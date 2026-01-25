@@ -1,0 +1,31 @@
+{
+  "ben": "17024665",
+  "organization_name": "Hayden Canyon Charter",
+  "entity_type": "School",
+  "address": "ID",
+  "street": null,
+  "city": null,
+  "state": "ID",
+  "zip_code": null,
+  "frn_number": "2599041473",
+  "dub_number": null,
+  "sam_id": null,
+  "total_funding_committed": 97833.24,
+  "total_funding_requested": 180329.12,
+  "funding_years": [
+    2025,
+    2024,
+    2023,
+    2022,
+    2021,
+    2020
+  ],
+  "applications_count": 20,
+  "has_category1": false,
+  "has_category2": false,
+  "status": "Unknown",
+  "latest_year": 2025,
+  "discount_rate": null,
+  "_enriched": true,
+  "_cached_at": "2026-01-23T14:34:34.361019"
+}

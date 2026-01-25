@@ -1,0 +1,1811 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkyRate AI - Trusted Professional Intelligence</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Montserrat:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        /* 
+     ========================================
+     DESIGN SYSTEM: TRUSTED PROFESSIONAL
+     ========================================
+    */
+        :root {
+            /* Palette - Dark Mode Optimized Default */
+            --bg-deep: #020617;
+            /* The Void */
+            --bg-surface: #0F172A;
+            /* Slate 900 */
+            --bg-card: #1E293B;
+            /* Slate 800 */
+            --bg-glass: rgba(15, 23, 42, 0.75);
+            /* Glassmorphic Base */
+
+            /* Accents */
+            --accent-primary: #3B82F6;
+            /* Royal Blue */
+            --accent-glow: rgba(59, 130, 246, 0.5);
+            --accent-gradient: linear-gradient(135deg, #3B82F6, #8B5CF6);
+
+            /* Status */
+            --success: #10B981;
+            --success-glow: rgba(16, 185, 129, 0.2);
+            --warning: #F59E0B;
+            --danger: #EF4444;
+            --danger-glow: rgba(239, 68, 68, 0.2);
+
+            /* Typography */
+            --font-display: 'Montserrat', sans-serif;
+            --font-body: 'Inter', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+
+            /* Text */
+            --text-main: #F8FAFC;
+            --text-muted: #94A3B8;
+            --text-dim: #64748B;
+
+            /* Chrome */
+            --border-subtle: rgba(148, 163, 184, 0.1);
+            --border-accent: rgba(59, 130, 246, 0.4);
+
+            /* Shadows */
+            --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.15);
+            --shadow-glow: 0 0 15px rgba(59, 130, 246, 0.15);
+            --shadow-card: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.15);
+
+            /* Radius */
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-full: 9999px;
+        }
+
+        /* Light Mode Overrides */
+        :root[data-theme="light"] {
+            --bg-deep: #F1F5F9;
+            /* Slate 100 */
+            --bg-surface: #FFFFFF;
+            /* White */
+            --bg-card: #FFFFFF;
+            /* White */
+            --bg-glass: rgba(255, 255, 255, 0.85);
+
+            --text-main: #0F172A;
+            /* Slate 900 */
+            --text-muted: #64748B;
+            /* Slate 500 */
+            --text-dim: #94A3B8;
+            /* Slate 400 */
+
+            --border-subtle: rgba(148, 163, 184, 0.2);
+
+            --shadow-soft: 0 4px 6px -1px rgba(148, 163, 184, 0.1), 0 2px 4px -1px rgba(148, 163, 184, 0.06);
+            --shadow-glow: 0 0 15px rgba(59, 130, 246, 0.25);
+            --shadow-card: 0 10px 15px -3px rgba(148, 163, 184, 0.1), 0 4px 6px -2px rgba(148, 163, 184, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            /* Micro-interaction base */
+            transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            color: var(--text-main);
+            font-family: var(--font-body);
+            line-height: 1.6;
+            min-height: 100vh;
+            overflow-x: hidden;
+            /* Font smoothing */
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-subtle);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-dim);
+        }
+
+        /* Focus Management */
+        :focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 2px var(--bg-deep), 0 0 0 4px var(--accent-primary);
+            border-radius: 4px;
+        }
+
+        h1,
+        h2,
+        h3,
+        h4,
+        h5,
+        h6 {
+            font-family: var(--font-display);
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        /* Loading Skeleton */
+        .skeleton {
+            background: linear-gradient(90deg, var(--border-subtle) 25%, var(--bg-surface) 50%, var(--border-subtle) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite linear;
+            border-radius: var(--radius-sm);
+        }
+
+        @keyframes shimmer {
+            0% {
+                background-position: 200% 0;
+            }
+
+            100% {
+                background-position: -200% 0;
+            }
+        }
+
+        /* Utilities */
+        .glass {
+            background: var(--bg-glass);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .text-gradient {
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .flex-center {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .w-full {
+            width: 100%;
+        }
+
+        .h-full {
+            height: 100%;
+        }
+
+        @keyframes float {
+            0% {
+                transform: translateY(0px);
+            }
+
+            50% {
+                transform: translateY(-10px);
+            }
+
+            100% {
+                transform: translateY(0px);
+            }
+        }
+
+        #app-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* View Switcher */
+        .preview-switcher {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 9999;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 0.5rem;
+            border-radius: var(--radius-full);
+            display: flex;
+            gap: 0.5rem;
+            border: 1px solid var(--border-subtle);
+            backdrop-filter: blur(10px);
+        }
+
+        .preview-btn {
+            background: transparent;
+            color: var(--text-muted);
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: var(--radius-full);
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .preview-btn:hover {
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .preview-btn.active {
+            background: var(--accent-primary);
+            color: white;
+            box-shadow: var(--shadow-glow);
+        }
+
+        .view-section {
+            display: none;
+            width: 100%;
+            height: 100%;
+        }
+
+        .view-section.active {
+            display: flex;
+        }
+
+        /* AUTH VIEW */
+        #view-auth {
+            position: relative;
+        }
+
+        .auth-visual {
+            flex: 1;
+            height: 100%;
+            position: relative;
+            background: #000;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 4rem;
+        }
+
+        .data-grid-bg {
+            position: absolute;
+            inset: 0;
+            background-image: linear-gradient(var(--border-subtle) 1px, transparent 1px), linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px);
+            background-size: 40px 40px;
+            perspective: 1000px;
+            transform: scale(1.5) rotateX(60deg) translateY(-100px);
+            opacity: 0.3;
+            z-index: 0;
+            animation: grid-move 20s linear infinite;
+        }
+
+        @keyframes grid-move {
+            0% {
+                transform: scale(1.5) rotateX(60deg) translateY(0);
+            }
+
+            100% {
+                transform: scale(1.5) rotateX(60deg) translateY(40px);
+            }
+        }
+
+        .auth-visual::before {
+            content: '';
+            position: absolute;
+            top: 20%;
+            left: 10%;
+            width: 300px;
+            height: 300px;
+            background: var(--accent-primary);
+            filter: blur(120px);
+            opacity: 0.4;
+            border-radius: 50%;
+            z-index: 1;
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 2;
+            max-width: 600px;
+        }
+
+        .logo-large {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .logo-mark {
+            width: 64px;
+            height: 64px;
+            background: var(--accent-gradient);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: 800;
+            font-family: var(--font-display);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .logo-large h1 {
+            font-size: 3.5rem;
+            letter-spacing: -0.04em;
+            background: linear-gradient(to right, #fff, #94A3B8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero-text {
+            font-size: 1.5rem;
+            color: var(--text-muted);
+            margin-bottom: 4rem;
+            line-height: 1.4;
+            font-weight: 300;
+        }
+
+        .stat-floater {
+            display: inline-flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem 1.5rem;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-card);
+            animation: float 6s ease-in-out infinite;
+            border-left: 4px solid var(--accent-primary);
+        }
+
+        .stat-val {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .stat-lbl {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .auth-form-container {
+            width: 480px;
+            background: var(--bg-surface);
+            border-left: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem;
+            z-index: 5;
+        }
+
+        .auth-card {
+            width: 100%;
+            padding: 2.5rem;
+            border-radius: var(--radius-lg);
+            background: rgba(30, 41, 59, 0.4);
+        }
+
+        .auth-card h2 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .input-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .input-group label {
+            display: block;
+            color: var(--text-dim);
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+
+        .input-group input {
+            width: 100%;
+            background: var(--bg-deep);
+            border: 1px solid var(--border-subtle);
+            padding: 1rem;
+            border-radius: var(--radius-md);
+            color: var(--text-main);
+            font-family: var(--font-body);
+            font-size: 1rem;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+
+        .btn-primary {
+            background: var(--accent-primary);
+            color: white;
+            border: none;
+            padding: 1rem;
+            border-radius: var(--radius-md);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        .btn-primary:hover {
+            background: #2563EB;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+            transform: translateY(-1px);
+        }
+
+        /* DASHBOARD */
+        #view-dashboard {
+            background: var(--bg-deep);
+            overflow: hidden;
+        }
+
+        .app-sidebar {
+            width: 280px;
+            height: 100%;
+            background: var(--bg-glass);
+            backdrop-filter: blur(20px);
+            border-right: 1px solid var(--border-subtle);
+            display: flex;
+            flex-direction: column;
+            padding: 1.5rem;
+            flex-shrink: 0;
+            z-index: 100;
+            transition: width 0.3s ease;
+            position: relative;
+        }
+
+        .app-sidebar.collapsed {
+            width: 80px;
+            padding: 1.5rem 0.5rem;
+        }
+
+        .app-sidebar.collapsed .brand-text,
+        .app-sidebar.collapsed .nav-title,
+        .app-sidebar.collapsed .nav-item span {
+            display: none;
+        }
+
+        .app-sidebar.collapsed .sidebar-header {
+            justify-content: center;
+            padding-left: 0;
+        }
+
+        .app-sidebar.collapsed .nav-item {
+            justify-content: center;
+            padding: 0.85rem 0;
+        }
+
+        .sidebar-toggle {
+            position: absolute;
+            top: 50%;
+            right: -12px;
+            width: 24px;
+            height: 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            cursor: pointer;
+            box-shadow: var(--shadow-sm);
+            z-index: 101;
+            color: var(--text-muted);
+        }
+
+        .sidebar-toggle:hover {
+            color: var(--accent-primary);
+            border-color: var(--accent-primary);
+        }
+
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 3rem;
+        }
+
+        .brand-icon {
+            width: 32px;
+            height: 32px;
+            background: var(--accent-gradient);
+            border-radius: 8px;
+        }
+
+        .brand-text {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: var(--text-main);
+        }
+
+        .nav-section {
+            margin-bottom: 2rem;
+        }
+
+        .nav-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            font-weight: 700;
+            margin-bottom: 1rem;
+            padding-left: 1rem;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 0.85rem 1rem;
+            color: var(--text-muted);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+
+        .nav-item:hover {
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--text-main);
+        }
+
+        .nav-item.active {
+            background: rgba(59, 130, 246, 0.1);
+            color: var(--accent-primary);
+            font-weight: 600;
+        }
+
+        .top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 3rem;
+        }
+
+        .search-cockpit {
+            position: relative;
+            width: 480px;
+        }
+
+        .search-input {
+            width: 100%;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            padding: 1rem 1rem 1rem 3rem;
+            border-radius: var(--radius-full);
+            color: var(--text-main);
+            font-family: var(--font-body);
+            box-shadow: var(--shadow-soft);
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 1.2rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-dim);
+        }
+
+        .app-main {
+            flex: 1;
+            height: 100%;
+            overflow-y: auto;
+            padding: 2rem 3rem;
+            background: radial-gradient(circle at top right, rgba(59, 130, 246, 0.05), transparent 40%);
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .grid-col-8 {
+            grid-column: span 8;
+        }
+
+        .grid-col-4 {
+            grid-column: span 4;
+        }
+
+        .dash-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            transition: all 0.2s;
+        }
+
+        .dash-card:hover {
+            border-color: var(--border-accent);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-card);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .deadline-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: var(--radius-md);
+            margin-bottom: 0.75rem;
+            border: 1px solid transparent;
+        }
+
+        .deadline-ring {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 3px solid var(--border-subtle);
+            border-top-color: var(--warning);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--text-muted);
+        }
+
+        .deadline-ring.urgent {
+            border-top-color: var(--danger);
+            color: var(--danger);
+        }
+
+        .quick-actions-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+        }
+
+        .action-tile {
+            background: var(--bg-surface);
+            padding: 1.5rem;
+            border-radius: var(--radius-md);
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .action-tile:hover {
+            background: var(--bg-glass);
+            border-color: var(--accent-primary);
+        }
+
+        .tile-icon {
+            font-size: 1.75rem;
+            margin-bottom: 1rem;
+            color: var(--accent-primary);
+        }
+
+        /* Filter Tokens */
+        .filter-bar {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+        }
+
+        .filter-token {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: var(--radius-full);
+            color: var(--accent-primary);
+            font-size: 0.75rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .filter-token:hover {
+            background: rgba(59, 130, 246, 0.2);
+        }
+
+        .filter-token span {
+            font-weight: 700;
+            opacity: 0.6;
+            margin-right: 2px;
+        }
+
+        .token-close {
+            font-size: 1rem;
+            line-height: .5;
+            margin-left: 2px;
+            opacity: 0.7;
+        }
+
+        .token-close:hover {
+            opacity: 1;
+        }
+
+        /* Empty State */
+        .empty-state-card {
+            grid-column: span 12;
+            text-align: center;
+            padding: 4rem 2rem;
+            background: var(--bg-card);
+            border: 1px dashed var(--border-subtle);
+            border-radius: var(--radius-lg);
+            display: none;
+            /* Hidden by default */
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .empty-state-card.active {
+            display: flex;
+        }
+
+        .empty-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+            filter: grayscale(1);
+        }
+
+        /* Account Type Selector */
+        .account-type-selector {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .account-type-option {
+            position: relative;
+            cursor: pointer;
+        }
+
+        .account-type-option input {
+            position: absolute;
+            opacity: 0;
+        }
+
+        .account-type-option .option-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 1.25rem;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            background: var(--bg-main);
+            transition: all 0.2s;
+        }
+
+        .account-type-option:hover .option-content {
+            border-color: var(--brand-blue);
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .account-type-option input:checked+.option-content {
+            border-color: var(--brand-blue);
+            background: rgba(59, 130, 246, 0.1);
+            box-shadow: 0 0 0 1px var(--brand-blue);
+        }
+
+        .option-icon {
+            font-size: 1.75rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .option-label {
+            font-weight: 600;
+            color: var(--text-main);
+            font-size: 0.95rem;
+        }
+
+        .option-desc {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+            text-align: center;
+        }
+
+        /* Import/Export Center */
+        .import-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .action-card-large {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .action-card-large:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-card);
+            border-color: var(--accent-primary);
+        }
+
+        .upload-zone {
+            width: 100%;
+            height: 160px;
+            border: 2px dashed var(--border-subtle);
+            border-radius: var(--radius-md);
+            margin: 1.5rem 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: rgba(59, 130, 246, 0.02);
+        }
+
+        .upload-zone:hover {
+            border-color: var(--accent-primary);
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .code-preview {
+            background: var(--bg-surface);
+            padding: 0.75rem;
+            border-radius: var(--radius-sm);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            width: 100%;
+            text-align: left;
+            margin-bottom: 1rem;
+            border: 1px solid var(--border-subtle);
+        }
+
+        /* SEARCH & ANALYSIS */
+        .search-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .data-table-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            box-shadow: var(--shadow-soft);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: rgba(15, 23, 42, 0.5);
+            padding: 1rem 1.5rem;
+            text-align: left;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        td {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+            color: var(--text-main);
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: var(--radius-full);
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-pill.success {
+            background: var(--success-glow);
+            color: var(--success);
+        }
+
+        .status-pill.danger {
+            background: var(--danger-glow);
+            color: var(--danger);
+        }
+
+        .status-pill.warning {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--warning);
+        }
+
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .message-item {
+            display: flex;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+            opacity: 0;
+            animation: slide-up 0.5s ease forwards;
+        }
+
+        @keyframes slide-up {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .avatar.ai {
+            background: var(--accent-gradient);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .avatar.user {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .msg-bubble {
+            font-size: 1rem;
+            color: var(--text-main);
+            line-height: 1.7;
+        }
+
+        .intel-card {
+            margin-top: 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            border-left: 4px solid var(--accent-primary);
+        }
+
+        .intel-header {
+            padding: 1rem 1.5rem;
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .intel-body {
+            padding: 1.5rem;
+        }
+
+        .insight-row {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .insight-key {
+            width: 140px;
+            color: var(--text-dim);
+        }
+
+        .insight-val {
+            flex: 1;
+            color: var(--text-main);
+            font-weight: 500;
+        }
+
+        .chat-input-area {
+            position: sticky;
+            bottom: 2rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-full);
+            padding: 0.5rem;
+            display: flex;
+            box-shadow: var(--shadow-card);
+            z-index: 50;
+        }
+
+        .chat-input-field {
+            flex: 1;
+            background: transparent;
+            border: none;
+            padding: 1rem 1.5rem;
+            color: white;
+            outline: none;
+        }
+
+        .send-btn {
+            width: 44px;
+            height: 44px;
+            background: var(--accent-primary);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .send-btn:hover {
+            background: #2563EB;
+            transform: scale(1.05);
+        }
+
+        @media (max-width: 1024px) {
+            .auth-visual {
+                display: none;
+            }
+
+            .auth-form-container {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Preview Controls -->
+    <div class="preview-switcher">
+        <button class="preview-btn" onclick="toggleTheme()" id="theme-btn">☀️ Light</button>
+        <div style="width:1px; height:16px; background:var(--border-subtle); margin:0 4px;"></div>
+        <button class="preview-btn active" onclick="switchView('auth')" id="btn-auth">Auth</button>
+        <button class="preview-btn" onclick="switchView('dashboard')" id="btn-dash">Dashboard</button>
+    </div>
+
+    <div id="app-container">
+
+        <!-- View 1: Auth -->
+        <section id="view-auth" class="view-section active">
+            <div class="auth-visual">
+                <div class="data-grid-bg"></div>
+                <div class="hero-content">
+                    <div class="logo-large">
+                        <div class="logo-mark">S</div>
+                        <h1>SkyRate AI</h1>
+                    </div>
+                    <p class="hero-text">Uncover hidden E-Rate funding opportunities with <span
+                            class="text-gradient">Professional Intelligence</span>.</p>
+                    <div class="stat-floater glass">
+                        <div class="stat-icon">📈</div>
+                        <div>
+                            <div class="stat-val">$2.4M</div>
+                            <div class="stat-lbl">Optimized Funding</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="auth-form-container">
+                <div class="auth-card glass">
+                    <h2>Welcome Back</h2>
+                    <p class="auth-sub">Enter your credentials to access the intelligence platform.</p>
+                    <form class="login-form">
+                        <div class="input-group"><label>Email Address</label><input type="email"
+                                placeholder="consultant@firm.com"></div>
+                        <div class="input-group"><label>Password</label><input type="password"
+                                placeholder="••••••••••••"></div>
+                        <button type="button" class="btn-primary" onclick="switchView('dashboard')">Sign In to
+                            Console</button>
+                        <div class="auth-footer">
+                            <a href="#">Forgot Password?</a>
+                            <span>•</span>
+                            <a href="#" onclick="switchView('signup')">Create Account</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- View 1.5: Sign Up -->
+        <section id="view-signup" class="view-section">
+            <div class="auth-visual">
+                <div class="data-grid-bg"></div>
+                <div class="hero-content">
+                    <div class="logo-large">
+                        <div class="logo-mark"
+                            style="background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));">🤝
+                        </div>
+                        <h1>Join the Network</h1>
+                    </div>
+                    <p class="hero-text">Connect with the <span class="text-gradient">E-Rate Intelligence
+                            Ecosystem</span>.</p>
+                </div>
+            </div>
+            <div class="auth-form-container">
+                <div class="auth-card glass">
+                    <h2 style="text-align:center;">Create Account</h2>
+                    <p class="auth-sub" style="text-align:center; margin-bottom:2rem;">Select your role to get started
+                    </p>
+
+                    <form>
+                        <div class="account-type-selector">
+                            <label class="account-type-option">
+                                <input type="radio" name="accountType" value="consultant" checked
+                                    onclick="toggleSignupFields()">
+                                <div class="option-content">
+                                    <span class="option-icon">📋</span>
+                                    <span class="option-label">Consultant</span>
+                                    <span class="option-desc">E-Rate Specialist</span>
+                                </div>
+                            </label>
+                            <label class="account-type-option">
+                                <input type="radio" name="accountType" value="vendor" onclick="toggleSignupFields()">
+                                <div class="option-content">
+                                    <span class="option-icon">🏢</span>
+                                    <span class="option-label">Vendor</span>
+                                    <span class="option-desc">Service Provider</span>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div class="input-group">
+                            <label>Full Name</label>
+                            <input type="text" placeholder="John Doe">
+                        </div>
+
+                        <div class="input-group">
+                            <label>Organization</label>
+                            <input type="text" placeholder="Company Name">
+                        </div>
+
+                        <!-- Dynamic Fields -->
+                        <div id="field-consultant" class="input-group">
+                            <label>Consultant Registration #</label>
+                            <input type="text" placeholder="CRN-12345678">
+                        </div>
+
+                        <div id="field-vendor" class="input-group" style="display:none;">
+                            <label>Service Provider ID (SPIN)</label>
+                            <input type="text" placeholder="143000001">
+                        </div>
+
+                        <div class="input-group">
+                            <label>Email Address</label>
+                            <input type="email" placeholder="name@company.com">
+                        </div>
+
+                        <div class="input-group">
+                            <label>Password</label>
+                            <input type="password" placeholder="••••••••">
+                        </div>
+
+                        <button type="button" class="btn-primary" onclick="switchView('dashboard')">Start Free
+                            Trial</button>
+
+                        <div class="auth-footer" style="justify-content:center;">
+                            Already have an account? <a href="#" onclick="switchView('auth')"
+                                style="margin-left:5px;">Sign in</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- View 2: Dashboard -->
+        <section id="view-dashboard" class="view-section">
+            <aside class="app-sidebar">
+                <div class="sidebar-toggle" onclick="toggleSidebar()">◀</div>
+                <div class="sidebar-header">
+                    <div class="brand-icon"></div>
+                    <div class="brand-text">SkyRate AI</div>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-title">Intelligence</div>
+                    <div class="nav-item active" onclick="switchView('dashboard')">
+                        <div class="nav-icon">📊</div><span>Dashboard</span>
+                    </div>
+                    <div class="nav-item" onclick="switchView('vendor-scout')">
+                        <div class="nav-icon">🎯</div><span>Vendor Scout</span>
+                    </div>
+                    <div class="nav-item" onclick="switchView('analysis')">
+                        <div class="nav-icon">💬</div><span>Strategy Chat</span>
+                    </div>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-title">Data Sources</div>
+                    <div class="nav-item" onclick="switchView('search')">
+                        <div class="nav-icon">🔍</div><span>Search Data</span>
+                    </div>
+                </div>
+                <div style="margin-top:auto;">
+                    <div class="nav-item" onclick="switchView('auth')">
+                        <div class="nav-icon">🚪</div><span>Sign Out</span>
+                    </div>
+                </div>
+            </aside>
+            <main class="app-main">
+                <header class="top-bar">
+                    <div class="search-cockpit">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" class="search-input" placeholder="Ask anything...">
+                        <div class="kbd-shortcut">Ctrl K</div>
+                        <div class="filter-bar">
+                            <div class="filter-token"><span>Year:</span> 2025 <div class="token-close">×</div>
+                            </div>
+                            <div class="filter-token"><span>Status:</span> Denied <div class="token-close">×</div>
+                            </div>
+                            <div class="filter-token"
+                                style="background:transparent; border:1px dashed var(--border-subtle); color:var(--text-dim);">
+                                + Add Filter</div>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:1rem;">
+                        <div class="glass flex-center" style="width:40px; height:40px; border-radius:50%;">🔔</div>
+                        <div class="glass flex-center"
+                            style="width:40px; height:40px; border-radius:50%; background:var(--accent-gradient);">JD
+                        </div>
+                    </div>
+                </header>
+                <div class="dashboard-grid">
+                    <div class="grid-col-8">
+                        <h2>Mission Control</h2>
+                        <div class="quick-actions-grid" style="margin-top:1.5rem">
+                            <div class="action-tile">
+                                <div class="tile-icon">⚡</div>
+                                <div class="tile-label">Analyze Denials</div>
+                            </div>
+                            <div class="action-tile">
+                                <div class="tile-icon">📈</div>
+                                <div class="tile-label">Optimize Funding</div>
+                            </div>
+                            <div class="action-tile">
+                                <div class="tile-icon">📝</div>
+                                <div class="tile-label">Draft Appeals</div>
+                            </div>
+                        </div>
+                        <div style="margin-top:2rem; display:grid; grid-template-columns:1fr 1fr; gap:1.5rem">
+                            <div class="dash-card">
+                                <div class="stat-lbl">Funded Amount</div>
+                                <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                                    <div class="stat-val text-gradient" style="font-size:2rem;">$4.2M</div>
+                                    <div style="width:120px; height:60px;">
+                                        <canvas id="chart-funded"></canvas>
+                                    </div>
+                                </div>
+                                <div
+                                    style="color:var(--success); font-weight:600; font-size:0.85rem; margin-top:0.5rem;">
+                                    ↑ 12% vs last year</div>
+                            </div>
+                            <div class="dash-card">
+                                <div class="stat-lbl">Pending Applications</div>
+                                <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                                    <div class="stat-val" style="font-size:2rem;">24</div>
+                                    <div style="width:120px; height:60px;">
+                                        <canvas id="chart-pending"></canvas>
+                                    </div>
+                                </div>
+                                <div
+                                    style="color:var(--warning); font-weight:600; font-size:0.85rem; margin-top:0.5rem;">
+                                    Action Required: 3</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid-col-4">
+                        <div class="dash-card h-full">
+                            <div class="card-header">
+                                <div class="card-title">Deadlines</div>
+                                <div class="card-action">View All</div>
+                            </div>
+                            <div class="deadline-item">
+                                <div class="deadline-ring urgent">2d</div>
+                                <div class="deadline-info">
+                                    <h4>Form 471 Window</h4>
+                                    <p>Closes Mar 27</p>
+                                </div>
+                            </div>
+                            <div class="deadline-item">
+                                <div class="deadline-ring">5d</div>
+                                <div class="deadline-info">
+                                    <h4>PIA Review</h4>
+                                    <p>TechCampus Charter</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </section>
+
+        <!-- View 3: Vendor Scout (New) -->
+        <section id="view-vendor-scout" class="view-section">
+            <aside class="app-sidebar">
+                <div class="sidebar-toggle" onclick="toggleSidebar()">◀</div>
+                <div class="sidebar-header">
+                    <div class="brand-icon"></div>
+                    <div class="brand-text">SkyRate AI</div>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-title">Vendor HQ</div>
+                    <div class="nav-item" onclick="switchView('dashboard')">
+                        <div class="nav-icon">📊</div><span>Dashboard</span>
+                    </div>
+                    <div class="nav-item active" onclick="switchView('vendor-scout')">
+                        <div class="nav-icon">🎯</div><span>Lead Scout</span>
+                    </div>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-title">Pipeline</div>
+                    <div class="nav-item">
+                        <div class="nav-icon">📁</div><span>My Bids</span>
+                    </div>
+                    <div class="nav-item">
+                        <div class="nav-icon">📝</div><span>Drafts</span>
+                    </div>
+                </div>
+                <div style="margin-top:auto;">
+                    <div class="nav-item" onclick="switchView('auth')">
+                        <div class="nav-icon">🚪</div><span>Sign Out</span>
+                    </div>
+                </div>
+            </aside>
+            <main class="app-main">
+                <header class="search-header">
+                    <div style="display:flex; flex-direction:column; gap:0.5rem;">
+                        <h2>Vendor Lead Scout</h2>
+                        <p style="color:var(--text-muted); font-size:0.9rem;">AI-identified high-probability
+                            opportunities for <span class="text-gradient">Network Services</span></p>
+                    </div>
+                    <div style="display:flex; gap:1rem;">
+                        <div class="filter-token"><span>Region:</span> West Coast <div class="token-close">×</div>
+                        </div>
+                        <div class="filter-token"><span>Service:</span> Fiber <div class="token-close">×</div>
+                        </div>
+                    </div>
+                </header>
+
+                <div class="data-table-container">
+                    <table id="vendor-table">
+                        <thead>
+                            <tr>
+                                <th>Organization</th>
+                                <th>Service Requested</th>
+                                <th>Posted Date</th>
+                                <th>Budget Est.</th>
+                                <th>Win Probability</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Lincoln Unified</strong><br><span
+                                        style="font-size:0.8rem; color:var(--text-muted);">Stockton, CA</span></td>
+                                <td>10Gbps Fiber Transport</td>
+                                <td>Jan 12, 2025</td>
+                                <td>$125k - $150k</td>
+                                <td><span class="status-pill success" style="background:rgba(16, 185, 129, 0.1);">High
+                                        (85%)</span></td>
+                                <td><button class="table-btn">Draft Bid</button></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Seattle Public Schools</strong><br><span
+                                        style="font-size:0.8rem; color:var(--text-muted);">Seattle, WA</span></td>
+                                <td>Managed Wi-Fi Upgrade</td>
+                                <td>Jan 10, 2025</td>
+                                <td>$450k+</td>
+                                <td><span class="status-pill warning" style="background:rgba(245, 158, 11, 0.1);">Medium
+                                        (52%)</span></td>
+                                <td><button class="table-btn">Analyze</button></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Portland Arts Academy</strong><br><span
+                                        style="font-size:0.8rem; color:var(--text-muted);">Portland, OR</span></td>
+                                <td>Firewall Appliance</td>
+                                <td>Jan 08, 2025</td>
+                                <td>$15k - $25k</td>
+                                <td><span class="status-pill success" style="background:rgba(16, 185, 129, 0.1);">Very
+                                        High (92%)</span></td>
+                                <td><button class="table-btn">Draft Bid</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </main>
+        </section>
+
+        <!-- View 3: Search Results -->
+        <section id="view-search" class="view-section">
+            <aside class="app-sidebar">
+                <div class="sidebar-header">
+                    <div class="brand-icon"></div>
+                    <div class="brand-text">SkyRate AI</div>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-title">Intelligence</div>
+                    <div class="nav-item" onclick="switchView('dashboard')">
+                        <div class="nav-icon">📊</div><span>Dashboard</span>
+                    </div>
+                    <div class="nav-item active" onclick="switchView('search')">
+                        <div class="nav-icon">🔍</div><span>Search Data</span>
+                    </div>
+                </div>
+            </aside>
+            <main class="app-main">
+                <header class="search-header">
+                    <h2>Search Results</h2>
+                    <div style="display:flex; gap:1rem;">
+                        <button class="btn-primary"
+                            style="background:transparent; border:1px solid var(--border-subtle); width:auto;"
+                            onclick="toggleEmptyState()">Toggle Data/Empty</button>
+                        <button class="btn-primary" style="width:auto;">Export Report</button>
+                    </div>
+                </header>
+                <div class="data-table-container">
+                    <div class="empty-state-card" id="search-empty-state">
+                        <div class="empty-icon">📂</div>
+                        <h3>No Intelligence Data Found</h3>
+                        <p style="color:var(--text-muted); margin-bottom:1.5rem; max-width:400px;">Connect your FCC Form
+                            471 data source or upload a CSV to begin analyzing your funding opportunities.</p>
+                        <button class="btn-primary" style="width:auto;">Import Data Source</button>
+                    </div>
+                    <table id="search-table">
+                        <thead>
+                            <tr>
+                                <th>Applicant</th>
+                                <th>BEN</th>
+                                <th>Funding Year</th>
+                                <th>Status</th>
+                                <th>Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Albany City School</td>
+                                <td>123456</td>
+                                <td>2024</td>
+                                <td><span class="status-pill success">Funded</span></td>
+                                <td>$145,000</td>
+                            </tr>
+                            <tr>
+                                <td>Buffalo Public</td>
+                                <td>789012</td>
+                                <td>2024</td>
+                                <td><span class="status-pill warning">Pending</span></td>
+                                <td>$890,500</td>
+                            </tr>
+                            <tr>
+                                <td>Syracuse City</td>
+                                <td>345678</td>
+                                <td>2024</td>
+                                <td><span class="status-pill danger">Denied</span></td>
+                                <td>$56,200</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </main>
+        </section>
+
+        <!-- View 4: Import/Export Center -->
+        <section id="view-import" class="view-section">
+            <aside class="app-sidebar">
+                <div class="sidebar-toggle" onclick="toggleSidebar()">◀</div>
+                <div class="sidebar-header">
+                    <div class="brand-icon"></div>
+                    <div class="brand-text">SkyRate AI</div>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-title">Data Operations</div>
+                    <div class="nav-item" onclick="switchView('dashboard')">
+                        <div class="nav-icon">📊</div><span>Dashboard</span>
+                    </div>
+                    <div class="nav-item active" onclick="switchView('import')">
+                        <div class="nav-icon">📥</div><span>Data Center</span>
+                    </div>
+                </div>
+                <div style="margin-top:auto;">
+                    <div class="nav-item" onclick="switchView('auth')">
+                        <div class="nav-icon">🚪</div><span>Sign Out</span>
+                    </div>
+                </div>
+            </aside>
+            <main class="app-main">
+                <header class="search-header">
+                    <div style="display:flex; flex-direction:column; gap:0.5rem;">
+                        <h2>Data Center</h2>
+                        <p style="color:var(--text-muted); font-size:0.9rem;">Manage your <span
+                                class="text-gradient">Portfolio Intelligence</span> sources</p>
+                    </div>
+                </header>
+
+                <div class="import-grid">
+                    <!-- Card 1: Template -->
+                    <div class="action-card-large">
+                        <div style="font-size:2.5rem; margin-bottom:1rem;">📄</div>
+                        <h3>CSV Template</h3>
+                        <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:1.5rem;">Download the
+                            standardized schema for bulk portfolio uploads.</p>
+                        <div class="code-preview">ben,org_name,state,year,category</div>
+                        <button class="btn-primary" style="width:100%; margin-top:auto;">Download Standard CSV</button>
+                    </div>
+
+                    <!-- Card 2: Upload -->
+                    <div class="action-card-large">
+                        <div style="font-size:2.5rem; margin-bottom:1rem;">☁️</div>
+                        <h3>Bulk Upload</h3>
+                        <p style="color:var(--text-muted); font-size:0.9rem;">Import your school district portfolio for
+                            analysis.</p>
+                        <div class="upload-zone">
+                            <div style="font-size:1.5rem; margin-bottom:0.5rem;">📤</div>
+                            <span>Drag CSV file here</span>
+                            <span style="font-size:0.8rem; color:var(--text-muted); margin-top:0.25rem;">or click to
+                                browse</span>
+                        </div>
+                    </div>
+
+                    <!-- Card 3: Manual Entry -->
+                    <div class="action-card-large">
+                        <div style="font-size:2.5rem; margin-bottom:1rem;">✍️</div>
+                        <h3>Manual Entry</h3>
+                        <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:1.5rem;">Add a single Entity
+                            by BEN number.</p>
+
+                        <div style="width:100%; text-align:left;">
+                            <label
+                                style="font-size:0.8rem; font-weight:600; margin-bottom:0.5rem; display:block;">Billed
+                                Entity Number (BEN)</label>
+                            <input type="text" class="search-input" placeholder="e.g., 16012345"
+                                style="background:var(--bg-main); border:1px solid var(--border-subtle);">
+                        </div>
+
+                        <button class="btn-primary" style="width:100%; margin-top:1.5rem;">Lookup & Add</button>
+                    </div>
+                </div>
+            </main>
+        </section>
+
+        <!-- View 4: Analysis -->
+        <section id="view-analysis" class="view-section">
+            <aside class="app-sidebar">
+                <div class="sidebar-header">
+                    <div class="brand-icon"></div>
+                    <div class="brand-text">SkyRate AI</div>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-title">Intelligence</div>
+                    <div class="nav-item" onclick="switchView('dashboard')">
+                        <div class="nav-icon">📊</div><span>Dashboard</span>
+                    </div>
+                    <div class="nav-item active" onclick="switchView('analysis')">
+                        <div class="nav-icon">💬</div><span>Strategy Chat</span>
+                    </div>
+                </div>
+            </aside>
+            <main class="app-main">
+                <div class="chat-container">
+                    <div class="chat-stream">
+                        <div class="message-item">
+                            <div class="avatar user">JD</div>
+                            <div class="msg-content">
+                                <div class="msg-name">John Doe</div>
+                                <div class="msg-bubble">Analyze the denial for Syracuse City SD.</div>
+                            </div>
+                        </div>
+                        <div class="message-item">
+                            <div class="avatar ai">✨</div>
+                            <div class="msg-content">
+                                <div class="msg-name">SkyRate Intelligence</div>
+                                <div class="msg-bubble">Analysis shows a strong case for appeal.</div>
+                                <div class="intel-card">
+                                    <div class="intel-header"><span>Appeal Strategy Analysis</span><span
+                                            class="status-pill success">High Success (85%)</span></div>
+                                    <div class="intel-body">
+                                        <div class="insight-row">
+                                            <div class="insight-key">Denial Code</div>
+                                            <div class="insight-val">Competitive Bidding (C.1)</div>
+                                        </div>
+                                        <div class="insight-row">
+                                            <div class="insight-key">Precedent</div>
+                                            <div class="insight-val">3 similar appeals granted in NY</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chat-input-area"><input class="chat-input-field" placeholder="Reply..."><button
+                            class="send-btn">➤</button></div>
+                </div>
+            </main>
+        </section>
+
+    </div>
+
+    <script>
+        // Initialize Charts
+        document.addEventListener('DOMContentLoaded', () => {
+            const commonOptions = {
+                plugins: { legend: { display: false }, tooltip: { enabled: true } },
+                scales: { x: { display: false }, y: { display: false } },
+                responsive: true,
+                maintainAspectRatio: false,
+                elements: { point: { radius: 0, hitRadius: 10, hoverRadius: 4 } }
+            };
+
+            // Funded Chart
+            if (document.getElementById('chart-funded')) {
+                new Chart(document.getElementById('chart-funded'), {
+                    type: 'line',
+                    data: {
+                        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'],
+                        datasets: [{
+                            data: [12, 19, 15, 25, 22, 30, 28, 35, 42],
+                            borderColor: '#10B981',
+                            backgroundColor: (context) => {
+                                const ctx = context.chart.ctx;
+                                const gradient = ctx.createLinearGradient(0, 0, 0, 100);
+                                gradient.addColorStop(0, 'rgba(16, 185, 129, 0.2)');
+                                gradient.addColorStop(1, 'rgba(16, 185, 129, 0)');
+                                return gradient;
+                            },
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: commonOptions
+                });
+            }
+
+            // Pending Chart
+            if (document.getElementById('chart-pending')) {
+                new Chart(document.getElementById('chart-pending'), {
+                    type: 'line',
+                    data: {
+                        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                        datasets: [{
+                            data: [5, 8, 12, 10, 15, 24],
+                            borderColor: '#F59E0B',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            fill: false,
+                            tension: 0.1
+                        }]
+                    },
+                    options: commonOptions
+                });
+            }
+        });
+
+        function toggleSidebar() {
+            const sidebar = document.querySelector('.app-sidebar');
+            sidebar.classList.toggle('collapsed');
+            const btn = document.querySelector('.sidebar-toggle');
+            btn.innerHTML = sidebar.classList.contains('collapsed') ? '▶' : '◀';
+        }
+
+        function switchView(viewName) {
+            // Hide all layouts
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+            // Show target
+            document.getElementById('view-' + viewName).classList.add('active');
+
+            // Update preview switcher buttons
+            document.querySelectorAll('.preview-btn').forEach(btn => btn.classList.remove('active'));
+            const previewBtn = document.querySelector(`.preview-btn[onclick="switchView('${viewName}')"]`);
+            if (previewBtn) previewBtn.classList.add('active');
+
+            // Update sidebar nav items logic (simple approximate matching)
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            // In a real app, this would be more robust
+        }
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const btn = document.getElementById('theme-btn');
+
+            if (html.getAttribute('data-theme') === 'light') {
+                html.removeAttribute('data-theme');
+                btn.innerHTML = '☀️ Light';
+                btn.classList.remove('active');
+            } else {
+                html.setAttribute('data-theme', 'light');
+                btn.innerHTML = '🌙 Dark';
+                btn.classList.add('active');
+            }
+        }
+        function toggleEmptyState() {
+            const table = document.getElementById('search-table');
+            const empty = document.getElementById('search-empty-state');
+
+            if (table.style.display === 'none') {
+                table.style.display = 'table';
+                empty.classList.remove('active');
+            } else {
+                table.style.display = 'none';
+                empty.classList.add('active');
+            }
+        }
+        function toggleSignupFields() {
+            const type = document.querySelector('input[name="accountType"]:checked').value;
+            document.getElementById('field-consultant').style.display = type === 'consultant' ? 'block' : 'none';
+            document.getElementById('field-vendor').style.display = type === 'vendor' ? 'block' : 'none';
+        }
+    </script>
+</body>
+
+</html>
