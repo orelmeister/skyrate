@@ -349,8 +349,9 @@ class ApiClient {
 
   async downloadCsvTemplate(): Promise<Blob | null> {
     try {
+      const token = this.getAccessToken();
       const response = await fetch(`${API_BASE_URL}/api/v1/consultant/schools/csv-template`, {
-        headers: this.accessToken ? { Authorization: `Bearer ${this.accessToken}` } : {},
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!response.ok) return null;
       return response.blob();
@@ -369,9 +370,10 @@ class ApiClient {
     const formData = new FormData();
     formData.append('file', file);
 
+    const token = this.getAccessToken();
     const response = await fetch(`${API_BASE_URL}/api/v1/consultant/upload-csv?validate_with_usac=${validateWithUsac}`, {
       method: 'POST',
-      headers: this.accessToken ? { Authorization: `Bearer ${this.accessToken}` } : {},
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
     });
 
