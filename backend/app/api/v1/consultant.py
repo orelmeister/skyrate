@@ -299,6 +299,112 @@ async def preview_crn_import(
     }
 
 
+def sync_schools_with_usac(
+    schools: List[ConsultantSchool],
+    db: Session
+) -> Dict[str, Any]:
+    """
+    Helper function to sync school data from USAC API.
+    Fetches Form 471 application data and updates school records with:
+    - status, status_color, latest_year, applications_count, last_synced
+    
+    Returns summary of synced schools.
+    """
+    if not schools:
+        return {"synced": 0, "errors": 0}
+    
+    usac_service = get_usac_service()
+    all_bens = [school.ben for school in schools]
+    
+    # Build a map of BEN -> applications
+    ben_applications: Dict[str, List[Dict]] = {ben: [] for ben in all_bens}
+    
+    try:
+        # Single batch query with all BENs (uses OR conditions)
+        all_applications = usac_service.fetch_form_471(
+            filters={"ben": all_bens},
+            limit=len(all_bens) * 20  # ~20 apps per school
+        )
+        
+        # Group applications by BEN
+        for app in all_applications:
+            app_ben = str(app.get("ben", ""))
+            if app_ben in ben_applications:
+                ben_applications[app_ben].append(app)
+    except Exception as e:
+        print(f"Batch USAC fetch failed: {e}")
+        return {"synced": 0, "errors": len(schools), "error": str(e)}
+    
+    synced_count = 0
+    for school in schools:
+        applications = ben_applications.get(school.ben, [])
+        
+        if applications:
+            # Sort by funding year desc
+            sorted_apps = sorted(
+                applications, 
+                key=lambda x: int(x.get("funding_year", 0) or 0), 
+                reverse=True
+            )
+            
+            # Get school info from most recent app
+            latest = sorted_apps[0]
+            if not school.school_name or school.school_name == "Unknown":
+                school.school_name = (
+                    latest.get("applicant_name") or 
+                    latest.get("organization_name") or 
+                    latest.get("billed_entity_name")
+                )
+            if not school.state:
+                school.state = latest.get("physical_state") or latest.get("state")
+            
+            # Determine status based on most recent year's applications
+            latest_year = latest.get("funding_year")
+            latest_year_apps = [a for a in sorted_apps if a.get("funding_year") == latest_year]
+            
+            # Check all possible status values from USAC
+            statuses = [
+                (a.get("form_471_frn_status_name") or a.get("application_status") or "").lower() 
+                for a in latest_year_apps
+            ]
+            
+            has_denied = any("denied" in s for s in statuses)
+            has_funded = any(s in ["funded", "committed"] for s in statuses)
+            has_pending = any(s in ["pending", "under review", "in review", "wave ready", "certified", "submitted"] for s in statuses)
+            has_unfunded = any(s in ["unfunded", "cancelled", "not funded"] for s in statuses)
+            
+            if has_denied:
+                school.status = "Has Denials"
+                school.status_color = "red"
+            elif has_unfunded:
+                school.status = "Unfunded"
+                school.status_color = "red"
+            elif has_funded:
+                school.status = "Funded"
+                school.status_color = "green"
+            elif has_pending:
+                school.status = "Pending"
+                school.status_color = "yellow"
+            else:
+                actual_status = latest.get("form_471_frn_status_name") or latest.get("application_status") or "Unknown"
+                school.status = actual_status if actual_status else "Unknown"
+                school.status_color = "gray"
+            
+            school.latest_year = int(latest_year) if latest_year else None
+            school.applications_count = len(applications)
+            school.last_synced = datetime.utcnow()
+            synced_count += 1
+        else:
+            school.status = "No Applications"
+            school.status_color = "gray"
+            school.applications_count = 0
+            school.last_synced = datetime.utcnow()
+            synced_count += 1
+    
+    db.commit()
+    return {"synced": synced_count, "errors": 0}
+
+
 @router.post("/crn/verify")
 async def verify_and_import_crn(
     crn: str = Query(..., description="CRN to verify and import"),
@@ -315,6 +421,7 @@ async def verify_and_import_crn(
     3. Returns list of schools the consultant represents
     4. Optionally auto-imports all schools into the portfolio
     5. Updates the profile with the verified CRN
+    6. Syncs all school data from USAC (status, funding info, etc.)
     """
     usac_service = get_usac_service()
     result = usac_service.verify_crn(crn)
@@ -338,6 +445,7 @@ async def verify_and_import_crn(
     # Import schools if requested
     imported = []
     skipped = []
+    new_schools = []
     
     if auto_import and result["schools"]:
         # Get existing BENs
@@ -364,6 +472,7 @@ async def verify_and_import_crn(
                 notes=f"Auto-imported from CRN {crn}",
             )
             db.add(new_school)
+            new_schools.append(new_school)
             imported.append({
                 "ben": ben,
                 "school_name": school.get("organization_name"),
@@ -371,6 +480,14 @@ async def verify_and_import_crn(
             })
     
     db.commit()
+    
+    # IMPORTANT: Sync all schools with USAC data (status, funding, etc.)
+    # This ensures schools have proper status/color/count info in the database
+    all_schools = db.query(ConsultantSchool).filter(
+        ConsultantSchool.consultant_profile_id == profile.id
+    ).all()
+    
+    sync_result = sync_schools_with_usac(all_schools, db)
     
     return {
         "success": True,
@@ -383,7 +500,8 @@ async def verify_and_import_crn(
         "imported_count": len(imported),
         "skipped_count": len(skipped),
         "imported": imported,
-        "skipped": skipped
+        "skipped": skipped,
+        "sync_result": sync_result
     }
 
 

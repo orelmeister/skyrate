@@ -217,7 +217,21 @@ export default function ConsultantPortalPage() {
         }
       }
       if (schoolsRes.success && schoolsRes.data) {
-        setSchools(schoolsRes.data.schools || []);
+        const loadedSchools = schoolsRes.data.schools || [];
+        setSchools(loadedSchools);
+        
+        // Auto-sync if schools exist but don't have status info (not synced yet)
+        // This handles the case where schools were imported but not synced
+        if (!withUsacData && loadedSchools.length > 0) {
+          const needsSync = loadedSchools.some(
+            (s: EnhancedSchool) => !s.status || s.status === '' || s.status === 'Unknown'
+          );
+          if (needsSync) {
+            console.log('Schools need sync, fetching USAC data...');
+            // Trigger a background sync
+            refreshSchoolsWithUsac();
+          }
+        }
       }
     } catch (error) {
       console.error("Failed to load data:", error);
