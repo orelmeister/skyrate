@@ -22,8 +22,8 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-# Import the legacy client from skyrate-ai
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..', 'skyrate-ai'))
+# Add backend directory to path for utils imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from utils.usac_client import USACDataClient, map_field_name, FIELD_NAME_MAPPING
 
 

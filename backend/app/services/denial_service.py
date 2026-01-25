@@ -15,8 +15,8 @@ import os
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 
-# Import the legacy analyzer from skyrate-ai
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..', 'skyrate-ai'))
+# Add backend directory to path for utils imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from utils.denial_analyzer import DenialAnalyzer, DenialReason
 from utils.usac_client import USACDataClient
 

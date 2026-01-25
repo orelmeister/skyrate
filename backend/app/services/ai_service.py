@@ -14,8 +14,8 @@ import os
 from typing import Dict, List, Optional, Any
 from enum import Enum
 
-# Import the legacy AI manager from skyrate-ai
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..', 'skyrate-ai'))
+# Add backend directory to path for utils imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from utils.ai_models import AIModelManager, AIModel, TaskType
 
 
