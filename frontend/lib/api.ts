@@ -538,10 +538,30 @@ class ApiClient {
 
   // ==================== SUBSCRIPTIONS ====================
 
-  async createCheckoutSession(plan: 'monthly' | 'yearly'): Promise<ApiResponse<{ checkout_url: string }>> {
+  async getPaymentStatus(): Promise<ApiResponse<{
+    requires_payment_setup: boolean;
+    subscription_status: string | null;
+    trial_ends_at: string | null;
+    plan: string | null;
+  }>> {
+    return this.request('/api/v1/subscriptions/payment-status');
+  }
+
+  async getSubscriptionStatus(): Promise<ApiResponse<{
+    success: boolean;
+    subscription: Subscription | null;
+    requires_payment_setup: boolean;
+  }>> {
+    return this.request('/api/v1/subscriptions/status');
+  }
+
+  async createCheckoutSession(plan: 'monthly' | 'yearly', successUrl: string, cancelUrl: string): Promise<ApiResponse<{ 
+    checkout_url: string;
+    session_id: string;
+  }>> {
     return this.request('/api/v1/subscriptions/create-checkout', {
       method: 'POST',
-      body: JSON.stringify({ plan }),
+      body: JSON.stringify({ plan, success_url: successUrl, cancel_url: cancelUrl }),
     });
   }
 
@@ -549,10 +569,42 @@ class ApiClient {
     return this.request('/api/v1/subscriptions/current');
   }
 
-  async cancelSubscription(): Promise<ApiResponse<any>> {
+  async cancelSubscription(reason?: string): Promise<ApiResponse<any>> {
     return this.request('/api/v1/subscriptions/cancel', {
       method: 'POST',
+      body: JSON.stringify({ reason }),
     });
+  }
+
+  async reactivateSubscription(): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/subscriptions/reactivate', {
+      method: 'POST',
+    });
+  }
+
+  // ==================== GENERIC HTTP METHODS ====================
+  // These allow for more flexible API calls similar to axios
+
+  async get<T = any>(endpoint: string): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, { method: 'GET' });
+  }
+
+  async post<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  async put<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  async delete<T = any>(endpoint: string): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, { method: 'DELETE' });
   }
 
   // ==================== QUERY ====================

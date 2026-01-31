@@ -1,13 +1,19 @@
 """
 Subscription & Payments API Endpoints
 Handles Stripe integration for consultant and vendor subscriptions
+
+Flow:
+1. User signs up -> account created with TRIALING status, requires_payment_setup=True
+2. User redirected to paywall -> creates Stripe checkout session with 14-day trial
+3. Stripe collects card, creates subscription (no charge for 14 days)
+4. After 14 days, Stripe charges the card automatically
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Header
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 
 from ...core.database import get_db
@@ -17,6 +23,9 @@ from ...models.user import User
 from ...models.subscription import Subscription, SubscriptionStatus, SubscriptionPlan
 
 router = APIRouter(prefix="/subscriptions", tags=["Subscriptions"])
+
+# Trial period in days
+TRIAL_PERIOD_DAYS = 14
 
 # Stripe import (optional - won't fail if not installed)
 try:
@@ -44,6 +53,14 @@ class CheckoutResponse(BaseModel):
 class SubscriptionResponse(BaseModel):
     success: bool
     subscription: Optional[dict]
+    requires_payment_setup: Optional[bool] = None
+
+
+class PaymentStatusResponse(BaseModel):
+    requires_payment_setup: bool
+    subscription_status: Optional[str]
+    trial_ends_at: Optional[str]
+    plan: Optional[str]
 
 
 class CancelRequest(BaseModel):
@@ -51,6 +68,43 @@ class CancelRequest(BaseModel):
 
 
 # ==================== ENDPOINTS ====================
+
+@router.get("/payment-status", response_model=PaymentStatusResponse)
+async def get_payment_status(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Check if user needs to complete payment setup.
+    Used by frontend to determine if user should be redirected to paywall.
+    
+    A user requires payment setup if:
+    - They have no Stripe customer ID, OR
+    - They have no Stripe subscription ID
+    """
+    subscription = current_user.subscription
+    
+    if not subscription:
+        return PaymentStatusResponse(
+            requires_payment_setup=True,
+            subscription_status=None,
+            trial_ends_at=None,
+            plan=None
+        )
+    
+    # User needs payment setup if they don't have Stripe IDs
+    requires_setup = (
+        not subscription.stripe_customer_id or 
+        not subscription.stripe_subscription_id
+    )
+    
+    return PaymentStatusResponse(
+        requires_payment_setup=requires_setup,
+        subscription_status=subscription.status,
+        trial_ends_at=subscription.trial_end.isoformat() if subscription.trial_end else None,
+        plan=subscription.plan
+    )
+
 
 @router.get("/status", response_model=SubscriptionResponse)
 async def get_subscription_status(
@@ -63,7 +117,11 @@ async def get_subscription_status(
     subscription = current_user.subscription
     
     if not subscription:
-        return SubscriptionResponse(success=True, subscription=None)
+        return SubscriptionResponse(
+            success=True, 
+            subscription=None,
+            requires_payment_setup=True
+        )
     
     # Check if subscription is expired
     sub_data = subscription.to_dict()
@@ -73,7 +131,17 @@ async def get_subscription_status(
         subscription.status != SubscriptionStatus.ACTIVE.value
     )
     
-    return SubscriptionResponse(success=True, subscription=sub_data)
+    # Check if payment setup is required
+    requires_setup = (
+        not subscription.stripe_customer_id or 
+        not subscription.stripe_subscription_id
+    )
+    
+    return SubscriptionResponse(
+        success=True, 
+        subscription=sub_data,
+        requires_payment_setup=requires_setup
+    )
 
 
 @router.post("/create-checkout", response_model=CheckoutResponse)
@@ -83,7 +151,10 @@ async def create_checkout_session(
     db: Session = Depends(get_db)
 ):
     """
-    Create a Stripe checkout session for subscription.
+    Create a Stripe checkout session for subscription with 14-day free trial.
+    
+    The user's card will be collected but NOT charged for the first 14 days.
+    After the trial period, Stripe will automatically charge the subscription fee.
     """
     if not STRIPE_AVAILABLE:
         raise HTTPException(
@@ -94,17 +165,18 @@ async def create_checkout_session(
     # Get price based on user role and plan
     if current_user.role == "consultant":
         if data.plan == "yearly":
-            price_id = settings.STRIPE_PRICE_YEARLY or "price_consultant_yearly"
             price_cents = settings.CONSULTANT_YEARLY_PRICE
+            plan_name = "Annual"
         else:
-            price_id = settings.STRIPE_PRICE_MONTHLY or "price_consultant_monthly"
             price_cents = settings.CONSULTANT_MONTHLY_PRICE
+            plan_name = "Monthly"
     else:  # vendor
         if data.plan == "yearly":
             price_cents = settings.VENDOR_YEARLY_PRICE
+            plan_name = "Annual"
         else:
             price_cents = settings.VENDOR_MONTHLY_PRICE
-        price_id = None  # Would need separate vendor prices
+            plan_name = "Monthly"
     
     try:
         # Get or create Stripe customer
@@ -114,7 +186,10 @@ async def create_checkout_session(
             customer = stripe.Customer.create(
                 email=current_user.email,
                 name=current_user.full_name,
-                metadata={"user_id": str(current_user.id)}
+                metadata={
+                    "user_id": str(current_user.id),
+                    "role": current_user.role
+                }
             )
             customer_id = customer.id
             
@@ -123,9 +198,8 @@ async def create_checkout_session(
                 current_user.subscription.stripe_customer_id = customer_id
                 db.commit()
         
-        # Create checkout session
-        # For now, use a generic subscription setup without specific price IDs
-        # In production, you'd configure actual Stripe prices
+        # Create checkout session with 14-day trial
+        # The card is collected but not charged during the trial
         session = stripe.checkout.Session.create(
             customer=customer_id,
             payment_method_types=["card"],
@@ -133,8 +207,8 @@ async def create_checkout_session(
                 "price_data": {
                     "currency": "usd",
                     "product_data": {
-                        "name": f"SkyRate AI {current_user.role.title()} - {data.plan.title()}",
-                        "description": f"{'Annual' if data.plan == 'yearly' else 'Monthly'} subscription to SkyRate AI",
+                        "name": f"SkyRate AI {current_user.role.title()} - {plan_name}",
+                        "description": f"{plan_name} subscription to SkyRate AI. {TRIAL_PERIOD_DAYS}-day free trial, then ${price_cents/100:.0f}/{('year' if data.plan == 'yearly' else 'month')}.",
                     },
                     "unit_amount": price_cents,
                     "recurring": {
@@ -144,12 +218,23 @@ async def create_checkout_session(
                 "quantity": 1
             }],
             mode="subscription",
+            # Enable 14-day trial - card collected but not charged
+            subscription_data={
+                "trial_period_days": TRIAL_PERIOD_DAYS,
+                "metadata": {
+                    "user_id": str(current_user.id),
+                    "plan": data.plan,
+                    "role": current_user.role
+                }
+            },
             success_url=data.success_url + "?session_id={CHECKOUT_SESSION_ID}",
             cancel_url=data.cancel_url,
             metadata={
                 "user_id": str(current_user.id),
                 "plan": data.plan
-            }
+            },
+            # Allow promotion codes for discounts
+            allow_promotion_codes=True,
         )
         
         return CheckoutResponse(

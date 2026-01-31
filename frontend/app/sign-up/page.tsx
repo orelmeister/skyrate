@@ -71,11 +71,8 @@ export default function SignUpPage() {
     });
 
     if (success) {
-      if (formData.role === "vendor") {
-        router.push("/vendor");
-      } else {
-        router.push("/consultant");
-      }
+      // Redirect to paywall to collect payment info
+      router.push("/paywall");
     } else {
       setError(authError || "Failed to create account. Please try again.");
     }
@@ -394,9 +391,9 @@ export default function SignUpPage() {
             </div>
           </div>
 
-          {/* No credit card notice */}
+          {/* Trial notice */}
           <p className="mt-6 text-center text-sm text-slate-500">
-            💳 No credit card required • Cancel anytime
+            🎉 14-day free trial • Cancel anytime before trial ends
           </p>
         </div>
       </div>
