@@ -183,6 +183,46 @@ async def get_serviced_entities(
         )
 
 
+@router.get("/spin/entity/{ben}")
+async def get_entity_detail(
+    ben: str,
+    profile: VendorProfile = Depends(get_vendor_profile),
+):
+    """
+    Get detailed year-by-year breakdown for a specific entity you service.
+    Shows Category 1 and Category 2 budgets, all services provided, and FRN history.
+    """
+    if not profile.spin:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No SPIN configured in your profile. Please add your SPIN in settings first."
+        )
+    
+    try:
+        from utils.usac_client import USACDataClient
+        
+        client = USACDataClient()
+        result = client.get_entity_detail(profile.spin, ben)
+        
+        if not result.get('success'):
+            return {
+                "success": False,
+                "error": result.get('error', 'Failed to fetch entity details')
+            }
+        
+        return {
+            "success": True,
+            "spin": profile.spin,
+            **result
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch entity details: {str(e)}"
+        )
+
+
 @router.get("/spin/{spin}/lookup")
 async def lookup_spin_details(
     spin: str,

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
-import { api, VendorProfile, SpinValidationResult, ServicedEntity } from "@/lib/api";
+import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData } from "@/lib/api";
 
 interface SearchResult {
   ben: string;
@@ -49,6 +49,12 @@ export default function VendorPortalPage() {
     service_provider_name: string | null;
   } | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
+  
+  // Entity detail modal state
+  const [selectedEntity, setSelectedEntity] = useState<ServicedEntity | null>(null);
+  const [entityDetailLoading, setEntityDetailLoading] = useState(false);
+  const [entityDetail, setEntityDetail] = useState<EntityDetailResponse | null>(null);
+  const [showEntityModal, setShowEntityModal] = useState(false);
   
   // Payment guard - check if user needs to complete payment setup
   const [checkingPayment, setCheckingPayment] = useState(true);
@@ -175,6 +181,30 @@ export default function VendorPortalPage() {
     } finally {
       setServicedEntitiesLoading(false);
     }
+  };
+
+  const loadEntityDetail = async (entity: ServicedEntity) => {
+    setSelectedEntity(entity);
+    setShowEntityModal(true);
+    setEntityDetailLoading(true);
+    setEntityDetail(null);
+    
+    try {
+      const response = await api.getEntityDetail(entity.ben);
+      if (response.success && response.data) {
+        setEntityDetail(response.data);
+      }
+    } catch (error) {
+      console.error("Failed to load entity detail:", error);
+    } finally {
+      setEntityDetailLoading(false);
+    }
+  };
+
+  const closeEntityModal = () => {
+    setShowEntityModal(false);
+    setSelectedEntity(null);
+    setEntityDetail(null);
   };
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -920,45 +950,78 @@ export default function VendorPortalPage() {
                     <table className="w-full">
                       <thead className="bg-slate-50">
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">BEN</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Entity Name</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">State</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Total Amount</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                            <div className="flex flex-col">
+                              <span>Current Year</span>
+                              <span className="text-[10px] font-normal normal-case text-slate-400">Cat 1 Budget</span>
+                            </div>
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                            <div className="flex flex-col">
+                              <span>Current Year</span>
+                              <span className="text-[10px] font-normal normal-case text-slate-400">Cat 2 Budget</span>
+                            </div>
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Total Lifetime</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">FRNs</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Services</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Years</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Years Active</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200">
                         {servicedEntities.slice(0, 50).map((entity) => (
-                          <tr key={entity.ben} className="hover:bg-slate-50 transition-colors">
-                            <td className="px-4 py-3 font-mono text-sm text-slate-600">{entity.ben}</td>
+                          <tr 
+                            key={entity.ben} 
+                            className="hover:bg-purple-50 transition-colors cursor-pointer group"
+                            onClick={() => loadEntityDetail(entity)}
+                          >
                             <td className="px-4 py-3">
-                              <div className="font-medium text-slate-900">{entity.organization_name}</div>
+                              <div className="flex items-center gap-2">
+                                <div>
+                                  <div className="font-medium text-slate-900 group-hover:text-purple-700 transition-colors">
+                                    {entity.organization_name}
+                                  </div>
+                                  <div className="text-xs text-slate-500 font-mono">BEN: {entity.ben}</div>
+                                </div>
+                                <svg className="w-4 h-4 text-slate-400 group-hover:text-purple-600 ml-auto opacity-0 group-hover:opacity-100 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                              </div>
                             </td>
                             <td className="px-4 py-3">
                               <span className="px-2 py-1 bg-slate-100 text-slate-700 text-xs font-medium rounded">
                                 {entity.state}
                               </span>
                             </td>
-                            <td className="px-4 py-3 font-semibold text-green-600">
+                            <td className="px-4 py-3">
+                              {entity.current_cat1 && entity.current_cat1 > 0 ? (
+                                <div className="text-right">
+                                  <div className="font-semibold text-blue-600">
+                                    ${entity.current_cat1.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                  </div>
+                                  <div className="text-xs text-slate-400">{entity.current_year}</div>
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 text-sm">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              {entity.current_cat2 && entity.current_cat2 > 0 ? (
+                                <div className="text-right">
+                                  <div className="font-semibold text-emerald-600">
+                                    ${entity.current_cat2.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                  </div>
+                                  <div className="text-xs text-slate-400">{entity.current_year}</div>
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 text-sm">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 font-semibold text-green-600 text-right">
                               ${entity.total_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                             </td>
                             <td className="px-4 py-3 text-center text-slate-600">{entity.frn_count}</td>
-                            <td className="px-4 py-3">
-                              <div className="flex gap-1 flex-wrap max-w-xs">
-                                {entity.service_types?.slice(0, 2).map((svc, idx) => (
-                                  <span key={idx} className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">
-                                    {svc.length > 20 ? svc.substring(0, 20) + '...' : svc}
-                                  </span>
-                                ))}
-                                {entity.service_types?.length > 2 && (
-                                  <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded" title={entity.service_types.join(', ')}>
-                                    +{entity.service_types.length - 2}
-                                  </span>
-                                )}
-                              </div>
-                            </td>
                             <td className="px-4 py-3">
                               <div className="flex gap-1 flex-wrap">
                                 {entity.funding_years?.slice(0, 3).map(year => (
@@ -980,7 +1043,7 @@ export default function VendorPortalPage() {
                     {servicedEntities.length > 50 && (
                       <div className="p-4 text-center border-t border-slate-200">
                         <p className="text-sm text-slate-500">
-                          Showing 50 of {servicedEntities.length} entities
+                          Showing 50 of {servicedEntities.length} entities. Click an entity to see full details.
                         </p>
                       </div>
                     )}
@@ -1235,6 +1298,223 @@ export default function VendorPortalPage() {
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
+      )}
+
+      {/* Entity Detail Modal */}
+      {showEntityModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={closeEntityModal}
+          />
+          
+          {/* Modal */}
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-purple-600 to-pink-600 text-white">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-xl font-bold">{selectedEntity?.organization_name}</h2>
+                  <div className="flex items-center gap-3 mt-1 text-purple-100">
+                    <span className="font-mono bg-white/20 px-2 py-0.5 rounded text-sm">
+                      BEN: {selectedEntity?.ben}
+                    </span>
+                    <span className="px-2 py-0.5 bg-white/20 rounded text-sm">
+                      {selectedEntity?.state}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={closeEntityModal}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {entityDetailLoading ? (
+                <div className="py-12 text-center">
+                  <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                  <p className="text-slate-600">Loading entity details...</p>
+                </div>
+              ) : entityDetail ? (
+                <div className="space-y-6">
+                  {/* Summary Stats */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-blue-50 rounded-xl p-4">
+                      <div className="text-sm text-blue-600 font-medium">Total Cat 1</div>
+                      <div className="text-2xl font-bold text-blue-700">
+                        ${(entityDetail.total_cat1 / 1000).toFixed(1)}K
+                      </div>
+                    </div>
+                    <div className="bg-emerald-50 rounded-xl p-4">
+                      <div className="text-sm text-emerald-600 font-medium">Total Cat 2</div>
+                      <div className="text-2xl font-bold text-emerald-700">
+                        ${(entityDetail.total_cat2 / 1000).toFixed(1)}K
+                      </div>
+                    </div>
+                    <div className="bg-purple-50 rounded-xl p-4">
+                      <div className="text-sm text-purple-600 font-medium">Lifetime Total</div>
+                      <div className="text-2xl font-bold text-purple-700">
+                        ${(entityDetail.total_all / 1000).toFixed(1)}K
+                      </div>
+                    </div>
+                    <div className="bg-amber-50 rounded-xl p-4">
+                      <div className="text-sm text-amber-600 font-medium">Total FRNs</div>
+                      <div className="text-2xl font-bold text-amber-700">
+                        {entityDetail.total_frns}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Current Year Budget Highlight */}
+                  {entityDetail.current_year_budget && (
+                    <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-semibold text-green-800">
+                            {entityDetail.current_year_budget.year} Current Year Budget
+                          </h3>
+                          <p className="text-sm text-green-600 mt-1">Most recent authorized funding</p>
+                        </div>
+                        <div className="text-right">
+                          <div className="flex gap-4">
+                            <div>
+                              <div className="text-xs text-slate-500">Cat 1</div>
+                              <div className="font-bold text-blue-600">
+                                ${entityDetail.current_year_budget.cat1.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-slate-500">Cat 2</div>
+                              <div className="font-bold text-emerald-600">
+                                ${entityDetail.current_year_budget.cat2.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-slate-500">Total</div>
+                              <div className="font-bold text-purple-600">
+                                ${entityDetail.current_year_budget.total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Service Types */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-700 mb-2">Services Provided</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {entityDetail.all_service_types.map((svc, idx) => (
+                        <span key={idx} className="px-3 py-1 bg-purple-100 text-purple-700 text-sm rounded-lg">
+                          {svc}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Year-by-Year Breakdown */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-700 mb-3">Funding History by Year</h3>
+                    <div className="space-y-3">
+                      {entityDetail.years.map((yearData) => (
+                        <div key={yearData.year} className="border border-slate-200 rounded-xl overflow-hidden">
+                          <div 
+                            className="flex items-center justify-between p-4 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors"
+                            onClick={(e) => {
+                              const content = e.currentTarget.nextElementSibling;
+                              if (content) {
+                                content.classList.toggle('hidden');
+                              }
+                            }}
+                          >
+                            <div className="flex items-center gap-4">
+                              <span className="text-lg font-bold text-slate-900">{yearData.year}</span>
+                              <span className="text-sm text-slate-500">{yearData.frn_count} FRNs</span>
+                            </div>
+                            <div className="flex items-center gap-6">
+                              <div className="text-right">
+                                <span className="text-xs text-slate-400 block">Cat 1</span>
+                                <span className="font-semibold text-blue-600">
+                                  ${yearData.cat1_total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-xs text-slate-400 block">Cat 2</span>
+                                <span className="font-semibold text-emerald-600">
+                                  ${yearData.cat2_total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-xs text-slate-400 block">Total</span>
+                                <span className="font-bold text-purple-600">
+                                  ${yearData.total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                </span>
+                              </div>
+                              <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </div>
+                          </div>
+                          
+                          {/* Line Items (collapsed by default) */}
+                          <div className="hidden border-t border-slate-200">
+                            <div className="p-4 space-y-2 max-h-60 overflow-y-auto">
+                              {yearData.line_items.map((item, idx) => (
+                                <div key={idx} className="flex items-center justify-between py-2 px-3 bg-white rounded-lg border border-slate-100 text-sm">
+                                  <div>
+                                    <div className="font-mono text-slate-600">{item.frn}</div>
+                                    <div className="text-xs text-slate-500">{item.service_type}</div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="font-semibold">
+                                      ${item.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                    </div>
+                                    <div className={`text-xs px-2 py-0.5 rounded inline-block ${
+                                      item.status?.toLowerCase().includes('paid') || item.status?.toLowerCase().includes('disbursed')
+                                        ? 'bg-green-100 text-green-700'
+                                        : item.status?.toLowerCase().includes('denied')
+                                        ? 'bg-red-100 text-red-700'
+                                        : 'bg-slate-100 text-slate-600'
+                                    }`}>
+                                      {item.category} • {item.status}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-12 text-center">
+                  <p className="text-slate-500">Failed to load entity details</p>
+                </div>
+              )}
+            </div>
+            
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-3">
+              <button
+                onClick={closeEntityModal}
+                className="px-4 py-2 text-slate-700 hover:bg-slate-200 rounded-xl transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

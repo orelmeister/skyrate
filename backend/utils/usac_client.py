@@ -452,11 +452,27 @@ class USACDataClient:
                     'total_amount': 0,
                     'frn_count': 0,
                     'service_types': set(),
-                    'categories': set()
+                    'categories': set(),
+                    'cat1_by_year': {},  # Cat 1 amounts by year
+                    'cat2_by_year': {}   # Cat 2 amounts by year
                 }
             
             if year_val and str(year_val) not in ['nan', 'None', '']:
                 entities[ben]['funding_years'].add(str(year_val))
+                year_str = str(year_val)
+                
+                # Track Category 1/2 amounts by year
+                is_cat1 = 'Category 1' in str(category) or 'category 1' in str(category).lower()
+                is_cat2 = 'Category 2' in str(category) or 'category 2' in str(category).lower()
+                
+                if is_cat1:
+                    if year_str not in entities[ben]['cat1_by_year']:
+                        entities[ben]['cat1_by_year'][year_str] = 0
+                    entities[ben]['cat1_by_year'][year_str] += amount
+                elif is_cat2:
+                    if year_str not in entities[ben]['cat2_by_year']:
+                        entities[ben]['cat2_by_year'][year_str] = 0
+                    entities[ben]['cat2_by_year'][year_str] += amount
             entities[ben]['total_amount'] += amount
             entities[ben]['frn_count'] += 1
             if service_type:
@@ -470,6 +486,26 @@ class USACDataClient:
             e['funding_years'] = sorted([y for y in list(e['funding_years']) if y not in ['nan', 'None', '']], reverse=True)
             e['service_types'] = list(e['service_types'])
             e['categories'] = list(e['categories'])
+            
+            # Calculate current year budget (2026 if available, else 2025)
+            current_year = None
+            current_cat1 = 0
+            current_cat2 = 0
+            for yr in ['2026', '2025']:
+                if yr in e['funding_years']:
+                    current_year = yr
+                    current_cat1 = e['cat1_by_year'].get(yr, 0)
+                    current_cat2 = e['cat2_by_year'].get(yr, 0)
+                    break
+            
+            e['current_year'] = current_year
+            e['current_cat1'] = current_cat1
+            e['current_cat2'] = current_cat2
+            
+            # Clean up internal tracking dicts before returning
+            del e['cat1_by_year']
+            del e['cat2_by_year']
+            
             entity_list.append(e)
         
         # Sort by total amount (highest first)
@@ -485,3 +521,164 @@ class USACDataClient:
             'service_provider_name': service_provider_name,
             'entities': entity_list
         }
+    
+    def get_entity_detail(
+        self,
+        spin: str,
+        ben: str
+    ) -> Dict[str, Any]:
+        """
+        Get detailed year-by-year breakdown for a specific entity serviced by a SPIN.
+        Includes Category 1 and Category 2 budgets per funding year.
+        
+        Args:
+            spin: Service Provider Identification Number
+            ben: Billed Entity Number
+            
+        Returns:
+            Dictionary with detailed entity funding information by year and category
+        """
+        try:
+            url = USAC_ENDPOINTS['invoice_disbursements']
+            
+            # Fetch all invoice records for this SPIN + BEN combination
+            params = {
+                'inv_service_provider_id_number_spin': spin,
+                'billed_entity_number': ben,
+                '$limit': 2000,
+                '$order': 'funding_year DESC'
+            }
+            
+            logger.info(f"Fetching entity detail for SPIN {spin}, BEN {ben}")
+            response = self.session.get(url, params=params, timeout=60)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if not data:
+                return {
+                    'success': False,
+                    'error': f'No records found for BEN {ben} with SPIN {spin}'
+                }
+            
+            df = pd.DataFrame(data)
+            
+            # Get basic entity info from first record
+            first_record = data[0]
+            entity_info = {
+                'ben': ben,
+                'organization_name': first_record.get('billed_entity_name', 'Unknown'),
+                'state': first_record.get('billed_entity_state', ''),
+                'city': first_record.get('billed_entity_city', ''),
+                'service_provider_name': first_record.get('inv_service_provider_name', ''),
+            }
+            
+            # Aggregate by funding year and category
+            years_data = {}
+            total_cat1 = 0
+            total_cat2 = 0
+            total_all = 0
+            all_service_types = set()
+            all_frns = set()
+            
+            for _, record in df.iterrows():
+                year = str(record.get('funding_year', ''))
+                if year in ['nan', 'None', '']:
+                    continue
+                    
+                category = record.get('chosen_category_of_service', '')
+                service_type = record.get('service_type', '')
+                frn = record.get('funding_request_number', '')
+                
+                # Get amount (approved if available, else requested)
+                amount = float(record.get('approved_inv_line_amt') or record.get('requested_inv_line_amt') or 0)
+                status = record.get('inv_line_item_status', '')
+                
+                if service_type:
+                    all_service_types.add(service_type)
+                if frn:
+                    all_frns.add(frn)
+                
+                if year not in years_data:
+                    years_data[year] = {
+                        'year': year,
+                        'cat1_total': 0,
+                        'cat2_total': 0,
+                        'total': 0,
+                        'frn_count': 0,
+                        'service_types': set(),
+                        'line_items': []
+                    }
+                
+                # Determine category
+                is_cat1 = 'Category 1' in str(category) or 'category 1' in str(category).lower()
+                is_cat2 = 'Category 2' in str(category) or 'category 2' in str(category).lower()
+                
+                if is_cat1:
+                    years_data[year]['cat1_total'] += amount
+                    total_cat1 += amount
+                elif is_cat2:
+                    years_data[year]['cat2_total'] += amount
+                    total_cat2 += amount
+                
+                years_data[year]['total'] += amount
+                total_all += amount
+                years_data[year]['frn_count'] += 1
+                if service_type:
+                    years_data[year]['service_types'].add(service_type)
+                
+                # Add line item detail
+                years_data[year]['line_items'].append({
+                    'frn': frn,
+                    'service_type': service_type,
+                    'category': category,
+                    'amount': amount,
+                    'status': status
+                })
+            
+            # Convert sets to lists
+            for year_data in years_data.values():
+                year_data['service_types'] = list(year_data['service_types'])
+            
+            # Sort years descending
+            sorted_years = sorted(years_data.keys(), reverse=True)
+            years_list = [years_data[y] for y in sorted_years]
+            
+            # Get current year budget (2026 if available, otherwise 2025)
+            current_year_budget = None
+            for year in ['2026', '2025']:
+                if year in years_data:
+                    current_year_budget = {
+                        'year': year,
+                        'cat1': years_data[year]['cat1_total'],
+                        'cat2': years_data[year]['cat2_total'],
+                        'total': years_data[year]['total']
+                    }
+                    break
+            
+            return {
+                'success': True,
+                'entity': entity_info,
+                'total_cat1': total_cat1,
+                'total_cat2': total_cat2,
+                'total_all': total_all,
+                'current_year_budget': current_year_budget,
+                'all_service_types': list(all_service_types),
+                'total_frns': len(all_frns),
+                'years': years_list,
+                'funding_years': sorted_years
+            }
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching entity detail for SPIN {spin}, BEN {ben}: {e}")
+            return {
+                'success': False,
+                'error': f'Failed to fetch entity details: {str(e)}'
+            }
+        except Exception as e:
+            import traceback
+            logger.error(f"Error in get_entity_detail: {type(e).__name__}: {str(e)}\n{traceback.format_exc()}")
+            return {
+                'success': False,
+                'error': f'Failed to fetch entity details: {str(e)}'
+            }

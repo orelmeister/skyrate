@@ -114,6 +114,9 @@ export interface ServicedEntity {
   frn_count: number;
   service_types: string[];
   categories: string[];
+  current_year?: string;
+  current_cat1?: number;
+  current_cat2?: number;
 }
 
 export interface ServicedEntitiesResponse {
@@ -123,6 +126,50 @@ export interface ServicedEntitiesResponse {
   total_authorized: number;
   funding_years: string[];
   entities: ServicedEntity[];
+}
+
+// Entity Detail Types for the modal view
+export interface EntityYearData {
+  year: string;
+  cat1_total: number;
+  cat2_total: number;
+  total: number;
+  frn_count: number;
+  service_types: string[];
+  line_items: EntityLineItem[];
+}
+
+export interface EntityLineItem {
+  frn: string;
+  service_type: string;
+  category: string;
+  amount: number;
+  status: string;
+}
+
+export interface EntityDetailResponse {
+  success: boolean;
+  spin: string;
+  entity: {
+    ben: string;
+    organization_name: string;
+    state: string;
+    city: string;
+    service_provider_name: string;
+  };
+  total_cat1: number;
+  total_cat2: number;
+  total_all: number;
+  current_year_budget: {
+    year: string;
+    cat1: number;
+    cat2: number;
+    total: number;
+  } | null;
+  all_service_types: string[];
+  total_frns: number;
+  years: EntityYearData[];
+  funding_years: string[];
 }
 
 // ==================== APPEALS TYPES ====================
@@ -738,6 +785,10 @@ class ApiClient {
   async getServicedEntities(year?: number): Promise<ApiResponse<ServicedEntitiesResponse>> {
     const params = year ? `?year=${year}` : '';
     return this.request(`/api/v1/vendor/spin/serviced-entities${params}`);
+  }
+
+  async getEntityDetail(ben: string): Promise<ApiResponse<EntityDetailResponse>> {
+    return this.request(`/api/v1/vendor/spin/entity/${ben}`);
   }
 
   async lookupSpin(spin: string, year?: number): Promise<ApiResponse<{
