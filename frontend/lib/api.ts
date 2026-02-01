@@ -108,9 +108,12 @@ export interface SpinValidationResult {
 export interface ServicedEntity {
   ben: string;
   organization_name: string;
-  funding_year: string[];
+  state: string;
+  funding_years: string[];
   total_amount: number;
   frn_count: number;
+  service_types: string[];
+  categories: string[];
 }
 
 export interface ServicedEntitiesResponse {

@@ -322,7 +322,7 @@ class USACDataClient:
         self,
         spin: str,
         year: Optional[int] = None,
-        limit: int = 500
+        limit: int = 5000
     ) -> pd.DataFrame:
         """
         Get all schools/entities serviced by a specific SPIN (vendor).
@@ -335,46 +335,58 @@ class USACDataClient:
             limit: Maximum records to return
             
         Returns:
-            DataFrame with unique entities serviced by the vendor
+            DataFrame with invoice records for entities serviced by the vendor
         """
         try:
             url = USAC_ENDPOINTS['invoice_disbursements']
             
-            # Build query - get invoices where this SPIN is the service provider
-            where_clause = f"inv_service_provider_id_number_spin = '{spin}'"
-            if year:
-                where_clause += f" AND funding_year = {year}"
-            
+            # Use direct field filtering (more reliable than $where clause)
             params = {
-                '$where': where_clause,
+                'inv_service_provider_id_number_spin': spin,
                 '$limit': limit,
-                '$order': 'funding_year DESC',
-                '$select': 'billed_entity_number_applicant_invoice, billed_entity_name_applicant_invoice, funding_year, frn, inv_service_provider_name, inv_total_authorized_amt, inv_line_item_status'
+                '$order': 'funding_year DESC'
             }
             
+            # Add year filter if specified
+            if year:
+                params['funding_year'] = str(year)
+            
+            logger.info(f"Fetching serviced entities for SPIN {spin}")
             response = self.session.get(url, params=params, timeout=60)
             response.raise_for_status()
             
             data = response.json()
             
             if not data:
+                logger.info(f"No invoice records found for SPIN {spin}")
                 return pd.DataFrame()
             
+            logger.info(f"Found {len(data)} invoice records for SPIN {spin}")
             df = pd.DataFrame(data)
             
-            # Rename columns for clarity
-            df = df.rename(columns={
-                'billed_entity_number_applicant_invoice': 'ben',
-                'billed_entity_name_applicant_invoice': 'organization_name',
+            # Rename columns for clarity (use actual field names from USAC)
+            column_mapping = {
+                'billed_entity_number': 'ben',
+                'billed_entity_name': 'organization_name',
+                'billed_entity_state': 'state',
                 'inv_service_provider_name': 'service_provider_name',
-                'inv_total_authorized_amt': 'total_authorized_amount',
-                'inv_line_item_status': 'status'
-            })
+                'approved_inv_line_amt': 'approved_amount',
+                'requested_inv_line_amt': 'requested_amount',
+                'inv_line_item_status': 'status',
+                'service_type': 'service_type',
+                'chosen_category_of_service': 'category',
+                'funding_request_number': 'frn',
+                'form_471_app_num': 'application_number'
+            }
+            
+            # Only rename columns that exist
+            rename_cols = {k: v for k, v in column_mapping.items() if k in df.columns}
+            df = df.rename(columns=rename_cols)
             
             return df
             
         except requests.exceptions.RequestException as e:
-            print(f"Error fetching serviced entities: {e}")
+            logger.error(f"Error fetching serviced entities for SPIN {spin}: {e}")
             return pd.DataFrame()
     
     def get_serviced_entities_summary(
@@ -392,7 +404,7 @@ class USACDataClient:
         Returns:
             Dictionary with summary statistics and unique entity list
         """
-        df = self.get_serviced_entities(spin, year, limit=2000)
+        df = self.get_serviced_entities(spin, year, limit=5000)
         
         if df.empty:
             return {
@@ -403,25 +415,73 @@ class USACDataClient:
                 'service_provider_name': None
             }
         
-        # Get unique entities with aggregated amounts
-        entities_summary = df.groupby(['ben', 'organization_name']).agg({
-            'funding_year': lambda x: list(x.unique()),
-            'total_authorized_amount': lambda x: pd.to_numeric(x, errors='coerce').sum(),
-            'frn': 'count'
-        }).reset_index()
+        # Get service provider name from first record
+        service_provider_name = df['service_provider_name'].iloc[0] if 'service_provider_name' in df.columns else None
         
-        entities_summary = entities_summary.rename(columns={
-            'frn': 'frn_count',
-            'total_authorized_amount': 'total_amount'
-        })
+        # Use approved_amount if available, otherwise requested_amount
+        amount_col = 'approved_amount' if 'approved_amount' in df.columns else 'requested_amount'
         
-        # Sort by total amount
-        entities_summary = entities_summary.sort_values('total_amount', ascending=False)
+        # Aggregate by unique entities
+        entities = {}
+        years = set()
+        total_amount = 0
+        
+        for _, record in df.iterrows():
+            ben = str(record.get('ben', ''))
+            if not ben or ben == 'nan':
+                continue
+                
+            name = record.get('organization_name', 'Unknown')
+            year_val = record.get('funding_year')
+            state = record.get('state', '')
+            service_type = record.get('service_type', '')
+            category = record.get('category', '')
+            amount = float(record.get(amount_col) or 0)
+            
+            # Skip invalid year values
+            if year_val and str(year_val) not in ['nan', 'None', '']:
+                years.add(str(year_val))
+            total_amount += amount
+            
+            if ben not in entities:
+                entities[ben] = {
+                    'ben': ben,
+                    'organization_name': name,
+                    'state': state,
+                    'funding_years': set(),
+                    'total_amount': 0,
+                    'frn_count': 0,
+                    'service_types': set(),
+                    'categories': set()
+                }
+            
+            if year_val and str(year_val) not in ['nan', 'None', '']:
+                entities[ben]['funding_years'].add(str(year_val))
+            entities[ben]['total_amount'] += amount
+            entities[ben]['frn_count'] += 1
+            if service_type:
+                entities[ben]['service_types'].add(service_type)
+            if category:
+                entities[ben]['categories'].add(category)
+        
+        # Convert sets to sorted lists and filter out invalid values
+        entity_list = []
+        for e in entities.values():
+            e['funding_years'] = sorted([y for y in list(e['funding_years']) if y not in ['nan', 'None', '']], reverse=True)
+            e['service_types'] = list(e['service_types'])
+            e['categories'] = list(e['categories'])
+            entity_list.append(e)
+        
+        # Sort by total amount (highest first)
+        entity_list.sort(key=lambda x: x['total_amount'], reverse=True)
+        
+        # Filter out invalid years from the global list
+        valid_years = [y for y in years if y not in ['nan', 'None', '']]
         
         return {
-            'total_entities': len(entities_summary),
-            'total_authorized': entities_summary['total_amount'].sum(),
-            'funding_years': sorted(df['funding_year'].unique().tolist(), reverse=True),
-            'service_provider_name': df['service_provider_name'].iloc[0] if not df.empty else None,
-            'entities': entities_summary.to_dict('records')
+            'total_entities': len(entity_list),
+            'total_authorized': total_amount,
+            'funding_years': sorted(valid_years, reverse=True),
+            'service_provider_name': service_provider_name,
+            'entities': entity_list
         }

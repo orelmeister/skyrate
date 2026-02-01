@@ -402,6 +402,73 @@ export default function VendorPortalPage() {
         <div className="p-6">
           {activeTab === "dashboard" && (
             <div className="space-y-6">
+              {/* Company Info Banner */}
+              {profile?.spin && servicedEntitiesStats ? (
+                <div className="bg-gradient-to-r from-purple-600 via-purple-700 to-pink-600 rounded-2xl p-6 text-white shadow-lg">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
+                        <span className="text-3xl">🏢</span>
+                      </div>
+                      <div>
+                        <h1 className="text-2xl font-bold">{servicedEntitiesStats.service_provider_name || profile.company_name || 'Your Company'}</h1>
+                        <div className="flex items-center gap-3 mt-1 text-purple-100">
+                          <span className="font-mono bg-white/20 px-2 py-0.5 rounded text-sm">SPIN: {profile.spin}</span>
+                          <span className="flex items-center gap-1 text-sm">
+                            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                            Active Service Provider
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab("my-entities")}
+                      className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
+                    >
+                      View All Entities →
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-4 gap-6 mt-6 pt-6 border-t border-white/20">
+                    <div>
+                      <div className="text-3xl font-bold">{servicedEntitiesStats.total_entities}</div>
+                      <div className="text-sm text-purple-200 mt-1">Entities Serviced</div>
+                    </div>
+                    <div>
+                      <div className="text-3xl font-bold">${(servicedEntitiesStats.total_authorized / 1000000).toFixed(2)}M</div>
+                      <div className="text-sm text-purple-200 mt-1">Total E-Rate Authorized</div>
+                    </div>
+                    <div>
+                      <div className="text-3xl font-bold">{servicedEntitiesStats.funding_years.length}</div>
+                      <div className="text-sm text-purple-200 mt-1">Years Active</div>
+                    </div>
+                    <div>
+                      <div className="text-3xl font-bold">{servicedEntitiesStats.funding_years[0] || 'N/A'}</div>
+                      <div className="text-sm text-purple-200 mt-1">Most Recent Year</div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200 p-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
+                      <span className="text-2xl">⚠️</span>
+                    </div>
+                    <div className="flex-1">
+                      <h2 className="text-lg font-semibold text-slate-900">Complete Your Profile</h2>
+                      <p className="text-sm text-slate-600 mt-1">
+                        Add your SPIN number to see your serviced entities and E-Rate history
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab("settings")}
+                      className="px-4 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors text-sm font-medium"
+                    >
+                      Setup SPIN →
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Stats Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
@@ -450,6 +517,47 @@ export default function VendorPortalPage() {
                   <div className="text-sm text-slate-500 mt-1">Subscription</div>
                 </div>
               </div>
+
+              {/* Top Entities Preview */}
+              {servicedEntities.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+                    <div>
+                      <h2 className="text-lg font-semibold text-slate-900">Top Entities by E-Rate Funding</h2>
+                      <p className="text-sm text-slate-500">Your highest-value customer relationships</p>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab("my-entities")}
+                      className="text-sm text-purple-600 hover:underline font-medium"
+                    >
+                      View All →
+                    </button>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {servicedEntities.slice(0, 5).map((entity, idx) => (
+                      <div key={entity.ben} className="p-4 flex items-center gap-4 hover:bg-slate-50 transition-colors">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center font-bold text-purple-600">
+                          {idx + 1}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-slate-900 truncate">{entity.organization_name}</div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-xs text-slate-500">{entity.state}</span>
+                            <span className="text-slate-300">•</span>
+                            <span className="text-xs text-slate-500">{entity.frn_count} FRNs</span>
+                            <span className="text-slate-300">•</span>
+                            <span className="text-xs text-slate-500">{entity.funding_years?.length || 0} years</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-semibold text-green-600">${entity.total_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                          <div className="text-xs text-slate-500">authorized</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Quick Actions */}
               <div className="bg-white rounded-2xl border border-slate-200 p-6">
@@ -814,30 +922,53 @@ export default function VendorPortalPage() {
                         <tr>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">BEN</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Entity Name</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">FRN Count</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">State</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Total Amount</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">FRNs</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Services</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Years</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200">
                         {servicedEntities.slice(0, 50).map((entity) => (
                           <tr key={entity.ben} className="hover:bg-slate-50 transition-colors">
-                            <td className="px-4 py-3 font-mono text-sm">{entity.ben}</td>
-                            <td className="px-4 py-3">{entity.organization_name}</td>
-                            <td className="px-4 py-3">{entity.frn_count}</td>
-                            <td className="px-4 py-3 font-medium text-green-600">
+                            <td className="px-4 py-3 font-mono text-sm text-slate-600">{entity.ben}</td>
+                            <td className="px-4 py-3">
+                              <div className="font-medium text-slate-900">{entity.organization_name}</div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="px-2 py-1 bg-slate-100 text-slate-700 text-xs font-medium rounded">
+                                {entity.state}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 font-semibold text-green-600">
                               ${entity.total_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            </td>
+                            <td className="px-4 py-3 text-center text-slate-600">{entity.frn_count}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex gap-1 flex-wrap max-w-xs">
+                                {entity.service_types?.slice(0, 2).map((svc, idx) => (
+                                  <span key={idx} className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">
+                                    {svc.length > 20 ? svc.substring(0, 20) + '...' : svc}
+                                  </span>
+                                ))}
+                                {entity.service_types?.length > 2 && (
+                                  <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded" title={entity.service_types.join(', ')}>
+                                    +{entity.service_types.length - 2}
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex gap-1 flex-wrap">
-                                {entity.funding_year?.slice(0, 3).map(year => (
-                                  <span key={year} className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded">
+                                {entity.funding_years?.slice(0, 3).map(year => (
+                                  <span key={year} className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
                                     {year}
                                   </span>
                                 ))}
-                                {entity.funding_year?.length > 3 && (
-                                  <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded">
-                                    +{entity.funding_year.length - 3}
+                                {entity.funding_years?.length > 3 && (
+                                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
+                                    +{entity.funding_years.length - 3}
                                   </span>
                                 )}
                               </div>
