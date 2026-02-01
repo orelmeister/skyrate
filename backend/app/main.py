@@ -13,6 +13,12 @@ import logging
 import sys
 import os
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
+
 # Add parent directory to path to import existing utils (skyrate-ai)
 skyrate_ai_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'skyrate-ai')
 if os.path.exists(skyrate_ai_path):
@@ -34,6 +40,43 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Rate limiter (disabled for debugging)
+# limiter = Limiter(key_func=get_remote_address)
+limiter = None  # TODO: Fix limiter - causes app to shutdown on first request
+
+
+# ==================== SECURITY MIDDLEWARE ====================
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers to all responses"""
+    
+    async def dispatch(self, request: Request, call_next) -> Response:
+        response = await call_next(request)
+        
+        # Prevent MIME type sniffing
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        
+        # Prevent clickjacking
+        response.headers["X-Frame-Options"] = "DENY"
+        
+        # XSS protection (legacy but still useful)
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        
+        # Referrer policy
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        
+        # Content Security Policy (adjust as needed for your frontend)
+        response.headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none'"
+        
+        # HSTS - enable in production with HTTPS
+        if settings.ENVIRONMENT != "development":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        
+        # Permissions Policy
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        
+        return response
 
 
 @asynccontextmanager
@@ -69,7 +112,14 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# CORS for frontend
+# Add rate limiter to app state
+# app.state.limiter = limiter
+# app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Add security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
+
+# CORS for frontend (after security headers so they're applied)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[

@@ -806,9 +806,50 @@ async def get_denied_applications(
                 amount = float(app.get("funding_commitment_request") or app.get("original_request") or 0)
                 total_denied_amount += amount
                 
+                # Extract FCDL date and calculate appeal deadline
+                fcdl_date_str = app.get("fcdl_letter_date")
+                deadline_info = None
+                
+                if fcdl_date_str:
+                    try:
+                        from datetime import datetime, timedelta
+                        # Parse FCDL date
+                        fcdl_date = datetime.fromisoformat(fcdl_date_str.replace('T00:00:00.000', ''))
+                        appeal_deadline = fcdl_date + timedelta(days=60)
+                        days_remaining = (appeal_deadline - datetime.now()).days
+                        
+                        # Determine urgency level
+                        if days_remaining < 0:
+                            urgency = "EXPIRED"
+                            urgency_color = "gray"
+                        elif days_remaining <= 7:
+                            urgency = "CRITICAL"
+                            urgency_color = "red"
+                        elif days_remaining <= 14:
+                            urgency = "HIGH"
+                            urgency_color = "orange"
+                        elif days_remaining <= 30:
+                            urgency = "MEDIUM"
+                            urgency_color = "yellow"
+                        else:
+                            urgency = "LOW"
+                            urgency_color = "green"
+                        
+                        deadline_info = {
+                            "fcdl_date": fcdl_date.strftime('%Y-%m-%d'),
+                            "appeal_deadline": appeal_deadline.strftime('%Y-%m-%d'),
+                            "days_remaining": days_remaining,
+                            "urgency": urgency,
+                            "urgency_color": urgency_color,
+                            "is_expired": days_remaining < 0,
+                            "can_appeal_to_usac": days_remaining >= 0
+                        }
+                    except Exception as e:
+                        print(f"Error calculating deadline for FRN {frn}: {e}")
+                
                 print(f"DEBUG: Found denied FRN {frn} - status: {status}, amount: {amount}")
                 
-                denied_applications.append({
+                denied_app = {
                     "frn": frn,
                     "ben": ben,
                     "school_name": school.school_name if school else app.get("organization_name", "Unknown"),
@@ -819,7 +860,13 @@ async def get_denied_applications(
                     "denial_reason": app.get("denial_reason") or app.get("frn_denial_reason_desc"),
                     "application_number": app.get("application_number"),
                     "has_appeal": frn in frns_with_appeals
-                })
+                }
+                
+                # Add deadline info if available
+                if deadline_info:
+                    denied_app.update(deadline_info)
+                
+                denied_applications.append(denied_app)
                 
     except Exception as e:
         print(f"Error fetching denied applications: {e}")
@@ -828,8 +875,14 @@ async def get_denied_applications(
     
     print(f"DEBUG denied-applications: Returning {len(denied_applications)} denied applications")
     
-    # Sort by amount (highest first)
-    denied_applications.sort(key=lambda x: x.get("amount_requested", 0), reverse=True)
+    # Sort by urgency (most urgent first), then by amount
+    urgency_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "EXPIRED": 4}
+    denied_applications.sort(
+        key=lambda x: (
+            urgency_order.get(x.get("urgency", "LOW"), 99),  # Primary: urgency
+            -x.get("amount_requested", 0)  # Secondary: amount (descending)
+        )
+    )
     
     return {
         "success": True,

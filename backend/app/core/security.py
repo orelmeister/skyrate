@@ -121,17 +121,29 @@ async def get_current_user(
             detail="User account is disabled",
         )
     
+    # Validate that token role matches database role (security check)
+    token_role = payload.get("role")
+    if token_role and token_role != user.role:
+        print(f"[WARNING] Token role mismatch: token has '{token_role}' but DB has '{user.role}' for user {user.id}")
+        # Use database role as source of truth
+    
+    # Debug logging
+    print(f"[DEBUG] get_current_user: user_id={user.id}, email={user.email}, role={user.role}")
+    
     return user
 
 
 def require_role(*roles: str):
     """Dependency factory to require specific user roles"""
     async def role_checker(current_user = Depends(get_current_user)):
+        print(f"[DEBUG] require_role: checking user {current_user.email} (role={current_user.role}) against required roles: {roles}")
         if current_user.role not in roles:
+            print(f"[DEBUG] require_role: DENIED - user role '{current_user.role}' not in {roles}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Access denied. Required roles: {', '.join(roles)}",
             )
+        print(f"[DEBUG] require_role: ALLOWED")
         return current_user
     return role_checker
 

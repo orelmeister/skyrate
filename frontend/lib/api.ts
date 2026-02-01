@@ -65,6 +65,7 @@ export interface ConsultantProfile {
 export interface VendorProfile {
   id: number;
   user_id: number;
+  spin: string | null;  // Service Provider Identification Number
   company_name: string;
   contact_name: string;
   phone: string | null;
@@ -75,6 +76,50 @@ export interface VendorProfile {
   service_areas: string[];
   search_count: number;
   created_at: string;
+}
+
+export interface SpinValidationResult {
+  valid: boolean;
+  spin?: string;
+  service_provider_name?: string;
+  doing_business_as?: string;
+  status?: string;
+  fcc_registration_number?: string;
+  general_contact_name?: string;
+  general_contact_email?: string;
+  phone_number?: string;
+  mailing_address?: {
+    address1?: string;
+    address2?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+  };
+  physical_address?: {
+    address1?: string;
+    address2?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+  };
+  error?: string;
+}
+
+export interface ServicedEntity {
+  ben: string;
+  organization_name: string;
+  funding_year: string[];
+  total_amount: number;
+  frn_count: number;
+}
+
+export interface ServicedEntitiesResponse {
+  spin: string;
+  service_provider_name: string | null;
+  total_entities: number;
+  total_authorized: number;
+  funding_years: string[];
+  entities: ServicedEntity[];
 }
 
 // ==================== APPEALS TYPES ====================
@@ -678,21 +723,81 @@ class ApiClient {
     });
   }
 
-  // ==================== SUBSCRIPTIONS ====================
+  // ==================== SPIN VALIDATION & SERVICED ENTITIES ====================
 
-  async createCheckoutSession(plan: 'monthly' | 'yearly'): Promise<ApiResponse<{ checkout_url: string }>> {
-    return this.request('/api/v1/subscriptions/create-checkout', {
+  async validateSpin(spin: string): Promise<ApiResponse<{ valid: boolean; provider?: SpinValidationResult; error?: string }>> {
+    return this.request('/api/v1/vendor/spin/validate', {
       method: 'POST',
-      body: JSON.stringify({ plan }),
+      body: JSON.stringify({ spin }),
     });
   }
 
-  async getSubscription(): Promise<ApiResponse<{ subscription: Subscription }>> {
-    return this.request('/api/v1/subscriptions/current');
+  async getServicedEntities(year?: number): Promise<ApiResponse<ServicedEntitiesResponse>> {
+    const params = year ? `?year=${year}` : '';
+    return this.request(`/api/v1/vendor/spin/serviced-entities${params}`);
   }
 
-  async cancelSubscription(): Promise<ApiResponse<any>> {
+  async lookupSpin(spin: string, year?: number): Promise<ApiResponse<{
+    provider: SpinValidationResult;
+    total_entities: number;
+    total_authorized: number;
+    funding_years: string[];
+    entities: ServicedEntity[];
+  }>> {
+    const params = year ? `?year=${year}` : '';
+    return this.request(`/api/v1/vendor/spin/${spin}/lookup${params}`);
+  }
+
+  // ==================== SUBSCRIPTIONS ====================
+
+  async getPaymentStatus(): Promise<ApiResponse<{
+    requires_payment_setup: boolean;
+    subscription_status: string | null;
+    trial_ends_at: string | null;
+    plan: string | null;
+  }>> {
+    return this.request('/api/v1/subscriptions/payment-status');
+  }
+
+  async createCheckoutSession(data: {
+    plan: 'monthly' | 'yearly';
+    success_url: string;
+    cancel_url: string;
+  }): Promise<ApiResponse<{ checkout_url: string; session_id: string }>> {
+    return this.request('/api/v1/subscriptions/create-checkout', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async redeemCoupon(coupon_code: string): Promise<ApiResponse<{
+    success: boolean;
+    message: string;
+    redirect_url?: string;
+  }>> {
+    return this.request('/api/v1/subscriptions/redeem-coupon', {
+      method: 'POST',
+      body: JSON.stringify({ coupon_code }),
+    });
+  }
+
+  async getSubscription(): Promise<ApiResponse<{ 
+    success: boolean;
+    subscription: Subscription | null;
+    requires_payment_setup: boolean;
+  }>> {
+    return this.request('/api/v1/subscriptions/status');
+  }
+
+  async cancelSubscription(reason?: string): Promise<ApiResponse<any>> {
     return this.request('/api/v1/subscriptions/cancel', {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  }
+
+  async reactivateSubscription(): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/subscriptions/reactivate', {
       method: 'POST',
     });
   }

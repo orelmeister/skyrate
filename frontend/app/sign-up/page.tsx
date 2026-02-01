@@ -71,11 +71,9 @@ export default function SignUpPage() {
     });
 
     if (success) {
-      if (formData.role === "vendor") {
-        router.push("/vendor");
-      } else {
-        router.push("/consultant");
-      }
+      // Redirect to subscribe page for subscription setup
+      // User must complete payment setup before accessing the dashboard
+      router.push("/subscribe");
     } else {
       setError(authError || "Failed to create account. Please try again.");
     }

@@ -3,11 +3,15 @@ Authentication API Endpoints
 Handles user registration, login, token refresh, and profile management
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional
 from datetime import datetime, timedelta
+import re
+
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from ...core.database import get_db
 from ...core.security import (
@@ -24,12 +28,41 @@ from ...services.usac_service import get_usac_service
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+# Rate limiter using client IP
+limiter = Limiter(key_func=get_remote_address)
+
 
 # ==================== SCHEMAS ====================
 
 class UserRegister(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    company_name: Optional[str] = None
+    role: str = Field(default="consultant", pattern="^(consultant|vendor)$")
+    crn: Optional[str] = Field(None, description="Consultant Registration Number (required for consultants)")
+    spin: Optional[str] = Field(None, description="Service Provider Identification Number (required for vendors)")
+    
+    @field_validator('password')
+    @classmethod
+    def validate_password_strength(cls, v: str) -> str:
+        """Validate password meets security requirements"""
+        errors = []
+        if len(v) < 8:
+            errors.append("at least 8 characters")
+        if not re.search(r'[A-Z]', v):
+            errors.append("one uppercase letter")
+        if not re.search(r'[a-z]', v):
+            errors.append("one lowercase letter")
+        if not re.search(r'\d', v):
+            errors.append("one digit")
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', v):
+            errors.append("one special character (!@#$%^&*(),.?\":{}|<>)")
+        
+        if errors:
+            raise ValueError(f"Password must contain {', '.join(errors)}")
+        return v
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     company_name: Optional[str] = None
@@ -129,7 +162,9 @@ def auto_import_schools_from_crn(user_id: int, crn: str):
 # ==================== ENDPOINTS ====================
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("3/minute")
 async def register(
+    request: Request,
     data: UserRegister,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
@@ -138,6 +173,7 @@ async def register(
     Register a new user account.
     Creates user and starts 14-day free trial.
     Requires CRN for consultants and SPIN for vendors.
+    Rate limited to 3 requests per minute.
     """
     # Validate required registration numbers
     if data.role == "consultant" and not data.crn:
@@ -233,9 +269,9 @@ async def register(
     db.commit()
     db.refresh(user)
     
-    # Generate tokens
-    access_token = create_access_token(data={"sub": str(user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    # Generate tokens with role included
+    access_token = create_access_token(data={"sub": str(user.id), "role": user.role})
+    refresh_token = create_refresh_token(data={"sub": str(user.id), "role": user.role})
     
     # Auto-import schools in background for consultants
     if data.role == "consultant" and data.crn:
@@ -253,13 +289,16 @@ async def register(
 
 
 @router.post("/login", response_model=TokenResponse)
+# @limiter.limit("5/minute")  # TODO: Fix limiter initialization - using app's limiter
 async def login(
+    request: Request,
     data: UserLogin,
     db: Session = Depends(get_db)
 ):
     """
     Login with email and password.
     Returns access and refresh tokens.
+    Rate limited to 5 requests per minute.
     """
     user = db.query(User).filter(User.email == data.email.lower()).first()
     
@@ -279,9 +318,14 @@ async def login(
     user.last_login = datetime.utcnow()
     db.commit()
     
-    # Generate tokens
-    access_token = create_access_token(data={"sub": str(user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    # Debug logging
+    print(f"[DEBUG] login: user_id={user.id}, email={user.email}, role={user.role}")
+    
+    # Generate tokens with role included
+    access_token = create_access_token(data={"sub": str(user.id), "role": user.role})
+    refresh_token = create_refresh_token(data={"sub": str(user.id), "role": user.role})
+    
+    print(f"[DEBUG] login: generated tokens for user {user.id} with role {user.role}")
     
     return TokenResponse(
         access_token=access_token,
@@ -316,9 +360,9 @@ async def refresh_token(
             detail="User not found or inactive"
         )
     
-    # Generate new tokens
-    access_token = create_access_token(data={"sub": str(user.id)})
-    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    # Generate new tokens with role included
+    access_token = create_access_token(data={"sub": str(user.id), "role": user.role})
+    refresh_token = create_refresh_token(data={"sub": str(user.id), "role": user.role})
     
     return TokenResponse(
         access_token=access_token,

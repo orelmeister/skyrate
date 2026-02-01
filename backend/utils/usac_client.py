@@ -6,6 +6,8 @@ USAC Datasets used:
 - Form 471: https://opendata.usac.org/resource/srbr-2d59.json
 - Form 470: https://opendata.usac.org/resource/avi8-svp9.json
 - C2 Budget: https://opendata.usac.org/resource/6brt-5pbv.json
+- Service Provider Info: https://opendata.usac.org/resource/xcy2-bdid.json
+- Invoice Disbursements: https://opendata.usac.org/resource/jpiu-tj8h.json
 """
 
 import requests
@@ -14,12 +16,17 @@ from typing import Dict, List, Optional, Any
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 # USAC Open Data API endpoints
 USAC_ENDPOINTS = {
     'form_471': 'https://opendata.usac.org/resource/srbr-2d59.json',
     'form_470': 'https://opendata.usac.org/resource/avi8-svp9.json',
     'c2_budget': 'https://opendata.usac.org/resource/6brt-5pbv.json',
+    'service_provider': 'https://opendata.usac.org/resource/xcy2-bdid.json',
+    'invoice_disbursements': 'https://opendata.usac.org/resource/jpiu-tj8h.json',
 }
 
 # Field name mapping from common names to USAC API field names
@@ -242,3 +249,179 @@ class USACDataClient:
             filters={'ben': ben},
             limit=100
         )
+    
+    def validate_spin(self, spin: str) -> Dict[str, Any]:
+        """
+        Validate a SPIN and get service provider information.
+        
+        Args:
+            spin: Service Provider Identification Number
+            
+        Returns:
+            Dictionary with provider info or error
+        """
+        try:
+            url = USAC_ENDPOINTS['service_provider']
+            params = {
+                '$where': f"spin = '{spin}'",
+                '$limit': 1,
+            }
+            
+            response = self.session.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if not data:
+                return {
+                    'valid': False,
+                    'error': f'SPIN {spin} not found in USAC database'
+                }
+            
+            provider = data[0]
+            return {
+                'valid': True,
+                'spin': provider.get('spin'),
+                'service_provider_name': provider.get('service_provider_name'),
+                'doing_business_as': provider.get('doing_business_as_dba_'),
+                'status': provider.get('status'),
+                'fcc_registration_number': provider.get('fcc_registration_number'),
+                'general_contact_name': provider.get('general_contact_name'),
+                'general_contact_email': provider.get('general_contact_email'),
+                'phone_number': provider.get('phone_number'),
+                'mailing_address': {
+                    'address1': provider.get('mailing_address_1'),
+                    'address2': provider.get('mailing_address_2'),
+                    'city': provider.get('mailing_city'),
+                    'state': provider.get('mailing_state'),
+                    'zip': provider.get('mailing_zip_code'),
+                },
+                'physical_address': {
+                    'address1': provider.get('physical_address_1'),
+                    'address2': provider.get('physical_address_2'),
+                    'city': provider.get('physical_city'),
+                    'state': provider.get('physical_state'),
+                    'zip': provider.get('physical_zip_code'),
+                }
+            }
+            
+        except requests.exceptions.RequestException as e:
+            return {
+                'valid': False,
+                'error': f'Failed to validate SPIN: {str(e)}'
+            }
+        except Exception as e:
+            import traceback
+            logger.error(f"Error validating SPIN {spin}: {type(e).__name__}: {str(e)}\n{traceback.format_exc()}")
+            return {
+                'valid': False,
+                'error': f'Failed to validate SPIN: {str(e)}'
+            }
+    
+    def get_serviced_entities(
+        self,
+        spin: str,
+        year: Optional[int] = None,
+        limit: int = 500
+    ) -> pd.DataFrame:
+        """
+        Get all schools/entities serviced by a specific SPIN (vendor).
+        Uses the Invoice Disbursements dataset to find all entities
+        that have received services from this vendor.
+        
+        Args:
+            spin: Service Provider Identification Number
+            year: Optional funding year filter
+            limit: Maximum records to return
+            
+        Returns:
+            DataFrame with unique entities serviced by the vendor
+        """
+        try:
+            url = USAC_ENDPOINTS['invoice_disbursements']
+            
+            # Build query - get invoices where this SPIN is the service provider
+            where_clause = f"inv_service_provider_id_number_spin = '{spin}'"
+            if year:
+                where_clause += f" AND funding_year = {year}"
+            
+            params = {
+                '$where': where_clause,
+                '$limit': limit,
+                '$order': 'funding_year DESC',
+                '$select': 'billed_entity_number_applicant_invoice, billed_entity_name_applicant_invoice, funding_year, frn, inv_service_provider_name, inv_total_authorized_amt, inv_line_item_status'
+            }
+            
+            response = self.session.get(url, params=params, timeout=60)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if not data:
+                return pd.DataFrame()
+            
+            df = pd.DataFrame(data)
+            
+            # Rename columns for clarity
+            df = df.rename(columns={
+                'billed_entity_number_applicant_invoice': 'ben',
+                'billed_entity_name_applicant_invoice': 'organization_name',
+                'inv_service_provider_name': 'service_provider_name',
+                'inv_total_authorized_amt': 'total_authorized_amount',
+                'inv_line_item_status': 'status'
+            })
+            
+            return df
+            
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching serviced entities: {e}")
+            return pd.DataFrame()
+    
+    def get_serviced_entities_summary(
+        self,
+        spin: str,
+        year: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Get a summary of all entities serviced by a SPIN with aggregated data.
+        
+        Args:
+            spin: Service Provider Identification Number
+            year: Optional funding year filter
+            
+        Returns:
+            Dictionary with summary statistics and unique entity list
+        """
+        df = self.get_serviced_entities(spin, year, limit=2000)
+        
+        if df.empty:
+            return {
+                'total_entities': 0,
+                'total_authorized': 0,
+                'entities': [],
+                'funding_years': [],
+                'service_provider_name': None
+            }
+        
+        # Get unique entities with aggregated amounts
+        entities_summary = df.groupby(['ben', 'organization_name']).agg({
+            'funding_year': lambda x: list(x.unique()),
+            'total_authorized_amount': lambda x: pd.to_numeric(x, errors='coerce').sum(),
+            'frn': 'count'
+        }).reset_index()
+        
+        entities_summary = entities_summary.rename(columns={
+            'frn': 'frn_count',
+            'total_authorized_amount': 'total_amount'
+        })
+        
+        # Sort by total amount
+        entities_summary = entities_summary.sort_values('total_amount', ascending=False)
+        
+        return {
+            'total_entities': len(entities_summary),
+            'total_authorized': entities_summary['total_amount'].sum(),
+            'funding_years': sorted(df['funding_year'].unique().tolist(), reverse=True),
+            'service_provider_name': df['service_provider_name'].iloc[0] if not df.empty else None,
+            'entities': entities_summary.to_dict('records')
+        }

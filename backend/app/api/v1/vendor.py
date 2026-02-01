@@ -33,6 +33,11 @@ class VendorProfileCreate(BaseModel):
     equipment_types: Optional[List[str]] = []
     services_offered: Optional[List[str]] = []
     service_areas: Optional[List[str]] = []
+    spin: Optional[str] = None  # Service Provider Identification Number
+
+
+class SpinValidationRequest(BaseModel):
+    spin: str
 
 
 class SearchRequest(BaseModel):
@@ -91,7 +96,7 @@ async def update_profile(
 ):
     """Update vendor profile"""
     for field in ['company_name', 'contact_name', 'phone', 'address', 
-                  'website', 'equipment_types', 'services_offered', 'service_areas']:
+                  'website', 'equipment_types', 'services_offered', 'service_areas', 'spin']:
         value = getattr(data, field, None)
         if value is not None:
             setattr(profile, field, value)
@@ -100,6 +105,124 @@ async def update_profile(
     db.refresh(profile)
     
     return {"success": True, "profile": profile.to_dict()}
+
+
+# ==================== SPIN VALIDATION & SERVICED ENTITIES ====================
+
+@router.post("/spin/validate")
+async def validate_spin(
+    data: SpinValidationRequest,
+    profile: VendorProfile = Depends(get_vendor_profile),
+):
+    """
+    Validate a SPIN and get service provider information from USAC.
+    Returns provider details if valid, error if not found.
+    """
+    try:
+        from utils.usac_client import USACDataClient
+        
+        client = USACDataClient()
+        result = client.validate_spin(data.spin)
+        
+        if not result.get('valid'):
+            return {
+                "success": False,
+                "error": result.get('error', 'Invalid SPIN'),
+                "valid": False
+            }
+        
+        return {
+            "success": True,
+            "valid": True,
+            "provider": result
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to validate SPIN: {str(e)}"
+        )
+
+
+@router.get("/spin/serviced-entities")
+async def get_serviced_entities(
+    year: Optional[int] = None,
+    limit: int = 500,
+    profile: VendorProfile = Depends(get_vendor_profile),
+):
+    """
+    Get all schools/entities that your company services based on your SPIN.
+    Uses invoice disbursement data from USAC to find all entities.
+    """
+    if not profile.spin:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No SPIN configured in your profile. Please add your SPIN in settings first."
+        )
+    
+    try:
+        from utils.usac_client import USACDataClient
+        
+        client = USACDataClient()
+        summary = client.get_serviced_entities_summary(profile.spin, year)
+        
+        return {
+            "success": True,
+            "spin": profile.spin,
+            "service_provider_name": summary.get('service_provider_name'),
+            "total_entities": summary.get('total_entities', 0),
+            "total_authorized": summary.get('total_authorized', 0),
+            "funding_years": summary.get('funding_years', []),
+            "entities": summary.get('entities', [])
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch serviced entities: {str(e)}"
+        )
+
+
+@router.get("/spin/{spin}/lookup")
+async def lookup_spin_details(
+    spin: str,
+    year: Optional[int] = None,
+    current_user: User = Depends(require_role("admin", "vendor")),
+):
+    """
+    Look up any SPIN to see what entities they service.
+    Useful for competitive research or verification.
+    """
+    try:
+        from utils.usac_client import USACDataClient
+        
+        client = USACDataClient()
+        
+        # First validate the SPIN
+        validation = client.validate_spin(spin)
+        if not validation.get('valid'):
+            return {
+                "success": False,
+                "error": validation.get('error', 'Invalid SPIN')
+            }
+        
+        # Get serviced entities
+        summary = client.get_serviced_entities_summary(spin, year)
+        
+        return {
+            "success": True,
+            "provider": validation,
+            "total_entities": summary.get('total_entities', 0),
+            "total_authorized": summary.get('total_authorized', 0),
+            "funding_years": summary.get('funding_years', []),
+            "entities": summary.get('entities', [])[:100]  # Limit to first 100 for other SPINs
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to lookup SPIN: {str(e)}"
+        )
 
 
 # ==================== SEARCH ENDPOINTS ====================

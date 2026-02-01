@@ -71,10 +71,10 @@ class Application(Base):
     # Application identification
     application_number = Column(String(50), index=True)
     frn = Column(String(50), index=True)  # Funding Request Number
-    funding_year = Column(Integer)
+    funding_year = Column(Integer, index=True)
     
     # Status
-    status = Column(String(100))  # Funded, Denied, Pending, etc.
+    status = Column(String(100), index=True)  # Funded, Denied, Pending, etc.
     
     # Amounts
     amount_requested = Column(Numeric(15, 2))  # Pre-discount
@@ -88,6 +88,7 @@ class Application(Base):
     # Denial info
     fcdl_comment = Column(Text)  # FCDL denial comments
     denial_reasons = Column(JSON)  # Parsed denial reasons
+    fcdl_date = Column(DateTime)  # FCDL letter date from USAC
     appeal_deadline = Column(DateTime)
     
     # Timestamps
@@ -111,6 +112,7 @@ class Application(Base):
             "service_description": self.service_description,
             "fcdl_comment": self.fcdl_comment,
             "denial_reasons": self.denial_reasons,
+            "fcdl_date": self.fcdl_date.isoformat() if self.fcdl_date else None,
             "appeal_deadline": self.appeal_deadline.isoformat() if self.appeal_deadline else None,
             "has_appeals": len(self.appeals) > 0 if self.appeals else False,
         }
@@ -187,7 +189,7 @@ class QueryHistory(Base):
     __tablename__ = "query_history"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     
     # Query details
     query_text = Column(Text, nullable=False)

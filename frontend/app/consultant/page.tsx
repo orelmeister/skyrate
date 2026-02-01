@@ -138,6 +138,13 @@ export default function ConsultantPortalPage() {
     denial_reason: string | null;
     application_number: string;
     has_appeal: boolean;
+    fcdl_date?: string;
+    appeal_deadline?: string;
+    days_remaining?: number;
+    urgency?: string;
+    urgency_color?: string;
+    is_expired?: boolean;
+    can_appeal_to_usac?: boolean;
   }>>([]);
   const [isLoadingDenied, setIsLoadingDenied] = useState(false);
   const [deniedStats, setDeniedStats] = useState<{ total: number; amount: number } | null>(null);
@@ -219,17 +226,39 @@ export default function ConsultantPortalPage() {
     }
   }, []);
 
+  // Payment guard - check if user needs to complete payment setup
+  const [checkingPayment, setCheckingPayment] = useState(true);
+  
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push("/sign-in");
-      return;
-    }
-    if (user?.role !== "consultant" && user?.role !== "admin") {
-      router.push("/vendor");
-      return;
-    }
-    loadData();
-    loadDashboardStats();
+    const checkPaymentStatus = async () => {
+      if (!isAuthenticated) {
+        router.push("/sign-in");
+        return;
+      }
+      if (user?.role !== "consultant" && user?.role !== "admin") {
+        router.push("/vendor");
+        return;
+      }
+      
+      // Check if payment setup is required
+      try {
+        const paymentStatus = await api.getPaymentStatus();
+        if (paymentStatus.success && paymentStatus.data?.requires_payment_setup) {
+          router.push("/subscribe");
+          return;
+        }
+      } catch (error) {
+        console.error("Error checking payment status:", error);
+        // If we can't check payment status, continue to dashboard
+        // The backend will enforce payment requirements on API calls
+      }
+      
+      setCheckingPayment(false);
+      loadData();
+      loadDashboardStats();
+    };
+    
+    checkPaymentStatus();
   }, [isAuthenticated, user, router]);
 
   const loadData = async (withUsacData: boolean = false) => {
@@ -585,18 +614,29 @@ export default function ConsultantPortalPage() {
   };
 
   const handleDeleteAppeal = async (appealId: number) => {
-    if (!confirm("Are you sure you want to delete this appeal?")) return;
+    console.log("Delete appeal clicked, appealId:", appealId);
+    if (!confirm("Are you sure you want to delete this appeal?")) {
+      console.log("User cancelled delete");
+      return;
+    }
+    console.log("User confirmed delete, calling API...");
     try {
       const res = await api.deleteAppeal(appealId);
+      console.log("Delete API response:", res);
       if (res.success) {
+        console.log("Delete successful, updating state");
         setAppeals(prev => prev.filter(a => a.id !== appealId));
         if (selectedAppeal?.id === appealId) {
           setSelectedAppeal(null);
           setShowAppealChat(false);
         }
+      } else {
+        console.error("Delete failed:", res.error);
+        alert("Failed to delete appeal: " + (res.error || "Unknown error"));
       }
     } catch (error) {
       console.error("Failed to delete appeal:", error);
+      alert("Error deleting appeal: " + (error instanceof Error ? error.message : "Unknown error"));
     }
   };
 
@@ -657,6 +697,18 @@ export default function ConsultantPortalPage() {
     setQueryHistory([]);
     localStorage.removeItem('skyrate_query_history');
   };
+
+  // Show loading state while checking payment status
+  if (checkingPayment) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600">Verifying your subscription...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -1308,7 +1360,17 @@ export default function ConsultantPortalPage() {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {deniedApplications.filter(app => !app.has_appeal).map((app) => (
+                      {deniedApplications.filter(app => !app.has_appeal).map((app) => {
+                        // Urgency badge colors
+                        const urgencyStyles = {
+                          CRITICAL: 'bg-red-100 text-red-700 border-red-200',
+                          HIGH: 'bg-orange-100 text-orange-700 border-orange-200',
+                          MEDIUM: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+                          LOW: 'bg-green-100 text-green-700 border-green-200',
+                          EXPIRED: 'bg-gray-100 text-gray-700 border-gray-200'
+                        };
+                        
+                        return (
                         <div 
                           key={app.frn}
                           className="flex items-center justify-between p-4 bg-gradient-to-r from-red-50 to-white border border-red-100 rounded-xl hover:shadow-md transition-all"
@@ -1320,6 +1382,11 @@ export default function ConsultantPortalPage() {
                                 Denied
                               </span>
                               <span className="text-xs text-slate-500">{app.funding_year}</span>
+                              {app.urgency && (
+                                <span className={`px-2 py-0.5 text-xs rounded-full font-medium border ${urgencyStyles[app.urgency as keyof typeof urgencyStyles] || urgencyStyles.LOW}`}>
+                                  {app.urgency}
+                                </span>
+                              )}
                             </div>
                             <p className="text-sm text-slate-900 font-medium">{app.school_name}</p>
                             <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
@@ -1327,6 +1394,43 @@ export default function ConsultantPortalPage() {
                               <span>•</span>
                               <span className="text-red-600 font-medium">${app.amount_requested.toLocaleString()}</span>
                             </div>
+                            
+                            {/* Appeal deadline info */}
+                            {app.fcdl_date && (
+                              <div className="flex items-center gap-4 mt-2 text-xs">
+                                <div className="flex items-center gap-1">
+                                  <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                  <span className="text-slate-500">FCDL: {new Date(app.fcdl_date).toLocaleDateString()}</span>
+                                </div>
+                                <span>•</span>
+                                <div className="flex items-center gap-1">
+                                  <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  {app.is_expired ? (
+                                    <span className="text-gray-600 font-medium">Expired - FCC Appeal Only</span>
+                                  ) : (
+                                    <span className={`font-medium ${
+                                      (app.days_remaining ?? 0) <= 7 ? 'text-red-600' :
+                                      (app.days_remaining ?? 0) <= 14 ? 'text-orange-600' :
+                                      (app.days_remaining ?? 0) <= 30 ? 'text-yellow-600' :
+                                      'text-green-600'
+                                    }`}>
+                                      {app.days_remaining} days left to appeal to USAC
+                                    </span>
+                                  )}
+                                </div>
+                                {app.appeal_deadline && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-slate-500">Deadline: {new Date(app.appeal_deadline).toLocaleDateString()}</span>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                            
                             {app.denial_reason && (
                               <p className="text-xs text-red-600 mt-2 bg-red-50 px-2 py-1 rounded">
                                 {app.denial_reason.slice(0, 150)}{app.denial_reason.length > 150 ? '...' : ''}
@@ -1365,7 +1469,7 @@ export default function ConsultantPortalPage() {
                             )}
                           </button>
                         </div>
-                      ))}
+                      )})}
                       
                       {/* Show count of applications that already have appeals */}
                       {deniedApplications.filter(app => app.has_appeal).length > 0 && (

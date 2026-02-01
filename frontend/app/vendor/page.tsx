@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
-import { api, VendorProfile } from "@/lib/api";
+import { api, VendorProfile, SpinValidationResult, ServicedEntity } from "@/lib/api";
 
 interface SearchResult {
   ben: string;
@@ -34,17 +34,54 @@ export default function VendorPortalPage() {
   const [searchYear, setSearchYear] = useState(2025);
   const [searchMinAmount, setSearchMinAmount] = useState("");
   const [searchMaxAmount, setSearchMaxAmount] = useState("");
+  
+  // SPIN state
+  const [spinInput, setSpinInput] = useState("");
+  const [spinValidating, setSpinValidating] = useState(false);
+  const [spinValidation, setSpinValidation] = useState<SpinValidationResult | null>(null);
+  const [spinError, setSpinError] = useState<string | null>(null);
+  const [servicedEntities, setServicedEntities] = useState<ServicedEntity[]>([]);
+  const [servicedEntitiesLoading, setServicedEntitiesLoading] = useState(false);
+  const [servicedEntitiesStats, setServicedEntitiesStats] = useState<{
+    total_entities: number;
+    total_authorized: number;
+    funding_years: string[];
+    service_provider_name: string | null;
+  } | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
+  
+  // Payment guard - check if user needs to complete payment setup
+  const [checkingPayment, setCheckingPayment] = useState(true);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push("/sign-in");
-      return;
-    }
-    if (user?.role !== "vendor" && user?.role !== "admin") {
-      router.push("/consultant");
-      return;
-    }
-    loadProfile();
+    const checkPaymentStatus = async () => {
+      if (!isAuthenticated) {
+        router.push("/sign-in");
+        return;
+      }
+      if (user?.role !== "vendor" && user?.role !== "admin") {
+        router.push("/consultant");
+        return;
+      }
+      
+      // Check if payment setup is required
+      try {
+        const paymentStatus = await api.getPaymentStatus();
+        if (paymentStatus.success && paymentStatus.data?.requires_payment_setup) {
+          router.push("/subscribe");
+          return;
+        }
+      } catch (error) {
+        console.error("Error checking payment status:", error);
+        // If we can't check payment status, continue to dashboard
+        // The backend will enforce payment requirements on API calls
+      }
+      
+      setCheckingPayment(false);
+      loadProfile();
+    };
+    
+    checkPaymentStatus();
   }, [isAuthenticated, user, router]);
 
   const loadProfile = async () => {
@@ -53,11 +90,90 @@ export default function VendorPortalPage() {
       const response = await api.getVendorProfile();
       if (response.success && response.data) {
         setProfile(response.data.profile);
+        // Initialize SPIN input with profile SPIN if exists
+        if (response.data.profile.spin) {
+          setSpinInput(response.data.profile.spin);
+          // Auto-load serviced entities if SPIN is configured
+          loadServicedEntities();
+        }
       }
     } catch (error) {
       console.error("Failed to load profile:", error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const validateSpin = async () => {
+    if (!spinInput.trim()) {
+      setSpinError("Please enter a SPIN");
+      return;
+    }
+    
+    setSpinValidating(true);
+    setSpinError(null);
+    setSpinValidation(null);
+    
+    try {
+      const response = await api.validateSpin(spinInput.trim());
+      if (response.success && response.data?.valid) {
+        setSpinValidation(response.data.provider!);
+        setSpinError(null);
+      } else {
+        setSpinError(response.data?.error || response.error || "Invalid SPIN");
+        setSpinValidation(null);
+      }
+    } catch (error) {
+      console.error("SPIN validation failed:", error);
+      setSpinError("Failed to validate SPIN. Please try again.");
+    } finally {
+      setSpinValidating(false);
+    }
+  };
+
+  const saveSpin = async () => {
+    if (!spinValidation) {
+      setSpinError("Please validate your SPIN first");
+      return;
+    }
+    
+    setSavingProfile(true);
+    try {
+      const response = await api.updateVendorProfile({
+        spin: spinInput.trim(),
+        company_name: spinValidation.service_provider_name || profile?.company_name,
+      });
+      
+      if (response.success && response.data) {
+        setProfile(response.data.profile);
+        // Fetch serviced entities after saving SPIN
+        loadServicedEntities();
+      }
+    } catch (error) {
+      console.error("Failed to save SPIN:", error);
+      setSpinError("Failed to save SPIN. Please try again.");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const loadServicedEntities = async () => {
+    setServicedEntitiesLoading(true);
+    try {
+      const response = await api.getServicedEntities();
+      if (response.success && response.data) {
+        setServicedEntities(response.data.entities || []);
+        setServicedEntitiesStats({
+          total_entities: response.data.total_entities,
+          total_authorized: response.data.total_authorized,
+          funding_years: response.data.funding_years,
+          service_provider_name: response.data.service_provider_name,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to load serviced entities:", error);
+    } finally {
+      setServicedEntitiesLoading(false);
     }
   };
 
@@ -124,6 +240,18 @@ export default function VendorPortalPage() {
     router.push("/");
   };
 
+  // Show loading state while checking payment status
+  if (checkingPayment) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600">Verifying your subscription...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (isLoading && !profile) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -155,6 +283,7 @@ export default function VendorPortalPage() {
 
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: "📊" },
+    { id: "my-entities", label: "My Entities", icon: "🏫" },
     { id: "search", label: "School Search", icon: "🔍" },
     { id: "leads", label: "Saved Leads", icon: "📋" },
     { id: "settings", label: "Settings", icon: "⚙️" },
@@ -573,8 +702,297 @@ export default function VendorPortalPage() {
           </div>
         )}
 
+        {activeTab === "my-entities" && (
+          <div className="space-y-6">
+            {/* SPIN Status Card */}
+            {profile?.spin ? (
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl border border-green-200 p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
+                      <span className="text-2xl">✅</span>
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold text-slate-900">SPIN Verified</h2>
+                      <p className="text-sm text-slate-600">
+                        {servicedEntitiesStats?.service_provider_name || profile.company_name}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-mono text-lg font-semibold text-green-700">{profile.spin}</div>
+                    <button
+                      onClick={loadServicedEntities}
+                      disabled={servicedEntitiesLoading}
+                      className="text-sm text-green-600 hover:underline mt-1"
+                    >
+                      {servicedEntitiesLoading ? "Refreshing..." : "Refresh Data"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200 p-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
+                    <span className="text-2xl">⚠️</span>
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900">SPIN Not Configured</h2>
+                    <p className="text-sm text-slate-600">
+                      Add your SPIN in Settings to see your serviced entities
+                    </p>
+                    <button
+                      onClick={() => setActiveTab("settings")}
+                      className="mt-2 text-sm text-amber-700 hover:underline font-medium"
+                    >
+                      Go to Settings →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Stats */}
+            {profile?.spin && servicedEntitiesStats && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
+                      <span className="text-2xl">🏫</span>
+                    </div>
+                  </div>
+                  <div className="text-3xl font-bold text-slate-900">{servicedEntitiesStats.total_entities}</div>
+                  <div className="text-sm text-slate-500 mt-1">Entities Serviced</div>
+                </div>
+                
+                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
+                      <span className="text-2xl">💰</span>
+                    </div>
+                  </div>
+                  <div className="text-3xl font-bold text-slate-900">
+                    ${(servicedEntitiesStats.total_authorized / 1000000).toFixed(1)}M
+                  </div>
+                  <div className="text-sm text-slate-500 mt-1">Total Authorized</div>
+                </div>
+                
+                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
+                      <span className="text-2xl">📅</span>
+                    </div>
+                  </div>
+                  <div className="text-3xl font-bold text-slate-900">{servicedEntitiesStats.funding_years.length}</div>
+                  <div className="text-sm text-slate-500 mt-1">Funding Years</div>
+                </div>
+              </div>
+            )}
+
+            {/* Serviced Entities Table */}
+            {profile?.spin && (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-slate-200">
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    Schools & Libraries You Service
+                  </h2>
+                  <p className="text-sm text-slate-500 mt-1">
+                    Based on invoice disbursement data from USAC
+                  </p>
+                </div>
+                
+                {servicedEntitiesLoading ? (
+                  <div className="p-12 text-center">
+                    <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-slate-600">Loading your serviced entities...</p>
+                  </div>
+                ) : servicedEntities.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">BEN</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Entity Name</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">FRN Count</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Total Amount</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Years</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {servicedEntities.slice(0, 50).map((entity) => (
+                          <tr key={entity.ben} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-4 py-3 font-mono text-sm">{entity.ben}</td>
+                            <td className="px-4 py-3">{entity.organization_name}</td>
+                            <td className="px-4 py-3">{entity.frn_count}</td>
+                            <td className="px-4 py-3 font-medium text-green-600">
+                              ${entity.total_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex gap-1 flex-wrap">
+                                {entity.funding_year?.slice(0, 3).map(year => (
+                                  <span key={year} className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded">
+                                    {year}
+                                  </span>
+                                ))}
+                                {entity.funding_year?.length > 3 && (
+                                  <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded">
+                                    +{entity.funding_year.length - 3}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {servicedEntities.length > 50 && (
+                      <div className="p-4 text-center border-t border-slate-200">
+                        <p className="text-sm text-slate-500">
+                          Showing 50 of {servicedEntities.length} entities
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-12 text-center">
+                    <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                      <span className="text-3xl">🏫</span>
+                    </div>
+                    <h2 className="text-lg font-semibold text-slate-900">No Invoice Data Found</h2>
+                    <p className="text-slate-500 mt-2 max-w-md mx-auto">
+                      We couldn&apos;t find any invoice disbursement records for your SPIN. This may be because you&apos;re new to E-Rate or invoices haven&apos;t been processed yet.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === "settings" && (
           <div className="space-y-6">
+            {/* SPIN Configuration - NEW */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+                  <span className="text-xl">🔑</span>
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">SPIN Configuration</h2>
+                  <p className="text-sm text-slate-500">Your Service Provider Identification Number from USAC</p>
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    SPIN (Service Provider Identification Number)
+                  </label>
+                  <div className="flex gap-3">
+                    <input
+                      type="text"
+                      value={spinInput}
+                      onChange={(e) => {
+                        setSpinInput(e.target.value);
+                        setSpinValidation(null);
+                        setSpinError(null);
+                      }}
+                      placeholder="e.g., 143032945"
+                      className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition font-mono"
+                    />
+                    <button
+                      onClick={validateSpin}
+                      disabled={spinValidating || !spinInput.trim()}
+                      className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {spinValidating ? (
+                        <>
+                          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Validating...
+                        </>
+                      ) : "Validate"}
+                    </button>
+                  </div>
+                  
+                  {spinError && (
+                    <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl">
+                      <p className="text-sm text-red-600">{spinError}</p>
+                    </div>
+                  )}
+                  
+                  {spinValidation && (
+                    <div className="mt-3 p-4 bg-green-50 border border-green-200 rounded-xl">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-green-600">✓</span>
+                        <span className="font-semibold text-green-700">Valid SPIN Found</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <span className="text-slate-500">Provider Name:</span>
+                          <span className="ml-2 font-medium">{spinValidation.service_provider_name}</span>
+                        </div>
+                        {spinValidation.doing_business_as && (
+                          <div>
+                            <span className="text-slate-500">DBA:</span>
+                            <span className="ml-2 font-medium">{spinValidation.doing_business_as}</span>
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-slate-500">Status:</span>
+                          <span className={`ml-2 font-medium ${spinValidation.status === 'Active' ? 'text-green-600' : 'text-amber-600'}`}>
+                            {spinValidation.status}
+                          </span>
+                        </div>
+                        {spinValidation.general_contact_name && (
+                          <div>
+                            <span className="text-slate-500">Contact:</span>
+                            <span className="ml-2 font-medium">{spinValidation.general_contact_name}</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {profile?.spin !== spinInput && (
+                        <button
+                          onClick={saveSpin}
+                          disabled={savingProfile}
+                          className="mt-4 px-6 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:shadow-lg hover:shadow-green-200 transition-all font-medium disabled:opacity-50"
+                        >
+                          {savingProfile ? "Saving..." : "Save This SPIN to Profile"}
+                        </button>
+                      )}
+                      
+                      {profile?.spin === spinInput && (
+                        <div className="mt-3 text-sm text-green-600">
+                          ✓ This SPIN is saved to your profile
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                
+                {profile?.spin && !spinValidation && (
+                  <div className="p-4 bg-slate-50 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-sm text-slate-500">Current SPIN:</span>
+                        <span className="ml-2 font-mono font-semibold">{profile.spin}</span>
+                      </div>
+                      <button
+                        onClick={() => setActiveTab("my-entities")}
+                        className="text-sm text-purple-600 hover:underline"
+                      >
+                        View Serviced Entities →
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Company Profile */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
               <div className="flex items-center gap-3 mb-6">

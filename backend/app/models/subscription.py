@@ -28,11 +28,11 @@ class Subscription(Base):
     __tablename__ = "subscriptions"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
     
     # Plan details
     plan = Column(String(50), nullable=False, default=SubscriptionPlan.MONTHLY.value)
-    status = Column(String(50), nullable=False, default=SubscriptionStatus.TRIALING.value)
+    status = Column(String(50), nullable=False, default=SubscriptionStatus.TRIALING.value, index=True)
     price_cents = Column(Integer, nullable=False)
     
     # Stripe integration
