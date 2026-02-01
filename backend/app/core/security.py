@@ -6,7 +6,7 @@ JWT token management and password hashing
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
@@ -14,25 +14,25 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .database import get_db
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 # JWT Bearer scheme
 security = HTTPBearer()
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its hash"""
-    # Truncate to 72 bytes for bcrypt compatibility (encode first to handle unicode)
-    truncated = plain_password.encode('utf-8')[:72].decode('utf-8', errors='ignore')
-    return pwd_context.verify(truncated, hashed_password)
+    """Verify a password against its hash using bcrypt directly"""
+    # Truncate to 72 bytes for bcrypt compatibility
+    password_bytes = plain_password.encode('utf-8')[:72]
+    hashed_bytes = hashed_password.encode('utf-8')
+    return bcrypt.checkpw(password_bytes, hashed_bytes)
 
 
 def hash_password(password: str) -> str:
-    """Hash a password"""
-    # Truncate to 72 bytes for bcrypt compatibility (encode first to handle unicode)
-    truncated = password.encode('utf-8')[:72].decode('utf-8', errors='ignore')
-    return pwd_context.hash(truncated)
+    """Hash a password using bcrypt directly"""
+    # Truncate to 72 bytes for bcrypt compatibility
+    password_bytes = password.encode('utf-8')[:72]
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8')
 
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:

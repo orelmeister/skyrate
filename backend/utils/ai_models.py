@@ -13,6 +13,20 @@ import logging
 from enum import Enum
 from typing import List, Dict, Any, Optional
 import json
+from pathlib import Path
+
+# Load .env file to ensure API keys are available
+from dotenv import load_dotenv
+
+# Find the .env file in the backend directory
+backend_dir = Path(__file__).parent.parent
+env_path = backend_dir / '.env'
+if env_path.exists():
+    load_dotenv(env_path)
+    print(f"Loaded .env from: {env_path}")
+else:
+    # Try current directory
+    load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -212,8 +226,14 @@ class AIModelManager:
         try:
             import anthropic
             
-            client = anthropic.Anthropic(api_key=api_key)
-            model_name = os.environ.get('CLAUDE_MODEL', 'claude-3-5-sonnet-latest')
+            # Create client with timeout settings
+            client = anthropic.Anthropic(
+                api_key=api_key,
+                timeout=120.0  # 2 minute timeout for long appeals
+            )
+            # Use claude-sonnet-4-20250514 as default (latest stable Sonnet)
+            # Alternative: claude-3-5-sonnet-20241022 for older version
+            model_name = os.environ.get('CLAUDE_MODEL', 'claude-sonnet-4-20250514')
             
             response = client.messages.create(
                 model=model_name,
@@ -268,6 +288,60 @@ Return only valid JSON, no markdown."""
                 "filters": {},
                 "explanation": f"Could not parse query: {query}. Please use structured filters."
             }
+    
+    def deep_analysis(self, data: str, prompt: str, model: str = None) -> str:
+        """
+        Perform deep analysis using the best available model.
+        This is the primary method for generating appeal letters and detailed analysis.
+        
+        Args:
+            data: The data context to analyze (denial details, application info, etc.)
+            prompt: The specific analysis prompt/instructions
+            model: Optional model override (gemini, claude, deepseek)
+            
+        Returns:
+            AI-generated detailed analysis text
+        """
+        # Build the full prompt with data context
+        full_prompt = f"""{prompt}
+
+DATA CONTEXT:
+{data}
+
+Please provide a comprehensive, professional response that directly addresses the request.
+Use specific details from the data provided."""
+
+        # Try models in order of preference for deep analysis: Claude > Gemini > DeepSeek
+        if model:
+            model = model.lower()
+            if model == 'claude' and self.is_model_available(AIModel.CLAUDE):
+                return self.call_claude(
+                    [{"role": "user", "content": full_prompt}],
+                    system="You are an expert E-Rate compliance consultant helping schools and libraries appeal denied funding applications. Provide detailed, professional, and legally sound advice.",
+                    max_tokens=8000
+                )
+            elif model == 'gemini' and self.is_model_available(AIModel.GEMINI):
+                return self.call_gemini(full_prompt)
+            elif model == 'deepseek' and self.is_model_available(AIModel.DEEPSEEK):
+                return self.call_deepseek([{"role": "user", "content": full_prompt}])
+        
+        # Auto-select best available model
+        if self.is_model_available(AIModel.CLAUDE):
+            logger.info("Using Claude for deep analysis")
+            return self.call_claude(
+                [{"role": "user", "content": full_prompt}],
+                system="You are an expert E-Rate compliance consultant helping schools and libraries appeal denied funding applications. Provide detailed, professional, and legally sound advice.",
+                max_tokens=8000
+            )
+        elif self.is_model_available(AIModel.GEMINI):
+            logger.info("Using Gemini for deep analysis (Claude unavailable)")
+            return self.call_gemini(full_prompt)
+        elif self.is_model_available(AIModel.DEEPSEEK):
+            logger.info("Using DeepSeek for deep analysis (Claude and Gemini unavailable)")
+            return self.call_deepseek([{"role": "user", "content": full_prompt}])
+        else:
+            logger.warning("No AI models available for deep analysis")
+            return self._stub_response(prompt, "AI")
     
     def _stub_response(self, prompt: str, model_name: str, error: str = None) -> str:
         """Generate a stub response when API is unavailable."""

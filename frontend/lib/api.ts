@@ -77,6 +77,29 @@ export interface VendorProfile {
   created_at: string;
 }
 
+// ==================== APPEALS TYPES ====================
+
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
+}
+
+export interface AppealRecord {
+  id: number;
+  user_id: number;
+  frn: string;
+  organization_name: string | null;
+  denial_reason: string | null;
+  denial_details: Record<string, any> | null;
+  strategy: Record<string, any> | null;
+  appeal_letter: string;
+  chat_history: ChatMessage[];
+  status: 'draft' | 'finalized' | 'submitted';
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ConsultantSchool {
   id: number;
   consultant_id: number;
@@ -184,9 +207,23 @@ class ApiClient {
       const data = await response.json();
       
       if (!response.ok) {
+        // Handle Pydantic validation errors (array of {type, loc, msg, input})
+        let errorMessage = 'Request failed';
+        if (data.detail) {
+          if (Array.isArray(data.detail)) {
+            // Pydantic validation errors
+            errorMessage = data.detail.map((e: any) => e.msg || e.message || String(e)).join(', ');
+          } else if (typeof data.detail === 'string') {
+            errorMessage = data.detail;
+          } else if (typeof data.detail === 'object' && data.detail.msg) {
+            errorMessage = data.detail.msg;
+          }
+        } else if (data.error) {
+          errorMessage = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+        }
         return {
           success: false,
-          error: data.detail || data.error || 'Request failed',
+          error: errorMessage,
         };
       }
 
@@ -307,6 +344,27 @@ class ApiClient {
     schools_with_denials: number;
   }>> {
     return this.request('/api/v1/consultant/dashboard-stats');
+  }
+
+  async getDeniedApplications(year?: number): Promise<ApiResponse<{
+    denied_applications: Array<{
+      frn: string;
+      ben: string;
+      school_name: string;
+      funding_year: string;
+      status: string;
+      service_type: string;
+      amount_requested: number;
+      denial_reason: string | null;
+      application_number: string;
+      has_appeal: boolean;
+    }>;
+    total_denied: number;
+    total_denied_amount: number;
+    year: number;
+  }>> {
+    const params = year ? `?year=${year}` : '';
+    return this.request(`/api/v1/consultant/denied-applications${params}`);
   }
 
   async getConsultantSchools(includeUsacData: boolean = false): Promise<ApiResponse<{ schools: ConsultantSchool[]; count: number }>> {
@@ -478,23 +536,107 @@ class ApiClient {
     });
   }
 
-  async generateAppeal(frn: string, additionalContext?: string): Promise<ApiResponse<{
-    appeal: {
-      frn: string;
-      organization: string;
-      denial_details: any;
-      strategy: any;
-      appeal_letter: string;
-    };
-  }>> {
-    return this.request('/api/v1/consultant/generate-appeal', {
+  // ==================== APPEALS (New API with Chat History) ====================
+
+  /**
+   * Generate a new appeal for a denied FRN
+   */
+  async generateAppeal(frn: string, additionalContext?: string): Promise<ApiResponse<AppealRecord>> {
+    return this.request('/api/v1/appeals/generate', {
       method: 'POST',
-      body: JSON.stringify({ frn, additional_context: additionalContext }),
+      body: JSON.stringify({ 
+        frn, 
+        additional_context: additionalContext 
+      }),
     });
   }
 
-  async getAppeals(): Promise<ApiResponse<{ appeals: any[]; count: number }>> {
-    return this.request('/api/v1/consultant/appeals');
+  /**
+   * Continue chat conversation to refine an appeal
+   */
+  async chatWithAppeal(appealId: number, message: string): Promise<ApiResponse<{
+    appeal_id: number;
+    response: string;
+    updated_letter: string;
+    chat_history: ChatMessage[];
+  }>> {
+    return this.request('/api/v1/appeals/chat', {
+      method: 'POST',
+      body: JSON.stringify({ 
+        appeal_id: appealId, 
+        message 
+      }),
+    });
+  }
+
+  /**
+   * Get a specific appeal by ID
+   */
+  async getAppeal(appealId: number): Promise<ApiResponse<AppealRecord>> {
+    return this.request(`/api/v1/appeals/${appealId}`);
+  }
+
+  /**
+   * Save/update an appeal (manually edit letter)
+   */
+  async saveAppeal(appealId: number, appealLetter: string, status?: string): Promise<ApiResponse<AppealRecord>> {
+    return this.request(`/api/v1/appeals/${appealId}/save`, {
+      method: 'PUT',
+      body: JSON.stringify({ 
+        appeal_letter: appealLetter,
+        status 
+      }),
+    });
+  }
+
+  /**
+   * Get all appeals for the current user
+   */
+  async getAppeals(status?: string, skip?: number, limit?: number): Promise<ApiResponse<{
+    appeals: AppealRecord[];
+    total: number;
+    skip: number;
+    limit: number;
+  }>> {
+    const params = new URLSearchParams();
+    if (status) params.append('status', status);
+    if (skip !== undefined) params.append('skip', skip.toString());
+    if (limit !== undefined) params.append('limit', limit.toString());
+    const queryString = params.toString();
+    return this.request(`/api/v1/appeals/${queryString ? '?' + queryString : ''}`);
+  }
+
+  /**
+   * Delete an appeal
+   */
+  async deleteAppeal(appealId: number): Promise<ApiResponse<{ message: string }>> {
+    return this.request(`/api/v1/appeals/${appealId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Download appeal as text file
+   */
+  async downloadAppealText(appealId: number): Promise<Blob> {
+    const token = this.getAccessToken();
+    const response = await fetch(`${API_BASE_URL}/api/v1/appeals/${appealId}/download/txt`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) throw new Error('Failed to download appeal');
+    return response.blob();
+  }
+
+  /**
+   * Download appeal as JSON
+   */
+  async downloadAppealJson(appealId: number): Promise<Blob> {
+    const token = this.getAccessToken();
+    const response = await fetch(`${API_BASE_URL}/api/v1/appeals/${appealId}/download/json`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) throw new Error('Failed to download appeal');
+    return response.blob();
   }
 
   // ==================== VENDOR ====================

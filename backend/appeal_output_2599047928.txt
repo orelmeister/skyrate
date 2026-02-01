@@ -1,0 +1,221 @@
+**FORMAL E-RATE APPEAL LETTER**
+
+---
+
+**BEFORE THE**
+**UNIVERSAL SERVICE ADMINISTRATIVE COMPANY**
+**APPEALS COMMITTEE**
+
+---
+
+**IN THE MATTER OF:**
+
+St. Francis De Sales Deaf School  
+E-Rate Funding Application Appeal  
+Application Number: 251033982  
+Funding Request Number: 2599047928  
+Funding Year: 2025  
+
+---
+
+**APPEAL OF FUNDING DENIAL DECISION**
+
+---
+
+**TO:** USAC Appeals Committee  
+**FROM:** St. Francis De Sales Deaf School  
+**DATE:** [Current Date]  
+**RE:** Appeal of Denial for Data Transmission and/or Internet Access Services
+
+---
+
+## I. INTRODUCTION
+
+St. Francis De Sales Deaf School ("Applicant" or "School") hereby respectfully submits this formal appeal to the Universal Service Administrative Company ("USAC") Appeals Committee pursuant to 47 C.F.R. § 54.719 and 47 C.F.R. § 54.720, challenging the denial of Funding Request Number 2599047928 under Application Number 251033982 for Funding Year 2025. This appeal seeks reversal of USAC's denial decision and approval of the School's funding request for essential Data Transmission and/or Internet Access services.
+
+The School serves a specialized population of deaf and hard-of-hearing students who rely heavily on visual and technology-based learning methodologies. Reliable internet connectivity is not merely beneficial for our student population—it is absolutely critical for their educational success and equal access to learning opportunities. The denial of this funding request directly impacts our ability to provide appropriate educational services to students with disabilities, potentially violating federal mandates under the Individuals with Disabilities Education Act (IDEA) and Section 504 of the Rehabilitation Act.
+
+This appeal demonstrates that USAC's denial was improper, unsupported by substantial evidence, and contrary to applicable FCC rules and precedent. We respectfully request that the Appeals Committee reverse the denial decision and approve the requested funding.
+
+## II. BACKGROUND
+
+St. Francis De Sales Deaf School is an educational institution specifically designed to serve deaf and hard-of-hearing students. Our mission is to provide comprehensive educational services that accommodate the unique communication and learning needs of our student population. The nature of our specialized educational program requires extensive use of visual learning technologies, video communication tools, and internet-based educational resources that are essential for deaf education.
+
+On [Application Date], the School submitted Application Number 251033982 for Funding Year 2025, requesting E-Rate support for Data Transmission and/or Internet Access services under Funding Request Number 2599047928. This application was submitted in full compliance with all applicable FCC rules and USAC requirements, following established procedures for Category One services under the E-Rate program.
+
+The requested internet access services are fundamental to our educational mission. Deaf and hard-of-hearing students rely on high-quality internet connectivity for:
+
+1. **Visual Learning Platforms:** Accessing educational content through video-based instruction and visual learning management systems
+2. **Communication Technologies:** Utilizing video relay services, video remote interpreting, and real-time captioning services
+3. **Assistive Technologies:** Operating hearing loops, FM systems, and other assistive devices that require internet connectivity
+4. **Distance Learning:** Participating in remote educational opportunities and virtual classroom experiences
+5. **Research and Information Access:** Conducting academic research and accessing educational databases
+
+Without adequate internet connectivity, our students face significant barriers to educational access and achievement, potentially constituting a violation of their rights under federal disability laws.
+
+## III. GROUNDS FOR APPEAL
+
+### A. Procedural Due Process Violations
+
+The primary ground for this appeal is that USAC failed to provide adequate procedural due process in its review and denial of the School's application. The denial notice contained no specific denial reason in the FCDL comment field, providing only a generic indication of "procedural" violations without any substantive explanation of the alleged deficiencies.
+
+This lack of specificity violates fundamental due process requirements established in FCC precedent and federal administrative law. The Federal Communications Commission has consistently held that applicants are entitled to meaningful notice of the reasons for adverse decisions to enable them to respond effectively. See 47 C.F.R. § 54.719(c), which requires USAC to "set forth the reasons for the decision."
+
+### B. Failure to Provide Adequate Notice
+
+Under 47 C.F.R. § 54.719(c), USAC must provide applicants with written notice that "sets forth the reasons for the decision." The denial notice in this case fails to meet this basic requirement by providing:
+
+1. **No Specific Denial Reason:** The FCDL comment field is blank, providing no explanation for the denial
+2. **Vague Violation Classification:** The classification of "procedural" violations without specification of which procedures were allegedly violated
+3. **No Remedial Guidance:** No indication of what corrective action, if any, might address the alleged deficiencies
+
+This failure to provide adequate notice violates established administrative law principles and FCC precedent requiring clear, specific explanations of agency decisions that adversely affect regulated parties.
+
+### C. Lack of Substantial Evidence
+
+The denial appears to be unsupported by substantial evidence in the record. Without a specific explanation of the alleged deficiencies, the School cannot identify any factual or legal basis for the denial decision. The application was submitted in good faith compliance with all known E-Rate requirements, and the School is unaware of any procedural deficiencies that would warrant denial.
+
+Under the substantial evidence standard applicable to USAC decisions, denials must be supported by evidence that a reasonable mind might accept as adequate to support the conclusion. The complete absence of any explanation for the denial suggests a lack of substantial evidence supporting the decision.
+
+### D. Arbitrary and Capricious Decision-Making
+
+A denial without explanation constitutes arbitrary and capricious decision-making prohibited under federal administrative law. The Administrative Procedure Act requires that agency decisions be based on consideration of relevant factors and not be arbitrary or capricious. 5 U.S.C. § 706(2)(A).
+
+The FCC has applied this standard to E-Rate decisions, requiring that USAC denials be based on reasonable interpretation of applicable rules and supported by adequate explanation. The absence of any explanation for this denial suggests arbitrary decision-making inconsistent with these requirements.
+
+## IV. LEGAL ARGUMENTS
+
+### A. Constitutional Due Process Rights
+
+The School's constitutional due process rights under the Fifth Amendment have been violated by USAC's failure to provide adequate notice and opportunity to be heard. The Supreme Court has established that due process requires, at minimum:
+
+1. **Notice:** Adequate notice of the charges or grounds for adverse action
+2. **Opportunity to Respond:** A meaningful opportunity to present arguments and evidence
+3. **Fair Hearing:** Review by an unbiased decision-maker
+
+The blank denial notice fails to satisfy the notice requirement, and the lack of specific grounds prevents the School from presenting an effective response.
+
+### B. FCC Rule Compliance
+
+The School's application complied with all applicable FCC rules governing the E-Rate program, including:
+
+**47 C.F.R. § 54.504** - Competitive Bidding Requirements: The School followed all required competitive bidding procedures for services exceeding the de minimis threshold.
+
+**47 C.F.R. § 54.507** - Application Requirements: The application contained all required information and was submitted within established deadlines.
+
+**47 C.F.R. § 54.511** - Ordering Services: All services were ordered in accordance with FCC requirements and within approved contract terms.
+
+**47 C.F.R. § 54.516** - Auditing and Monitoring: The School maintains appropriate records and has cooperated with all USAC oversight activities.
+
+### C. Precedential Support
+
+FCC precedent supports reversal of denials based on inadequate explanation or procedural deficiencies in the review process. In numerous cases, the FCC has emphasized the importance of clear communication from USAC to applicants regarding the basis for adverse decisions.
+
+The Commission has consistently held that applicants must receive sufficient information to understand the grounds for denial and to prepare effective appeals. The complete absence of explanation in this case falls far short of this standard.
+
+## V. SUPPORTING DOCUMENTATION
+
+The School provides the following documentation in support of this appeal:
+
+### A. Application Materials
+1. **Original E-Rate Application 251033982:** Complete application as submitted to USAC
+2. **FCC Form 471:** Properly executed and timely submitted
+3. **Supporting Documentation:** All attachments and supplementary materials submitted with the original application
+
+### B. Compliance Evidence
+1. **Competitive Bidding Records:** Documentation of competitive bidding process compliance
+2. **Service Provider Contracts:** Executed agreements for requested services
+3. **Board Resolutions:** Governing board authorization for E-Rate participation
+4. **Technology Plan:** Current technology plan demonstrating need for requested services
+
+### C. Procedural Compliance
+1. **Filing Receipts:** Confirmation of timely submission of all required forms
+2. **USAC Correspondence:** All communications received from USAC regarding this application
+3. **Timeline Documentation:** Comprehensive timeline showing compliance with all deadlines
+
+### D. Educational Need Documentation
+1. **Student Demographics:** Information regarding our specialized student population
+2. **Curriculum Requirements:** Documentation of technology requirements for deaf education
+3. **Assistive Technology Needs:** Specifications for internet-dependent assistive devices
+4. **Educational Impact Statement:** Analysis of how denial affects student learning outcomes
+
+## VI. SPECIFIC RESPONSES TO ALLEGED PROCEDURAL VIOLATIONS
+
+Although USAC has not specified the nature of the alleged procedural violations, the School addresses potential areas of concern:
+
+### A. Application Completeness
+The School's application was complete and contained all required information fields. Every mandatory section was properly completed, and all required attachments were included. If any information was deemed insufficient, USAC should have requested clarification rather than issuing a denial.
+
+### B. Deadline Compliance
+All deadlines were strictly observed. The application was submitted well in advance of the filing deadline, and all subsequent responses were provided within required timeframes. The School maintains detailed records confirming timely submission of all materials.
+
+### C. Competitive Bidding Compliance
+The School followed all competitive bidding requirements under 47 C.F.R. § 54.504. The bidding process was conducted fairly and transparently, with appropriate evaluation criteria and vendor selection procedures. All documentation supporting the competitive bidding process is available for review.
+
+### D. Service Provider Eligibility
+All selected service providers meet USAC eligibility requirements and are properly registered in the USAC database. Service provider eligibility was verified prior to contract execution, and all providers remain in good standing with USAC.
+
+## VII. IMPACT OF DENIAL ON STUDENTS WITH DISABILITIES
+
+The denial of this funding request has particularly severe consequences for our student population. Deaf and hard-of-hearing students face unique challenges that make reliable internet connectivity essential for educational equity:
+
+### A. Communication Access
+Students rely on internet-based video relay services, video remote interpreting, and real-time captioning services that require high-quality broadband connectivity. Without adequate internet access, these students cannot participate fully in educational activities.
+
+### B. Visual Learning Requirements
+Deaf education relies heavily on visual learning modalities that require internet access for educational videos, visual learning management systems, and multimedia educational content. The lack of adequate connectivity creates educational barriers for our students.
+
+### C. Assistive Technology Integration
+Many assistive technologies used by deaf students require internet connectivity to function properly. Hearing loops, FM systems, and other assistive devices increasingly rely on network connectivity for optimal performance.
+
+### D. Federal Compliance Obligations
+The denial may force the School into non-compliance with federal requirements under IDEA and Section 504, which mandate appropriate educational services for students with disabilities. Adequate internet access is essential for providing these required services.
+
+## VIII. REQUEST FOR RELIEF
+
+Based on the foregoing arguments and supporting documentation, St. Francis De Sales Deaf School respectfully requests that the USAC Appeals Committee:
+
+1. **Reverse the Denial Decision:** Find that the denial was improper and unsupported by substantial evidence
+2. **Approve the Funding Request:** Grant approval for Funding Request Number 2599047928 in its entirety
+3. **Authorize Immediate Processing:** Direct USAC to process the approved funding request expeditiously to minimize further educational disruption
+4. **Establish Procedural Safeguards:** Recommend procedures to prevent similar due process violations in future cases
+
+## IX. CONCLUSION
+
+St. Francis De Sales Deaf School has demonstrated that USAC's denial of Funding Request Number 2599047928 was procedurally deficient, unsupported by substantial evidence, and contrary to applicable FCC rules and precedent. The denial violates fundamental due process rights by failing to provide adequate notice of the grounds for the adverse decision.
+
+The School submitted its application in good faith compliance with all known E-Rate requirements. The requested internet access services are essential for providing appropriate educational services to deaf and hard-of-hearing students, and the denial creates significant barriers to educational equity for this vulnerable population.
+
+The complete absence of any explanation for the denial suggests arbitrary decision-making inconsistent with FCC requirements and federal administrative law principles. The School has been denied the opportunity to respond to specific allegations because no specific allegations have been made.
+
+For these reasons, the School respectfully urges the Appeals Committee to reverse USAC's denial decision and approve the requested funding. The students we serve depend on these essential internet services for their educational success, and continued denial would constitute an unconscionable barrier to their educational opportunities.
+
+This appeal is submitted within the required timeframe under 47 C.F.R. § 54.719(d), and the School requests expedited consideration given the critical nature of these services for our student population.
+
+We thank the Appeals Committee for its consideration of this matter and look forward to a favorable resolution.
+
+**Respectfully submitted,**
+
+[Name]  
+[Title]  
+St. Francis De Sales Deaf School  
+[Address]  
+[City, State, ZIP]  
+[Phone Number]  
+[Email Address]
+
+**Date:** [Current Date]
+
+---
+
+**CERTIFICATE OF SERVICE**
+
+I hereby certify that a true and correct copy of the foregoing Appeal has been served upon USAC by electronic filing through the USAC portal on this [Day] day of [Month], [Year].
+
+[Signature]  
+[Name]  
+[Title]
+
+---
+
+*This appeal is submitted pursuant to 47 C.F.R. § 54.719 and 47 C.F.R. § 54.720, and all applicable USAC appeals procedures.*

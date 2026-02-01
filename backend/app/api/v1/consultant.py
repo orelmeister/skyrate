@@ -647,16 +647,23 @@ async def get_dashboard_stats(
     
     # ========== STEP 1: Fetch C2 Budget data using C2 Budget Tool API ==========
     # This gives us accurate 5-year C2 budget amounts
+    # OPTIMIZED: Batch query all BENs in one API call instead of individual calls
     try:
-        for ben in all_bens:
-            # Query C2 Budget Tool API directly - use ben with quotes (string field)
-            c2_data = fetch_usac_data('c2_budget', f"ben='{ben}'", limit=10)
-            
-            if c2_data:
-                for record in c2_data:
-                    # funded_c2_budget_amount = total C2 funding committed for this entity
-                    c2_funded = float(record.get("funded_c2_budget_amount") or 0)
-                    total_c2_funding += c2_funded
+        if len(all_bens) == 1:
+            c2_ben_filter = f"ben='{all_bens[0]}'"
+        else:
+            # Build OR clause for all BENs in a single query
+            c2_or_conditions = [f"ben='{ben}'" for ben in all_bens]
+            c2_ben_filter = f"({' OR '.join(c2_or_conditions)})"
+        
+        c2_data = fetch_usac_data('c2_budget', c2_ben_filter, limit=len(all_bens) * 10)
+        
+        if c2_data:
+            for record in c2_data:
+                # funded_c2_budget_amount = total C2 funding committed for this entity
+                c2_funded = float(record.get("funded_c2_budget_amount") or 0)
+                total_c2_funding += c2_funded
+        print(f"DEBUG dashboard: Fetched C2 budget data for {len(all_bens)} BENs in single query, found {len(c2_data)} records")
     except Exception as e:
         print(f"Error fetching C2 Budget data: {e}")
     
@@ -674,7 +681,14 @@ async def get_dashboard_stats(
         form_471_data = fetch_usac_data('form_471', where_clause, limit=len(all_bens) * 50)
         
         total_applications = len(form_471_data)
-        print(f"DEBUG: Found {total_applications} Form 471 applications for 2025")
+        print(f"DEBUG dashboard: Found {total_applications} Form 471 applications for 2025")
+        
+        # Debug: Print all unique statuses in dashboard
+        all_statuses = set()
+        for app in form_471_data:
+            status = str(app.get("form_471_frn_status_name", ""))
+            all_statuses.add(status)
+        print(f"DEBUG dashboard: All unique statuses: {all_statuses}")
         
         for app in form_471_data:
             # Get status from form_471_frn_status_name
@@ -719,6 +733,110 @@ async def get_dashboard_stats(
         "funded_count": funded_count,
         "pending_count": pending_count,
         "schools_with_denials": len(bens_with_denials)
+    }
+
+
+@router.get("/denied-applications")
+async def get_denied_applications(
+    year: Optional[int] = Query(None, description="Filter by funding year (defaults to current year)"),
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all denied applications across the consultant's schools.
+    Returns detailed information for each denied FRN to help with appeals.
+    """
+    from app.models.application import AppealRecord
+    
+    schools = db.query(ConsultantSchool).filter(
+        ConsultantSchool.consultant_profile_id == profile.id
+    ).all()
+    
+    if not schools:
+        return {
+            "success": True,
+            "denied_applications": [],
+            "total_denied": 0,
+            "total_denied_amount": 0
+        }
+    
+    all_bens = [school.ben for school in schools]
+    ben_to_school = {school.ben: school for school in schools}
+    
+    # For now, we don't track appeals by FRN since AppealRecord links to Application
+    # which is not populated from USAC data. Will show has_appeal=False for all.
+    frns_with_appeals = set()
+    
+    denied_applications = []
+    total_denied_amount = 0
+    
+    try:
+        # Build OR clause for multiple BENs
+        if len(all_bens) == 1:
+            ben_filter = f"ben='{all_bens[0]}'"
+        else:
+            or_conditions = [f"ben='{ben}'" for ben in all_bens]
+            ben_filter = f"({' OR '.join(or_conditions)})"
+        
+        # Filter by year if specified - default to 2025 (same as dashboard)
+        funding_year = year or 2025
+        where_clause = f"{ben_filter} AND funding_year='{funding_year}'"
+        
+        # Fetch Form 471 data
+        form_471_data = fetch_usac_data('form_471', where_clause, limit=len(all_bens) * 100)
+        
+        print(f"DEBUG denied-applications: Found {len(form_471_data)} Form 471 applications for {funding_year}")
+        
+        # Debug: Print all unique statuses
+        all_statuses = set()
+        for app in form_471_data:
+            status = str(app.get("form_471_frn_status_name", ""))
+            all_statuses.add(status)
+        print(f"DEBUG denied-applications: All unique statuses: {all_statuses}")
+        
+        for app in form_471_data:
+            status = str(app.get("form_471_frn_status_name", "")).lower()
+            
+            # Match the same logic as dashboard - check if "denied" is in status
+            if "denied" in status:
+                frn = str(app.get("funding_request_number", ""))
+                ben = str(app.get("ben", ""))
+                school = ben_to_school.get(ben)
+                
+                amount = float(app.get("funding_commitment_request") or app.get("original_request") or 0)
+                total_denied_amount += amount
+                
+                print(f"DEBUG: Found denied FRN {frn} - status: {status}, amount: {amount}")
+                
+                denied_applications.append({
+                    "frn": frn,
+                    "ben": ben,
+                    "school_name": school.school_name if school else app.get("organization_name", "Unknown"),
+                    "funding_year": app.get("funding_year"),
+                    "status": app.get("form_471_frn_status_name", "Denied"),
+                    "service_type": app.get("form_471_service_type_name"),
+                    "amount_requested": amount,
+                    "denial_reason": app.get("denial_reason") or app.get("frn_denial_reason_desc"),
+                    "application_number": app.get("application_number"),
+                    "has_appeal": frn in frns_with_appeals
+                })
+                
+    except Exception as e:
+        print(f"Error fetching denied applications: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    print(f"DEBUG denied-applications: Returning {len(denied_applications)} denied applications")
+    
+    # Sort by amount (highest first)
+    denied_applications.sort(key=lambda x: x.get("amount_requested", 0), reverse=True)
+    
+    return {
+        "success": True,
+        "denied_applications": denied_applications,
+        "total_denied": len(denied_applications),
+        "total_denied_amount": total_denied_amount,
+        "year": funding_year
     }
 
 

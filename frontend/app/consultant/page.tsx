@@ -4,8 +4,9 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
-import { api, ConsultantSchool, ConsultantProfile } from "@/lib/api";
+import { api, ConsultantSchool, ConsultantProfile, AppealRecord } from "@/lib/api";
 import { SearchResultsTable } from "@/components/SearchResultsTable";
+import { AppealChat } from "@/components/AppealChat";
 
 // Extended school type with USAC data
 interface EnhancedSchool {
@@ -108,8 +109,38 @@ export default function ConsultantPortalPage() {
   
   // Appeal generation state
   const [generatingAppeal, setGeneratingAppeal] = useState<string | null>(null);
-  const [generatedAppeal, setGeneratedAppeal] = useState<any>(null);
-  const [showAppealModal, setShowAppealModal] = useState(false);
+  const [appeals, setAppeals] = useState<AppealRecord[]>([]);
+  const [selectedAppeal, setSelectedAppeal] = useState<AppealRecord | null>(null);
+  const [showAppealChat, setShowAppealChat] = useState(false);
+  const [isLoadingAppeals, setIsLoadingAppeals] = useState(false);
+  const [showNewAppealModal, setShowNewAppealModal] = useState(false);
+  const [newAppealFrn, setNewAppealFrn] = useState("");
+  const [newAppealContext, setNewAppealContext] = useState("");
+  const [appealError, setAppealError] = useState<string | null>(null);
+  const [selectedDeniedApp, setSelectedDeniedApp] = useState<{
+    frn: string;
+    school_name: string;
+    funding_year: string;
+    service_type: string;
+    amount_requested: number;
+    denial_reason: string | null;
+  } | null>(null);
+  
+  // Denied applications state (for appeals page)
+  const [deniedApplications, setDeniedApplications] = useState<Array<{
+    frn: string;
+    ben: string;
+    school_name: string;
+    funding_year: string;
+    status: string;
+    service_type: string;
+    amount_requested: number;
+    denial_reason: string | null;
+    application_number: string;
+    has_appeal: boolean;
+  }>>([]);
+  const [isLoadingDenied, setIsLoadingDenied] = useState(false);
+  const [deniedStats, setDeniedStats] = useState<{ total: number; amount: number } | null>(null);
   
   // Query state
   const [queryInput, setQueryInput] = useState("");
@@ -253,6 +284,50 @@ export default function ConsultantPortalPage() {
       setIsLoadingStats(false);
     }
   };
+
+  const loadAppeals = async () => {
+    setIsLoadingAppeals(true);
+    try {
+      const response = await api.getAppeals();
+      if (response.success && response.data) {
+        setAppeals(response.data.appeals || []);
+      }
+    } catch (error) {
+      console.error("Failed to load appeals:", error);
+    } finally {
+      setIsLoadingAppeals(false);
+    }
+  };
+
+  const loadDeniedApplications = async () => {
+    console.log("loadDeniedApplications called");
+    setIsLoadingDenied(true);
+    try {
+      const response = await api.getDeniedApplications();
+      console.log("getDeniedApplications response:", response);
+      if (response.success && response.data) {
+        console.log("Denied applications data:", response.data);
+        setDeniedApplications(response.data.denied_applications || []);
+        setDeniedStats({
+          total: response.data.total_denied || 0,
+          amount: response.data.total_denied_amount || 0,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to load denied applications:", error);
+    } finally {
+      setIsLoadingDenied(false);
+    }
+  };
+
+  // Load appeals and denied applications when switching to appeals tab
+  useEffect(() => {
+    if (activeTab === "appeals") {
+      // Always load both when switching to appeals tab
+      loadAppeals();
+      loadDeniedApplications();
+    }
+  }, [activeTab]);
 
   const refreshSchoolsWithUsac = async () => {
     setIsRefreshingSchools(true);
@@ -484,19 +559,50 @@ export default function ConsultantPortalPage() {
     }
   };
 
-  const handleGenerateAppeal = async (frn: string) => {
+  const handleGenerateAppeal = async (frn: string, additionalContext?: string) => {
     setGeneratingAppeal(frn);
+    setAppealError(null);
     try {
-      const res = await api.generateAppeal(frn);
+      const res = await api.generateAppeal(frn, additionalContext);
       if (res.success && res.data) {
-        setGeneratedAppeal(res.data.appeal);
-        setShowAppealModal(true);
+        // Add to appeals list and open chat
+        setAppeals(prev => [res.data!, ...prev]);
+        setSelectedAppeal(res.data);
+        setShowAppealChat(true);
+        setShowNewAppealModal(false);
+        setSelectedDeniedApp(null);
+        setNewAppealFrn("");
+        setNewAppealContext("");
+      } else {
+        setAppealError(res.error || "Failed to generate appeal");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Appeal generation failed:", error);
+      setAppealError(error.message || "Failed to generate appeal");
     } finally {
       setGeneratingAppeal(null);
     }
+  };
+
+  const handleDeleteAppeal = async (appealId: number) => {
+    if (!confirm("Are you sure you want to delete this appeal?")) return;
+    try {
+      const res = await api.deleteAppeal(appealId);
+      if (res.success) {
+        setAppeals(prev => prev.filter(a => a.id !== appealId));
+        if (selectedAppeal?.id === appealId) {
+          setSelectedAppeal(null);
+          setShowAppealChat(false);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to delete appeal:", error);
+    }
+  };
+
+  const handleAppealUpdate = (updatedAppeal: AppealRecord) => {
+    setAppeals(prev => prev.map(a => a.id === updatedAppeal.id ? updatedAppeal : a));
+    setSelectedAppeal(updatedAppeal);
   };
 
   const handleRemoveSchool = async (ben: string) => {
@@ -720,7 +826,10 @@ export default function ConsultantPortalPage() {
                   <div className="text-sm text-slate-500 mt-1">Category 2 Funding</div>
                 </div>
                 
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                <div 
+                  className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer hover:border-red-300"
+                  onClick={() => setActiveTab("appeals")}
+                >
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center">
                       <span className="text-2xl">⚠️</span>
@@ -1134,13 +1243,249 @@ export default function ConsultantPortalPage() {
           )}
 
           {activeTab === "appeals" && (
-            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
-              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center mx-auto mb-6">
-                <span className="text-4xl">📋</span>
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">Appeals Management</h2>
+                  <p className="text-slate-500">Generate, refine, and manage E-Rate appeals with AI assistance</p>
+                </div>
+                <button 
+                  onClick={() => {
+                    setSelectedDeniedApp(null);
+                    setNewAppealFrn("");
+                    setNewAppealContext("");
+                    setShowNewAppealModal(true);
+                  }}
+                  className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl shadow-lg shadow-amber-200 hover:shadow-xl transition-all flex items-center gap-2 font-medium"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  New Appeal
+                </button>
               </div>
-              <h2 className="text-xl font-semibold text-slate-900 mb-2">Appeals Management</h2>
-              <p className="text-slate-500 mb-6">Track and manage E-Rate appeals for your schools</p>
-              <button className="px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl shadow-lg shadow-amber-200">Create New Appeal</button>
+
+              {/* Denied Applications Section */}
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-red-50 to-orange-50 px-6 py-4 border-b border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-slate-900">Denied Applications</h3>
+                        <p className="text-sm text-slate-500">FRNs from your schools that need appeals</p>
+                      </div>
+                    </div>
+                    {deniedStats && (
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-red-600">{deniedStats.total} denied</p>
+                        <p className="text-sm text-slate-500">${deniedStats.amount.toLocaleString()} at risk</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="p-6">
+                  {isLoadingDenied ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+                      <p className="text-slate-500">Loading denied applications...</p>
+                    </div>
+                  ) : deniedApplications.length === 0 ? (
+                    <div className="text-center py-8">
+                      <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+                        <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <h4 className="font-medium text-slate-900 mb-1">No denied applications</h4>
+                      <p className="text-sm text-slate-500">All your schools&apos; funding requests are in good standing!</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {deniedApplications.filter(app => !app.has_appeal).map((app) => (
+                        <div 
+                          key={app.frn}
+                          className="flex items-center justify-between p-4 bg-gradient-to-r from-red-50 to-white border border-red-100 rounded-xl hover:shadow-md transition-all"
+                        >
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-1">
+                              <span className="font-mono text-sm font-medium text-slate-700">FRN: {app.frn}</span>
+                              <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full font-medium">
+                                Denied
+                              </span>
+                              <span className="text-xs text-slate-500">{app.funding_year}</span>
+                            </div>
+                            <p className="text-sm text-slate-900 font-medium">{app.school_name}</p>
+                            <div className="flex items-center gap-4 mt-1 text-xs text-slate-500">
+                              <span>{app.service_type}</span>
+                              <span>•</span>
+                              <span className="text-red-600 font-medium">${app.amount_requested.toLocaleString()}</span>
+                            </div>
+                            {app.denial_reason && (
+                              <p className="text-xs text-red-600 mt-2 bg-red-50 px-2 py-1 rounded">
+                                {app.denial_reason.slice(0, 150)}{app.denial_reason.length > 150 ? '...' : ''}
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => {
+                              setSelectedDeniedApp({
+                                frn: app.frn,
+                                school_name: app.school_name,
+                                funding_year: app.funding_year,
+                                service_type: app.service_type,
+                                amount_requested: app.amount_requested,
+                                denial_reason: app.denial_reason
+                              });
+                              setNewAppealFrn(app.frn);
+                              setNewAppealContext(`School: ${app.school_name}\nAmount: $${app.amount_requested.toLocaleString()}\nService: ${app.service_type}\nDenial Reason: ${app.denial_reason || 'Not specified'}`);
+                              setShowNewAppealModal(true);
+                            }}
+                            disabled={generatingAppeal === app.frn}
+                            className="ml-4 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-sm font-medium rounded-lg hover:shadow-lg transition-all disabled:opacity-50 flex items-center gap-2"
+                          >
+                            {generatingAppeal === app.frn ? (
+                              <>
+                                <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                                Generating...
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                Generate Appeal
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      ))}
+                      
+                      {/* Show count of applications that already have appeals */}
+                      {deniedApplications.filter(app => app.has_appeal).length > 0 && (
+                        <div className="text-center pt-2 text-sm text-slate-500">
+                          {deniedApplications.filter(app => app.has_appeal).length} denied application(s) already have appeals (shown below)
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Your Appeals Section */}
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 px-6 py-4 border-b border-slate-200">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-slate-900">Your Appeals</h3>
+                      <p className="text-sm text-slate-500">Generated appeal letters you can refine and download</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="p-6">
+                  {isLoadingAppeals ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin w-8 h-8 border-4 border-amber-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+                      <p className="text-slate-500">Loading appeals...</p>
+                    </div>
+                  ) : appeals.length === 0 ? (
+                    <div className="text-center py-8">
+                      <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                        <span className="text-2xl">📄</span>
+                      </div>
+                      <h4 className="font-medium text-slate-900 mb-1">No appeals generated yet</h4>
+                      <p className="text-sm text-slate-500">Generate an appeal from a denied application above, or create one manually</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {appeals.map((appeal) => (
+                        <div 
+                          key={appeal.id} 
+                          className="flex items-center justify-between p-4 bg-gradient-to-r from-amber-50 to-white border border-amber-100 rounded-xl hover:shadow-md transition-all cursor-pointer"
+                          onClick={() => {
+                            setSelectedAppeal(appeal);
+                            setShowAppealChat(true);
+                          }}
+                        >
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-1">
+                              <span className="font-mono text-sm font-medium text-slate-700">FRN: {appeal.frn}</span>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                appeal.status === "finalized" 
+                                  ? "bg-green-100 text-green-700" 
+                                  : appeal.status === "submitted"
+                                  ? "bg-blue-100 text-blue-700"
+                                  : "bg-amber-100 text-amber-700"
+                              }`}>
+                                {appeal.status}
+                              </span>
+                            </div>
+                            <p className="text-sm text-slate-900">{appeal.organization_name || "Unknown Organization"}</p>
+                            {appeal.denial_reason && (
+                              <p className="text-xs text-red-600 mt-1">
+                                Denial: {appeal.denial_reason.slice(0, 80)}{appeal.denial_reason.length > 80 ? '...' : ''}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
+                              <span>Updated: {new Date(appeal.updated_at).toLocaleDateString()}</span>
+                              {appeal.chat_history && appeal.chat_history.length > 0 && (
+                                <>
+                                  <span>•</span>
+                                  <span className="flex items-center gap-1">
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                    </svg>
+                                    {appeal.chat_history.length} messages
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedAppeal(appeal);
+                                setShowAppealChat(true);
+                              }}
+                              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                              title="Open & Chat"
+                            >
+                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteAppeal(appeal.id);
+                              }}
+                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete"
+                            >
+                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
@@ -1609,46 +1954,189 @@ export default function ConsultantPortalPage() {
         </div>
       )}
 
-      {/* Appeal Modal */}
-      {showAppealModal && generatedAppeal && (
+      {/* New Appeal Modal */}
+      {showNewAppealModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-slate-200 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-semibold text-slate-900">Generated Appeal Letter</h2>
-                <p className="text-sm text-slate-500 mt-1">FRN: {generatedAppeal.frn}</p>
-              </div>
-              <button onClick={() => { setShowAppealModal(false); setGeneratedAppeal(null); }} className="p-2 hover:bg-slate-100 rounded-lg">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <div className="p-6 overflow-y-auto flex-1">
-              <div className="prose max-w-none">
-                <pre className="whitespace-pre-wrap text-sm text-slate-700 bg-slate-50 p-6 rounded-xl border border-slate-200">
-                  {generatedAppeal.appeal_letter}
-                </pre>
-              </div>
-            </div>
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
+            {selectedDeniedApp ? (
+              /* Confirmation view when generating from denied application */
+              <>
+                <div className="p-6 border-b border-slate-200">
+                  <h2 className="text-xl font-semibold text-slate-900">Confirm Appeal Generation</h2>
+                  <p className="text-sm text-slate-500 mt-1">Review the details and confirm to generate the appeal</p>
+                </div>
+                
+                <div className="p-6 space-y-4">
+                  {appealError && (
+                    <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
+                      {appealError}
+                    </div>
+                  )}
+                  
+                  {/* Application Details */}
+                  <div className="bg-slate-50 rounded-xl p-4 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-slate-500">School Name</span>
+                      <span className="text-sm font-medium text-slate-900">{selectedDeniedApp.school_name}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-slate-500">FRN</span>
+                      <span className="text-sm font-mono font-semibold text-indigo-600">{selectedDeniedApp.frn}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-slate-500">Funding Year</span>
+                      <span className="text-sm font-medium text-slate-900">{selectedDeniedApp.funding_year}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-slate-500">Service Type</span>
+                      <span className="text-sm font-medium text-slate-900">{selectedDeniedApp.service_type}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-slate-500">Amount Requested</span>
+                      <span className="text-sm font-medium text-slate-900">${selectedDeniedApp.amount_requested?.toLocaleString() || 'N/A'}</span>
+                    </div>
+                    {selectedDeniedApp.denial_reason && (
+                      <div className="pt-2 border-t border-slate-200">
+                        <span className="text-sm text-slate-500 block mb-1">Denial Reason</span>
+                        <span className="text-sm text-red-600">{selectedDeniedApp.denial_reason}</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Additional Context (Optional)
+                    </label>
+                    <textarea
+                      value={newAppealContext}
+                      onChange={(e) => setNewAppealContext(e.target.value)}
+                      placeholder="Add any additional information to help generate the appeal..."
+                      rows={3}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                    />
+                  </div>
+                </div>
 
-            <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
-              <button 
-                onClick={() => navigator.clipboard.writeText(generatedAppeal.appeal_letter)}
-                className="px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 flex items-center gap-2"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                </svg>
-                Copy to Clipboard
-              </button>
-              <button onClick={() => { setShowAppealModal(false); setGeneratedAppeal(null); }} className="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl">
-                Done
-              </button>
-            </div>
+                <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+                  <button 
+                    onClick={() => {
+                      setShowNewAppealModal(false);
+                      setSelectedDeniedApp(null);
+                      setNewAppealFrn("");
+                      setNewAppealContext("");
+                      setAppealError(null);
+                    }}
+                    className="px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={() => handleGenerateAppeal(selectedDeniedApp.frn, newAppealContext)}
+                    disabled={generatingAppeal !== null}
+                    className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl hover:from-amber-600 hover:to-orange-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {generatingAppeal ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        Generating...
+                      </>
+                    ) : (
+                      'Generate Appeal'
+                    )}
+                  </button>
+                </div>
+              </>
+            ) : (
+              /* Manual entry view for new appeals */
+              <>
+                <div className="p-6 border-b border-slate-200">
+                  <h2 className="text-xl font-semibold text-slate-900">Generate New Appeal</h2>
+                  <p className="text-sm text-slate-500 mt-1">Enter a denied FRN to generate an appeal letter</p>
+                </div>
+                
+                <div className="p-6 space-y-4">
+                  {appealError && (
+                    <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
+                      {appealError}
+                    </div>
+                  )}
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      FRN (Funding Request Number) *
+                    </label>
+                    <input
+                      type="text"
+                      value={newAppealFrn}
+                      onChange={(e) => setNewAppealFrn(e.target.value)}
+                      placeholder="e.g., 2391012345"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Additional Context (Optional)
+                    </label>
+                    <textarea
+                      value={newAppealContext}
+                      onChange={(e) => setNewAppealContext(e.target.value)}
+                      placeholder="Add any additional information to help generate the appeal..."
+                      rows={3}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+                  <button 
+                    onClick={() => {
+                      setShowNewAppealModal(false);
+                      setNewAppealFrn("");
+                      setNewAppealContext("");
+                      setAppealError(null);
+                    }}
+                    className="px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={() => handleGenerateAppeal(newAppealFrn, newAppealContext)}
+                    disabled={!newAppealFrn.trim() || generatingAppeal !== null}
+                    className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl hover:from-amber-600 hover:to-orange-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {generatingAppeal ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        Generating...
+                      </>
+                    ) : (
+                      'Generate Appeal'
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
+      )}
+
+      {/* Appeal Chat Modal */}
+      {showAppealChat && selectedAppeal && (
+        <AppealChat
+          appeal={selectedAppeal}
+          onAppealUpdate={handleAppealUpdate}
+          onClose={() => {
+            setShowAppealChat(false);
+            setSelectedAppeal(null);
+          }}
+        />
       )}
     </div>
   );

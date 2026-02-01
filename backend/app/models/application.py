@@ -128,6 +128,10 @@ class AppealRecord(Base):
     strategy = Column(JSON)  # Appeal strategy from AI
     evidence = Column(JSON)  # Evidence pack
     
+    # Chat history - stores conversation about the appeal
+    # Format: [{"role": "user"|"assistant", "content": "...", "timestamp": "ISO"}]
+    chat_history = Column(JSON, default=list)
+    
     # Status
     status = Column(String(50), default="draft")  # draft, submitted, won, lost
     submitted_at = Column(DateTime)
@@ -142,15 +146,39 @@ class AppealRecord(Base):
     application = relationship("Application", back_populates="appeals")
     
     def to_dict(self) -> dict:
+        # Get related application data for FRN and organization info
+        frn = None
+        organization_name = None
+        denial_reason = None
+        
+        if self.application:
+            frn = self.application.frn
+            # Safely get denial reason
+            if self.application.fcdl_comment:
+                denial_reason = self.application.fcdl_comment
+            elif self.application.denial_reasons and len(self.application.denial_reasons) > 0:
+                denial_reason = self.application.denial_reasons[0]
+            
+            if self.application.school_snapshot:
+                organization_name = self.application.school_snapshot.organization_name
+        
         return {
             "id": self.id,
             "application_id": self.application_id,
+            "frn": frn,
+            "organization_name": organization_name,
+            "denial_reason": denial_reason,
+            "denial_details": self.strategy.get("analysis") if self.strategy else None,
+            "appeal_letter": self.appeal_text,  # Frontend expects 'appeal_letter'
             "appeal_text": self.appeal_text,
             "strategy": self.strategy,
+            "chat_history": self.chat_history or [],
             "status": self.status,
             "submitted_at": self.submitted_at.isoformat() if self.submitted_at else None,
             "outcome": self.outcome,
             "generated_at": self.generated_at.isoformat() if self.generated_at else None,
+            "created_at": self.generated_at.isoformat() if self.generated_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
 

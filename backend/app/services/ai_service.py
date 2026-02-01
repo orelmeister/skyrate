@@ -206,41 +206,155 @@ class AIService:
         organization_info: Optional[Dict] = None
     ) -> str:
         """
-        Generate an appeal strategy document.
+        Generate a comprehensive E-Rate appeal letter using AI.
         
         Args:
-            denial_details: Structured denial information
+            denial_details: Structured denial information including USAC data
             organization_info: Optional applicant details
             
         Returns:
-            AI-generated appeal strategy
+            AI-generated appeal letter
         """
         import json
         
-        prompt = f"""Generate a comprehensive E-Rate appeal strategy.
+        # Extract key information for the prompt
+        frn = denial_details.get("frn", "Unknown")
+        funding_year = denial_details.get("funding_year", "Unknown")
+        amount = denial_details.get("total_denied_amount", 0)
+        fcdl_comment = denial_details.get("fcdl_comment", "")
+        violation_types = denial_details.get("violation_types", [])
+        usac_context = denial_details.get("usac_context", {})
+        form_470_data = denial_details.get("form_470_data", {})
+        
+        # Enhanced system prompt for consistency
+        system_prompt = """You are an expert E-Rate compliance consultant with 15+ years of experience successfully appealing denied funding applications. Your appeals have an 85% success rate because you:
 
-        Denial Details:
-        {json.dumps(denial_details, indent=2, default=str)}
-        
-        {"Organization Info:" + json.dumps(organization_info, indent=2) if organization_info else ""}
-        
-        Create a detailed appeal strategy including:
-        1. Executive Summary
-        2. Violation-by-Violation Analysis
-        3. Evidence Required
-        4. Recommended Timeline
-        5. Appeal Letter Outline
-        6. Success Probability Assessment
-        
-        Use professional language suitable for E-Rate compliance.
-        """
-        
-        # Use Claude for report generation
-        return self._manager.call_claude(
-            [{"role": "user", "content": prompt}],
-            system="You are an expert E-Rate compliance consultant helping schools and libraries appeal denied funding applications.",
-            max_tokens=8000
-        )
+1. Write in formal, professional legal language suitable for government submissions
+2. Always include specific FCC regulation citations (47 C.F.R.)
+3. Reference relevant FCC orders and precedents
+4. Address each denial reason with specific counter-arguments
+5. Demonstrate the applicant's good faith compliance effort
+6. Follow proper legal brief structure with clear sections
+7. Include specific dates, amounts, and documentation references
+
+Your appeals are known for being thorough, persuasive, and ready for immediate submission to USAC."""
+
+        # Enhanced prompt with better structure and examples
+        prompt = f"""Generate a comprehensive, professional E-Rate appeal letter for this denied funding application. This must be a complete, submission-ready formal appeal.
+
+## CASE INFORMATION
+- **FRN:** {frn}
+- **Funding Year:** {funding_year} 
+- **Amount Denied:** ${amount:,.2f}
+- **Service Type:** {denial_details.get('service_type', 'Not specified')}
+- **Service Description:** {denial_details.get('service_description', 'Not specified')}
+- **Organization:** {organization_info.get('organization_name', 'Not specified') if organization_info else 'Not specified'}
+
+## DENIAL REASON FROM USAC
+**FCDL Comment:** "{fcdl_comment}"
+
+**Violation Categories:** {', '.join(violation_types) if violation_types else 'General procedural'}
+
+## USAC DATA CONTEXT
+Service Provider: {usac_context.get('service_provider_name', 'Not specified')}
+Discount Rate: {usac_context.get('discount_pct', 'Not specified')}%
+Form 470 Number: {usac_context.get('establishing_fcc_form470_number', 'Not specified')}
+{f"Form 470 Posted: {form_470_data.get('posting_date', 'Not specified')}" if form_470_data else ""}
+{f"Contract Date: {form_470_data.get('allowable_contract_date', 'Not specified')}" if form_470_data else ""}
+
+## REQUIRED APPEAL STRUCTURE
+
+**HEADER:**
+- Formal government letter format with USAC address
+- Clear subject line with FRN, funding year, amount
+- Professional salutation ("Dear USAC Appeals Committee:")
+
+**BODY SECTIONS:**
+1. **INTRODUCTION** - Brief summary requesting reversal of denial
+2. **BACKGROUND** - Application details and timeline  
+3. **DENIAL SUMMARY** - Quote the exact FCDL language
+4. **GROUNDS FOR APPEAL** - Numbered counter-arguments addressing each violation:
+   - Cite specific FCC regulations (47 C.F.R. §54.503, etc.)
+   - Reference relevant FCC orders and precedents
+   - Provide specific dates, amounts, and facts
+   - Address competitive bidding, documentation, eligibility, or procedural issues
+5. **GOOD FAITH COMPLIANCE** - Demonstrate intent to follow program rules
+6. **SUPPORTING DOCUMENTATION** - List attachments being provided
+7. **CONCLUSION** - Professional closing requesting specific relief
+8. **SIGNATURE BLOCK** - Formal signature line with contact information
+
+**CRITICAL REQUIREMENTS:**
+- Use formal legal language throughout
+- Include specific regulation citations for each argument
+- Reference actual FCC orders where similar appeals succeeded
+- Address the specific denial reasons with factual counter-arguments
+- Maintain respectful, professional tone
+- Be thorough but concise (aim for 4-6 pages when printed)
+- Make it ready for immediate submission with minimal editing
+
+Generate the complete formal appeal letter now:"""
+
+        # Try Claude first (best for formal legal writing)
+        try:
+            result = self._manager.call_claude(
+                [{"role": "user", "content": prompt}],
+                system=system_prompt,
+                max_tokens=8000
+            )
+            # Enhanced quality check
+            if (result and len(result) > 1000 and 
+                "dear usac" in result.lower() and 
+                "respectfully" in result.lower() and
+                "47 c.f.r" in result.lower() and
+                str(frn) in result and
+                "unavailable" not in result.lower()):
+                return result
+            else:
+                print(f"Claude response failed quality check (length: {len(result) if result else 0})")
+                raise ValueError("Claude response failed quality requirements")
+        except Exception as e:
+            print(f"Claude failed: {e}")
+            
+        # Fallback to Gemini with similar enhanced prompt
+        try:
+            gemini_prompt = f"""Write a formal E-Rate appeal letter for FRN {frn} denied for ${amount:,.2f} in funding year {funding_year}.
+
+DENIAL REASON: {fcdl_comment}
+
+Create a professional appeal letter that:
+- Starts with "Dear USAC Appeals Committee:"
+- Uses formal legal language with FCC regulation citations
+- Addresses each specific denial reason with counter-arguments
+- Ends with "Respectfully submitted,"
+- Is ready for submission to USAC
+
+Make it comprehensive and persuasive (minimum 2000 words)."""
+            
+            result = self._manager.call_gemini(gemini_prompt)
+            if (result and len(result) > 1000 and 
+                "dear" in result.lower() and 
+                str(frn) in result):
+                return result
+            print(f"Gemini response also insufficient (length: {len(result) if result else 0})")
+        except Exception as e2:
+            print(f"Gemini also failed: {e2}")
+            
+        # Last resort - try DeepSeek
+        try:
+            deepseek_result = self._manager.call_deepseek([
+                {"role": "system", "content": "You are an expert E-Rate legal consultant."},
+                {"role": "user", "content": f"""Write a formal appeal letter for denied E-Rate FRN {frn} (${amount:,.2f}). 
+                
+Denial reason: {fcdl_comment}
+
+Format as a professional legal document ready for USAC submission. Include specific FCC regulations and be comprehensive."""}
+            ])
+            if deepseek_result and len(deepseek_result) > 500:
+                return deepseek_result
+        except Exception as e3:
+            print(f"DeepSeek also failed: {e3}")
+            
+        return ""  # Return empty to trigger template fallback
     
     def generate_vendor_outreach(
         self,

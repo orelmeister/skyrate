@@ -26,7 +26,7 @@ from app.core.database import engine, Base
 from app.services import get_usac_service, get_ai_service, get_denial_service, get_appeals_service
 
 # Import API routers
-from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools
+from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals
 
 # Configure logging
 logging.basicConfig(
@@ -110,6 +110,7 @@ app.include_router(vendor.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(query.router, prefix="/api/v1")
 app.include_router(schools.router, prefix="/api/v1")
+app.include_router(appeals.router, prefix="/api/v1")
 
 # ==================== MODELS ====================
 
