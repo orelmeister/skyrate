@@ -17,7 +17,7 @@ services:
     envs:
       - key: SECRET_KEY
         scope: RUN_TIME
-        type: SECRET
+        value: WvFKVgkDWd4KVcfz1mUOkuSx_oXXZO57cgYl71P7A0c
       - key: DATABASE_URL
         scope: RUN_TIME
         value: sqlite:///./skyrate.db
