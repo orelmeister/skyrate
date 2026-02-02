@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
-import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse } from "@/lib/api";
+import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse, FRNStatusResponse, FRNStatusSummaryResponse, FRNStatusRecord } from "@/lib/api";
 
 interface SearchResult {
   ben: string;
@@ -63,6 +63,12 @@ export default function VendorPortalPage() {
   const [form471Error, setForm471Error] = useState<string | null>(null);
   const [competitorData, setCompetitorData] = useState<CompetitorAnalysisResponse | null>(null);
   const [competitorLoading, setCompetitorLoading] = useState(false);
+  
+  // FRN Status Monitoring state (Sprint 2)
+  const [frnStatusData, setFrnStatusData] = useState<FRNStatusResponse | null>(null);
+  const [frnStatusLoading, setFrnStatusLoading] = useState(false);
+  const [frnStatusYear, setFrnStatusYear] = useState<number | undefined>(undefined);
+  const [frnStatusFilter, setFrnStatusFilter] = useState<string>("");
   
   // Payment guard - check if user needs to complete payment setup
   const [checkingPayment, setCheckingPayment] = useState(true);
@@ -263,6 +269,25 @@ export default function VendorPortalPage() {
     }
   };
 
+  // FRN Status Monitoring functions (Sprint 2)
+  const loadFRNStatus = async (year?: number, status?: string) => {
+    if (!profile?.spin) {
+      return;
+    }
+    
+    setFrnStatusLoading(true);
+    try {
+      const response = await api.getFRNStatus(year, status || undefined);
+      if (response.success && response.data) {
+        setFrnStatusData(response.data);
+      }
+    } catch (error) {
+      console.error("Failed to load FRN status:", error);
+    } finally {
+      setFrnStatusLoading(false);
+    }
+  };
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -370,6 +395,7 @@ export default function VendorPortalPage() {
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: "📊" },
     { id: "my-entities", label: "My Entities", icon: "🏫" },
+    { id: "frn-status", label: "FRN Status", icon: "📈" },
     { id: "competitive", label: "471 Lookup", icon: "🎯" },
     { id: "search", label: "School Search", icon: "🔍" },
     { id: "leads", label: "Saved Leads", icon: "📋" },
@@ -687,6 +713,270 @@ export default function VendorPortalPage() {
               </div>
             </div>
           )}
+
+        {/* FRN Status Monitoring Tab (Sprint 2) */}
+        {activeTab === "frn-status" && (
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 rounded-2xl p-6 text-white shadow-lg">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
+                    <span className="text-3xl">📈</span>
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold">FRN Status Monitoring</h1>
+                    <p className="text-teal-100 mt-1">Track the status of your E-Rate contracts</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => loadFRNStatus(frnStatusYear, frnStatusFilter)}
+                  disabled={frnStatusLoading || !profile?.spin}
+                  className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+                >
+                  {frnStatusLoading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Loading...
+                    </>
+                  ) : (
+                    <>Refresh Data</>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {!profile?.spin ? (
+              <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200 p-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
+                    <span className="text-2xl">⚠️</span>
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-lg font-semibold text-slate-900">SPIN Required</h2>
+                    <p className="text-sm text-slate-600 mt-1">
+                      Configure your SPIN number in settings to view FRN status
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab("settings")}
+                    className="px-4 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors text-sm font-medium"
+                  >
+                    Setup SPIN →
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Filters */}
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div>
+                      <label className="text-sm text-slate-600 mb-1 block">Funding Year</label>
+                      <select
+                        value={frnStatusYear || ""}
+                        onChange={(e) => {
+                          const year = e.target.value ? parseInt(e.target.value) : undefined;
+                          setFrnStatusYear(year);
+                          loadFRNStatus(year, frnStatusFilter);
+                        }}
+                        className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm"
+                      >
+                        <option value="">All Years</option>
+                        {[2026, 2025, 2024, 2023, 2022, 2021, 2020].map(y => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-sm text-slate-600 mb-1 block">Status</label>
+                      <select
+                        value={frnStatusFilter}
+                        onChange={(e) => {
+                          setFrnStatusFilter(e.target.value);
+                          loadFRNStatus(frnStatusYear, e.target.value);
+                        }}
+                        className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm"
+                      >
+                        <option value="">All Statuses</option>
+                        <option value="Funded">Funded</option>
+                        <option value="Denied">Denied</option>
+                        <option value="Pending">Pending</option>
+                      </select>
+                    </div>
+                    <button
+                      onClick={() => loadFRNStatus(frnStatusYear, frnStatusFilter)}
+                      disabled={frnStatusLoading}
+                      className="mt-5 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium flex items-center gap-2"
+                    >
+                      {frnStatusLoading ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      ) : (
+                        <span>🔍</span>
+                      )}
+                      Apply Filters
+                    </button>
+                  </div>
+                </div>
+
+                {/* Status Summary Cards */}
+                {frnStatusData && (
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-slate-600">Total FRNs</span>
+                        <span className="text-2xl">📋</span>
+                      </div>
+                      <div className="text-3xl font-bold text-slate-900">{frnStatusData.total_frns}</div>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-green-200 p-6 shadow-sm bg-gradient-to-br from-green-50 to-emerald-50">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-green-700">Funded</span>
+                        <span className="text-2xl">✅</span>
+                      </div>
+                      <div className="text-3xl font-bold text-green-700">{frnStatusData.summary?.funded?.count || 0}</div>
+                      <div className="text-sm text-green-600 mt-1">
+                        ${(frnStatusData.summary?.funded?.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-red-200 p-6 shadow-sm bg-gradient-to-br from-red-50 to-rose-50">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-red-700">Denied</span>
+                        <span className="text-2xl">❌</span>
+                      </div>
+                      <div className="text-3xl font-bold text-red-700">{frnStatusData.summary?.denied?.count || 0}</div>
+                      <div className="text-sm text-red-600 mt-1">
+                        ${(frnStatusData.summary?.denied?.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-2xl border border-amber-200 p-6 shadow-sm bg-gradient-to-br from-amber-50 to-yellow-50">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-amber-700">Pending</span>
+                        <span className="text-2xl">⏳</span>
+                      </div>
+                      <div className="text-3xl font-bold text-amber-700">{frnStatusData.summary?.pending?.count || 0}</div>
+                      <div className="text-sm text-amber-600 mt-1">
+                        ${(frnStatusData.summary?.pending?.amount || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* FRN Table */}
+                {frnStatusData && frnStatusData.frns && frnStatusData.frns.length > 0 && (
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-4 border-b border-slate-200">
+                      <h3 className="font-semibold text-slate-900">FRN Details</h3>
+                      <p className="text-sm text-slate-600">Detailed status for each funding request</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50 border-b border-slate-200">
+                          <tr>
+                            <th className="text-left px-4 py-3 font-medium text-slate-600">FRN</th>
+                            <th className="text-left px-4 py-3 font-medium text-slate-600">Entity</th>
+                            <th className="text-left px-4 py-3 font-medium text-slate-600">Year</th>
+                            <th className="text-left px-4 py-3 font-medium text-slate-600">Service Type</th>
+                            <th className="text-center px-4 py-3 font-medium text-slate-600">Status</th>
+                            <th className="text-right px-4 py-3 font-medium text-slate-600">Commitment</th>
+                            <th className="text-right px-4 py-3 font-medium text-slate-600">Disbursed</th>
+                            <th className="text-left px-4 py-3 font-medium text-slate-600">Invoicing</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {frnStatusData.frns.slice(0, 100).map((frn, idx) => (
+                            <tr key={`${frn.frn}-${idx}`} className="hover:bg-slate-50">
+                              <td className="px-4 py-3">
+                                <div className="font-mono text-xs text-slate-900">{frn.frn}</div>
+                                <div className="text-xs text-slate-500">{frn.application_number}</div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="font-medium text-slate-900 truncate max-w-[200px]">{frn.entity_name}</div>
+                                <div className="text-xs text-slate-500">{frn.state} • BEN: {frn.ben}</div>
+                              </td>
+                              <td className="px-4 py-3 text-slate-600">{frn.funding_year}</td>
+                              <td className="px-4 py-3 text-slate-600 truncate max-w-[150px]">{frn.service_type}</td>
+                              <td className="px-4 py-3 text-center">
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                  frn.status?.toLowerCase().includes('funded') || frn.status?.toLowerCase().includes('committed')
+                                    ? 'bg-green-100 text-green-700'
+                                    : frn.status?.toLowerCase().includes('denied')
+                                    ? 'bg-red-100 text-red-700'
+                                    : 'bg-amber-100 text-amber-700'
+                                }`}>
+                                  {frn.status || 'Unknown'}
+                                </span>
+                                {frn.pending_reason && (
+                                  <div className="text-xs text-slate-500 mt-1">{frn.pending_reason}</div>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-right font-medium text-slate-900">
+                                ${frn.commitment_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                <span className={frn.disbursed_amount > 0 ? 'text-green-600 font-medium' : 'text-slate-400'}>
+                                  ${frn.disbursed_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-1">
+                                  <span className={`w-2 h-2 rounded-full ${
+                                    frn.invoicing_ready === 'Yes' ? 'bg-green-500' : 'bg-slate-300'
+                                  }`}></span>
+                                  <span className="text-xs text-slate-600">{frn.invoicing_mode || 'N/A'}</span>
+                                </div>
+                                {frn.f486_status && (
+                                  <div className="text-xs text-slate-500">486: {frn.f486_status}</div>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {frnStatusData.frns.length > 100 && (
+                        <div className="p-4 text-center text-sm text-slate-500 bg-slate-50 border-t border-slate-200">
+                          Showing first 100 of {frnStatusData.frns.length} FRNs
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Empty State */}
+                {frnStatusData && frnStatusData.frns && frnStatusData.frns.length === 0 && (
+                  <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+                    <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                      <span className="text-3xl">📭</span>
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-900">No FRNs Found</h3>
+                    <p className="text-sm text-slate-600 mt-2">
+                      No funding requests match your current filters. Try adjusting the year or status filter.
+                    </p>
+                  </div>
+                )}
+
+                {/* Initial Load State */}
+                {!frnStatusData && !frnStatusLoading && (
+                  <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+                    <div className="w-16 h-16 rounded-full bg-teal-100 flex items-center justify-center mx-auto mb-4">
+                      <span className="text-3xl">📈</span>
+                    </div>
+                    <h3 className="text-lg font-semibold text-slate-900">Load FRN Status</h3>
+                    <p className="text-sm text-slate-600 mt-2 mb-4">
+                      Click the button below to load your FRN status data
+                    </p>
+                    <button
+                      onClick={() => loadFRNStatus()}
+                      className="px-6 py-2.5 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-colors font-medium"
+                    >
+                      Load FRN Status
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         {/* Form 471 Competitive Analysis Tab */}
         {activeTab === "competitive" && (

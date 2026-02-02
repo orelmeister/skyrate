@@ -242,6 +242,80 @@ export interface CompetitorAnalysisResponse {
   error?: string;
 }
 
+// ==================== FRN STATUS MONITORING TYPES (Sprint 2) ====================
+
+export interface FRNStatusRecord {
+  frn: string;
+  application_number: string;
+  ben?: string;
+  entity_name?: string;
+  state?: string;
+  funding_year: string;
+  spin_name: string;
+  service_type: string;
+  status: string;
+  pending_reason: string;
+  commitment_amount: number;
+  disbursed_amount: number;
+  discount_rate: number;
+  award_date: string;
+  fcdl_date: string;
+  last_invoice_date: string;
+  service_start: string;
+  service_end: string;
+  invoicing_mode: string;
+  invoicing_ready: string;
+  f486_status: string;
+  wave_number: string;
+  fcdl_comment: string;
+}
+
+export interface FRNStatusSummary {
+  funded: { count: number; amount: number };
+  denied: { count: number; amount: number };
+  pending: { count: number; amount: number };
+}
+
+export interface FRNStatusResponse {
+  success: boolean;
+  spin: string;
+  spin_name: string;
+  total_frns: number;
+  summary: FRNStatusSummary;
+  frns: FRNStatusRecord[];
+  error?: string;
+}
+
+export interface FRNStatusSummaryResponse {
+  success: boolean;
+  spin: string;
+  spin_name: string;
+  total_frns: number;
+  summary: FRNStatusSummary;
+  year_filter?: number;
+  error?: string;
+}
+
+export interface EntityFRNStatusResponse {
+  success: boolean;
+  ben: string;
+  entity_name: string;
+  entity_state: string;
+  total_frns: number;
+  years: string[];
+  summary: FRNStatusSummary;
+  frns: FRNStatusRecord[];
+  years_breakdown?: {
+    year: string;
+    funded: { count: number; amount: number };
+    denied: { count: number; amount: number };
+    pending: { count: number; amount: number };
+    total: number;
+    frns: FRNStatusRecord[];
+  }[];
+  error?: string;
+}
+
 // ==================== APPEALS TYPES ====================
 
 export interface ChatMessage {
@@ -904,6 +978,36 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(filters),
     });
+  }
+
+  // ==================== FRN STATUS MONITORING (Sprint 2) ====================
+
+  /**
+   * Get FRN status for all your contracts (filtered by your SPIN)
+   */
+  async getFRNStatus(year?: number, status?: string, limit: number = 500): Promise<ApiResponse<FRNStatusResponse>> {
+    const params = new URLSearchParams();
+    if (year) params.set('year', String(year));
+    if (status) params.set('status', status);
+    if (limit) params.set('limit', String(limit));
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/api/v1/vendor/frn-status${queryString}`);
+  }
+
+  /**
+   * Get FRN status summary (counts and totals without individual FRN details)
+   */
+  async getFRNStatusSummary(year?: number): Promise<ApiResponse<FRNStatusSummaryResponse>> {
+    const params = year ? `?year=${year}` : '';
+    return this.request(`/api/v1/vendor/frn-status/summary${params}`);
+  }
+
+  /**
+   * Get FRN status for a specific entity (school)
+   */
+  async getEntityFRNStatus(ben: string, year?: number): Promise<ApiResponse<EntityFRNStatusResponse>> {
+    const params = year ? `?year=${year}` : '';
+    return this.request(`/api/v1/vendor/frn-status/entity/${ben}${params}`);
   }
 
   // ==================== SUBSCRIPTIONS ====================

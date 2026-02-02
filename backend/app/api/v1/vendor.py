@@ -369,6 +369,128 @@ async def search_471(
         )
 
 
+# ==================== FRN STATUS MONITORING (Sprint 2) ====================
+
+@router.get("/frn-status")
+async def get_frn_status(
+    year: Optional[int] = None,
+    status: Optional[str] = None,
+    limit: int = 500,
+    profile: VendorProfile = Depends(get_vendor_profile),
+):
+    """
+    Get FRN status for all your contracts (filtered by your SPIN).
+    This shows the commitment status, disbursement status, and key dates.
+    
+    Useful for operations team to:
+    - Track which FRNs are funded/denied/pending
+    - See disbursement status
+    - Follow up with clients based on status
+    
+    Args:
+        year: Optional funding year filter
+        status: Optional status filter ('Funded', 'Denied', 'Pending')
+        limit: Maximum records (default 500)
+    """
+    if not profile.spin:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No SPIN configured in your profile. Please add your SPIN in settings first."
+        )
+    
+    try:
+        from utils.usac_client import USACDataClient
+        
+        client = USACDataClient()
+        result = client.get_frn_status_by_spin(profile.spin, year, status, limit)
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch FRN status: {str(e)}"
+        )
+
+
+@router.get("/frn-status/entity/{ben}")
+async def get_entity_frn_status(
+    ben: str,
+    year: Optional[int] = None,
+    profile: VendorProfile = Depends(get_vendor_profile),
+):
+    """
+    Get detailed FRN status for a specific entity (school).
+    Filtered by your SPIN to show only your contracts at this entity.
+    
+    Args:
+        ben: Billed Entity Number
+        year: Optional funding year filter
+    """
+    if not profile.spin:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No SPIN configured in your profile. Please add your SPIN in settings first."
+        )
+    
+    try:
+        from utils.usac_client import USACDataClient
+        
+        client = USACDataClient()
+        result = client.get_entity_frn_summary(profile.spin, ben)
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch entity FRN status: {str(e)}"
+        )
+
+
+@router.get("/frn-status/summary")
+async def get_frn_status_summary(
+    year: Optional[int] = None,
+    profile: VendorProfile = Depends(get_vendor_profile),
+):
+    """
+    Get a summary of FRN status across all your contracts.
+    Returns totals for funded, denied, and pending FRNs.
+    
+    Args:
+        year: Optional funding year filter (defaults to all years)
+    """
+    if not profile.spin:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No SPIN configured in your profile. Please add your SPIN in settings first."
+        )
+    
+    try:
+        from utils.usac_client import USACDataClient
+        
+        client = USACDataClient()
+        result = client.get_frn_status_by_spin(profile.spin, year)
+        
+        if not result.get('success'):
+            return result
+        
+        # Return just the summary without all FRN details
+        return {
+            'success': True,
+            'spin': profile.spin,
+            'spin_name': result.get('spin_name'),
+            'total_frns': result.get('total_frns', 0),
+            'summary': result.get('summary', {}),
+            'year_filter': year
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch FRN status summary: {str(e)}"
+        )
+
 
 async def lookup_spin_details(
     spin: str,

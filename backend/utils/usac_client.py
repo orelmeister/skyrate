@@ -27,6 +27,8 @@ USAC_ENDPOINTS = {
     'c2_budget': 'https://opendata.usac.org/resource/6brt-5pbv.json',
     'service_provider': 'https://opendata.usac.org/resource/xcy2-bdid.json',
     'invoice_disbursements': 'https://opendata.usac.org/resource/jpiu-tj8h.json',
+    'frn_status': 'https://opendata.usac.org/resource/qdmp-ygft.json',  # Form 471 FRN Status
+    '471_combined': 'https://opendata.usac.org/resource/avi8-svp9.json',  # Recipient Details & Commitments
 }
 
 # Field name mapping from common names to USAC API field names
@@ -1058,4 +1060,366 @@ class USACDataClient:
             return {
                 'success': False,
                 'error': f'Failed to analyze competitors: {str(e)}'
+            }
+    
+    # ==========================================================================
+    # FRN STATUS MONITORING METHODS (Sprint 2)
+    # ==========================================================================
+    
+    def get_frn_status_by_spin(
+        self,
+        spin: str,
+        year: Optional[int] = None,
+        status_filter: Optional[str] = None,
+        limit: int = 2000
+    ) -> Dict[str, Any]:
+        """
+        Get FRN status details for all FRNs associated with a SPIN (vendor).
+        This is for operations team to track their contracts.
+        
+        Args:
+            spin: Service Provider Identification Number
+            year: Optional funding year filter
+            status_filter: Optional status filter ('Funded', 'Denied', 'Pending')
+            limit: Maximum records to return
+            
+        Returns:
+            Dictionary with FRN status data grouped by status
+        """
+        try:
+            url = USAC_ENDPOINTS['frn_status']
+            
+            # Build query - FRN Status dataset uses spin_name, not spin number
+            # We need to first get the spin_name from service provider dataset
+            provider_info = self.validate_spin(spin)
+            if not provider_info.get('valid'):
+                return {
+                    'success': False,
+                    'error': f'Invalid SPIN: {spin}'
+                }
+            
+            spin_name = provider_info.get('service_provider_name', '')
+            
+            # Query FRN status by spin_name
+            where_conditions = [f"spin_name = '{spin_name}'"]
+            
+            if year:
+                where_conditions.append(f"funding_year = '{year}'")
+            
+            if status_filter:
+                where_conditions.append(f"form_471_frn_status_name = '{status_filter}'")
+            
+            params = {
+                '$where': ' AND '.join(where_conditions),
+                '$limit': limit,
+                '$order': 'funding_year DESC, award_date DESC'
+            }
+            
+            logger.info(f"Fetching FRN status for SPIN {spin} ({spin_name})")
+            response = self.session.get(url, params=params, timeout=60)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if not data:
+                return {
+                    'success': True,
+                    'spin': spin,
+                    'spin_name': spin_name,
+                    'total_frns': 0,
+                    'frns': [],
+                    'summary': {
+                        'funded': {'count': 0, 'amount': 0},
+                        'denied': {'count': 0, 'amount': 0},
+                        'pending': {'count': 0, 'amount': 0}
+                    }
+                }
+            
+            # Process FRN records
+            frns = []
+            funded_count = 0
+            funded_amount = 0
+            denied_count = 0
+            denied_amount = 0
+            pending_count = 0
+            pending_amount = 0
+            
+            for record in data:
+                status = record.get('form_471_frn_status_name', 'Unknown')
+                commitment_amount = float(record.get('funding_commitment_request', 0) or 0)
+                disbursed_amount = float(record.get('total_authorized_disbursement', 0) or 0)
+                
+                # Categorize by status
+                status_lower = status.lower()
+                if 'funded' in status_lower or 'committed' in status_lower:
+                    funded_count += 1
+                    funded_amount += commitment_amount
+                elif 'denied' in status_lower:
+                    denied_count += 1
+                    denied_amount += commitment_amount
+                else:
+                    pending_count += 1
+                    pending_amount += commitment_amount
+                
+                frns.append({
+                    'frn': record.get('funding_request_number', ''),
+                    'application_number': record.get('application_number', ''),
+                    'ben': record.get('ben', ''),
+                    'entity_name': record.get('organization_name', ''),
+                    'state': record.get('state', ''),
+                    'funding_year': record.get('funding_year', ''),
+                    'service_type': record.get('form_471_service_type_name', ''),
+                    'status': status,
+                    'pending_reason': record.get('pending_reason', ''),
+                    'commitment_amount': commitment_amount,
+                    'disbursed_amount': disbursed_amount,
+                    'discount_rate': float(record.get('dis_pct', 0) or 0) * 100,
+                    'award_date': record.get('award_date', ''),
+                    'fcdl_date': record.get('fcdl_letter_date', ''),
+                    'last_invoice_date': record.get('last_date_to_invoice', ''),
+                    'service_start': record.get('service_start_date', ''),
+                    'service_end': record.get('service_delivery_deadline', ''),
+                    'invoicing_mode': record.get('invoicing_mode', ''),
+                    'invoicing_ready': record.get('invoicing_ready', ''),
+                    'f486_status': record.get('f486_case_status', ''),
+                    'wave_number': record.get('wave_sequence_number', ''),
+                    'fcdl_comment': record.get('fcdl_comment_frn', '')
+                })
+            
+            return {
+                'success': True,
+                'spin': spin,
+                'spin_name': spin_name,
+                'total_frns': len(frns),
+                'summary': {
+                    'funded': {'count': funded_count, 'amount': funded_amount},
+                    'denied': {'count': denied_count, 'amount': denied_amount},
+                    'pending': {'count': pending_count, 'amount': pending_amount}
+                },
+                'frns': frns
+            }
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching FRN status for SPIN {spin}: {e}")
+            return {
+                'success': False,
+                'error': f'Failed to fetch FRN status: {str(e)}'
+            }
+        except Exception as e:
+            import traceback
+            logger.error(f"Error in get_frn_status_by_spin: {type(e).__name__}: {str(e)}\n{traceback.format_exc()}")
+            return {
+                'success': False,
+                'error': f'Failed to fetch FRN status: {str(e)}'
+            }
+    
+    def get_frn_status_by_ben(
+        self,
+        ben: str,
+        year: Optional[int] = None,
+        spin: Optional[str] = None,
+        limit: int = 500
+    ) -> Dict[str, Any]:
+        """
+        Get FRN status for a specific entity (BEN), optionally filtered by SPIN.
+        This shows the detailed status of each FRN for a specific school.
+        
+        Args:
+            ben: Billed Entity Number
+            year: Optional funding year filter
+            spin: Optional SPIN to filter (show only your FRNs at this entity)
+            limit: Maximum records to return
+            
+        Returns:
+            Dictionary with FRN status details for the entity
+        """
+        try:
+            url = USAC_ENDPOINTS['frn_status']
+            
+            # Build query
+            where_conditions = [f"ben = '{ben}'"]
+            
+            if year:
+                where_conditions.append(f"funding_year = '{year}'")
+            
+            if spin:
+                # Get spin_name for filtering
+                provider_info = self.validate_spin(spin)
+                if provider_info.get('valid'):
+                    spin_name = provider_info.get('service_provider_name', '')
+                    where_conditions.append(f"spin_name = '{spin_name}'")
+            
+            params = {
+                '$where': ' AND '.join(where_conditions),
+                '$limit': limit,
+                '$order': 'funding_year DESC, funding_request_number ASC'
+            }
+            
+            logger.info(f"Fetching FRN status for BEN {ben}")
+            response = self.session.get(url, params=params, timeout=60)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if not data:
+                return {
+                    'success': True,
+                    'ben': ben,
+                    'entity_name': None,
+                    'total_frns': 0,
+                    'frns': [],
+                    'years': [],
+                    'summary': {
+                        'funded': {'count': 0, 'amount': 0},
+                        'denied': {'count': 0, 'amount': 0},
+                        'pending': {'count': 0, 'amount': 0}
+                    }
+                }
+            
+            # Get entity info from first record
+            first_record = data[0]
+            entity_name = first_record.get('organization_name', 'Unknown')
+            entity_state = first_record.get('state', '')
+            
+            # Process FRN records
+            frns = []
+            years = set()
+            funded_count = 0
+            funded_amount = 0
+            denied_count = 0
+            denied_amount = 0
+            pending_count = 0
+            pending_amount = 0
+            
+            for record in data:
+                status = record.get('form_471_frn_status_name', 'Unknown')
+                commitment_amount = float(record.get('funding_commitment_request', 0) or 0)
+                disbursed_amount = float(record.get('total_authorized_disbursement', 0) or 0)
+                year_val = record.get('funding_year', '')
+                
+                if year_val:
+                    years.add(year_val)
+                
+                # Categorize by status
+                status_lower = status.lower()
+                if 'funded' in status_lower or 'committed' in status_lower:
+                    funded_count += 1
+                    funded_amount += commitment_amount
+                elif 'denied' in status_lower:
+                    denied_count += 1
+                    denied_amount += commitment_amount
+                else:
+                    pending_count += 1
+                    pending_amount += commitment_amount
+                
+                frns.append({
+                    'frn': record.get('funding_request_number', ''),
+                    'application_number': record.get('application_number', ''),
+                    'funding_year': year_val,
+                    'spin_name': record.get('spin_name', ''),
+                    'service_type': record.get('form_471_service_type_name', ''),
+                    'status': status,
+                    'pending_reason': record.get('pending_reason', ''),
+                    'commitment_amount': commitment_amount,
+                    'disbursed_amount': disbursed_amount,
+                    'discount_rate': float(record.get('dis_pct', 0) or 0) * 100,
+                    'award_date': record.get('award_date', ''),
+                    'fcdl_date': record.get('fcdl_letter_date', ''),
+                    'last_invoice_date': record.get('last_date_to_invoice', ''),
+                    'service_start': record.get('service_start_date', ''),
+                    'service_end': record.get('service_delivery_deadline', ''),
+                    'invoicing_mode': record.get('invoicing_mode', ''),
+                    'invoicing_ready': record.get('invoicing_ready', ''),
+                    'f486_status': record.get('f486_case_status', ''),
+                    'wave_number': record.get('wave_sequence_number', ''),
+                    'fcdl_comment': record.get('fcdl_comment_frn', '')
+                })
+            
+            return {
+                'success': True,
+                'ben': ben,
+                'entity_name': entity_name,
+                'entity_state': entity_state,
+                'total_frns': len(frns),
+                'years': sorted(list(years), reverse=True),
+                'summary': {
+                    'funded': {'count': funded_count, 'amount': funded_amount},
+                    'denied': {'count': denied_count, 'amount': denied_amount},
+                    'pending': {'count': pending_count, 'amount': pending_amount}
+                },
+                'frns': frns
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching FRN status for BEN {ben}: {e}")
+            return {
+                'success': False,
+                'error': f'Failed to fetch FRN status: {str(e)}'
+            }
+    
+    def get_entity_frn_summary(
+        self,
+        spin: str,
+        ben: str
+    ) -> Dict[str, Any]:
+        """
+        Get a summary of FRN status for a specific entity that a vendor services.
+        Enhanced version for the entity detail modal in My Entities.
+        
+        Args:
+            spin: Service Provider SPIN
+            ben: Billed Entity Number
+            
+        Returns:
+            Dictionary with FRN status summary for the entity
+        """
+        try:
+            # Get FRN status filtered by both BEN and SPIN
+            result = self.get_frn_status_by_ben(ben, spin=spin)
+            
+            if not result.get('success'):
+                return result
+            
+            # Group FRNs by year for detailed breakdown
+            years_data = {}
+            for frn in result.get('frns', []):
+                year = frn.get('funding_year', 'Unknown')
+                if year not in years_data:
+                    years_data[year] = {
+                        'year': year,
+                        'funded': {'count': 0, 'amount': 0},
+                        'denied': {'count': 0, 'amount': 0},
+                        'pending': {'count': 0, 'amount': 0},
+                        'total': 0,
+                        'frns': []
+                    }
+                
+                status_lower = frn.get('status', '').lower()
+                amount = frn.get('commitment_amount', 0)
+                
+                if 'funded' in status_lower or 'committed' in status_lower:
+                    years_data[year]['funded']['count'] += 1
+                    years_data[year]['funded']['amount'] += amount
+                elif 'denied' in status_lower:
+                    years_data[year]['denied']['count'] += 1
+                    years_data[year]['denied']['amount'] += amount
+                else:
+                    years_data[year]['pending']['count'] += 1
+                    years_data[year]['pending']['amount'] += amount
+                
+                years_data[year]['total'] += amount
+                years_data[year]['frns'].append(frn)
+            
+            # Sort years descending
+            sorted_years = sorted(years_data.keys(), reverse=True)
+            years_list = [years_data[y] for y in sorted_years]
+            
+            result['years_breakdown'] = years_list
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error in get_entity_frn_summary: {e}")
+            return {
+                'success': False,
+                'error': f'Failed to get entity FRN summary: {str(e)}'
             }
