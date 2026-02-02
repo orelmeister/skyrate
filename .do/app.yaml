@@ -1,0 +1,51 @@
+name: skyrate
+
+services:
+  # Backend API (FastAPI/Python)
+  - name: backend
+    github:
+      branch: main
+      deploy_on_push: true
+    source_dir: backend
+    environment_slug: python
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    http_port: 8000
+    run_command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    envs:
+      - key: SECRET_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: sqlite:///./skyrate.db
+      - key: OPENAI_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: STRIPE_SECRET_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: STRIPE_WEBHOOK_SECRET
+        scope: RUN_TIME
+        type: SECRET
+    routes:
+      - path: /api
+
+  # Frontend (Next.js)
+  - name: frontend
+    github:
+      branch: main
+      deploy_on_push: true
+    source_dir: frontend
+    environment_slug: node-js
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    build_command: npm run build
+    run_command: npm start
+    http_port: 3000
+    envs:
+      - key: NEXT_PUBLIC_API_URL
+        scope: RUN_TIME
+        value: ${backend.PUBLIC_URL}
+    routes:
+      - path: /
