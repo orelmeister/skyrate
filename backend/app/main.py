@@ -71,6 +71,41 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def seed_demo_accounts():
+    """Create demo accounts if they don't exist"""
+    from sqlalchemy.orm import Session
+    from app.models.user import User, UserRole
+    from app.core.database import SessionLocal
+    import bcrypt
+    
+    db = SessionLocal()
+    try:
+        demo_accounts = [
+            ("test_consultant@example.com", UserRole.CONSULTANT.value, "TestPass123!"),
+            ("test_vendor@example.com", UserRole.VENDOR.value, "TestPass123!"),
+        ]
+        
+        for email, role, password in demo_accounts:
+            existing = db.query(User).filter(User.email == email).first()
+            if not existing:
+                hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+                user = User(
+                    email=email,
+                    hashed_password=hashed,
+                    role=role,
+                    is_active=True
+                )
+                db.add(user)
+                logger.info(f"Created demo account: {email}")
+        
+        db.commit()
+    except Exception as e:
+        logger.error(f"Error seeding demo accounts: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
@@ -87,6 +122,10 @@ async def lifespan(app: FastAPI):
     # Create database tables
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables created")
+    
+    # Seed demo accounts for testing
+    seed_demo_accounts()
+    logger.info("Demo accounts seeded")
     
     yield
     
