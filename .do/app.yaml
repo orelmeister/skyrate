@@ -4,6 +4,7 @@ services:
   # Backend API (FastAPI/Python)
   - name: backend
     github:
+      repo: orelmeister/skyrate
       branch: main
       deploy_on_push: true
     source_dir: backend
@@ -35,6 +36,7 @@ services:
   # Frontend (Next.js)
   - name: frontend
     github:
+      repo: orelmeister/skyrate
       branch: main
       deploy_on_push: true
     source_dir: frontend
