@@ -1,0 +1,381 @@
+{
+  "id" : "39tn-hjzv",
+  "name" : "E-Rate Open Competitive Bidding: Services Requested (FCC Form 470 and Related Information)",
+  "assetType" : "dataset",
+  "attribution" : "Universal Service Administrative Company",
+  "attributionLink" : "http://usac.org",
+  "averageRating" : 0,
+  "category" : "E-Rate",
+  "createdAt" : 1506739783,
+  "description" : "This dataset contains information about the services requested within each FCC Form 470, including the service type, function, and manufacturer, and related information from the E-Rate Productivity Center (EPC).",
+  "diciBackend" : false,
+  "displayType" : "table",
+  "domainCName" : "opendata.usac.org",
+  "downloadCount" : 4977,
+  "hideFromCatalog" : false,
+  "hideFromDataJson" : false,
+  "licenseId" : "PUBLIC_DOMAIN",
+  "locked" : false,
+  "newBackend" : true,
+  "numberOfComments" : 0,
+  "oid" : 38694833,
+  "provenance" : "official",
+  "publicationAppendEnabled" : false,
+  "publicationDate" : 1658411018,
+  "publicationGroup" : 14497792,
+  "publicationStage" : "published",
+  "rowsUpdatedAt" : 1769943319,
+  "rowsUpdatedBy" : "cvjt-j8au",
+  "tableId" : 18788134,
+  "totalTimesRated" : 0,
+  "viewCount" : 26818,
+  "viewLastModified" : 1658411018,
+  "viewType" : "tabular",
+  "approvals" : [ {
+    "reviewedAt" : 1506953390,
+    "reviewedAutomatically" : true,
+    "state" : "approved",
+    "submissionId" : 4850270,
+    "submissionObject" : "public_audience_request",
+    "submissionOutcome" : "change_audience",
+    "submittedAt" : 1506953390,
+    "targetAudience" : "public",
+    "workflowId" : 2768,
+    "submissionDetails" : {
+      "permissionType" : "READ"
+    },
+    "submissionOutcomeApplication" : {
+      "failureCount" : 0,
+      "status" : "success"
+    },
+    "submitter" : {
+      "id" : "h8xc-278k",
+      "displayName" : "Tom Nesbitt"
+    }
+  }, {
+    "message" : "The `strict_permissions` flag must be on to enable internal approvals.",
+    "state" : "unsubmittable",
+    "targetAudience" : "internal",
+    "workflowId" : 5163
+  } ],
+  "clientContext" : {
+    "clientContextVariables" : [ ],
+    "inheritedVariables" : { }
+  },
+  "columns" : [ {
+    "id" : 563582661,
+    "name" : "Application Number",
+    "dataTypeName" : "text",
+    "description" : "This unique application number is generated at the time an applicant begins to file FCC Form 470. Applicants request funding for multiple services under the same application number.",
+    "fieldName" : "application_number",
+    "position" : 1,
+    "renderTypeName" : "text",
+    "tableColumnId" : 54062054,
+    "width" : 100,
+    "format" : {
+      "displayStyle" : "plain",
+      "align" : "left"
+    }
+  }, {
+    "id" : 563582662,
+    "name" : "Funding Year",
+    "dataTypeName" : "text",
+    "description" : "Funding year for the application.",
+    "fieldName" : "funding_year",
+    "position" : 2,
+    "renderTypeName" : "text",
+    "tableColumnId" : 54062055,
+    "width" : 100,
+    "format" : {
+      "displayStyle" : "plain",
+      "align" : "left"
+    }
+  }, {
+    "id" : 563582663,
+    "name" : "Service Category",
+    "dataTypeName" : "text",
+    "description" : "Category of service the applicant is applying for. ",
+    "fieldName" : "service_category",
+    "position" : 3,
+    "renderTypeName" : "text",
+    "tableColumnId" : 54062056,
+    "width" : 100,
+    "format" : {
+      "displayStyle" : "plain",
+      "align" : "left"
+    }
+  }, {
+    "id" : 563582664,
+    "name" : "Service Type",
+    "dataTypeName" : "text",
+    "description" : "Funding request number service type.",
+    "fieldName" : "service_type",
+    "position" : 4,
+    "renderTypeName" : "text",
+    "tableColumnId" : 54062057,
+    "width" : 100,
+    "format" : {
+      "displayStyle" : "plain",
+      "align" : "left"
+    }
+  }, {
+    "id" : 563582665,
+    "name" : "Function",
+    "dataTypeName" : "text",
+    "description" : "Indicates the function of the funding request number line item service or product. ",
+    "fieldName" : "function",
+    "position" : 5,
+    "renderTypeName" : "text",
+    "tableColumnId" : 54062058,
+    "width" : 100,
+    "format" : {
+      "displayStyle" : "plain",
+      "align" : "left"
+    }
+  }, {
+    "id" : 563582666,
+    "name" : "Other Function",
+    "dataTypeName" : "text",
+    "description" : "Description of the function the applicant is requesting, if not listed.",
+    "fieldName" : "other_function",
+    "position" : 6,
+    "renderTypeName" : "text",
+    "tableColumnId" : 54062059,
+    "width" : 100,
+    "format" : {
+      "displayStyle" : "plain",
+      "align" : "left"
+    }
+  }, {
+    "id" : 563582667,
+    "name" : "Entities",
+    "dataTypeName" : "number",
+    "description" : "Number of entities served by the service requested.",
+    "fieldName" : "entities",
+    "position" : 7,
+    "renderTypeName" : "number",
+    "tableColumnId" : 54062060,
+    "width" : 100,
+    "format" : {
+      "precisionStyle" : "standard",
+      "noCommas" : "false",
+      "align" : "right"
+    }
+  }, {
+    "id" : 563582668,
+    "name" : "Quantity",
+    "dataTypeName" : "number",
+    "description" : "Amount of units of the specific service requested. ",
+    "fieldName" : "quantity",
+    "position" : 8,
+    "renderTypeName" : "number",
+    "tableColumnId" : 54062061,
+    "width" : 100,
+    "format" : {
+      "displayStyle" : "plain",
+      "align" : "right"
+    }
+  }, {
+    "id" : 563582669,
+    "name" : "Unit",
+    "dataTypeName" : "text",
+    "description" : "Unit type of the service requested (e.g. circuits, lines, fiber strands.)",
+    "fieldName" : "unit",
+    "position" : 9,
+    "renderTypeName" : "text",
+    "tableColumnId" : 54062062,
+    "width" : 100,
+    "format" : {
+      "displayStyle" : "plain",
+      "align" : "left"
+    }
+  }, {
+    "id" : 563582670,
+    "name" : "Minimum Capacity",
+    "dataTypeName" : "text",
+    "description" : "Minimum capacity of units desired for the service requested. ",
+    "fieldName" : "minimum_capacity",
+    "position" : 10,
+    "renderTypeName" : "text",
+    "tableColumnId" : 54062063,
+    "width" : 100,
+    "format" : {
+      "displayStyle" : "plain",
+      "align" : "left"
+    }
+  }, {
+    "id" : 563582671,
+    "name" : "Maximum Capacity",
+    "dataTypeName" : "text",
+    "description" : "Maximum capacity of units desired for the service requested.",
+    "fieldName" : "maximum_capacity",
+    "position" : 11,
+    "renderTypeName" : "text",
+    "tableColumnId" : 54062064,
+    "width" : 100,
+    "format" : {
+      "displayStyle" : "plain",
+      "align" : "left"
+    }
+  }, {
+    "id" : 563582672,
+    "name" : "Installation & Initial Configuration",
+    "dataTypeName" : "text",
+    "description" : "Indicates if the applicant is seeking installation, activation, and initial configuration for the service requested.",
+    "fieldName" : "installation_initial_configuration",
+    "position" : 12,
+    "renderTypeName" : "text",
+    "tableColumnId" : 54062065,
+    "width" : 100,
+    "format" : {
+      "displayStyle" : "plain",
+      "align" : "left"
+    }
+  }, {
+    "id" : 563582673,
+    "name" : "Maintenance & Technical Support",
+    "dataTypeName" : "text",
+    "description" : "Indicates if the applicant is seeking maintenance and technical Support for the service requested.",
+    "fieldName" : "maintenance_technical_support",
+    "position" : 13,
+    "renderTypeName" : "text",
+    "tableColumnId" : 54062066,
+    "width" : 100,
+    "format" : {
+      "displayStyle" : "plain",
+      "align" : "left"
+    }
+  }, {
+    "id" : 563582674,
+    "name" : "Manufacturer",
+    "dataTypeName" : "text",
+    "description" : "Requested manufacturer or equivalent.",
+    "fieldName" : "manufacturer",
+    "position" : 14,
+    "renderTypeName" : "text",
+    "tableColumnId" : 54062067,
+    "width" : 100,
+    "format" : {
+      "displayStyle" : "plain",
+      "align" : "left"
+    }
+  }, {
+    "id" : 563582675,
+    "name" : "Other Manufacturer",
+    "dataTypeName" : "text",
+    "description" : "Name of the manufacturer if it is not included in the drop down list.",
+    "fieldName" : "other_manufacturer",
+    "position" : 15,
+    "renderTypeName" : "text",
+    "tableColumnId" : 54062068,
+    "width" : 100,
+    "format" : {
+      "displayStyle" : "plain",
+      "align" : "left"
+    }
+  }, {
+    "id" : 563582676,
+    "name" : "Request for Proposal Identifier",
+    "dataTypeName" : "text",
+    "description" : "Indicates whether a Request for Proposal (RFP) document was provided for the services requested.",
+    "fieldName" : "rfp_identifier",
+    "position" : 16,
+    "renderTypeName" : "text",
+    "tableColumnId" : 54062069,
+    "width" : 100,
+    "format" : {
+      "displayStyle" : "plain",
+      "align" : "left"
+    }
+  }, {
+    "id" : 563582704,
+    "name" : "Request for Proposal Documents",
+    "dataTypeName" : "url",
+    "description" : "Link to download a copy of the original submission of the Request for Proposal (RFP).",
+    "fieldName" : "rfp_documents",
+    "position" : 17,
+    "renderTypeName" : "url",
+    "tableColumnId" : 143051835,
+    "width" : 100,
+    "format" : {
+      "displayStyle" : "url",
+      "align" : "left"
+    },
+    "subColumnTypes" : [ "url", "description" ]
+  }, {
+    "id" : 563582678,
+    "name" : "Request for Proposal Upload Date/Time",
+    "dataTypeName" : "calendar_date",
+    "description" : "The date the Request for Proposal (RFP) document was uploaded to EPC.",
+    "fieldName" : "rfp_upload_date",
+    "position" : 18,
+    "renderTypeName" : "calendar_date",
+    "tableColumnId" : 54062071,
+    "width" : 100,
+    "format" : {
+      "view" : "date_time",
+      "align" : "left"
+    }
+  }, {
+    "id" : 563582679,
+    "name" : "Form Version",
+    "dataTypeName" : "text",
+    "description" : "Indicates whether the form version of the application is \"current\" or \"original.\" It can be used to aggregate the data between current and original applications. \"Current\" is the view of the form processed by USAC. \"Original\" is the view of the form originally submitted by the applicant upon certification.",
+    "fieldName" : "form_version",
+    "position" : 19,
+    "renderTypeName" : "text",
+    "tableColumnId" : 54062072,
+    "width" : 100,
+    "format" : {
+      "displayStyle" : "plain",
+      "align" : "left"
+    }
+  } ],
+  "grants" : [ {
+    "inherited" : false,
+    "type" : "viewer",
+    "flags" : [ "public" ]
+  } ],
+  "license" : {
+    "name" : "Public Domain"
+  },
+  "metadata" : {
+    "attachments" : [ {
+      "filename" : "E-rate Open Competitive Bidding - Services Requested Data Glossary.pdf",
+      "assetId" : "e5a2113c-0f38-488a-a486-6ac79fa75250",
+      "name" : "E-rate Open Competitive Bidding - Services Requested Data Glossary.pdf"
+    } ],
+    "custom_fields" : {
+      "Common Core" : {
+        "Contact Email" : "opendata@usac.org",
+        "Homepage" : "usac.org",
+        "Language" : "English",
+        "Contact Name" : "Tom Nesbitt",
+        "Update Frequency" : "Daily",
+        "Geographic Coverage" : "United States ",
+        "Dataset Completeness" : "USAC is committed to sharing the highest quality data possible. We conduct a full analysis of all datasets to determine if they are complete prior to publishing. Each dataset field is described with a “field completeness” metric that ranges from 0 -100%. Any value less than 100% indicates a field with missing values. In most cases, missing values are the result of “not required” fields.",
+        "Publisher" : "Universal Service Administrative Company",
+        "Dataset Description" : "This dataset contains information about the services requested within each FCC Form 470, including the service type, function, and manufacturer, and related information from the E-Rate Productivity Center (EPC). Use this dataset to answer questions such as: Which category of service is the applicant is applying for? What will the service be used for? What is the service quantity the applicant is requesting? All data contained within the Service Requested (FCC Form 470) dataset is self-reported by applicants."
+      }
+    },
+    "availableDisplayTypes" : [ "table", "fatrow", "page" ]
+  },
+  "owner" : {
+    "id" : "h8xc-278k",
+    "displayName" : "Tom Nesbitt",
+    "screenName" : "Tom Nesbitt",
+    "type" : "interactive",
+    "flags" : [ "acceptedEula" ]
+  },
+  "query" : { },
+  "rights" : [ "read" ],
+  "tableAuthor" : {
+    "id" : "h8xc-278k",
+    "displayName" : "Tom Nesbitt",
+    "screenName" : "Tom Nesbitt",
+    "type" : "interactive",
+    "flags" : [ "acceptedEula" ]
+  },
+  "tags" : [ "470", "form 470", "fcc form 470", "schools", "libraries", "schools & libraries", "schools and libraries", "sld", "e-rate", "erate", "e rate", "basic information", "applicant information", "applicant", "applicant contact information", "usac", "broadband", "usf", "universal service fund", "connectivity information", "connectivity data", "service request", "services requested", "service type", "function", "manufacturer" ],
+  "flags" : [ "default", "federated", "internalToPublicFederatedView", "ownerMayBeContacted", "restorable", "restorePossibleForType" ]
+}
