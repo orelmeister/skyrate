@@ -223,7 +223,153 @@ async def get_entity_detail(
         )
 
 
-@router.get("/spin/{spin}/lookup")
+# ==================== FORM 471 COMPETITIVE ANALYSIS ====================
+
+class Form471SearchRequest(BaseModel):
+    ben: Optional[str] = None
+    state: Optional[str] = None
+    year: Optional[int] = None
+    category: Optional[str] = None  # '1' or '2'
+    limit: int = 500
+
+
+@router.get("/471/entity/{ben}")
+async def get_471_by_entity(
+    ben: str,
+    year: Optional[int] = None,
+    current_user: User = Depends(require_role("admin", "vendor")),
+):
+    """
+    Get all Form 471 applications for a specific entity (BEN).
+    Shows which vendors have won contracts at this school - core competitive intelligence.
+    
+    This helps vendors:
+    - See who their competitors are at target schools
+    - Understand what services schools are purchasing
+    - Identify opportunities where contracts may be up for renewal
+    """
+    try:
+        from utils.usac_client import USACDataClient
+        
+        client = USACDataClient()
+        result = client.get_471_by_ben(ben, year)
+        
+        if not result.get('success'):
+            return {
+                "success": False,
+                "error": result.get('error', 'Failed to fetch 471 data')
+            }
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch 471 data: {str(e)}"
+        )
+
+
+@router.get("/471/state/{state}")
+async def get_471_by_state(
+    state: str,
+    year: Optional[int] = None,
+    category: Optional[str] = None,
+    limit: int = 500,
+    current_user: User = Depends(require_role("admin", "vendor")),
+):
+    """
+    Search Form 471 applications by state.
+    Useful for finding opportunities in specific markets.
+    
+    Args:
+        state: Two-letter state code (e.g., 'NY', 'CA')
+        year: Optional funding year filter
+        category: Optional category filter ('1' for Cat1, '2' for Cat2)
+        limit: Maximum records (default 500)
+    """
+    try:
+        from utils.usac_client import USACDataClient
+        
+        client = USACDataClient()
+        result = client.get_471_by_state(state, year, category, limit)
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch 471 data: {str(e)}"
+        )
+
+
+@router.get("/471/competitors")
+async def get_competitors(
+    year: Optional[int] = None,
+    profile: VendorProfile = Depends(get_vendor_profile),
+):
+    """
+    Find competing vendors at entities you service.
+    Shows which other vendors have won contracts at "your" schools.
+    
+    Requires SPIN to be configured in vendor profile.
+    """
+    if not profile.spin:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No SPIN configured in your profile. Please add your SPIN in settings first."
+        )
+    
+    try:
+        from utils.usac_client import USACDataClient
+        
+        client = USACDataClient()
+        result = client.get_471_competitors_for_spin(profile.spin, year)
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to analyze competitors: {str(e)}"
+        )
+
+
+@router.post("/471/search")
+async def search_471(
+    data: Form471SearchRequest,
+    current_user: User = Depends(require_role("admin", "vendor")),
+):
+    """
+    Search Form 471 applications with multiple filters.
+    Flexible endpoint for competitive analysis queries.
+    """
+    try:
+        from utils.usac_client import USACDataClient
+        
+        client = USACDataClient()
+        
+        # If BEN is specified, search by entity
+        if data.ben:
+            result = client.get_471_by_ben(data.ben, data.year, data.limit)
+        # Otherwise search by state
+        elif data.state:
+            result = client.get_471_by_state(data.state, data.year, data.category, data.limit)
+        else:
+            return {
+                "success": False,
+                "error": "Please specify either a BEN or state to search"
+            }
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to search 471 data: {str(e)}"
+        )
+
+
+
 async def lookup_spin_details(
     spin: str,
     year: Optional[int] = None,

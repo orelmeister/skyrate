@@ -682,3 +682,380 @@ class USACDataClient:
                 'success': False,
                 'error': f'Failed to fetch entity details: {str(e)}'
             }
+    # ==========================================================================
+    # FORM 471 COMPETITIVE ANALYSIS METHODS
+    # ==========================================================================
+    
+    def get_471_by_ben(
+        self,
+        ben: str,
+        year: Optional[int] = None,
+        limit: int = 500
+    ) -> Dict[str, Any]:
+        """
+        Get Form 471 data for a specific BEN (entity) to see which vendors have won contracts.
+        This is the core competitive analysis feature.
+        
+        Uses the Recipient Details & Commitments Combined dataset (avi8-svp9)
+        which provides comprehensive 471 data including service provider info.
+        
+        Note: BEN can be either a billed_entity_number (for direct applicants) or
+        ros_entity_number (for recipients of service in consortia). We search both.
+        
+        Args:
+            ben: Entity Number (can be billed_entity_number or ros_entity_number)
+            year: Optional funding year filter
+            limit: Maximum records to return
+            
+        Returns:
+            Dictionary with 471 applications showing winning vendors
+        """
+        try:
+            # Use the combined 471 dataset which has all relevant fields
+            url = "https://opendata.usac.org/resource/avi8-svp9.json"
+            
+            # First, try searching by billed_entity_number (direct applicants)
+            year_filter = f" AND funding_year='{year}'" if year else ""
+            
+            # Use SoQL to search both billed_entity_number and ros_entity_number
+            where_clause = f"(billed_entity_number='{ben}' OR ros_entity_number='{ben}'){year_filter}"
+            
+            params = {
+                '$where': where_clause,
+                '$limit': limit,
+                '$order': 'funding_year DESC'
+            }
+            
+            logger.info(f"Fetching 471 data for BEN {ben}")
+            response = self.session.get(url, params=params, timeout=60)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if not data:
+                logger.info(f"No 471 records found for BEN {ben}")
+                return {
+                    'success': True,
+                    'ben': ben,
+                    'total_records': 0,
+                    'records': [],
+                    'vendors': [],
+                    'funding_years': [],
+                    'total_committed': 0
+                }
+            
+            logger.info(f"Found {len(data)} 471 records for BEN {ben}")
+            
+            # Determine if this is a ROS entity (consortium member) or direct applicant
+            first_record = data[0]
+            is_ros_entity = str(first_record.get('ros_entity_number', '')) == ben
+            
+            # Get entity name based on whether it's a ROS entity or billed entity
+            if is_ros_entity:
+                # This is a recipient of service (part of a consortium)
+                entity_name = first_record.get('ros_entity_name', 'Unknown')
+                entity_state = first_record.get('ros_physical_state', '')
+                # Also capture consortium info
+                consortium_name = first_record.get('organization_name', '')
+                consortium_ben = first_record.get('billed_entity_number', '')
+            else:
+                # This is a direct applicant (billed entity)
+                entity_name = first_record.get('organization_name', 'Unknown')
+                entity_state = first_record.get('org_state', first_record.get('physical_state', ''))
+                consortium_name = None
+                consortium_ben = None
+            
+            # Process records
+            records = []
+            vendors = {}
+            years = set()
+            total_committed = 0
+            
+            for record in data:
+                year_val = record.get('funding_year', '')
+                if year_val:
+                    years.add(str(year_val))
+                
+                # USAC uses funding_request_number for FRN
+                frn = record.get('funding_request_number', '')
+                # USAC uses spin_number and spin_name for vendor info
+                spin = record.get('spin_number', '')
+                vendor_name = record.get('spin_name', 'Unknown')
+                # Service type info from USAC
+                service_type = record.get('form_471_service_type_name', '')
+                category = record.get('chosen_category_of_service', '')
+                
+                # Get commitment/funding amounts - USAC uses pre/post discount fields
+                pre_discount = float(record.get('pre_discount_extended_eligible_line_item_costs', 0) or 0)
+                post_discount = float(record.get('post_discount_extended_eligible_line_item_costs', 0) or 0)
+                committed = post_discount  # Use post-discount as committed amount
+                discount_rate = 0
+                if pre_discount > 0:
+                    discount_rate = round((1 - (post_discount / pre_discount)) * 100, 1)
+                
+                frn_status = record.get('form_471_frn_status_name', '')
+                
+                total_committed += committed
+                
+                # Track unique vendors
+                if spin and spin not in vendors:
+                    vendors[spin] = {
+                        'spin': spin,
+                        'name': vendor_name,
+                        'frn_count': 0,
+                        'total_committed': 0
+                    }
+                
+                if spin:
+                    vendors[spin]['frn_count'] += 1
+                    vendors[spin]['total_committed'] += committed
+                
+                records.append({
+                    'funding_year': year_val,
+                    'frn': frn,
+                    'application_number': record.get('form_471_application_number', ''),
+                    'service_provider_spin': spin,
+                    'service_provider_name': vendor_name,
+                    'service_type': service_type,
+                    'category': category,
+                    'committed_amount': committed,
+                    'pre_discount_amount': pre_discount,
+                    'discount_rate': discount_rate,
+                    'frn_status': frn_status,
+                    'product_description': record.get('form_471_service_type_name', '')
+                })
+            
+            # Sort vendors by total committed (highest first)
+            vendor_list = sorted(vendors.values(), key=lambda x: x['total_committed'], reverse=True)
+            
+            result = {
+                'success': True,
+                'ben': ben,
+                'entity_name': entity_name,
+                'entity_state': entity_state,
+                'total_records': len(records),
+                'total_committed': total_committed,
+                'funding_years': sorted(list(years), reverse=True),
+                'vendors': vendor_list,
+                'records': records
+            }
+            
+            # Add consortium info if this is a ROS entity
+            if consortium_name:
+                result['consortium_name'] = consortium_name
+                result['consortium_ben'] = consortium_ben
+                result['is_consortium_member'] = True
+            else:
+                result['is_consortium_member'] = False
+            
+            return result
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching 471 data for BEN {ben}: {e}")
+            return {
+                'success': False,
+                'error': f'Failed to fetch 471 data: {str(e)}'
+            }
+        except Exception as e:
+            import traceback
+            logger.error(f"Error in get_471_by_ben: {type(e).__name__}: {str(e)}\n{traceback.format_exc()}")
+            return {
+                'success': False,
+                'error': f'Failed to fetch 471 data: {str(e)}'
+            }
+    
+    def get_471_by_state(
+        self,
+        state: str,
+        year: Optional[int] = None,
+        category: Optional[str] = None,
+        limit: int = 1000
+    ) -> Dict[str, Any]:
+        """
+        Search Form 471 applications by state for competitive intelligence.
+        
+        Args:
+            state: Two-letter state code (e.g., 'NY', 'CA')
+            year: Optional funding year filter
+            category: Optional category filter ('1' or '2')
+            limit: Maximum records to return
+            
+        Returns:
+            Dictionary with 471 applications in the specified state
+        """
+        try:
+            url = "https://opendata.usac.org/resource/avi8-svp9.json"
+            
+            # USAC uses physical_state field
+            params = {
+                'physical_state': state.upper(),
+                '$limit': limit,
+                '$order': 'funding_year DESC, pre_discount_extended_eligible_line_item_costs DESC'
+            }
+            
+            if year:
+                params['funding_year'] = str(year)
+            
+            if category:
+                cat_val = f"Category{category}" if category in ['1', '2'] else category
+                params['chosen_category_of_service'] = cat_val
+            
+            logger.info(f"Fetching 471 data for state {state}")
+            response = self.session.get(url, params=params, timeout=60)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if not data:
+                return {
+                    'success': True,
+                    'state': state,
+                    'total_records': 0,
+                    'records': []
+                }
+            
+            # Process records - use correct USAC field names
+            records = []
+            for record in data:
+                records.append({
+                    'ben': record.get('billed_entity_number', ''),
+                    'entity_name': record.get('organization_name', ''),
+                    'funding_year': record.get('funding_year', ''),
+                    'frn': record.get('funding_request_number', ''),
+                    'service_provider_spin': record.get('spin_number', ''),
+                    'service_provider_name': record.get('spin_name', ''),
+                    'service_type': record.get('form_471_service_type_name', ''),
+                    'category': record.get('chosen_category_of_service', ''),
+                    'committed_amount': float(record.get('post_discount_extended_eligible_line_item_costs', 0) or 0),
+                    'frn_status': record.get('form_471_frn_status_name', '')
+                })
+            
+            return {
+                'success': True,
+                'state': state,
+                'year': year,
+                'category': category,
+                'total_records': len(records),
+                'records': records
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching 471 data for state {state}: {e}")
+            return {
+                'success': False,
+                'error': f'Failed to fetch 471 data: {str(e)}'
+            }
+    
+    def get_471_competitors_for_spin(
+        self,
+        spin: str,
+        year: Optional[int] = None,
+        limit: int = 2000
+    ) -> Dict[str, Any]:
+        """
+        Find competing vendors at entities that this SPIN has serviced.
+        Shows which other vendors have won contracts at "your" schools.
+        
+        Args:
+            spin: Service Provider Identification Number
+            year: Optional funding year filter
+            limit: Maximum records
+            
+        Returns:
+            Dictionary with competitor analysis
+        """
+        try:
+            # First, get all entities this SPIN services
+            entities_data = self.get_serviced_entities_summary(spin)
+            
+            if not entities_data or entities_data['total_entities'] == 0:
+                return {
+                    'success': True,
+                    'spin': spin,
+                    'message': 'No serviced entities found for this SPIN',
+                    'competitors': [],
+                    'entities_analyzed': 0
+                }
+            
+            # Get list of BENs
+            bens = [e['ben'] for e in entities_data['entities'][:50]]  # Limit to top 50
+            
+            # Fetch 471 data for these entities
+            url = "https://opendata.usac.org/resource/avi8-svp9.json"
+            
+            # Build query for multiple BENs
+            ben_list = "', '".join(bens)
+            where_clause = f"ros_entity_number IN ('{ben_list}')"
+            
+            if year:
+                where_clause += f" AND funding_year = '{year}'"
+            
+            params = {
+                '$where': where_clause,
+                '$limit': limit,
+                '$order': 'funding_year DESC'
+            }
+            
+            logger.info(f"Fetching competitor data for SPIN {spin} across {len(bens)} entities")
+            response = self.session.get(url, params=params, timeout=90)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # Track competitors (excluding self)
+            competitors = {}
+            my_frns = 0
+            competitor_frns = 0
+            
+            for record in data:
+                vendor_spin = record.get('service_provider_number', '')
+                vendor_name = record.get('service_provider_name', '')
+                committed = float(record.get('total_committed_amount', 0) or 0)
+                
+                if vendor_spin == spin:
+                    my_frns += 1
+                    continue
+                
+                if not vendor_spin:
+                    continue
+                
+                competitor_frns += 1
+                
+                if vendor_spin not in competitors:
+                    competitors[vendor_spin] = {
+                        'spin': vendor_spin,
+                        'name': vendor_name,
+                        'frn_count': 0,
+                        'total_committed': 0,
+                        'entities': set()
+                    }
+                
+                competitors[vendor_spin]['frn_count'] += 1
+                competitors[vendor_spin]['total_committed'] += committed
+                competitors[vendor_spin]['entities'].add(record.get('ros_entity_number', ''))
+            
+            # Convert sets to counts
+            competitor_list = []
+            for comp in competitors.values():
+                comp['entity_count'] = len(comp['entities'])
+                del comp['entities']
+                competitor_list.append(comp)
+            
+            # Sort by total committed
+            competitor_list.sort(key=lambda x: x['total_committed'], reverse=True)
+            
+            return {
+                'success': True,
+                'spin': spin,
+                'entities_analyzed': len(bens),
+                'my_frn_count': my_frns,
+                'competitor_frn_count': competitor_frns,
+                'competitors': competitor_list[:20]  # Top 20 competitors
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in get_471_competitors_for_spin: {e}")
+            return {
+                'success': False,
+                'error': f'Failed to analyze competitors: {str(e)}'
+            }

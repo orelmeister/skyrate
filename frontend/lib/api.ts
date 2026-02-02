@@ -172,6 +172,76 @@ export interface EntityDetailResponse {
   funding_years: string[];
 }
 
+// ==================== FORM 471 COMPETITIVE ANALYSIS TYPES ====================
+
+export interface Form471Record {
+  funding_year: string;
+  frn: string;
+  application_number: string;
+  service_provider_spin: string;
+  service_provider_name: string;
+  service_type: string;
+  category: string;
+  committed_amount: number;
+  pre_discount_amount: number;
+  discount_rate: number;
+  frn_status: string;
+  product_description: string;
+}
+
+export interface Form471Vendor {
+  spin: string;
+  name: string;
+  frn_count: number;
+  total_committed: number;
+  entity_count?: number;
+}
+
+export interface Form471ByEntityResponse {
+  success: boolean;
+  ben: string;
+  entity_name: string;
+  entity_state: string;
+  total_records: number;
+  total_committed: number;
+  funding_years: string[];
+  vendors: Form471Vendor[];
+  records: Form471Record[];
+  error?: string;
+}
+
+export interface Form471ByStateResponse {
+  success: boolean;
+  state: string;
+  year?: number;
+  category?: string;
+  total_records: number;
+  records: {
+    ben: string;
+    entity_name: string;
+    funding_year: string;
+    frn: string;
+    service_provider_spin: string;
+    service_provider_name: string;
+    service_type: string;
+    category: string;
+    committed_amount: number;
+    frn_status: string;
+  }[];
+  error?: string;
+}
+
+export interface CompetitorAnalysisResponse {
+  success: boolean;
+  spin: string;
+  entities_analyzed: number;
+  my_frn_count: number;
+  competitor_frn_count: number;
+  competitors: Form471Vendor[];
+  message?: string;
+  error?: string;
+}
+
 // ==================== APPEALS TYPES ====================
 
 export interface ChatMessage {
@@ -800,6 +870,40 @@ class ApiClient {
   }>> {
     const params = year ? `?year=${year}` : '';
     return this.request(`/api/v1/vendor/spin/${spin}/lookup${params}`);
+  }
+
+  // ==================== FORM 471 COMPETITIVE ANALYSIS ====================
+
+  async get471ByEntity(ben: string, year?: number): Promise<ApiResponse<Form471ByEntityResponse>> {
+    const params = year ? `?year=${year}` : '';
+    return this.request(`/api/v1/vendor/471/entity/${ben}${params}`);
+  }
+
+  async get471ByState(state: string, year?: number, category?: string, limit: number = 500): Promise<ApiResponse<Form471ByStateResponse>> {
+    const params = new URLSearchParams();
+    if (year) params.set('year', String(year));
+    if (category) params.set('category', category);
+    if (limit) params.set('limit', String(limit));
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/api/v1/vendor/471/state/${state}${queryString}`);
+  }
+
+  async get471Competitors(year?: number): Promise<ApiResponse<CompetitorAnalysisResponse>> {
+    const params = year ? `?year=${year}` : '';
+    return this.request(`/api/v1/vendor/471/competitors${params}`);
+  }
+
+  async search471(filters: {
+    ben?: string;
+    state?: string;
+    year?: number;
+    category?: string;
+    limit?: number;
+  }): Promise<ApiResponse<Form471ByEntityResponse | Form471ByStateResponse>> {
+    return this.request('/api/v1/vendor/471/search', {
+      method: 'POST',
+      body: JSON.stringify(filters),
+    });
   }
 
   // ==================== SUBSCRIPTIONS ====================

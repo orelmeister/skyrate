@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
-import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData } from "@/lib/api";
+import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse } from "@/lib/api";
 
 interface SearchResult {
   ben: string;
@@ -55,6 +55,14 @@ export default function VendorPortalPage() {
   const [entityDetailLoading, setEntityDetailLoading] = useState(false);
   const [entityDetail, setEntityDetail] = useState<EntityDetailResponse | null>(null);
   const [showEntityModal, setShowEntityModal] = useState(false);
+  
+  // Form 471 Competitive Analysis state
+  const [form471BenInput, setForm471BenInput] = useState("");
+  const [form471Loading, setForm471Loading] = useState(false);
+  const [form471Data, setForm471Data] = useState<Form471ByEntityResponse | null>(null);
+  const [form471Error, setForm471Error] = useState<string | null>(null);
+  const [competitorData, setCompetitorData] = useState<CompetitorAnalysisResponse | null>(null);
+  const [competitorLoading, setCompetitorLoading] = useState(false);
   
   // Payment guard - check if user needs to complete payment setup
   const [checkingPayment, setCheckingPayment] = useState(true);
@@ -207,6 +215,54 @@ export default function VendorPortalPage() {
     setEntityDetail(null);
   };
 
+  // Form 471 Competitive Analysis functions
+  const search471ByBen = async () => {
+    if (!form471BenInput.trim()) {
+      setForm471Error("Please enter a BEN (Billed Entity Number)");
+      return;
+    }
+    
+    setForm471Loading(true);
+    setForm471Error(null);
+    setForm471Data(null);
+    
+    try {
+      const response = await api.get471ByEntity(form471BenInput.trim());
+      if (response.success && response.data) {
+        if (response.data.success) {
+          setForm471Data(response.data);
+        } else {
+          setForm471Error(response.data.error || "Failed to fetch 471 data");
+        }
+      } else {
+        setForm471Error(response.error || "Failed to fetch 471 data");
+      }
+    } catch (error) {
+      console.error("471 lookup failed:", error);
+      setForm471Error("Failed to look up Form 471 data. Please try again.");
+    } finally {
+      setForm471Loading(false);
+    }
+  };
+
+  const loadCompetitorAnalysis = async () => {
+    if (!profile?.spin) {
+      return;
+    }
+    
+    setCompetitorLoading(true);
+    try {
+      const response = await api.get471Competitors();
+      if (response.success && response.data) {
+        setCompetitorData(response.data);
+      }
+    } catch (error) {
+      console.error("Failed to load competitor analysis:", error);
+    } finally {
+      setCompetitorLoading(false);
+    }
+  };
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -314,6 +370,7 @@ export default function VendorPortalPage() {
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: "📊" },
     { id: "my-entities", label: "My Entities", icon: "🏫" },
+    { id: "competitive", label: "471 Lookup", icon: "🎯" },
     { id: "search", label: "School Search", icon: "🔍" },
     { id: "leads", label: "Saved Leads", icon: "📋" },
     { id: "settings", label: "Settings", icon: "⚙️" },
@@ -630,6 +687,281 @@ export default function VendorPortalPage() {
               </div>
             </div>
           )}
+
+        {/* Form 471 Competitive Analysis Tab */}
+        {activeTab === "competitive" && (
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-purple-600 rounded-2xl p-6 text-white shadow-lg">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
+                    <span className="text-3xl">🎯</span>
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold">Form 471 Competitive Analysis</h1>
+                    <p className="text-blue-100 mt-1">See which vendors have won contracts at any school</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* BEN Lookup */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-slate-900 mb-4">Look Up Entity by BEN</h2>
+              <p className="text-sm text-slate-600 mb-4">
+                Enter a Billed Entity Number (BEN) to see all Form 471 applications and which vendors won contracts.
+              </p>
+              
+              <div className="flex gap-3 mb-4">
+                <input
+                  type="text"
+                  value={form471BenInput}
+                  onChange={(e) => setForm471BenInput(e.target.value)}
+                  placeholder="Enter BEN (e.g., 232950)"
+                  className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  onKeyDown={(e) => e.key === 'Enter' && search471ByBen()}
+                />
+                <button
+                  onClick={search471ByBen}
+                  disabled={form471Loading}
+                  className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
+                >
+                  {form471Loading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Searching...
+                    </>
+                  ) : (
+                    <>
+                      <span>🔍</span>
+                      Search
+                    </>
+                  )}
+                </button>
+              </div>
+              
+              {form471Error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
+                  {form471Error}
+                </div>
+              )}
+            </div>
+
+            {/* 471 Results */}
+            {form471Data && (
+              <div className="space-y-6">
+                {/* Entity Summary */}
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                  <div className="flex items-start justify-between mb-6">
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-900">{form471Data.entity_name}</h2>
+                      <div className="flex items-center gap-3 mt-1 text-slate-600">
+                        <span className="font-mono bg-slate-100 px-2 py-0.5 rounded text-sm">BEN: {form471Data.ben}</span>
+                        <span className="text-sm">{form471Data.entity_state}</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-green-600">
+                        ${form471Data.total_committed?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </div>
+                      <div className="text-sm text-slate-500">Total Committed</div>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-slate-50 rounded-xl p-4">
+                      <div className="text-2xl font-bold text-slate-900">{form471Data.total_records}</div>
+                      <div className="text-sm text-slate-500">Total FRNs</div>
+                    </div>
+                    <div className="bg-slate-50 rounded-xl p-4">
+                      <div className="text-2xl font-bold text-slate-900">{form471Data.vendors?.length || 0}</div>
+                      <div className="text-sm text-slate-500">Unique Vendors</div>
+                    </div>
+                    <div className="bg-slate-50 rounded-xl p-4">
+                      <div className="text-2xl font-bold text-slate-900">{form471Data.funding_years?.length || 0}</div>
+                      <div className="text-sm text-slate-500">Funding Years</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Vendors at this Entity */}
+                {form471Data.vendors && form471Data.vendors.length > 0 && (
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-4 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-purple-50">
+                      <h3 className="font-semibold text-slate-900">Vendors at this Entity</h3>
+                      <p className="text-sm text-slate-600">Service providers who have won contracts here</p>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {form471Data.vendors.map((vendor, idx) => (
+                        <div key={vendor.spin} className="p-4 flex items-center gap-4 hover:bg-slate-50 transition-colors">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white ${
+                            idx === 0 ? 'bg-yellow-500' : idx === 1 ? 'bg-slate-400' : idx === 2 ? 'bg-amber-700' : 'bg-slate-300'
+                          }`}>
+                            {idx + 1}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-slate-900">{vendor.name}</div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-xs font-mono bg-slate-100 px-2 py-0.5 rounded">SPIN: {vendor.spin}</span>
+                              <span className="text-xs text-slate-500">{vendor.frn_count} FRNs</span>
+                              {vendor.spin === profile?.spin && (
+                                <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">Your Company</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-semibold text-green-600">
+                              ${vendor.total_committed?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            </div>
+                            <div className="text-xs text-slate-500">committed</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* FRN Details */}
+                {form471Data.records && form471Data.records.length > 0 && (
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-4 border-b border-slate-200">
+                      <h3 className="font-semibold text-slate-900">FRN Details</h3>
+                      <p className="text-sm text-slate-600">All Form 471 funding requests for this entity</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50 border-b border-slate-200">
+                          <tr>
+                            <th className="text-left px-4 py-3 font-medium text-slate-600">Year</th>
+                            <th className="text-left px-4 py-3 font-medium text-slate-600">FRN</th>
+                            <th className="text-left px-4 py-3 font-medium text-slate-600">Vendor</th>
+                            <th className="text-left px-4 py-3 font-medium text-slate-600">Service Type</th>
+                            <th className="text-left px-4 py-3 font-medium text-slate-600">Category</th>
+                            <th className="text-right px-4 py-3 font-medium text-slate-600">Committed</th>
+                            <th className="text-center px-4 py-3 font-medium text-slate-600">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {form471Data.records.slice(0, 50).map((record, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50">
+                              <td className="px-4 py-3 text-slate-900">{record.funding_year}</td>
+                              <td className="px-4 py-3 font-mono text-xs text-slate-600">{record.frn}</td>
+                              <td className="px-4 py-3">
+                                <div className="font-medium text-slate-900">{record.service_provider_name}</div>
+                                <div className="text-xs text-slate-500">{record.service_provider_spin}</div>
+                              </td>
+                              <td className="px-4 py-3 text-slate-600">{record.service_type}</td>
+                              <td className="px-4 py-3">
+                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                  record.category?.includes('1') ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                                }`}>
+                                  {record.category}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-right font-medium text-green-600">
+                                ${record.committed_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                  record.frn_status?.toLowerCase().includes('funded') || record.frn_status?.toLowerCase().includes('committed') 
+                                    ? 'bg-green-100 text-green-700' 
+                                    : record.frn_status?.toLowerCase().includes('denied')
+                                    ? 'bg-red-100 text-red-700'
+                                    : 'bg-amber-100 text-amber-700'
+                                }`}>
+                                  {record.frn_status || 'Unknown'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {form471Data.records.length > 50 && (
+                        <div className="p-4 text-center text-sm text-slate-500 bg-slate-50 border-t border-slate-200">
+                          Showing first 50 of {form471Data.records.length} records
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Competitor Analysis Card - only show if SPIN configured */}
+            {profile?.spin && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900">Your Competitor Analysis</h3>
+                    <p className="text-sm text-slate-600">See which vendors compete at your serviced entities</p>
+                  </div>
+                  <button
+                    onClick={loadCompetitorAnalysis}
+                    disabled={competitorLoading}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors text-sm font-medium flex items-center gap-2"
+                  >
+                    {competitorLoading ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>Analyze Competitors</>
+                    )}
+                  </button>
+                </div>
+                
+                {competitorData && competitorData.success && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="bg-slate-50 rounded-xl p-4">
+                        <div className="text-2xl font-bold text-slate-900">{competitorData.entities_analyzed}</div>
+                        <div className="text-sm text-slate-500">Entities Analyzed</div>
+                      </div>
+                      <div className="bg-green-50 rounded-xl p-4">
+                        <div className="text-2xl font-bold text-green-600">{competitorData.my_frn_count}</div>
+                        <div className="text-sm text-slate-500">Your FRNs</div>
+                      </div>
+                      <div className="bg-amber-50 rounded-xl p-4">
+                        <div className="text-2xl font-bold text-amber-600">{competitorData.competitor_frn_count}</div>
+                        <div className="text-sm text-slate-500">Competitor FRNs</div>
+                      </div>
+                    </div>
+                    
+                    {competitorData.competitors && competitorData.competitors.length > 0 && (
+                      <div className="border border-slate-200 rounded-xl overflow-hidden">
+                        <div className="p-3 bg-slate-50 border-b border-slate-200">
+                          <span className="font-medium text-slate-700">Top Competitors at Your Entities</span>
+                        </div>
+                        <div className="divide-y divide-slate-100">
+                          {competitorData.competitors.slice(0, 10).map((comp, idx) => (
+                            <div key={comp.spin} className="p-3 flex items-center gap-3 hover:bg-slate-50">
+                              <div className="w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center text-sm font-bold text-slate-600">
+                                {idx + 1}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-slate-900 truncate">{comp.name}</div>
+                                <div className="text-xs text-slate-500">
+                                  {comp.frn_count} FRNs • {comp.entity_count || 0} entities
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-medium text-amber-600">
+                                  ${comp.total_committed?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {activeTab === "search" && (
           <div className="space-y-6">
