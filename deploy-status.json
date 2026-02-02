@@ -1,0 +1,3535 @@
+﻿[
+  {
+    "id": "a07c8495-03ee-4c24-975b-c887605cf59d",
+    "spec": {
+      "name": "skyrate",
+      "services": [
+        {
+          "name": "backend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "pip install -r requirements.txt",
+          "run_command": "uvicorn app.main_simple:app --host 0.0.0.0 --port 8000",
+          "source_dir": "backend",
+          "environment_slug": "python",
+          "envs": [
+            {
+              "key": "SECRET_KEY",
+              "value": "WvFKVgkDWd4KVcfz1mUOkuSx_oXXZO57cgYl71P7A0c",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "DATABASE_URL",
+              "value": "sqlite:///./skyrate.db",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "ENVIRONMENT",
+              "value": "production",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "DEBUG",
+              "value": "false",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "OPENAI_API_KEY",
+              "value": "EV[1:nEQKY3XUzd3CRDE7jgdNIKLGCuZqtxmt:11AE4X/SY49kb8cu0JrMew==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_SECRET_KEY",
+              "value": "EV[1:rYiPGP/fnQdmW60qrTL1ru2ku9Lmj+pb:cUOtJXe8Q30MaveTSxDaBQ==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_WEBHOOK_SECRET",
+              "value": "EV[1:Kt9OopPDx1YMLNUrUsHYkDLN9gOJEvSD:xZ83cNZ5ejQSymstLDGQwQ==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 8000
+        },
+        {
+          "name": "frontend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "npm install \u0026\u0026 npm run build",
+          "run_command": "npm start",
+          "source_dir": "frontend",
+          "environment_slug": "node-js",
+          "envs": [
+            {
+              "key": "NEXT_PUBLIC_API_URL",
+              "value": "${backend.PUBLIC_URL}",
+              "scope": "RUN_TIME"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 3000
+        }
+      ],
+      "region": "fra",
+      "ingress": {
+        "rules": [
+          {
+            "match": {
+              "path": {
+                "prefix": "/api"
+              }
+            },
+            "component": {
+              "name": "backend"
+            }
+          },
+          {
+            "match": {
+              "path": {
+                "prefix": "/"
+              }
+            },
+            "component": {
+              "name": "frontend"
+            }
+          }
+        ]
+      }
+    },
+    "services": [
+      {
+        "name": "backend",
+        "source_commit_hash": "d2bf8872705bf94d03e74e8e7f7e9992582de43d",
+        "buildpacks": [
+          {
+            "id": "heroku/python",
+            "version": "4.322.5",
+            "major_version": 4,
+            "latest": true,
+            "name": "Python",
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/languages-frameworks/python/"
+          },
+          {
+            "id": "digitalocean/procfile",
+            "version": "0.1.0",
+            "latest": true,
+            "name": "Procfile",
+            "description": [
+              "Configure default run commands from the Procfile if one exists"
+            ]
+          },
+          {
+            "id": "digitalocean/custom",
+            "version": "0.2.0",
+            "latest": true,
+            "name": "Custom Build Command",
+            "description": [
+              "Run the provided custom build command"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/how-to/build-run-commands/"
+          }
+        ]
+      },
+      {
+        "name": "frontend",
+        "source_commit_hash": "d2bf8872705bf94d03e74e8e7f7e9992582de43d",
+        "buildpacks": [
+          {
+            "id": "heroku/nodejs",
+            "version": "0.325.5",
+            "latest": true,
+            "name": "Node.js",
+            "description": [
+              "Install dependencies using NPM, PNPM or Yarn"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/languages-frameworks/nodejs/"
+          },
+          {
+            "id": "digitalocean/procfile",
+            "version": "0.1.0",
+            "latest": true,
+            "name": "Procfile",
+            "description": [
+              "Configure default run commands from the Procfile if one exists"
+            ]
+          },
+          {
+            "id": "digitalocean/custom",
+            "version": "0.2.0",
+            "latest": true,
+            "name": "Custom Build Command",
+            "description": [
+              "Run the provided custom build command"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/how-to/build-run-commands/"
+          }
+        ]
+      }
+    ],
+    "phase_last_updated_at": "2026-02-02T03:48:54Z",
+    "created_at": "2026-02-02T03:48:12Z",
+    "updated_at": "2026-02-02T03:48:54Z",
+    "cause": "automated rollback after failed deployment of \"20f2d59a-25e9-45ad-b5b2-a4e9f8e598b7\"",
+    "cloned_from": "6e90f6e6-97d2-4607-bfc1-3afe5e9e1054",
+    "progress": {
+      "success_steps": 9,
+      "total_steps": 9,
+      "steps": [
+        {
+          "name": "build",
+          "status": "SUCCESS",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "SUCCESS",
+              "started_at": "2026-02-02T03:48:19.842041628Z",
+              "ended_at": "2026-02-02T03:48:20.860572299Z"
+            },
+            {
+              "name": "components",
+              "status": "SUCCESS",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "SUCCESS",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "reason": {
+                    "code": "PreviousBuildReused",
+                    "message": "Your previous build was reused."
+                  },
+                  "component_name": "backend",
+                  "message_base": "Building service"
+                },
+                {
+                  "name": "frontend",
+                  "status": "SUCCESS",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "reason": {
+                    "code": "PreviousBuildReused",
+                    "message": "Your previous build was reused."
+                  },
+                  "component_name": "frontend",
+                  "message_base": "Building service"
+                }
+              ],
+              "started_at": "2026-02-02T03:48:20.860605671Z",
+              "ended_at": "2026-02-02T03:48:20.8614333Z"
+            }
+          ],
+          "started_at": "2026-02-02T03:48:19.841877022Z",
+          "ended_at": "2026-02-02T03:48:20.861700937Z"
+        },
+        {
+          "name": "deploy",
+          "status": "SUCCESS",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "SUCCESS",
+              "started_at": "2026-02-02T03:48:26.841571144Z",
+              "ended_at": "2026-02-02T03:48:28.522424021Z"
+            },
+            {
+              "name": "components",
+              "status": "SUCCESS",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "SUCCESS",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "SUCCESS",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "backend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "SUCCESS",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "backend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "backend"
+                },
+                {
+                  "name": "frontend",
+                  "status": "SUCCESS",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "SUCCESS",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "SUCCESS",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend"
+                }
+              ],
+              "started_at": "2026-02-02T03:48:28.522462092Z",
+              "ended_at": "2026-02-02T03:48:51.589081592Z"
+            },
+            {
+              "name": "finalize",
+              "status": "SUCCESS",
+              "started_at": "2026-02-02T03:48:52.433029918Z",
+              "ended_at": "2026-02-02T03:48:53.383261192Z"
+            }
+          ],
+          "started_at": "2026-02-02T03:48:26.841545767Z",
+          "ended_at": "2026-02-02T03:48:53.383348976Z"
+        }
+      ]
+    },
+    "phase": "ACTIVE",
+    "tier_slug": "basic",
+    "previous_deployment_id": "20f2d59a-25e9-45ad-b5b2-a4e9f8e598b7",
+    "cause_details": {
+      "internal": true,
+      "type": "AUTO_ROLLBACK"
+    },
+    "timing": {
+      "pending": "7.842041628s",
+      "build_total": "1.019659309s",
+      "build_billable": "0s"
+    }
+  },
+  {
+    "id": "20f2d59a-25e9-45ad-b5b2-a4e9f8e598b7",
+    "spec": {
+      "name": "skyrate",
+      "services": [
+        {
+          "name": "backend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "pip install -r requirements.txt",
+          "run_command": "uvicorn app.main:app --host 0.0.0.0 --port 8000",
+          "source_dir": "backend",
+          "environment_slug": "python",
+          "envs": [
+            {
+              "key": "SECRET_KEY",
+              "value": "WvFKVgkDWd4KVcfz1mUOkuSx_oXXZO57cgYl71P7A0c",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "DATABASE_URL",
+              "value": "sqlite:///./skyrate.db",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "ENVIRONMENT",
+              "value": "production",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "DEBUG",
+              "value": "false",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "OPENAI_API_KEY",
+              "value": "EV[1:2L2TLY0CYsigOYtjkJJzktCPznm0JO2R:mGsITLLYMf6MuyoJrMV0Aw==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_SECRET_KEY",
+              "value": "EV[1:mVqHBpXIh3f66Ar+0VGq7ihKaL7aLeik:BgVzb/eAI5mRFTmGl6dAKw==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_WEBHOOK_SECRET",
+              "value": "EV[1:kScDw2KP4jey+9OAeZPSawPbJdl9A/Ur:fy95Kp6lgT/bKgWbANWHlg==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 8000
+        },
+        {
+          "name": "frontend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "npm install \u0026\u0026 npm run build",
+          "run_command": "npm start",
+          "source_dir": "frontend",
+          "environment_slug": "node-js",
+          "envs": [
+            {
+              "key": "NEXT_PUBLIC_API_URL",
+              "value": "${backend.PUBLIC_URL}",
+              "scope": "RUN_TIME"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 3000
+        }
+      ],
+      "region": "fra",
+      "ingress": {
+        "rules": [
+          {
+            "match": {
+              "path": {
+                "prefix": "/api"
+              }
+            },
+            "component": {
+              "name": "backend"
+            }
+          },
+          {
+            "match": {
+              "path": {
+                "prefix": "/"
+              }
+            },
+            "component": {
+              "name": "frontend"
+            }
+          }
+        ]
+      }
+    },
+    "services": [
+      {
+        "name": "backend",
+        "source_commit_hash": "8f5e94fba75f76e68ba912f1bb65e5d60aedeb36",
+        "buildpacks": [
+          {
+            "id": "heroku/python",
+            "version": "4.322.5",
+            "major_version": 4,
+            "latest": true,
+            "name": "Python",
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/languages-frameworks/python/"
+          },
+          {
+            "id": "digitalocean/procfile",
+            "version": "0.1.0",
+            "latest": true,
+            "name": "Procfile",
+            "description": [
+              "Configure default run commands from the Procfile if one exists"
+            ]
+          },
+          {
+            "id": "digitalocean/custom",
+            "version": "0.2.0",
+            "latest": true,
+            "name": "Custom Build Command",
+            "description": [
+              "Run the provided custom build command"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/how-to/build-run-commands/"
+          }
+        ]
+      },
+      {
+        "name": "frontend",
+        "source_commit_hash": "8f5e94fba75f76e68ba912f1bb65e5d60aedeb36",
+        "buildpacks": [
+          {
+            "id": "heroku/nodejs",
+            "version": "0.325.5",
+            "latest": true,
+            "name": "Node.js",
+            "description": [
+              "Install dependencies using NPM, PNPM or Yarn"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/languages-frameworks/nodejs/"
+          },
+          {
+            "id": "digitalocean/procfile",
+            "version": "0.1.0",
+            "latest": true,
+            "name": "Procfile",
+            "description": [
+              "Configure default run commands from the Procfile if one exists"
+            ]
+          },
+          {
+            "id": "digitalocean/custom",
+            "version": "0.2.0",
+            "latest": true,
+            "name": "Custom Build Command",
+            "description": [
+              "Run the provided custom build command"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/how-to/build-run-commands/"
+          }
+        ]
+      }
+    ],
+    "phase_last_updated_at": "2026-02-02T03:49:04Z",
+    "created_at": "2026-02-02T03:44:15Z",
+    "updated_at": "2026-02-02T03:49:12Z",
+    "cause": "app spec updated",
+    "progress": {
+      "pending_steps": 1,
+      "success_steps": 7,
+      "error_steps": 1,
+      "total_steps": 9,
+      "steps": [
+        {
+          "name": "build",
+          "status": "SUCCESS",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "SUCCESS",
+              "started_at": "2026-02-02T03:44:18.600583015Z",
+              "ended_at": "2026-02-02T03:44:19.597668866Z"
+            },
+            {
+              "name": "components",
+              "status": "SUCCESS",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "SUCCESS",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "backend",
+                  "message_base": "Building service"
+                },
+                {
+                  "name": "frontend",
+                  "status": "SUCCESS",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend",
+                  "message_base": "Building service"
+                }
+              ],
+              "started_at": "2026-02-02T03:44:19.597701146Z",
+              "ended_at": "2026-02-02T03:46:04.280706902Z"
+            }
+          ],
+          "started_at": "2026-02-02T03:44:18.600411225Z",
+          "ended_at": "2026-02-02T03:46:05.519452985Z"
+        },
+        {
+          "name": "deploy",
+          "status": "ERROR",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "SUCCESS",
+              "started_at": "2026-02-02T03:46:12.365051067Z",
+              "ended_at": "2026-02-02T03:46:14.497747214Z"
+            },
+            {
+              "name": "components",
+              "status": "ERROR",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "ERROR",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "SUCCESS",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "backend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "ERROR",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "reason": {
+                        "code": "DeployContainerExitNonZero",
+                        "message": "Your deploy failed because your container exited with a non-zero exit code."
+                      },
+                      "component_name": "backend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "reason": {
+                    "code": "DeployContainerExitNonZero",
+                    "message": "Your deploy failed because your container exited with a non-zero exit code."
+                  },
+                  "component_name": "backend"
+                },
+                {
+                  "name": "frontend",
+                  "status": "SUCCESS",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "SUCCESS",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "SUCCESS",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend"
+                }
+              ],
+              "started_at": "2026-02-02T03:46:14.497776689Z",
+              "ended_at": "2026-02-02T03:48:11.816493394Z",
+              "reason": {
+                "code": "DeployContainerExitNonZero",
+                "message": "Your deploy failed because your container exited with a non-zero exit code."
+              }
+            },
+            {
+              "name": "finalize",
+              "status": "PENDING",
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            }
+          ],
+          "started_at": "2026-02-02T03:46:12.365026381Z",
+          "ended_at": "2026-02-02T03:48:12.808669636Z",
+          "reason": {
+            "code": "DeployContainerExitNonZero",
+            "message": "Your deploy failed because your container exited with a non-zero exit code."
+          }
+        }
+      ],
+      "summary_steps": [
+        {
+          "name": "deploy.components.backend.wait",
+          "status": "ERROR",
+          "started_at": "0001-01-01T00:00:00Z",
+          "ended_at": "0001-01-01T00:00:00Z",
+          "reason": {
+            "code": "DeployContainerExitNonZero",
+            "message": "Your deploy failed because your container exited with a non-zero exit code."
+          },
+          "component_name": "backend",
+          "message_base": "Waiting for service"
+        }
+      ]
+    },
+    "phase": "ERROR",
+    "tier_slug": "basic",
+    "previous_deployment_id": "ffa3826b-e743-4ca3-929f-8ac678da1130",
+    "cause_details": {
+      "digitalocean_user_action": {
+        "user": {
+          "uuid": "83f0f261-2d6f-46c8-81d2-e1b6c8954bb2",
+          "email": "orelmeister@gmail.com",
+          "full_name": "Orel David"
+        },
+        "name": "UPDATE_SPEC"
+      },
+      "type": "MANUAL"
+    },
+    "timing": {
+      "pending": "3.600583015s",
+      "build_total": "106.918869970s",
+      "build_billable": "50.135036568s",
+      "components": [
+        {
+          "name": "backend",
+          "build_billable": "7.517933205s"
+        },
+        {
+          "name": "frontend",
+          "build_billable": "42.617103363s"
+        }
+      ]
+    }
+  },
+  {
+    "id": "ffa3826b-e743-4ca3-929f-8ac678da1130",
+    "spec": {
+      "name": "skyrate",
+      "services": [
+        {
+          "name": "backend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "pip install -r requirements.txt",
+          "run_command": "uvicorn app.main_simple:app --host 0.0.0.0 --port 8000",
+          "source_dir": "backend",
+          "environment_slug": "python",
+          "envs": [
+            {
+              "key": "SECRET_KEY",
+              "value": "WvFKVgkDWd4KVcfz1mUOkuSx_oXXZO57cgYl71P7A0c",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "DATABASE_URL",
+              "value": "sqlite:///./skyrate.db",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "ENVIRONMENT",
+              "value": "production",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "DEBUG",
+              "value": "false",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "OPENAI_API_KEY",
+              "value": "EV[1:nEQKY3XUzd3CRDE7jgdNIKLGCuZqtxmt:11AE4X/SY49kb8cu0JrMew==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_SECRET_KEY",
+              "value": "EV[1:rYiPGP/fnQdmW60qrTL1ru2ku9Lmj+pb:cUOtJXe8Q30MaveTSxDaBQ==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_WEBHOOK_SECRET",
+              "value": "EV[1:Kt9OopPDx1YMLNUrUsHYkDLN9gOJEvSD:xZ83cNZ5ejQSymstLDGQwQ==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 8000
+        },
+        {
+          "name": "frontend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "npm install \u0026\u0026 npm run build",
+          "run_command": "npm start",
+          "source_dir": "frontend",
+          "environment_slug": "node-js",
+          "envs": [
+            {
+              "key": "NEXT_PUBLIC_API_URL",
+              "value": "${backend.PUBLIC_URL}",
+              "scope": "RUN_TIME"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 3000
+        }
+      ],
+      "region": "fra",
+      "ingress": {
+        "rules": [
+          {
+            "match": {
+              "path": {
+                "prefix": "/api"
+              }
+            },
+            "component": {
+              "name": "backend"
+            }
+          },
+          {
+            "match": {
+              "path": {
+                "prefix": "/"
+              }
+            },
+            "component": {
+              "name": "frontend"
+            }
+          }
+        ]
+      }
+    },
+    "services": [
+      {
+        "name": "backend",
+        "source_commit_hash": "8f5e94fba75f76e68ba912f1bb65e5d60aedeb36"
+      },
+      {
+        "name": "frontend",
+        "source_commit_hash": "8f5e94fba75f76e68ba912f1bb65e5d60aedeb36"
+      }
+    ],
+    "phase_last_updated_at": "2026-02-02T03:44:29Z",
+    "created_at": "2026-02-02T03:44:11Z",
+    "updated_at": "2026-02-02T03:44:38Z",
+    "cause": "commit 8f5e94f pushed to github.com/orelmeister/skyrate/tree/main",
+    "progress": {
+      "pending_steps": 9,
+      "total_steps": 9,
+      "steps": [
+        {
+          "name": "build",
+          "status": "PENDING",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "PENDING",
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "components",
+              "status": "PENDING",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "PENDING",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "backend",
+                  "message_base": "Building service"
+                },
+                {
+                  "name": "frontend",
+                  "status": "PENDING",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend",
+                  "message_base": "Building service"
+                }
+              ],
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            }
+          ],
+          "started_at": "0001-01-01T00:00:00Z",
+          "ended_at": "0001-01-01T00:00:00Z"
+        },
+        {
+          "name": "deploy",
+          "status": "PENDING",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "PENDING",
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "components",
+              "status": "PENDING",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "PENDING",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "PENDING",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "backend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "PENDING",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "backend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "backend"
+                },
+                {
+                  "name": "frontend",
+                  "status": "PENDING",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "PENDING",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "PENDING",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend"
+                }
+              ],
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "finalize",
+              "status": "PENDING",
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            }
+          ],
+          "started_at": "0001-01-01T00:00:00Z",
+          "ended_at": "0001-01-01T00:00:00Z"
+        }
+      ]
+    },
+    "phase": "CANCELED",
+    "tier_slug": "basic",
+    "previous_deployment_id": "6e90f6e6-97d2-4607-bfc1-3afe5e9e1054",
+    "cause_details": {
+      "git_push": {
+        "github": {
+          "repo": "orelmeister/skyrate",
+          "branch": "main"
+        },
+        "username": "orelmeister",
+        "commit_sha": "8f5e94fba75f76e68ba912f1bb65e5d60aedeb36",
+        "commit_message": "Fix: Remove eager service imports to prevent startup crash"
+      },
+      "type": "DEPLOY_ON_PUSH"
+    },
+    "timing": {
+      "pending": "4s"
+    }
+  },
+  {
+    "id": "6e90f6e6-97d2-4607-bfc1-3afe5e9e1054",
+    "spec": {
+      "name": "skyrate",
+      "services": [
+        {
+          "name": "backend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "pip install -r requirements.txt",
+          "run_command": "uvicorn app.main_simple:app --host 0.0.0.0 --port 8000",
+          "source_dir": "backend",
+          "environment_slug": "python",
+          "envs": [
+            {
+              "key": "SECRET_KEY",
+              "value": "WvFKVgkDWd4KVcfz1mUOkuSx_oXXZO57cgYl71P7A0c",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "DATABASE_URL",
+              "value": "sqlite:///./skyrate.db",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "ENVIRONMENT",
+              "value": "production",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "DEBUG",
+              "value": "false",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "OPENAI_API_KEY",
+              "value": "EV[1:nEQKY3XUzd3CRDE7jgdNIKLGCuZqtxmt:11AE4X/SY49kb8cu0JrMew==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_SECRET_KEY",
+              "value": "EV[1:rYiPGP/fnQdmW60qrTL1ru2ku9Lmj+pb:cUOtJXe8Q30MaveTSxDaBQ==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_WEBHOOK_SECRET",
+              "value": "EV[1:Kt9OopPDx1YMLNUrUsHYkDLN9gOJEvSD:xZ83cNZ5ejQSymstLDGQwQ==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 8000
+        },
+        {
+          "name": "frontend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "npm install \u0026\u0026 npm run build",
+          "run_command": "npm start",
+          "source_dir": "frontend",
+          "environment_slug": "node-js",
+          "envs": [
+            {
+              "key": "NEXT_PUBLIC_API_URL",
+              "value": "${backend.PUBLIC_URL}",
+              "scope": "RUN_TIME"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 3000
+        }
+      ],
+      "region": "fra",
+      "ingress": {
+        "rules": [
+          {
+            "match": {
+              "path": {
+                "prefix": "/api"
+              }
+            },
+            "component": {
+              "name": "backend"
+            }
+          },
+          {
+            "match": {
+              "path": {
+                "prefix": "/"
+              }
+            },
+            "component": {
+              "name": "frontend"
+            }
+          }
+        ]
+      }
+    },
+    "services": [
+      {
+        "name": "backend",
+        "source_commit_hash": "d2bf8872705bf94d03e74e8e7f7e9992582de43d",
+        "buildpacks": [
+          {
+            "id": "heroku/python",
+            "version": "4.322.5",
+            "major_version": 4,
+            "latest": true,
+            "name": "Python",
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/languages-frameworks/python/"
+          },
+          {
+            "id": "digitalocean/procfile",
+            "version": "0.1.0",
+            "latest": true,
+            "name": "Procfile",
+            "description": [
+              "Configure default run commands from the Procfile if one exists"
+            ]
+          },
+          {
+            "id": "digitalocean/custom",
+            "version": "0.2.0",
+            "latest": true,
+            "name": "Custom Build Command",
+            "description": [
+              "Run the provided custom build command"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/how-to/build-run-commands/"
+          }
+        ]
+      },
+      {
+        "name": "frontend",
+        "source_commit_hash": "d2bf8872705bf94d03e74e8e7f7e9992582de43d",
+        "buildpacks": [
+          {
+            "id": "heroku/nodejs",
+            "version": "0.325.5",
+            "latest": true,
+            "name": "Node.js",
+            "description": [
+              "Install dependencies using NPM, PNPM or Yarn"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/languages-frameworks/nodejs/"
+          },
+          {
+            "id": "digitalocean/procfile",
+            "version": "0.1.0",
+            "latest": true,
+            "name": "Procfile",
+            "description": [
+              "Configure default run commands from the Procfile if one exists"
+            ]
+          },
+          {
+            "id": "digitalocean/custom",
+            "version": "0.2.0",
+            "latest": true,
+            "name": "Custom Build Command",
+            "description": [
+              "Run the provided custom build command"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/how-to/build-run-commands/"
+          }
+        ]
+      }
+    ],
+    "phase_last_updated_at": "2026-02-02T03:49:02Z",
+    "created_at": "2026-02-02T03:39:15Z",
+    "updated_at": "2026-02-02T03:49:12Z",
+    "cause": "app spec updated",
+    "progress": {
+      "success_steps": 9,
+      "total_steps": 9,
+      "steps": [
+        {
+          "name": "build",
+          "status": "SUCCESS",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "SUCCESS",
+              "started_at": "2026-02-02T03:39:17.425272998Z",
+              "ended_at": "2026-02-02T03:39:19.709467208Z"
+            },
+            {
+              "name": "components",
+              "status": "SUCCESS",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "SUCCESS",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "backend",
+                  "message_base": "Building service"
+                },
+                {
+                  "name": "frontend",
+                  "status": "SUCCESS",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend",
+                  "message_base": "Building service"
+                }
+              ],
+              "started_at": "2026-02-02T03:39:19.709508064Z",
+              "ended_at": "2026-02-02T03:41:31.808002111Z"
+            }
+          ],
+          "started_at": "2026-02-02T03:39:17.425186377Z",
+          "ended_at": "2026-02-02T03:41:33.242947984Z"
+        },
+        {
+          "name": "deploy",
+          "status": "SUCCESS",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "SUCCESS",
+              "started_at": "2026-02-02T03:41:41.960757899Z",
+              "ended_at": "2026-02-02T03:41:45.139301081Z"
+            },
+            {
+              "name": "components",
+              "status": "SUCCESS",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "SUCCESS",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "SUCCESS",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "backend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "SUCCESS",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "backend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "backend"
+                },
+                {
+                  "name": "frontend",
+                  "status": "SUCCESS",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "SUCCESS",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "SUCCESS",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend"
+                }
+              ],
+              "started_at": "2026-02-02T03:41:45.139341937Z",
+              "ended_at": "2026-02-02T03:42:34.838396377Z"
+            },
+            {
+              "name": "finalize",
+              "status": "SUCCESS",
+              "started_at": "2026-02-02T03:42:35.680003651Z",
+              "ended_at": "2026-02-02T03:42:38.299296648Z"
+            }
+          ],
+          "started_at": "2026-02-02T03:41:41.960734826Z",
+          "ended_at": "2026-02-02T03:42:38.299425628Z"
+        }
+      ]
+    },
+    "phase": "SUPERSEDED",
+    "tier_slug": "basic",
+    "previous_deployment_id": "87ba12ac-b93a-4ca6-944d-e33b1d37bc22",
+    "cause_details": {
+      "digitalocean_user_action": {
+        "user": {
+          "uuid": "83f0f261-2d6f-46c8-81d2-e1b6c8954bb2",
+          "email": "orelmeister@gmail.com",
+          "full_name": "Orel David"
+        },
+        "name": "UPDATE_SPEC"
+      },
+      "type": "MANUAL"
+    },
+    "timing": {
+      "pending": "2.425272998s",
+      "build_total": "135.817674986s",
+      "build_billable": "105.398185624s",
+      "components": [
+        {
+          "name": "backend",
+          "build_billable": "36.640650425s"
+        },
+        {
+          "name": "frontend",
+          "build_billable": "68.757535199s"
+        }
+      ]
+    }
+  },
+  {
+    "id": "87ba12ac-b93a-4ca6-944d-e33b1d37bc22",
+    "spec": {
+      "name": "skyrate",
+      "services": [
+        {
+          "name": "backend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "pip install -r requirements.txt",
+          "run_command": "uvicorn app.main:app --host 0.0.0.0 --port 8000",
+          "source_dir": "backend",
+          "environment_slug": "python",
+          "envs": [
+            {
+              "key": "SECRET_KEY",
+              "value": "WvFKVgkDWd4KVcfz1mUOkuSx_oXXZO57cgYl71P7A0c",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "DATABASE_URL",
+              "value": "sqlite:///./skyrate.db",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "ENVIRONMENT",
+              "value": "production",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "DEBUG",
+              "value": "false",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "OPENAI_API_KEY",
+              "value": "EV[1:iBrQLpXAfXyxonIC4lDEOJgxqSctPRER:PLAD44+FdXEFwvIn8LllqQ==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_SECRET_KEY",
+              "value": "EV[1:R2PRqxByQnqx9iZJfT8tzihM3spcfUke:YJcAQGjq0gJqJ5jULJX8dQ==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_WEBHOOK_SECRET",
+              "value": "EV[1:JKQpwhuTtD5ooh7o2IJjfOc2JzXahv6h:4utwUQ37MoTyUyQuim9RKw==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 8000
+        },
+        {
+          "name": "frontend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "npm install \u0026\u0026 npm run build",
+          "run_command": "npm start",
+          "source_dir": "frontend",
+          "environment_slug": "node-js",
+          "envs": [
+            {
+              "key": "NEXT_PUBLIC_API_URL",
+              "value": "${backend.PUBLIC_URL}",
+              "scope": "RUN_TIME"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 3000
+        }
+      ],
+      "region": "fra",
+      "ingress": {
+        "rules": [
+          {
+            "match": {
+              "path": {
+                "prefix": "/api"
+              }
+            },
+            "component": {
+              "name": "backend"
+            }
+          },
+          {
+            "match": {
+              "path": {
+                "prefix": "/"
+              }
+            },
+            "component": {
+              "name": "frontend"
+            }
+          }
+        ]
+      }
+    },
+    "services": [
+      {
+        "name": "backend",
+        "source_commit_hash": "d2bf8872705bf94d03e74e8e7f7e9992582de43d"
+      },
+      {
+        "name": "frontend",
+        "source_commit_hash": "d2bf8872705bf94d03e74e8e7f7e9992582de43d"
+      }
+    ],
+    "phase_last_updated_at": "2026-02-02T03:39:27Z",
+    "created_at": "2026-02-02T03:39:13Z",
+    "updated_at": "2026-02-02T03:39:34Z",
+    "cause": "commit d2bf887 pushed to github.com/orelmeister/skyrate/tree/main",
+    "progress": {
+      "pending_steps": 9,
+      "total_steps": 9,
+      "steps": [
+        {
+          "name": "build",
+          "status": "PENDING",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "PENDING",
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "components",
+              "status": "PENDING",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "PENDING",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "backend",
+                  "message_base": "Building service"
+                },
+                {
+                  "name": "frontend",
+                  "status": "PENDING",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend",
+                  "message_base": "Building service"
+                }
+              ],
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            }
+          ],
+          "started_at": "0001-01-01T00:00:00Z",
+          "ended_at": "0001-01-01T00:00:00Z"
+        },
+        {
+          "name": "deploy",
+          "status": "PENDING",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "PENDING",
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "components",
+              "status": "PENDING",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "PENDING",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "PENDING",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "backend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "PENDING",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "backend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "backend"
+                },
+                {
+                  "name": "frontend",
+                  "status": "PENDING",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "PENDING",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "PENDING",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend"
+                }
+              ],
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "finalize",
+              "status": "PENDING",
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            }
+          ],
+          "started_at": "0001-01-01T00:00:00Z",
+          "ended_at": "0001-01-01T00:00:00Z"
+        }
+      ]
+    },
+    "phase": "CANCELED",
+    "tier_slug": "basic",
+    "previous_deployment_id": "71f64a51-d598-45da-8e97-a6a892d860ab",
+    "cause_details": {
+      "git_push": {
+        "github": {
+          "repo": "orelmeister/skyrate",
+          "branch": "main"
+        },
+        "username": "orelmeister",
+        "commit_sha": "d2bf8872705bf94d03e74e8e7f7e9992582de43d",
+        "commit_message": "Use simple app for debugging runtime startup"
+      },
+      "type": "DEPLOY_ON_PUSH"
+    },
+    "timing": {
+      "pending": "2s"
+    }
+  },
+  {
+    "id": "71f64a51-d598-45da-8e97-a6a892d860ab",
+    "spec": {
+      "name": "skyrate",
+      "services": [
+        {
+          "name": "backend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "pip install -r requirements.txt",
+          "run_command": "uvicorn app.main:app --host 0.0.0.0 --port 8000",
+          "source_dir": "backend",
+          "environment_slug": "python",
+          "envs": [
+            {
+              "key": "SECRET_KEY",
+              "value": "WvFKVgkDWd4KVcfz1mUOkuSx_oXXZO57cgYl71P7A0c",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "DATABASE_URL",
+              "value": "sqlite:///./skyrate.db",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "ENVIRONMENT",
+              "value": "production",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "DEBUG",
+              "value": "false",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "OPENAI_API_KEY",
+              "value": "EV[1:iBrQLpXAfXyxonIC4lDEOJgxqSctPRER:PLAD44+FdXEFwvIn8LllqQ==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_SECRET_KEY",
+              "value": "EV[1:R2PRqxByQnqx9iZJfT8tzihM3spcfUke:YJcAQGjq0gJqJ5jULJX8dQ==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_WEBHOOK_SECRET",
+              "value": "EV[1:JKQpwhuTtD5ooh7o2IJjfOc2JzXahv6h:4utwUQ37MoTyUyQuim9RKw==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 8000
+        },
+        {
+          "name": "frontend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "npm install \u0026\u0026 npm run build",
+          "run_command": "npm start",
+          "source_dir": "frontend",
+          "environment_slug": "node-js",
+          "envs": [
+            {
+              "key": "NEXT_PUBLIC_API_URL",
+              "value": "${backend.PUBLIC_URL}",
+              "scope": "RUN_TIME"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 3000
+        }
+      ],
+      "region": "fra",
+      "ingress": {
+        "rules": [
+          {
+            "match": {
+              "path": {
+                "prefix": "/api"
+              }
+            },
+            "component": {
+              "name": "backend"
+            }
+          },
+          {
+            "match": {
+              "path": {
+                "prefix": "/"
+              }
+            },
+            "component": {
+              "name": "frontend"
+            }
+          }
+        ]
+      }
+    },
+    "services": [
+      {
+        "name": "backend",
+        "source_commit_hash": "d7d755be102450f9b4a536b4bd9e77fb6d457f27",
+        "buildpacks": [
+          {
+            "id": "heroku/python",
+            "version": "4.322.5",
+            "major_version": 4,
+            "latest": true,
+            "name": "Python",
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/languages-frameworks/python/"
+          },
+          {
+            "id": "digitalocean/procfile",
+            "version": "0.1.0",
+            "latest": true,
+            "name": "Procfile",
+            "description": [
+              "Configure default run commands from the Procfile if one exists"
+            ]
+          },
+          {
+            "id": "digitalocean/custom",
+            "version": "0.2.0",
+            "latest": true,
+            "name": "Custom Build Command",
+            "description": [
+              "Run the provided custom build command"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/how-to/build-run-commands/"
+          }
+        ]
+      },
+      {
+        "name": "frontend",
+        "source_commit_hash": "d7d755be102450f9b4a536b4bd9e77fb6d457f27",
+        "buildpacks": [
+          {
+            "id": "heroku/nodejs",
+            "version": "0.325.5",
+            "latest": true,
+            "name": "Node.js",
+            "description": [
+              "Install dependencies using NPM, PNPM or Yarn"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/languages-frameworks/nodejs/"
+          },
+          {
+            "id": "digitalocean/procfile",
+            "version": "0.1.0",
+            "latest": true,
+            "name": "Procfile",
+            "description": [
+              "Configure default run commands from the Procfile if one exists"
+            ]
+          },
+          {
+            "id": "digitalocean/custom",
+            "version": "0.2.0",
+            "latest": true,
+            "name": "Custom Build Command",
+            "description": [
+              "Run the provided custom build command"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/how-to/build-run-commands/"
+          }
+        ]
+      }
+    ],
+    "phase_last_updated_at": "2026-02-02T03:37:57Z",
+    "created_at": "2026-02-02T03:33:58Z",
+    "updated_at": "2026-02-02T03:38:02Z",
+    "cause": "app spec updated",
+    "progress": {
+      "pending_steps": 1,
+      "success_steps": 7,
+      "error_steps": 1,
+      "total_steps": 9,
+      "steps": [
+        {
+          "name": "build",
+          "status": "SUCCESS",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "SUCCESS",
+              "started_at": "2026-02-02T03:34:01.157539716Z",
+              "ended_at": "2026-02-02T03:34:01.772969565Z"
+            },
+            {
+              "name": "components",
+              "status": "SUCCESS",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "SUCCESS",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "backend",
+                  "message_base": "Building service"
+                },
+                {
+                  "name": "frontend",
+                  "status": "SUCCESS",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend",
+                  "message_base": "Building service"
+                }
+              ],
+              "started_at": "2026-02-02T03:34:01.773000453Z",
+              "ended_at": "2026-02-02T03:35:52.178603877Z"
+            }
+          ],
+          "started_at": "2026-02-02T03:34:01.157455669Z",
+          "ended_at": "2026-02-02T03:35:53.146799091Z"
+        },
+        {
+          "name": "deploy",
+          "status": "ERROR",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "SUCCESS",
+              "started_at": "2026-02-02T03:36:00.126010795Z",
+              "ended_at": "2026-02-02T03:36:02.407138581Z"
+            },
+            {
+              "name": "components",
+              "status": "ERROR",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "ERROR",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "SUCCESS",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "backend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "ERROR",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "reason": {
+                        "code": "DeployContainerExitNonZero",
+                        "message": "Your deploy failed because your container exited with a non-zero exit code."
+                      },
+                      "component_name": "backend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "reason": {
+                    "code": "DeployContainerExitNonZero",
+                    "message": "Your deploy failed because your container exited with a non-zero exit code."
+                  },
+                  "component_name": "backend"
+                },
+                {
+                  "name": "frontend",
+                  "status": "SUCCESS",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "SUCCESS",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "SUCCESS",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend"
+                }
+              ],
+              "started_at": "2026-02-02T03:36:02.407160942Z",
+              "ended_at": "2026-02-02T03:37:46.230398458Z",
+              "reason": {
+                "code": "DeployContainerExitNonZero",
+                "message": "Your deploy failed because your container exited with a non-zero exit code."
+              }
+            },
+            {
+              "name": "finalize",
+              "status": "PENDING",
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            }
+          ],
+          "started_at": "2026-02-02T03:36:00.125990277Z",
+          "ended_at": "2026-02-02T03:37:47.071468897Z",
+          "reason": {
+            "code": "DeployContainerExitNonZero",
+            "message": "Your deploy failed because your container exited with a non-zero exit code."
+          }
+        }
+      ],
+      "summary_steps": [
+        {
+          "name": "deploy.components.backend.wait",
+          "status": "ERROR",
+          "started_at": "0001-01-01T00:00:00Z",
+          "ended_at": "0001-01-01T00:00:00Z",
+          "reason": {
+            "code": "DeployContainerExitNonZero",
+            "message": "Your deploy failed because your container exited with a non-zero exit code."
+          },
+          "component_name": "backend",
+          "message_base": "Waiting for service"
+        }
+      ]
+    },
+    "phase": "ERROR",
+    "tier_slug": "basic",
+    "previous_deployment_id": "465b2d63-a39f-4aa6-a6f9-98b7a93d75d3",
+    "cause_details": {
+      "digitalocean_user_action": {
+        "user": {
+          "uuid": "83f0f261-2d6f-46c8-81d2-e1b6c8954bb2",
+          "email": "orelmeister@gmail.com",
+          "full_name": "Orel David"
+        },
+        "name": "UPDATE_SPEC"
+      },
+      "type": "MANUAL"
+    },
+    "timing": {
+      "pending": "3.157539716s",
+      "build_total": "111.989259375s",
+      "build_billable": "95.426189049s",
+      "components": [
+        {
+          "name": "backend",
+          "build_billable": "39.994161894s"
+        },
+        {
+          "name": "frontend",
+          "build_billable": "55.432027155s"
+        }
+      ]
+    }
+  },
+  {
+    "id": "465b2d63-a39f-4aa6-a6f9-98b7a93d75d3",
+    "spec": {
+      "name": "skyrate",
+      "services": [
+        {
+          "name": "backend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "pip install -r requirements.txt",
+          "run_command": "uvicorn app.main:app --host 0.0.0.0 --port 8000",
+          "source_dir": "backend",
+          "environment_slug": "python",
+          "envs": [
+            {
+              "key": "SECRET_KEY",
+              "value": "EV[1:xL+t3wR4Gb/GwqRm7gKU9kETOXr3Ryju:OE6Tg7ruGYUmtdK+F6YYyQ==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "DATABASE_URL",
+              "value": "sqlite:///./skyrate.db",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "ENVIRONMENT",
+              "value": "production",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "DEBUG",
+              "value": "false",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "OPENAI_API_KEY",
+              "value": "EV[1:tbJxLBSVLPiAsGXCkura7vTuhuyt/NGy:rC7e4pQSyH3Iy7tQnE3evw==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_SECRET_KEY",
+              "value": "EV[1:4/fbF3tz8N9KiQ7x6pjy9GNs38REbwR7:WTV9lWa26tiHIy8ff/xiSA==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_WEBHOOK_SECRET",
+              "value": "EV[1:d8RryKWvqoSlAZQsOAzJeLWnnkmjEsCu:hC5GqRLnU73y7oeBFh4pFw==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 8000
+        },
+        {
+          "name": "frontend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "npm install \u0026\u0026 npm run build",
+          "run_command": "npm start",
+          "source_dir": "frontend",
+          "environment_slug": "node-js",
+          "envs": [
+            {
+              "key": "NEXT_PUBLIC_API_URL",
+              "value": "${backend.PUBLIC_URL}",
+              "scope": "RUN_TIME"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 3000
+        }
+      ],
+      "region": "fra",
+      "ingress": {
+        "rules": [
+          {
+            "match": {
+              "path": {
+                "prefix": "/api"
+              }
+            },
+            "component": {
+              "name": "backend"
+            }
+          },
+          {
+            "match": {
+              "path": {
+                "prefix": "/"
+              }
+            },
+            "component": {
+              "name": "frontend"
+            }
+          }
+        ]
+      }
+    },
+    "services": [
+      {
+        "name": "backend",
+        "source_commit_hash": "d7d755be102450f9b4a536b4bd9e77fb6d457f27"
+      },
+      {
+        "name": "frontend",
+        "source_commit_hash": "d7d755be102450f9b4a536b4bd9e77fb6d457f27"
+      }
+    ],
+    "phase_last_updated_at": "2026-02-02T03:34:08Z",
+    "created_at": "2026-02-02T03:33:55Z",
+    "updated_at": "2026-02-02T03:34:14Z",
+    "cause": "commit d7d755b pushed to github.com/orelmeister/skyrate/tree/main",
+    "progress": {
+      "pending_steps": 9,
+      "total_steps": 9,
+      "steps": [
+        {
+          "name": "build",
+          "status": "PENDING",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "PENDING",
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "components",
+              "status": "PENDING",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "PENDING",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "backend",
+                  "message_base": "Building service"
+                },
+                {
+                  "name": "frontend",
+                  "status": "PENDING",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend",
+                  "message_base": "Building service"
+                }
+              ],
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            }
+          ],
+          "started_at": "0001-01-01T00:00:00Z",
+          "ended_at": "0001-01-01T00:00:00Z"
+        },
+        {
+          "name": "deploy",
+          "status": "PENDING",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "PENDING",
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "components",
+              "status": "PENDING",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "PENDING",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "PENDING",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "backend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "PENDING",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "backend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "backend"
+                },
+                {
+                  "name": "frontend",
+                  "status": "PENDING",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "PENDING",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "PENDING",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend"
+                }
+              ],
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "finalize",
+              "status": "PENDING",
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            }
+          ],
+          "started_at": "0001-01-01T00:00:00Z",
+          "ended_at": "0001-01-01T00:00:00Z"
+        }
+      ]
+    },
+    "phase": "CANCELED",
+    "tier_slug": "basic",
+    "previous_deployment_id": "cb106745-af7f-4fa2-81f4-eba74a50b1d2",
+    "cause_details": {
+      "git_push": {
+        "github": {
+          "repo": "orelmeister/skyrate",
+          "branch": "main"
+        },
+        "username": "orelmeister",
+        "commit_sha": "d7d755be102450f9b4a536b4bd9e77fb6d457f27",
+        "commit_message": "Use explicit SECRET_KEY value for debugging"
+      },
+      "type": "DEPLOY_ON_PUSH"
+    },
+    "timing": {
+      "pending": "3s"
+    }
+  },
+  {
+    "id": "cb106745-af7f-4fa2-81f4-eba74a50b1d2",
+    "spec": {
+      "name": "skyrate",
+      "services": [
+        {
+          "name": "backend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "pip install -r requirements.txt",
+          "run_command": "uvicorn app.main:app --host 0.0.0.0 --port 8000",
+          "source_dir": "backend",
+          "environment_slug": "python",
+          "envs": [
+            {
+              "key": "SECRET_KEY",
+              "value": "EV[1:xL+t3wR4Gb/GwqRm7gKU9kETOXr3Ryju:OE6Tg7ruGYUmtdK+F6YYyQ==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "DATABASE_URL",
+              "value": "sqlite:///./skyrate.db",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "ENVIRONMENT",
+              "value": "production",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "DEBUG",
+              "value": "false",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "OPENAI_API_KEY",
+              "value": "EV[1:tbJxLBSVLPiAsGXCkura7vTuhuyt/NGy:rC7e4pQSyH3Iy7tQnE3evw==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_SECRET_KEY",
+              "value": "EV[1:4/fbF3tz8N9KiQ7x6pjy9GNs38REbwR7:WTV9lWa26tiHIy8ff/xiSA==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_WEBHOOK_SECRET",
+              "value": "EV[1:d8RryKWvqoSlAZQsOAzJeLWnnkmjEsCu:hC5GqRLnU73y7oeBFh4pFw==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 8000
+        },
+        {
+          "name": "frontend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "npm install \u0026\u0026 npm run build",
+          "run_command": "npm start",
+          "source_dir": "frontend",
+          "environment_slug": "node-js",
+          "envs": [
+            {
+              "key": "NEXT_PUBLIC_API_URL",
+              "value": "${backend.PUBLIC_URL}",
+              "scope": "RUN_TIME"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 3000
+        }
+      ],
+      "region": "fra",
+      "ingress": {
+        "rules": [
+          {
+            "match": {
+              "path": {
+                "prefix": "/api"
+              }
+            },
+            "component": {
+              "name": "backend"
+            }
+          },
+          {
+            "match": {
+              "path": {
+                "prefix": "/"
+              }
+            },
+            "component": {
+              "name": "frontend"
+            }
+          }
+        ]
+      }
+    },
+    "services": [
+      {
+        "name": "backend",
+        "source_commit_hash": "b76764c738a90c9b4ea2da6f37d335e1d6b734c3",
+        "buildpacks": [
+          {
+            "id": "heroku/python",
+            "version": "4.322.5",
+            "major_version": 4,
+            "latest": true,
+            "name": "Python",
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/languages-frameworks/python/"
+          },
+          {
+            "id": "digitalocean/procfile",
+            "version": "0.1.0",
+            "latest": true,
+            "name": "Procfile",
+            "description": [
+              "Configure default run commands from the Procfile if one exists"
+            ]
+          },
+          {
+            "id": "digitalocean/custom",
+            "version": "0.2.0",
+            "latest": true,
+            "name": "Custom Build Command",
+            "description": [
+              "Run the provided custom build command"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/how-to/build-run-commands/"
+          }
+        ]
+      },
+      {
+        "name": "frontend",
+        "source_commit_hash": "b76764c738a90c9b4ea2da6f37d335e1d6b734c3",
+        "buildpacks": [
+          {
+            "id": "heroku/nodejs",
+            "version": "0.325.5",
+            "latest": true,
+            "name": "Node.js",
+            "description": [
+              "Install dependencies using NPM, PNPM or Yarn"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/languages-frameworks/nodejs/"
+          },
+          {
+            "id": "digitalocean/procfile",
+            "version": "0.1.0",
+            "latest": true,
+            "name": "Procfile",
+            "description": [
+              "Configure default run commands from the Procfile if one exists"
+            ]
+          },
+          {
+            "id": "digitalocean/custom",
+            "version": "0.2.0",
+            "latest": true,
+            "name": "Custom Build Command",
+            "description": [
+              "Run the provided custom build command"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/how-to/build-run-commands/"
+          }
+        ]
+      }
+    ],
+    "phase_last_updated_at": "2026-02-02T03:33:13Z",
+    "created_at": "2026-02-02T03:29:29Z",
+    "updated_at": "2026-02-02T03:33:16Z",
+    "cause": "app spec updated",
+    "progress": {
+      "pending_steps": 1,
+      "success_steps": 7,
+      "error_steps": 1,
+      "total_steps": 9,
+      "steps": [
+        {
+          "name": "build",
+          "status": "SUCCESS",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "SUCCESS",
+              "started_at": "2026-02-02T03:29:32.072872478Z",
+              "ended_at": "2026-02-02T03:29:33.600246909Z"
+            },
+            {
+              "name": "components",
+              "status": "SUCCESS",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "SUCCESS",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "backend",
+                  "message_base": "Building service"
+                },
+                {
+                  "name": "frontend",
+                  "status": "SUCCESS",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend",
+                  "message_base": "Building service"
+                }
+              ],
+              "started_at": "2026-02-02T03:29:33.600276003Z",
+              "ended_at": "2026-02-02T03:31:32.889670961Z"
+            }
+          ],
+          "started_at": "2026-02-02T03:29:32.072762313Z",
+          "ended_at": "2026-02-02T03:31:33.993996382Z"
+        },
+        {
+          "name": "deploy",
+          "status": "ERROR",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "SUCCESS",
+              "started_at": "2026-02-02T03:31:39.407023457Z",
+              "ended_at": "2026-02-02T03:31:41.840548903Z"
+            },
+            {
+              "name": "components",
+              "status": "ERROR",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "ERROR",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "SUCCESS",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "backend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "ERROR",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "reason": {
+                        "code": "DeployContainerExitNonZero",
+                        "message": "Your deploy failed because your container exited with a non-zero exit code."
+                      },
+                      "component_name": "backend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "reason": {
+                    "code": "DeployContainerExitNonZero",
+                    "message": "Your deploy failed because your container exited with a non-zero exit code."
+                  },
+                  "component_name": "backend"
+                },
+                {
+                  "name": "frontend",
+                  "status": "SUCCESS",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "SUCCESS",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "SUCCESS",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend"
+                }
+              ],
+              "started_at": "2026-02-02T03:31:41.840578207Z",
+              "ended_at": "2026-02-02T03:33:01.117487039Z",
+              "reason": {
+                "code": "DeployContainerExitNonZero",
+                "message": "Your deploy failed because your container exited with a non-zero exit code."
+              }
+            },
+            {
+              "name": "finalize",
+              "status": "PENDING",
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            }
+          ],
+          "started_at": "2026-02-02T03:31:39.406994794Z",
+          "ended_at": "2026-02-02T03:33:02.40187082Z",
+          "reason": {
+            "code": "DeployContainerExitNonZero",
+            "message": "Your deploy failed because your container exited with a non-zero exit code."
+          }
+        }
+      ],
+      "summary_steps": [
+        {
+          "name": "deploy.components.backend.wait",
+          "status": "ERROR",
+          "started_at": "0001-01-01T00:00:00Z",
+          "ended_at": "0001-01-01T00:00:00Z",
+          "reason": {
+            "code": "DeployContainerExitNonZero",
+            "message": "Your deploy failed because your container exited with a non-zero exit code."
+          },
+          "component_name": "backend",
+          "message_base": "Waiting for service"
+        }
+      ]
+    },
+    "phase": "ERROR",
+    "tier_slug": "basic",
+    "previous_deployment_id": "776cd7a3-99bb-4d8e-be5e-d4ce6939a7eb",
+    "cause_details": {
+      "digitalocean_user_action": {
+        "user": {
+          "uuid": "83f0f261-2d6f-46c8-81d2-e1b6c8954bb2",
+          "email": "orelmeister@gmail.com",
+          "full_name": "Orel David"
+        },
+        "name": "UPDATE_SPEC"
+      },
+      "type": "MANUAL"
+    },
+    "timing": {
+      "pending": "3.072872478s",
+      "build_total": "121.921123904s",
+      "build_billable": "98.929276242s",
+      "components": [
+        {
+          "name": "backend",
+          "build_billable": "43.490206306s"
+        },
+        {
+          "name": "frontend",
+          "build_billable": "55.439069936s"
+        }
+      ]
+    }
+  },
+  {
+    "id": "776cd7a3-99bb-4d8e-be5e-d4ce6939a7eb",
+    "spec": {
+      "name": "skyrate",
+      "services": [
+        {
+          "name": "backend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "pip install -r requirements.txt",
+          "run_command": "uvicorn app.main:app --host 0.0.0.0 --port 8000",
+          "source_dir": "backend",
+          "environment_slug": "python",
+          "envs": [
+            {
+              "key": "SECRET_KEY",
+              "value": "EV[1:GjDW4ITL/QisxLGxslU7N3sJ/Jk15Z0m:z0+NLNPcoMoPCwhn3ZuYBQ==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "DATABASE_URL",
+              "value": "sqlite:///./skyrate.db",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "OPENAI_API_KEY",
+              "value": "EV[1:/nKzEEqU0xwlHzI3MsJU2uUyCBBnYI/G:Oag1AsgSVxyVQwYJop5fgw==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_SECRET_KEY",
+              "value": "EV[1:gapxQ7bUw0G9x4MVs43KYehkyBCKonsg:Qjw1VaAnL809XwnDoLTaUQ==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_WEBHOOK_SECRET",
+              "value": "EV[1:SZb5l4F5yifQEK4Zq/eVIUDjKw8u7yKp:qwFr/sOma6qBtOldVxM0jw==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 8000
+        },
+        {
+          "name": "frontend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "npm install \u0026\u0026 npm run build",
+          "run_command": "npm start",
+          "source_dir": "frontend",
+          "environment_slug": "node-js",
+          "envs": [
+            {
+              "key": "NEXT_PUBLIC_API_URL",
+              "value": "${backend.PUBLIC_URL}",
+              "scope": "RUN_TIME"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 3000
+        }
+      ],
+      "region": "fra",
+      "ingress": {
+        "rules": [
+          {
+            "match": {
+              "path": {
+                "prefix": "/api"
+              }
+            },
+            "component": {
+              "name": "backend"
+            }
+          },
+          {
+            "match": {
+              "path": {
+                "prefix": "/"
+              }
+            },
+            "component": {
+              "name": "frontend"
+            }
+          }
+        ]
+      },
+      "features": [
+        "buildpack-stack=ubuntu-22"
+      ]
+    },
+    "services": [
+      {
+        "name": "backend",
+        "source_commit_hash": "b76764c738a90c9b4ea2da6f37d335e1d6b734c3"
+      },
+      {
+        "name": "frontend",
+        "source_commit_hash": "b76764c738a90c9b4ea2da6f37d335e1d6b734c3"
+      }
+    ],
+    "phase_last_updated_at": "2026-02-02T03:29:39Z",
+    "created_at": "2026-02-02T03:29:25Z",
+    "updated_at": "2026-02-02T03:29:47Z",
+    "cause": "commit b76764c pushed to github.com/orelmeister/skyrate/tree/main",
+    "progress": {
+      "pending_steps": 9,
+      "total_steps": 9,
+      "steps": [
+        {
+          "name": "build",
+          "status": "PENDING",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "PENDING",
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "components",
+              "status": "PENDING",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "PENDING",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "backend",
+                  "message_base": "Building service"
+                },
+                {
+                  "name": "frontend",
+                  "status": "PENDING",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend",
+                  "message_base": "Building service"
+                }
+              ],
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            }
+          ],
+          "started_at": "0001-01-01T00:00:00Z",
+          "ended_at": "0001-01-01T00:00:00Z"
+        },
+        {
+          "name": "deploy",
+          "status": "PENDING",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "PENDING",
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "components",
+              "status": "PENDING",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "PENDING",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "PENDING",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "backend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "PENDING",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "backend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "backend"
+                },
+                {
+                  "name": "frontend",
+                  "status": "PENDING",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "PENDING",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "PENDING",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend"
+                }
+              ],
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "finalize",
+              "status": "PENDING",
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            }
+          ],
+          "started_at": "0001-01-01T00:00:00Z",
+          "ended_at": "0001-01-01T00:00:00Z"
+        }
+      ]
+    },
+    "phase": "CANCELED",
+    "tier_slug": "basic",
+    "previous_deployment_id": "7dc21348-0a67-4bb5-90d2-1ff6f05762bb",
+    "cause_details": {
+      "git_push": {
+        "github": {
+          "repo": "orelmeister/skyrate",
+          "branch": "main"
+        },
+        "username": "orelmeister",
+        "commit_sha": "b76764c738a90c9b4ea2da6f37d335e1d6b734c3",
+        "commit_message": "Add ENVIRONMENT and DEBUG env vars for production"
+      },
+      "type": "DEPLOY_ON_PUSH"
+    },
+    "timing": {
+      "pending": "4s"
+    }
+  },
+  {
+    "id": "7dc21348-0a67-4bb5-90d2-1ff6f05762bb",
+    "spec": {
+      "name": "skyrate",
+      "services": [
+        {
+          "name": "backend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "pip install -r requirements.txt",
+          "run_command": "uvicorn app.main:app --host 0.0.0.0 --port 8000",
+          "source_dir": "backend",
+          "environment_slug": "python",
+          "envs": [
+            {
+              "key": "SECRET_KEY",
+              "value": "EV[1:GjDW4ITL/QisxLGxslU7N3sJ/Jk15Z0m:z0+NLNPcoMoPCwhn3ZuYBQ==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "DATABASE_URL",
+              "value": "sqlite:///./skyrate.db",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "OPENAI_API_KEY",
+              "value": "EV[1:/nKzEEqU0xwlHzI3MsJU2uUyCBBnYI/G:Oag1AsgSVxyVQwYJop5fgw==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_SECRET_KEY",
+              "value": "EV[1:gapxQ7bUw0G9x4MVs43KYehkyBCKonsg:Qjw1VaAnL809XwnDoLTaUQ==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_WEBHOOK_SECRET",
+              "value": "EV[1:SZb5l4F5yifQEK4Zq/eVIUDjKw8u7yKp:qwFr/sOma6qBtOldVxM0jw==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 8000
+        },
+        {
+          "name": "frontend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "npm install \u0026\u0026 npm run build",
+          "run_command": "npm start",
+          "source_dir": "frontend",
+          "environment_slug": "node-js",
+          "envs": [
+            {
+              "key": "NEXT_PUBLIC_API_URL",
+              "value": "${backend.PUBLIC_URL}",
+              "scope": "RUN_TIME"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 3000
+        }
+      ],
+      "region": "fra",
+      "ingress": {
+        "rules": [
+          {
+            "match": {
+              "path": {
+                "prefix": "/api"
+              }
+            },
+            "component": {
+              "name": "backend"
+            }
+          },
+          {
+            "match": {
+              "path": {
+                "prefix": "/"
+              }
+            },
+            "component": {
+              "name": "frontend"
+            }
+          }
+        ]
+      },
+      "features": [
+        "buildpack-stack=ubuntu-22"
+      ]
+    },
+    "services": [
+      {
+        "name": "backend",
+        "source_commit_hash": "045cdb6f6dafa6113bb47d0909b033d0ee46f7b4",
+        "buildpacks": [
+          {
+            "id": "heroku/python",
+            "version": "4.322.5",
+            "major_version": 4,
+            "latest": true,
+            "name": "Python",
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/languages-frameworks/python/"
+          },
+          {
+            "id": "digitalocean/procfile",
+            "version": "0.1.0",
+            "latest": true,
+            "name": "Procfile",
+            "description": [
+              "Configure default run commands from the Procfile if one exists"
+            ]
+          },
+          {
+            "id": "digitalocean/custom",
+            "version": "0.2.0",
+            "latest": true,
+            "name": "Custom Build Command",
+            "description": [
+              "Run the provided custom build command"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/how-to/build-run-commands/"
+          }
+        ]
+      },
+      {
+        "name": "frontend",
+        "source_commit_hash": "045cdb6f6dafa6113bb47d0909b033d0ee46f7b4",
+        "buildpacks": [
+          {
+            "id": "heroku/nodejs",
+            "version": "0.325.5",
+            "latest": true,
+            "name": "Node.js",
+            "description": [
+              "Install dependencies using NPM, PNPM or Yarn"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/languages-frameworks/nodejs/"
+          },
+          {
+            "id": "digitalocean/procfile",
+            "version": "0.1.0",
+            "latest": true,
+            "name": "Procfile",
+            "description": [
+              "Configure default run commands from the Procfile if one exists"
+            ]
+          },
+          {
+            "id": "digitalocean/custom",
+            "version": "0.2.0",
+            "latest": true,
+            "name": "Custom Build Command",
+            "description": [
+              "Run the provided custom build command"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/how-to/build-run-commands/"
+          }
+        ]
+      }
+    ],
+    "phase_last_updated_at": "2026-02-02T03:27:46Z",
+    "created_at": "2026-02-02T03:24:01Z",
+    "updated_at": "2026-02-02T03:27:50Z",
+    "cause": "commit 045cdb6 pushed to github.com/orelmeister/skyrate/tree/main",
+    "progress": {
+      "pending_steps": 1,
+      "success_steps": 7,
+      "error_steps": 1,
+      "total_steps": 9,
+      "steps": [
+        {
+          "name": "build",
+          "status": "SUCCESS",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "SUCCESS",
+              "started_at": "2026-02-02T03:24:04.851773984Z",
+              "ended_at": "2026-02-02T03:24:05.659598223Z"
+            },
+            {
+              "name": "components",
+              "status": "SUCCESS",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "SUCCESS",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "backend",
+                  "message_base": "Building service"
+                },
+                {
+                  "name": "frontend",
+                  "status": "SUCCESS",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend",
+                  "message_base": "Building service"
+                }
+              ],
+              "started_at": "2026-02-02T03:24:05.659642135Z",
+              "ended_at": "2026-02-02T03:25:55.476924797Z"
+            }
+          ],
+          "started_at": "2026-02-02T03:24:04.85167519Z",
+          "ended_at": "2026-02-02T03:25:56.602416856Z"
+        },
+        {
+          "name": "deploy",
+          "status": "ERROR",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "SUCCESS",
+              "started_at": "2026-02-02T03:26:02.113052732Z",
+              "ended_at": "2026-02-02T03:26:04.16497139Z"
+            },
+            {
+              "name": "components",
+              "status": "ERROR",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "ERROR",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "SUCCESS",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "backend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "ERROR",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "reason": {
+                        "code": "DeployContainerExitNonZero",
+                        "message": "Your deploy failed because your container exited with a non-zero exit code."
+                      },
+                      "component_name": "backend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "reason": {
+                    "code": "DeployContainerExitNonZero",
+                    "message": "Your deploy failed because your container exited with a non-zero exit code."
+                  },
+                  "component_name": "backend"
+                },
+                {
+                  "name": "frontend",
+                  "status": "SUCCESS",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "SUCCESS",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "SUCCESS",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend"
+                }
+              ],
+              "started_at": "2026-02-02T03:26:04.165019579Z",
+              "ended_at": "2026-02-02T03:27:34.728354881Z",
+              "reason": {
+                "code": "DeployContainerExitNonZero",
+                "message": "Your deploy failed because your container exited with a non-zero exit code."
+              }
+            },
+            {
+              "name": "finalize",
+              "status": "PENDING",
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            }
+          ],
+          "started_at": "2026-02-02T03:26:02.113027124Z",
+          "ended_at": "2026-02-02T03:27:35.899297246Z",
+          "reason": {
+            "code": "DeployContainerExitNonZero",
+            "message": "Your deploy failed because your container exited with a non-zero exit code."
+          }
+        }
+      ],
+      "summary_steps": [
+        {
+          "name": "deploy.components.backend.wait",
+          "status": "ERROR",
+          "started_at": "0001-01-01T00:00:00Z",
+          "ended_at": "0001-01-01T00:00:00Z",
+          "reason": {
+            "code": "DeployContainerExitNonZero",
+            "message": "Your deploy failed because your container exited with a non-zero exit code."
+          },
+          "component_name": "backend",
+          "message_base": "Waiting for service"
+        }
+      ]
+    },
+    "phase": "ERROR",
+    "tier_slug": "basic",
+    "previous_deployment_id": "dc72983b-3dc2-483c-88f2-1c3f32a3d533",
+    "cause_details": {
+      "git_push": {
+        "github": {
+          "repo": "orelmeister/skyrate",
+          "branch": "main"
+        },
+        "username": "orelmeister",
+        "commit_sha": "045cdb6f6dafa6113bb47d0909b033d0ee46f7b4",
+        "commit_message": "Fix backend build: Use Python 3.11.8 and remove streamlit dependency"
+      },
+      "type": "DEPLOY_ON_PUSH"
+    },
+    "timing": {
+      "pending": "3.851773984s",
+      "build_total": "111.750642872s",
+      "build_billable": "97.705528312s",
+      "components": [
+        {
+          "name": "backend",
+          "build_billable": "41.788445785s"
+        },
+        {
+          "name": "frontend",
+          "build_billable": "55.917082527s"
+        }
+      ]
+    }
+  },
+  {
+    "id": "dc72983b-3dc2-483c-88f2-1c3f32a3d533",
+    "spec": {
+      "name": "skyrate",
+      "services": [
+        {
+          "name": "backend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "pip install -r requirements.txt",
+          "run_command": "uvicorn app.main:app --host 0.0.0.0 --port 8000",
+          "source_dir": "backend",
+          "environment_slug": "python",
+          "envs": [
+            {
+              "key": "SECRET_KEY",
+              "value": "EV[1:GjDW4ITL/QisxLGxslU7N3sJ/Jk15Z0m:z0+NLNPcoMoPCwhn3ZuYBQ==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "DATABASE_URL",
+              "value": "sqlite:///./skyrate.db",
+              "scope": "RUN_TIME"
+            },
+            {
+              "key": "OPENAI_API_KEY",
+              "value": "EV[1:/nKzEEqU0xwlHzI3MsJU2uUyCBBnYI/G:Oag1AsgSVxyVQwYJop5fgw==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_SECRET_KEY",
+              "value": "EV[1:gapxQ7bUw0G9x4MVs43KYehkyBCKonsg:Qjw1VaAnL809XwnDoLTaUQ==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_WEBHOOK_SECRET",
+              "value": "EV[1:SZb5l4F5yifQEK4Zq/eVIUDjKw8u7yKp:qwFr/sOma6qBtOldVxM0jw==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 8000
+        },
+        {
+          "name": "frontend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "npm install \u0026\u0026 npm run build",
+          "run_command": "npm start",
+          "source_dir": "frontend",
+          "environment_slug": "node-js",
+          "envs": [
+            {
+              "key": "NEXT_PUBLIC_API_URL",
+              "value": "${backend.PUBLIC_URL}",
+              "scope": "RUN_TIME"
+            }
+          ],
+          "instance_size_slug": "apps-s-1vcpu-0.5gb",
+          "instance_count": 1,
+          "http_port": 3000
+        }
+      ],
+      "region": "fra",
+      "ingress": {
+        "rules": [
+          {
+            "match": {
+              "path": {
+                "prefix": "/api"
+              }
+            },
+            "component": {
+              "name": "backend"
+            }
+          },
+          {
+            "match": {
+              "path": {
+                "prefix": "/"
+              }
+            },
+            "component": {
+              "name": "frontend"
+            }
+          }
+        ]
+      },
+      "features": [
+        "buildpack-stack=ubuntu-22"
+      ]
+    },
+    "services": [
+      {
+        "name": "backend",
+        "source_commit_hash": "d77f14e8cc555cffe882e2ebaf7656b73b8e7d09",
+        "buildpacks": [
+          {
+            "id": "heroku/python",
+            "version": "4.322.5",
+            "major_version": 4,
+            "latest": true,
+            "name": "Python",
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/languages-frameworks/python/"
+          },
+          {
+            "id": "digitalocean/procfile",
+            "version": "0.1.0",
+            "latest": true,
+            "name": "Procfile",
+            "description": [
+              "Configure default run commands from the Procfile if one exists"
+            ]
+          },
+          {
+            "id": "digitalocean/custom",
+            "version": "0.2.0",
+            "latest": true,
+            "name": "Custom Build Command",
+            "description": [
+              "Run the provided custom build command"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/how-to/build-run-commands/"
+          }
+        ]
+      },
+      {
+        "name": "frontend",
+        "source_commit_hash": "d77f14e8cc555cffe882e2ebaf7656b73b8e7d09",
+        "buildpacks": [
+          {
+            "id": "heroku/nodejs",
+            "version": "0.325.5",
+            "latest": true,
+            "name": "Node.js",
+            "description": [
+              "Install dependencies using NPM, PNPM or Yarn"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/languages-frameworks/nodejs/"
+          },
+          {
+            "id": "digitalocean/procfile",
+            "version": "0.1.0",
+            "latest": true,
+            "name": "Procfile",
+            "description": [
+              "Configure default run commands from the Procfile if one exists"
+            ]
+          },
+          {
+            "id": "digitalocean/custom",
+            "version": "0.2.0",
+            "latest": true,
+            "name": "Custom Build Command",
+            "description": [
+              "Run the provided custom build command"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/how-to/build-run-commands/"
+          }
+        ]
+      }
+    ],
+    "phase_last_updated_at": "2026-02-02T03:18:49Z",
+    "created_at": "2026-02-02T03:16:11Z",
+    "updated_at": "2026-02-02T03:18:53Z",
+    "cause": "initial deployment",
+    "progress": {
+      "pending_steps": 6,
+      "success_steps": 2,
+      "error_steps": 1,
+      "total_steps": 9,
+      "steps": [
+        {
+          "name": "build",
+          "status": "ERROR",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "SUCCESS",
+              "started_at": "2026-02-02T03:16:17.893619583Z",
+              "ended_at": "2026-02-02T03:16:40.226285847Z"
+            },
+            {
+              "name": "components",
+              "status": "ERROR",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "ERROR",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "reason": {
+                    "code": "BuildJobExitNonZero",
+                    "message": "Your build job failed because it returned a non-zero exit code. See the logs for details."
+                  },
+                  "component_name": "backend",
+                  "message_base": "Building service"
+                },
+                {
+                  "name": "frontend",
+                  "status": "SUCCESS",
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend",
+                  "message_base": "Building service"
+                }
+              ],
+              "started_at": "2026-02-02T03:16:40.226316073Z",
+              "ended_at": "2026-02-02T03:18:42.526219616Z",
+              "reason": {
+                "code": "BuildJobExitNonZero",
+                "message": "Your build job failed because it returned a non-zero exit code. See the logs for details."
+              }
+            }
+          ],
+          "started_at": "2026-02-02T03:16:17.893544624Z",
+          "ended_at": "2026-02-02T03:18:44.251255746Z",
+          "reason": {
+            "code": "BuildJobExitNonZero",
+            "message": "Your build job failed because it returned a non-zero exit code. See the logs for details."
+          }
+        },
+        {
+          "name": "deploy",
+          "status": "PENDING",
+          "steps": [
+            {
+              "name": "initialize",
+              "status": "PENDING",
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "components",
+              "status": "PENDING",
+              "steps": [
+                {
+                  "name": "backend",
+                  "status": "PENDING",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "PENDING",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "backend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "PENDING",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "backend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "backend"
+                },
+                {
+                  "name": "frontend",
+                  "status": "PENDING",
+                  "steps": [
+                    {
+                      "name": "deploy",
+                      "status": "PENDING",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Deploying service"
+                    },
+                    {
+                      "name": "wait",
+                      "status": "PENDING",
+                      "started_at": "0001-01-01T00:00:00Z",
+                      "ended_at": "0001-01-01T00:00:00Z",
+                      "component_name": "frontend",
+                      "message_base": "Waiting for service"
+                    }
+                  ],
+                  "started_at": "0001-01-01T00:00:00Z",
+                  "ended_at": "0001-01-01T00:00:00Z",
+                  "component_name": "frontend"
+                }
+              ],
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "finalize",
+              "status": "PENDING",
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            }
+          ],
+          "started_at": "0001-01-01T00:00:00Z",
+          "ended_at": "0001-01-01T00:00:00Z"
+        }
+      ],
+      "summary_steps": [
+        {
+          "name": "build.components.backend",
+          "status": "ERROR",
+          "started_at": "0001-01-01T00:00:00Z",
+          "ended_at": "0001-01-01T00:00:00Z",
+          "reason": {
+            "code": "BuildJobExitNonZero",
+            "message": "Your build job failed because it returned a non-zero exit code. See the logs for details."
+          },
+          "component_name": "backend",
+          "message_base": "Building service"
+        }
+      ]
+    },
+    "phase": "ERROR",
+    "tier_slug": "basic",
+    "cause_details": {
+      "digitalocean_user_action": {
+        "user": {
+          "uuid": "83f0f261-2d6f-46c8-81d2-e1b6c8954bb2",
+          "email": "orelmeister@gmail.com",
+          "full_name": "Orel David"
+        },
+        "name": "CREATE_DEPLOYMENT"
+      },
+      "type": "MANUAL"
+    },
+    "timing": {
+      "pending": "6.893619583s",
+      "build_total": "146.357636163s",
+      "build_billable": "159.786100458s",
+      "components": [
+        {
+          "name": "backend",
+          "build_billable": "105.254556096s"
+        },
+        {
+          "name": "frontend",
+          "build_billable": "54.531544362s"
+        }
+      ]
+    }
+  }
+]

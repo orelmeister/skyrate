@@ -54,7 +54,7 @@ services:
     http_port: 3000
     envs:
       - key: NEXT_PUBLIC_API_URL
-        scope: RUN_TIME
-        value: ${backend.PUBLIC_URL}
+        scope: BUILD_TIME
+        value: https://skyrate-unox7.ondigitalocean.app/api
     routes:
       - path: /
