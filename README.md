@@ -223,6 +223,25 @@ npm run dev
 
 ---
 
+## 🎮 Demo Access
+
+### Live Demo on Render
+The application is deployed on Render for partner testing:
+- **Frontend**: https://skyrate-frontend.onrender.com
+- **Backend API**: https://skyrate-backend.onrender.com
+
+### Demo Accounts
+Use these credentials to test the application:
+
+| Role | Email | Password |
+|------|-------|----------|
+| **Consultant** | test_consultant@example.com | TestPass123! |
+| **Vendor** | test_vendor@example.com | TestPass123! |
+
+> ⚠️ **Note**: These demo accounts are for testing only. Credentials will be removed for production deployment.
+
+---
+
 ## 📝 Environment Variables
 
 ### Frontend (.env.local)

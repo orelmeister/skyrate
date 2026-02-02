@@ -202,11 +202,13 @@ export default function SignInPage() {
             </div>
           </div>
 
-          {/* Demo Hint */}
-          <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-xl text-center">
-            <p className="text-sm text-amber-800">
-              <span className="font-medium">Demo Account:</span> test_consultant@example.com / TestPass123!
-            </p>
+          {/* Demo Accounts */}
+          <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+            <p className="text-sm font-medium text-amber-900 mb-2 text-center">Demo Accounts</p>
+            <div className="space-y-1 text-sm text-amber-800">
+              <p><span className="font-medium">Consultant:</span> test_consultant@example.com / TestPass123!</p>
+              <p><span className="font-medium">Vendor:</span> test_vendor@example.com / TestPass123!</p>
+            </div>
           </div>
         </div>
       </div>
