@@ -558,7 +558,7 @@ async def get_470_leads(
     Get Form 470 postings for lead generation.
     This is the CORE SALES WORKFLOW for vendors - finding schools seeking services.
     
-    Key differentiator vs Query Bob: We support manufacturer filtering!
+    Key differentiator: Manufacturer filtering - exclusive to SkyRate!
     
     Args:
         year: Optional funding year filter (defaults to current/next year)
@@ -633,7 +633,7 @@ async def get_470_by_manufacturer(
 ):
     """
     Get Form 470 postings that mention a specific manufacturer.
-    KEY DIFFERENTIATOR vs Query Bob - they don't have this!
+    KEY DIFFERENTIATOR: Manufacturer filtering - only available in SkyRate!
     
     Perfect for vendors representing specific product lines:
     - Cisco, Cisco Systems

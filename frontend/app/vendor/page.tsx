@@ -1070,7 +1070,7 @@ export default function VendorPortalPage() {
                 <div className="text-right">
                   <div className="text-sm text-orange-100">Key Differentiator</div>
                   <div className="text-xl font-bold">Manufacturer Filtering</div>
-                  <div className="text-sm text-orange-100">Query Bob doesn't have this!</div>
+                  <div className="text-sm text-orange-100">Exclusive to SkyRate!</div>
                 </div>
               </div>
             </div>

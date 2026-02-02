@@ -1667,7 +1667,7 @@ class USACDataClient:
     ) -> Dict[str, Any]:
         """
         Get Form 470 postings that mention a specific manufacturer.
-        This is a KEY DIFFERENTIATOR vs Query Bob - they don't have this!
+        KEY DIFFERENTIATOR: Manufacturer filtering - exclusive to SkyRate!
         
         Useful for vendors who represent specific product lines (Cisco, Meraki, Aruba, etc.)
         

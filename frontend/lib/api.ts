@@ -1119,7 +1119,7 @@ class ApiClient {
 
   /**
    * Get Form 470 leads (core sales workflow)
-   * KEY DIFFERENTIATOR: Supports manufacturer filtering (Query Bob doesn't have this!)
+   * KEY DIFFERENTIATOR: Supports manufacturer filtering - exclusive to SkyRate!
    */
   async get470Leads(filters: {
     year?: number;
@@ -1153,7 +1153,7 @@ class ApiClient {
 
   /**
    * Get Form 470 leads by manufacturer - KEY DIFFERENTIATOR!
-   * This is what Query Bob doesn't have
+   * Exclusive manufacturer filtering - only available in SkyRate
    */
   async get470ByManufacturer(manufacturer: string, year?: number, state?: string, limit: number = 500): Promise<ApiResponse<Form470LeadsResponse>> {
     const params = new URLSearchParams();
