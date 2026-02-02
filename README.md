@@ -272,6 +272,9 @@ USAC_API_TOKEN=optional-for-higher-rate-limits
 | `/api/v1/consultant/schools` | GET | List consultant's schools |
 | `/api/v1/consultant/schools` | POST | Add school to portfolio |
 | `/api/v1/consultant/schools/{ben}` | DELETE | Remove school |
+| `/api/v1/consultant/schools/{ben}/budget` | GET | Get C2 budget data |
+| `/api/v1/consultant/schools/{ben}/comprehensive` | GET | Get comprehensive funding data |
+| `/api/v1/consultant/search/institutions` | GET | Search any US institution |
 | `/api/v1/consultant/denials` | GET | Get denials for portfolio |
 | `/api/v1/consultant/denials/{id}/analyze` | POST | AI analysis of denial |
 
@@ -339,6 +342,8 @@ SkyRate AI integrates with official USAC Open Data APIs:
 - [x] AI-powered appeal generation
 - [x] Vendor portal with Form 470 leads
 - [x] Competitor analysis
+- [x] Comprehensive budget display
+- [x] National institution search
 - [ ] Email alerts for Form 470 postings
 - [ ] Automated USAC status polling
 - [ ] Mobile app
