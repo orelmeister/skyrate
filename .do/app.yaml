@@ -21,6 +21,12 @@ services:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: sqlite:///./skyrate.db
+      - key: ENVIRONMENT
+        scope: RUN_TIME
+        value: production
+      - key: DEBUG
+        scope: RUN_TIME
+        value: "false"
       - key: OPENAI_API_KEY
         scope: RUN_TIME
         type: SECRET
