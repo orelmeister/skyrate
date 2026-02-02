@@ -58,7 +58,7 @@ Whether you're a **consultant** managing hundreds of schools or a **vendor** cha
 
 #### AI Appeal Generation
 - Generate **professional, USAC-compliant appeal letters** in seconds
-- Uses GPT-4 trained on E-Rate regulations and FCC orders
+- Uses advanced AI trained on E-Rate regulations and FCC orders
 - **Cite relevant FCC orders** automatically
 - Interactive chat interface for refining appeals
 
@@ -118,7 +118,7 @@ Whether you're a **consultant** managing hundreds of schools or a **vendor** cha
 | **Backend** | FastAPI, Python 3.12, SQLAlchemy |
 | **Database** | SQLite (dev) / PostgreSQL (prod) |
 | **State Management** | Zustand |
-| **AI/ML** | OpenAI GPT-4, Custom prompts for E-Rate |
+| **AI/ML** | Advanced AI models, Custom prompts for E-Rate |
 | **Data Source** | USAC Open Data Portal (Socrata API) |
 | **Authentication** | Custom JWT with bcrypt |
 
@@ -153,7 +153,7 @@ skyrate/
 │   │   │   └── query.py      # Natural language search
 │   │   ├── models/           # SQLAlchemy models
 │   │   ├── services/         # Business logic
-│   │   │   ├── ai_service.py      # GPT-4 integration
+│   │   │   ├── ai_service.py      # AI model integration
 │   │   │   ├── usac_service.py    # USAC API client
 │   │   │   ├── denial_service.py  # Denial analysis
 │   │   │   └── appeals_service.py # Appeal generation
@@ -196,7 +196,7 @@ pip install -r requirements.txt
 
 # Create .env file
 echo "SECRET_KEY=your-secret-key-here" > .env
-echo "OPENAI_API_KEY=your-openai-key" >> .env
+echo "AI_API_KEY=your-ai-api-key" >> .env
 
 # Run the server
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -247,7 +247,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 ### Backend (.env)
 ```env
 SECRET_KEY=your-secret-key-here
-OPENAI_API_KEY=your-openai-api-key
+AI_API_KEY=your-ai-api-key
 DATABASE_URL=sqlite:///./skyrate.db  # Optional, defaults to SQLite
 USAC_API_TOKEN=optional-for-higher-rate-limits
 ```
@@ -318,7 +318,7 @@ SkyRate AI integrates with official USAC Open Data APIs:
 | Plan | Price | Best For |
 |------|-------|----------|
 | **Consultant** | $300/month or $3,000/year | E-Rate consultants managing school portfolios |
-| **Vendor** | $500/month or $5,000/year | E-Rate vendors tracking leads and competitors |
+| **Vendor** | $200/month or $2,000/year | E-Rate vendors tracking leads and competitors |
 
 ✅ **14-day free trial** included with all plans
 

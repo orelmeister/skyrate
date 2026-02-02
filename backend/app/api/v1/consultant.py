@@ -220,6 +220,7 @@ async def import_schools_from_crn(
     """
     Auto-import all schools from the consultant's CRN into their portfolio.
     Skips schools that are already added.
+    Automatically syncs status data from USAC after import.
     """
     if not profile.crn:
         raise HTTPException(
@@ -239,6 +240,7 @@ async def import_schools_from_crn(
     
     imported = []
     skipped = []
+    new_schools = []
     
     for school in result['schools']:
         ben = school['ben']
@@ -258,6 +260,7 @@ async def import_schools_from_crn(
             notes=f"Auto-imported from CRN {profile.crn}",
         )
         db.add(new_school)
+        new_schools.append(new_school)
         imported.append({
             'ben': ben,
             'school_name': school.get('organization_name'),
@@ -266,13 +269,24 @@ async def import_schools_from_crn(
     
     db.commit()
     
+    # IMPORTANT: Sync all schools with USAC data (status, funding, etc.)
+    # This ensures schools have proper status/color/count info in the database
+    if new_schools:
+        all_schools = db.query(ConsultantSchool).filter(
+            ConsultantSchool.consultant_profile_id == profile.id
+        ).all()
+        sync_result = sync_schools_with_usac(all_schools, db)
+    else:
+        sync_result = {"synced": 0, "errors": 0}
+    
     return {
         "success": True,
         "crn": profile.crn,
         "imported_count": len(imported),
         "skipped_count": len(skipped),
         "imported": imported,
-        "skipped": skipped
+        "skipped": skipped,
+        "sync_result": sync_result
     }
 
 
@@ -896,12 +910,18 @@ async def get_denied_applications(
 @router.get("/schools")
 async def list_schools(
     include_usac_data: bool = Query(False, description="Fetch fresh data from USAC for each school"),
+    auto_sync: bool = Query(True, description="Auto-sync schools with Unknown status or never synced"),
     profile: ConsultantProfile = Depends(get_consultant_profile),
     db: Session = Depends(get_db)
 ):
     """
     List all schools in consultant's portfolio.
-    If include_usac_data=true, fetches fresh school name, state, and status from USAC.
+    
+    Auto-sync behavior (auto_sync=true by default):
+    - Automatically syncs schools that have status='Unknown' or have never been synced
+    - Ensures schools always have up-to-date status when consultant logs in
+    
+    If include_usac_data=true, forces fresh sync for ALL schools regardless of status.
     OPTIMIZED: Uses batch query to fetch all schools at once instead of one-by-one.
     """
     schools = db.query(ConsultantSchool).filter(
@@ -910,7 +930,21 @@ async def list_schools(
     
     school_list = []
     
-    if include_usac_data and schools:
+    # Determine if we need to sync from USAC
+    # Auto-sync schools that have status='Unknown' or have never been synced
+    needs_sync = include_usac_data  # Force sync if explicitly requested
+    
+    if not needs_sync and auto_sync and schools:
+        # Check if any schools need syncing (Unknown status or never synced)
+        schools_needing_sync = [
+            s for s in schools 
+            if not s.status or s.status == 'Unknown' or s.last_synced is None
+        ]
+        if schools_needing_sync:
+            needs_sync = True
+            print(f"Auto-sync triggered: {len(schools_needing_sync)} schools need status update")
+    
+    if needs_sync and schools:
         usac_service = get_usac_service()
         
         # OPTIMIZATION: Fetch ALL applications for ALL BENs in a SINGLE batch query
@@ -1010,13 +1044,16 @@ async def list_schools(
         
         # Commit any updates to DB
         db.commit()
+        print(f"Synced {len(school_list)} schools from USAC and saved to database")
     else:
+        # No sync needed - return cached data from database
         school_list = [s.to_dict() for s in schools]
     
     return {
         "success": True,
         "count": len(school_list),
-        "schools": school_list
+        "schools": school_list,
+        "synced": needs_sync if schools else False
     }
 
 
@@ -1039,32 +1076,84 @@ async def add_school(
             detail=f"School with BEN {data.ben} already in portfolio"
         )
     
-    # Try to fetch school info from USAC if not provided
+    # Try to fetch school info from USAC
     school_name = data.school_name
     state = data.state
+    school_status = "Unknown"
+    status_color = "gray"
+    applications_count = 0
+    latest_year = None
     
-    if not school_name or not state:
-        try:
-            usac_service = get_usac_service()
-            usac_data = usac_service.fetch_form_471(
-                filters={"ben": data.ben},
-                limit=1
+    try:
+        usac_service = get_usac_service()
+        usac_data = usac_service.fetch_form_471(
+            filters={"ben": data.ben},
+            limit=50  # Get more records to determine status
+        )
+        if usac_data:
+            # Sort by funding year desc
+            sorted_apps = sorted(
+                usac_data, 
+                key=lambda x: int(x.get("funding_year", 0) or 0), 
+                reverse=True
             )
-            if usac_data:
-                record = usac_data[0]
-                if not school_name:
-                    school_name = record.get("organization_name") or record.get("billed_entity_name")
-                if not state:
-                    state = record.get("physical_state") or record.get("state")
-        except Exception:
-            pass  # Use provided data if USAC lookup fails
+            
+            # Get school info from most recent app
+            latest = sorted_apps[0]
+            if not school_name:
+                school_name = latest.get("organization_name") or latest.get("billed_entity_name") or latest.get("applicant_name")
+            if not state:
+                state = latest.get("physical_state") or latest.get("state")
+            
+            latest_year = latest.get("funding_year")
+            applications_count = len(usac_data)
+            
+            # Determine status from most recent year's applications
+            latest_year_apps = [a for a in sorted_apps if a.get("funding_year") == latest_year]
+            statuses = [
+                (a.get("form_471_frn_status_name") or a.get("application_status") or "").lower() 
+                for a in latest_year_apps
+            ]
+            
+            has_denied = any("denied" in s for s in statuses)
+            has_funded = any(s in ["funded", "committed"] for s in statuses)
+            has_pending = any(s in ["pending", "under review", "in review", "wave ready", "certified", "submitted"] for s in statuses)
+            has_unfunded = any(s in ["unfunded", "cancelled", "not funded"] for s in statuses)
+            
+            if has_denied:
+                school_status = "Has Denials"
+                status_color = "red"
+            elif has_unfunded:
+                school_status = "Unfunded"
+                status_color = "red"
+            elif has_funded:
+                school_status = "Funded"
+                status_color = "green"
+            elif has_pending:
+                school_status = "Pending"
+                status_color = "yellow"
+            else:
+                actual = latest.get("form_471_frn_status_name") or latest.get("application_status")
+                school_status = actual if actual else "No Applications"
+                status_color = "gray"
+        else:
+            school_status = "No Applications"
+            status_color = "gray"
+    except Exception as e:
+        print(f"Error fetching USAC data for BEN {data.ben}: {e}")
+        # Continue with defaults if USAC lookup fails
     
     school = ConsultantSchool(
         consultant_profile_id=profile.id,
         ben=data.ben,
         frn=data.frn,
-        school_name=school_name,
+        school_name=school_name or "Unknown",
         state=state,
+        status=school_status,
+        status_color=status_color,
+        applications_count=applications_count,
+        latest_year=int(latest_year) if latest_year else None,
+        last_synced=datetime.utcnow(),
         notes=data.notes,
         tags=data.tags or [],
     )
@@ -1544,3 +1633,697 @@ async def list_appeals(
         "count": len(appeals),
         "appeals": [a.to_dict() for a in appeals]
     }
+
+
+# ==================== FRN STATUS MONITORING (for Consultant Portfolio) ====================
+
+@router.get("/frn-status")
+async def get_portfolio_frn_status(
+    year: Optional[int] = None,
+    status_filter: Optional[str] = None,
+    limit: int = 500,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+):
+    """
+    Get FRN status for all schools in consultant's portfolio.
+    This aggregates status across all BENs the consultant manages.
+    
+    Useful for consultants to:
+    - Track which FRNs are funded/denied/pending across all clients
+    - See disbursement status for all schools
+    - Identify denied FRNs that need appeals
+    
+    Args:
+        year: Optional funding year filter
+        status_filter: Optional status filter ('Funded', 'Denied', 'Pending')
+        limit: Maximum records per school (default 500)
+    """
+    # Get all BENs in portfolio
+    school_bens = [s.ben for s in profile.schools]
+    
+    if not school_bens:
+        return {
+            "success": True,
+            "message": "No schools in portfolio. Add schools to track their FRN status.",
+            "total_frns": 0,
+            "summary": {},
+            "schools": []
+        }
+    
+    try:
+        from utils.usac_client import USACDataClient
+        
+        client = USACDataClient()
+        
+        # Fetch FRN status for all portfolio BENs
+        all_frns = []
+        schools_data = []
+        status_counts = {
+            "funded": {"count": 0, "amount": 0},
+            "denied": {"count": 0, "amount": 0},
+            "pending": {"count": 0, "amount": 0},
+            "other": {"count": 0, "amount": 0}
+        }
+        
+        for ben in school_bens:
+            result = client.get_frn_status_by_ben(ben, year, status_filter, limit)
+            
+            if result.get('success') and result.get('frns'):
+                school_frns = result.get('frns', [])
+                all_frns.extend(school_frns)
+                
+                # Calculate school-level summary
+                school_summary = {
+                    "ben": ben,
+                    "entity_name": result.get('entity_name', 'Unknown'),
+                    "total_frns": len(school_frns),
+                    "funded": 0,
+                    "denied": 0,
+                    "pending": 0,
+                    "total_amount": 0,
+                    "frns": school_frns[:10]  # Include first 10 FRNs for quick view
+                }
+                
+                for frn in school_frns:
+                    frn_status = (frn.get('status') or '').lower()
+                    amount = float(frn.get('total_authorized_amount') or frn.get('amount') or 0)
+                    school_summary["total_amount"] += amount
+                    
+                    if 'funded' in frn_status or 'committed' in frn_status:
+                        school_summary["funded"] += 1
+                        status_counts["funded"]["count"] += 1
+                        status_counts["funded"]["amount"] += amount
+                    elif 'denied' in frn_status:
+                        school_summary["denied"] += 1
+                        status_counts["denied"]["count"] += 1
+                        status_counts["denied"]["amount"] += amount
+                    elif any(s in frn_status for s in ['pending', 'review', 'submitted', 'certified']):
+                        school_summary["pending"] += 1
+                        status_counts["pending"]["count"] += 1
+                        status_counts["pending"]["amount"] += amount
+                    else:
+                        status_counts["other"]["count"] += 1
+                        status_counts["other"]["amount"] += amount
+                
+                schools_data.append(school_summary)
+        
+        return {
+            "success": True,
+            "total_frns": len(all_frns),
+            "total_schools": len(schools_data),
+            "summary": status_counts,
+            "year_filter": year,
+            "schools": schools_data
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch FRN status: {str(e)}"
+        )
+
+
+@router.get("/frn-status/school/{ben}")
+async def get_school_frn_status(
+    ben: str,
+    year: Optional[int] = None,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+):
+    """
+    Get detailed FRN status for a specific school in the portfolio.
+    
+    Args:
+        ben: Billed Entity Number
+        year: Optional funding year filter
+    """
+    # Verify school is in portfolio
+    school_bens = [s.ben for s in profile.schools]
+    if ben not in school_bens:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"School {ben} not found in your portfolio"
+        )
+    
+    try:
+        from utils.usac_client import USACDataClient
+        
+        client = USACDataClient()
+        result = client.get_frn_status_by_ben(ben, year)
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch school FRN status: {str(e)}"
+        )
+
+
+@router.get("/frn-status/summary")
+async def get_portfolio_frn_summary(
+    year: Optional[int] = None,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+):
+    """
+    Get a quick summary of FRN status across all portfolio schools.
+    Returns aggregate counts without individual FRN details.
+    
+    Args:
+        year: Optional funding year filter (defaults to all years)
+    """
+    # Get all BENs in portfolio
+    school_bens = [s.ben for s in profile.schools]
+    
+    if not school_bens:
+        return {
+            "success": True,
+            "total_schools": 0,
+            "total_frns": 0,
+            "summary": {
+                "funded": {"count": 0, "amount": 0},
+                "denied": {"count": 0, "amount": 0},
+                "pending": {"count": 0, "amount": 0}
+            }
+        }
+    
+    try:
+        from utils.usac_client import USACDataClient
+        
+        client = USACDataClient()
+        
+        total_frns = 0
+        status_counts = {
+            "funded": {"count": 0, "amount": 0},
+            "denied": {"count": 0, "amount": 0},
+            "pending": {"count": 0, "amount": 0}
+        }
+        
+        for ben in school_bens:
+            result = client.get_frn_status_by_ben(ben, year)
+            
+            if result.get('success') and result.get('frns'):
+                for frn in result.get('frns', []):
+                    total_frns += 1
+                    frn_status = (frn.get('status') or '').lower()
+                    amount = float(frn.get('total_authorized_amount') or frn.get('amount') or 0)
+                    
+                    if 'funded' in frn_status or 'committed' in frn_status:
+                        status_counts["funded"]["count"] += 1
+                        status_counts["funded"]["amount"] += amount
+                    elif 'denied' in frn_status:
+                        status_counts["denied"]["count"] += 1
+                        status_counts["denied"]["amount"] += amount
+                    else:
+                        status_counts["pending"]["count"] += 1
+                        status_counts["pending"]["amount"] += amount
+        
+        return {
+            "success": True,
+            "total_schools": len(school_bens),
+            "total_frns": total_frns,
+            "summary": status_counts,
+            "year_filter": year
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch FRN status summary: {str(e)}"
+        )
+
+
+# =============================================================================
+# COMPREHENSIVE SCHOOL DATA ENDPOINTS (Budget, Funding History)
+# =============================================================================
+
+@router.get("/schools/{ben}/budget")
+async def get_school_budget_data(
+    ben: str,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    db: Session = Depends(get_db)
+):
+    """
+    Get comprehensive Category 2 budget data for a school.
+    
+    Returns:
+    - C2 budget for current cycle (FY2021-2025 or FY2026-2030)
+    - Previous cycle budget if applicable
+    - Funded, pending, and available amounts
+    - Historical funding data
+    """
+    # Verify school belongs to consultant
+    school = db.query(ConsultantSchool).filter(
+        ConsultantSchool.consultant_profile_id == profile.id,
+        ConsultantSchool.ben == ben
+    ).first()
+    
+    if not school:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"School with BEN {ben} not found in your portfolio"
+        )
+    
+    try:
+        # Fetch C2 budget data directly from USAC
+        url = 'https://opendata.usac.org/resource/6brt-5pbv.json'
+        params = {
+            '$limit': 10,
+            '$where': f"ben = '{ben}'"
+        }
+        
+        response = requests.get(url, params=params, timeout=30)
+        c2_data = response.json() if response.ok else []
+        
+        # Process budget data by cycle
+        budget_cycles = {}
+        for record in c2_data:
+            cycle = record.get('c2_budget_cycle', 'Unknown')
+            budget_cycles[cycle] = {
+                "cycle": cycle,
+                "entity_name": record.get('billed_entity_name'),
+                "state": record.get('state'),
+                "applicant_type": record.get('applicant_type'),
+                "c2_budget": float(record.get('c2_budget', 0) or 0),
+                "funded_amount": float(record.get('funded_c2_budget_amount', 0) or 0),
+                "pending_amount": float(record.get('pending_c2_budget_amount', 0) or 0),
+                "available_amount": float(record.get('available_c2_budget_amount', 0) or 0),
+                "budget_algorithm": record.get('c2_budget_algorithm'),
+                "child_entity_count": int(record.get('child_entity_count', 0) or 0),
+                "full_time_students": int(record.get('full_time_students', 0) or 0),
+                "budget_version": record.get('c2_budget_version'),
+            }
+        
+        # Get current and previous cycles
+        current_cycle = budget_cycles.get('FY2026-2030') or budget_cycles.get('FY2021-2025', {})
+        previous_cycle = budget_cycles.get('FY2021-2025') if 'FY2026-2030' in budget_cycles else {}
+        
+        return {
+            "success": True,
+            "ben": ben,
+            "school_name": school.school_name,
+            "current_cycle": current_cycle,
+            "previous_cycle": previous_cycle,
+            "all_cycles": budget_cycles,
+            "summary": {
+                "total_c2_budget": sum(b.get('c2_budget', 0) for b in budget_cycles.values()),
+                "total_funded": sum(b.get('funded_amount', 0) for b in budget_cycles.values()),
+                "total_available": sum(b.get('available_amount', 0) for b in budget_cycles.values()),
+            }
+        }
+        
+    except Exception as e:
+        print(f"Error fetching C2 budget for BEN {ben}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch budget data: {str(e)}"
+        )
+
+
+@router.get("/schools/{ben}/comprehensive")
+async def get_comprehensive_school_data(
+    ben: str,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    db: Session = Depends(get_db)
+):
+    """
+    Get comprehensive data for a school including:
+    - Basic info (name, state, entity type)
+    - Category 2 budget (current and previous cycles)
+    - Category 1 funding history (last 5 years)
+    - Application history by year
+    - Status summary
+    """
+    # Verify school belongs to consultant
+    school = db.query(ConsultantSchool).filter(
+        ConsultantSchool.consultant_profile_id == profile.id,
+        ConsultantSchool.ben == ben
+    ).first()
+    
+    if not school:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"School with BEN {ben} not found in your portfolio"
+        )
+    
+    try:
+        # Fetch Form 471 data for funding history
+        url_471 = 'https://opendata.usac.org/resource/srbr-2d59.json'
+        params_471 = {
+            '$limit': 100,
+            '$where': f"ben = '{ben}'",
+            '$order': 'funding_year DESC'
+        }
+        
+        response_471 = requests.get(url_471, params=params_471, timeout=30)
+        applications = response_471.json() if response_471.ok else []
+        
+        # Fetch C2 budget data
+        url_c2 = 'https://opendata.usac.org/resource/6brt-5pbv.json'
+        params_c2 = {
+            '$limit': 10,
+            '$where': f"ben = '{ben}'"
+        }
+        
+        response_c2 = requests.get(url_c2, params=params_c2, timeout=30)
+        c2_data = response_c2.json() if response_c2.ok else []
+        
+        # Process C2 budget by cycle
+        c2_budgets = {}
+        for record in c2_data:
+            cycle = record.get('c2_budget_cycle', 'Unknown')
+            c2_budgets[cycle] = {
+                "c2_budget": float(record.get('c2_budget', 0) or 0),
+                "funded": float(record.get('funded_c2_budget_amount', 0) or 0),
+                "pending": float(record.get('pending_c2_budget_amount', 0) or 0),
+                "available": float(record.get('available_c2_budget_amount', 0) or 0),
+            }
+        
+        # Process applications by year and service type
+        years_data = {}
+        c1_totals = {"funded": 0, "requested": 0}
+        c2_totals = {"funded": 0, "requested": 0}
+        
+        for app in applications:
+            year = app.get('funding_year', 'Unknown')
+            service_type = (app.get('form_471_service_type_name') or '').lower()
+            status_name = app.get('form_471_frn_status_name', 'Unknown')
+            committed = float(app.get('funding_commitment_request', 0) or 0)
+            requested = float(app.get('original_total_pre_discount_costs', 0) or app.get('total_pre_discount_costs', 0) or 0)
+            
+            if year not in years_data:
+                years_data[year] = {
+                    "year": year,
+                    "applications": [],
+                    "c1_funded": 0,
+                    "c1_requested": 0,
+                    "c2_funded": 0,
+                    "c2_requested": 0,
+                    "status_summary": {}
+                }
+            
+            years_data[year]["applications"].append({
+                "frn": app.get('funding_request_number'),
+                "application_number": app.get('application_number'),
+                "service_type": app.get('form_471_service_type_name'),
+                "status": status_name,
+                "committed_amount": committed,
+                "requested_amount": requested,
+                "spin_name": app.get('spin_name'),
+            })
+            
+            # Category 1 = Voice, Data Transmission, Internet Access
+            # Category 2 = Internal Connections, Basic Maintenance, MIBS
+            is_c2 = 'internal' in service_type or 'maintenance' in service_type or 'mibs' in service_type
+            
+            if is_c2:
+                years_data[year]["c2_funded"] += committed
+                years_data[year]["c2_requested"] += requested
+                if 'funded' in status_name.lower() or 'committed' in status_name.lower():
+                    c2_totals["funded"] += committed
+                c2_totals["requested"] += requested
+            else:
+                years_data[year]["c1_funded"] += committed
+                years_data[year]["c1_requested"] += requested
+                if 'funded' in status_name.lower() or 'committed' in status_name.lower():
+                    c1_totals["funded"] += committed
+                c1_totals["requested"] += requested
+            
+            # Track status counts
+            status_key = status_name.lower()
+            if status_key not in years_data[year]["status_summary"]:
+                years_data[year]["status_summary"][status_key] = 0
+            years_data[year]["status_summary"][status_key] += 1
+        
+        # Convert to sorted list
+        years_list = sorted(years_data.values(), key=lambda x: str(x["year"]), reverse=True)
+        
+        # Update school info if we got data
+        entity_name = None
+        entity_state = None
+        if applications:
+            latest = applications[0]
+            entity_name = latest.get('organization_name')
+            entity_state = latest.get('state')
+            
+            # Update database
+            if entity_name and entity_name != school.school_name:
+                school.school_name = entity_name
+            if entity_state and entity_state != school.state:
+                school.state = entity_state
+            school.last_synced = datetime.utcnow()
+            db.commit()
+        
+        return {
+            "success": True,
+            "school": {
+                "ben": ben,
+                "name": entity_name or school.school_name,
+                "state": entity_state or school.state,
+                "entity_type": school.entity_type,
+            },
+            "c2_budget": c2_budgets,
+            "c2_budget_summary": {
+                "current_cycle": c2_budgets.get('FY2026-2030') or c2_budgets.get('FY2021-2025', {}),
+                "previous_cycle": c2_budgets.get('FY2021-2025') if 'FY2026-2030' in c2_budgets else {},
+            },
+            "funding_totals": {
+                "category_1": c1_totals,
+                "category_2": c2_totals,
+                "lifetime_total": c1_totals["funded"] + c2_totals["funded"],
+            },
+            "years": years_list[:10],  # Last 10 years
+            "applications_count": len(applications),
+        }
+        
+    except Exception as e:
+        print(f"Error fetching comprehensive data for BEN {ben}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch comprehensive data: {str(e)}"
+        )
+
+
+# =============================================================================
+# NATIONAL INSTITUTION SEARCH ENDPOINT
+# =============================================================================
+
+@router.get("/search/institutions")
+async def search_institutions(
+    query: str = Query(..., description="Search query (name, city, BEN)"),
+    state: Optional[str] = Query(None, description="State filter (2-letter code)"),
+    limit: int = Query(50, le=200, description="Maximum results"),
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    db: Session = Depends(get_db)
+):
+    """
+    Search for any institution in the United States from USAC data.
+    
+    This allows consultants to discover and research schools nationwide,
+    view their budget data, and potentially add them to their portfolio.
+    """
+    try:
+        # Build search query - search in C2 budget data which has all entities
+        url = 'https://opendata.usac.org/resource/6brt-5pbv.json'
+        
+        # Build WHERE clause for search
+        where_parts = []
+        
+        # Search by name (contains)
+        if query:
+            # Escape single quotes in query
+            safe_query = query.replace("'", "''").upper()
+            where_parts.append(f"upper(billed_entity_name) like '%{safe_query}%'")
+        
+        # Filter by state if provided
+        if state:
+            where_parts.append(f"state = '{state.upper()}'")
+        
+        where_clause = ' AND '.join(where_parts) if where_parts else '1=1'
+        
+        params = {
+            '$limit': limit,
+            '$where': where_clause,
+            '$order': 'billed_entity_name ASC',
+            '$select': 'ben, billed_entity_name, city, state, applicant_type, c2_budget_cycle, c2_budget, funded_c2_budget_amount, available_c2_budget_amount, consulting_firm_name_crn'
+        }
+        
+        response = requests.get(url, params=params, timeout=30)
+        
+        if not response.ok:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"USAC API error: {response.text}"
+            )
+        
+        data = response.json()
+        
+        # Deduplicate by BEN (may have multiple cycles)
+        institutions = {}
+        for record in data:
+            ben = record.get('ben')
+            if ben and ben not in institutions:
+                institutions[ben] = {
+                    "ben": ben,
+                    "name": record.get('billed_entity_name'),
+                    "city": record.get('city'),
+                    "state": record.get('state'),
+                    "entity_type": record.get('applicant_type'),
+                    "c2_budget": float(record.get('c2_budget', 0) or 0),
+                    "c2_funded": float(record.get('funded_c2_budget_amount', 0) or 0),
+                    "c2_available": float(record.get('available_c2_budget_amount', 0) or 0),
+                    "has_consultant": bool(record.get('consulting_firm_name_crn')),
+                }
+            elif ben in institutions:
+                # Add to existing budget totals
+                institutions[ben]["c2_budget"] += float(record.get('c2_budget', 0) or 0)
+                institutions[ben]["c2_funded"] += float(record.get('funded_c2_budget_amount', 0) or 0)
+                institutions[ben]["c2_available"] += float(record.get('available_c2_budget_amount', 0) or 0)
+        
+        results = list(institutions.values())
+        
+        # Check which ones are already in portfolio
+        existing_bens = set(s.ben for s in db.query(ConsultantSchool.ben).filter(
+            ConsultantSchool.consultant_profile_id == profile.id
+        ).all())
+        
+        for inst in results:
+            inst["in_portfolio"] = inst["ben"] in existing_bens
+        
+        return {
+            "success": True,
+            "count": len(results),
+            "results": results,
+            "query": query,
+            "state_filter": state,
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error searching institutions: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Search failed: {str(e)}"
+        )
+
+
+@router.get("/search/institutions/{ben}")
+async def get_institution_details(
+    ben: str,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    db: Session = Depends(get_db)
+):
+    """
+    Get detailed information about any institution by BEN.
+    Does not require the school to be in the consultant's portfolio.
+    """
+    try:
+        # Fetch Form 471 data
+        url_471 = 'https://opendata.usac.org/resource/srbr-2d59.json'
+        params_471 = {
+            '$limit': 50,
+            '$where': f"ben = '{ben}'",
+            '$order': 'funding_year DESC'
+        }
+        
+        response_471 = requests.get(url_471, params=params_471, timeout=30)
+        applications = response_471.json() if response_471.ok else []
+        
+        # Fetch C2 budget data
+        url_c2 = 'https://opendata.usac.org/resource/6brt-5pbv.json'
+        params_c2 = {
+            '$limit': 10,
+            '$where': f"ben = '{ben}'"
+        }
+        
+        response_c2 = requests.get(url_c2, params=params_c2, timeout=30)
+        c2_data = response_c2.json() if response_c2.ok else []
+        
+        if not applications and not c2_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No data found for BEN {ben}"
+            )
+        
+        # Get basic info
+        entity_info = {}
+        if applications:
+            latest = applications[0]
+            entity_info = {
+                "name": latest.get('organization_name'),
+                "state": latest.get('state'),
+                "entity_type": latest.get('organization_entity_type_name'),
+                "contact_name": latest.get('cnct_name'),
+                "contact_email": latest.get('cnct_email'),
+            }
+        elif c2_data:
+            record = c2_data[0]
+            entity_info = {
+                "name": record.get('billed_entity_name'),
+                "state": record.get('state'),
+                "city": record.get('city'),
+                "entity_type": record.get('applicant_type'),
+            }
+        
+        # Process C2 budgets
+        c2_budgets = {}
+        for record in c2_data:
+            cycle = record.get('c2_budget_cycle', 'Unknown')
+            c2_budgets[cycle] = {
+                "budget": float(record.get('c2_budget', 0) or 0),
+                "funded": float(record.get('funded_c2_budget_amount', 0) or 0),
+                "pending": float(record.get('pending_c2_budget_amount', 0) or 0),
+                "available": float(record.get('available_c2_budget_amount', 0) or 0),
+            }
+        
+        # Process applications by year
+        years_summary = {}
+        for app in applications:
+            year = app.get('funding_year')
+            if year not in years_summary:
+                years_summary[year] = {
+                    "year": year,
+                    "frn_count": 0,
+                    "total_committed": 0,
+                    "statuses": {}
+                }
+            years_summary[year]["frn_count"] += 1
+            years_summary[year]["total_committed"] += float(app.get('funding_commitment_request', 0) or 0)
+            
+            status = app.get('form_471_frn_status_name', 'Unknown')
+            if status not in years_summary[year]["statuses"]:
+                years_summary[year]["statuses"][status] = 0
+            years_summary[year]["statuses"][status] += 1
+        
+        # Check if in portfolio
+        in_portfolio = db.query(ConsultantSchool).filter(
+            ConsultantSchool.consultant_profile_id == profile.id,
+            ConsultantSchool.ben == ben
+        ).first() is not None
+        
+        return {
+            "success": True,
+            "ben": ben,
+            "entity": entity_info,
+            "c2_budgets": c2_budgets,
+            "years": sorted(years_summary.values(), key=lambda x: str(x["year"]), reverse=True),
+            "total_applications": len(applications),
+            "in_portfolio": in_portfolio,
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching institution details for BEN {ben}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch details: {str(e)}"
+        )

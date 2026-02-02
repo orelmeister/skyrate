@@ -100,6 +100,14 @@ export default function ConsultantPortalPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isRefreshingSchools, setIsRefreshingSchools] = useState(false);
   
+  // Comprehensive school data state (includes C2 budget)
+  const [comprehensiveSchoolData, setComprehensiveSchoolData] = useState<{
+    c2_budget: Record<string, { c2_budget: number; funded: number; pending: number; available: number }>;
+    funding_totals: { category_1: { funded: number; requested: number }; category_2: { funded: number; requested: number }; lifetime_total: number };
+    years: Array<any>;
+  } | null>(null);
+  const [loadingComprehensiveData, setLoadingComprehensiveData] = useState(false);
+  
   // CSV Upload state
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [validationResults, setValidationResults] = useState<ValidationResult[] | null>(null);
@@ -266,7 +274,7 @@ export default function ConsultantPortalPage() {
     try {
       const [profileRes, schoolsRes] = await Promise.all([
         api.getConsultantProfile(),
-        api.getConsultantSchools(withUsacData),
+        api.getConsultantSchools(withUsacData),  // Backend auto-syncs schools with Unknown status
       ]);
       
       if (profileRes.success && profileRes.data) {
@@ -279,18 +287,10 @@ export default function ConsultantPortalPage() {
       if (schoolsRes.success && schoolsRes.data) {
         const loadedSchools = schoolsRes.data.schools || [];
         setSchools(loadedSchools);
-        
-        // Auto-sync if schools exist but don't have status info (not synced yet)
-        // This handles the case where schools were imported but not synced
-        if (!withUsacData && loadedSchools.length > 0) {
-          const needsSync = loadedSchools.some(
-            (s: EnhancedSchool) => !s.status || s.status === '' || s.status === 'Unknown'
-          );
-          if (needsSync) {
-            console.log('Schools need sync, fetching USAC data...');
-            // Trigger a background sync
-            refreshSchoolsWithUsac();
-          }
+        // Backend now auto-syncs schools that have Unknown status or haven't been synced
+        // No need for client-side sync check
+        if (schoolsRes.data.synced) {
+          console.log('Schools auto-synced from USAC');
         }
       }
     } catch (error) {
@@ -518,17 +518,20 @@ export default function ConsultantPortalPage() {
   const openSchoolDetail = async (school: EnhancedSchool) => {
     setSelectedSchool(school);
     setEnrichedSchoolData(null);
+    setComprehensiveSchoolData(null);
     setShowSchoolDetail(true);
     setSchoolApplications([]);
     setSelectedYear(null);
     setLoadingApplications(true);
     setLoadingEnrichment(true);
+    setLoadingComprehensiveData(true);
     
     try {
-      // Fetch applications and enrichment data in parallel
-      const [appsRes, enrichRes] = await Promise.all([
+      // Fetch applications, enrichment data, and comprehensive data in parallel
+      const [appsRes, enrichRes, comprehensiveRes] = await Promise.all([
         api.getSchoolApplications(school.ben, { include_denial_reasons: true }),
-        api.getSchoolEnrichment(school.ben)
+        api.getSchoolEnrichment(school.ben),
+        api.getComprehensiveSchoolData(school.ben),
       ]);
       
       if (appsRes.success && appsRes.data) {
@@ -560,11 +563,20 @@ export default function ConsultantPortalPage() {
         setEnrichedSchoolData(enriched);
         setSelectedSchool(enriched);
       }
+      
+      if (comprehensiveRes.success && comprehensiveRes.data) {
+        setComprehensiveSchoolData({
+          c2_budget: comprehensiveRes.data.c2_budget,
+          funding_totals: comprehensiveRes.data.funding_totals,
+          years: comprehensiveRes.data.years,
+        });
+      }
     } catch (error) {
       console.error("Failed to load school data:", error);
     } finally {
       setLoadingApplications(false);
       setLoadingEnrichment(false);
+      setLoadingComprehensiveData(false);
     }
   };
 
@@ -1866,7 +1878,7 @@ export default function ConsultantPortalPage() {
                   {selectedSchool.state && ` • ${selectedSchool.city || ''} ${selectedSchool.state}`}
                 </p>
               </div>
-              <button onClick={() => { setShowSchoolDetail(false); setSelectedSchool(null); setEnrichedSchoolData(null); setSchoolApplications([]); }} className="p-2 hover:bg-slate-100 rounded-lg">
+              <button onClick={() => { setShowSchoolDetail(false); setSelectedSchool(null); setEnrichedSchoolData(null); setComprehensiveSchoolData(null); setSchoolApplications([]); }} className="p-2 hover:bg-slate-100 rounded-lg">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -1944,6 +1956,170 @@ export default function ConsultantPortalPage() {
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* Comprehensive Budget & Funding Section */}
+              {loadingComprehensiveData ? (
+                <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
+                  <div className="flex items-center justify-center gap-2 text-slate-500">
+                    <span className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></span>
+                    <span>Loading budget data...</span>
+                  </div>
+                </div>
+              ) : comprehensiveSchoolData && (
+                <div className="space-y-4">
+                  {/* Category 2 Budget Section */}
+                  <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-5 border border-purple-100">
+                    <h3 className="text-lg font-semibold text-purple-900 mb-4 flex items-center gap-2">
+                      <span>📚</span> Category 2 Budget (Internal Connections)
+                    </h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Current Cycle */}
+                      {comprehensiveSchoolData.c2_budget['FY2026-2030'] && (
+                        <div className="bg-white/70 rounded-lg p-4">
+                          <div className="text-sm font-medium text-purple-700 mb-2">FY2026-2030 (Current Cycle)</div>
+                          <div className="space-y-2">
+                            <div className="flex justify-between">
+                              <span className="text-slate-600">Total Budget:</span>
+                              <span className="font-semibold text-purple-900">${comprehensiveSchoolData.c2_budget['FY2026-2030'].c2_budget.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-600">Funded:</span>
+                              <span className="font-medium text-green-700">${comprehensiveSchoolData.c2_budget['FY2026-2030'].funded.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-600">Pending:</span>
+                              <span className="font-medium text-yellow-700">${comprehensiveSchoolData.c2_budget['FY2026-2030'].pending.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between border-t pt-2 mt-2">
+                              <span className="text-slate-600 font-medium">Available:</span>
+                              <span className="font-bold text-indigo-700">${comprehensiveSchoolData.c2_budget['FY2026-2030'].available.toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Previous Cycle */}
+                      {comprehensiveSchoolData.c2_budget['FY2021-2025'] && (
+                        <div className="bg-white/70 rounded-lg p-4">
+                          <div className="text-sm font-medium text-purple-700 mb-2">FY2021-2025 (Previous Cycle)</div>
+                          <div className="space-y-2">
+                            <div className="flex justify-between">
+                              <span className="text-slate-600">Total Budget:</span>
+                              <span className="font-semibold text-purple-900">${comprehensiveSchoolData.c2_budget['FY2021-2025'].c2_budget.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-600">Funded:</span>
+                              <span className="font-medium text-green-700">${comprehensiveSchoolData.c2_budget['FY2021-2025'].funded.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-600">Pending:</span>
+                              <span className="font-medium text-yellow-700">${comprehensiveSchoolData.c2_budget['FY2021-2025'].pending.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between border-t pt-2 mt-2">
+                              <span className="text-slate-600 font-medium">Available:</span>
+                              <span className="font-bold text-indigo-700">${comprehensiveSchoolData.c2_budget['FY2021-2025'].available.toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Lifetime Funding Totals */}
+                  <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-5 border border-emerald-100">
+                    <h3 className="text-lg font-semibold text-emerald-900 mb-4 flex items-center gap-2">
+                      <span>💰</span> Lifetime Funding Summary
+                    </h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Category 1 */}
+                      <div className="bg-white/70 rounded-lg p-4 text-center">
+                        <div className="text-sm font-medium text-emerald-700 mb-1">Category 1</div>
+                        <div className="text-xs text-slate-500 mb-2">(Voice, Internet, Data)</div>
+                        <div className="text-2xl font-bold text-emerald-800">
+                          ${comprehensiveSchoolData.funding_totals.category_1.funded.toLocaleString()}
+                        </div>
+                        <div className="text-xs text-slate-500 mt-1">
+                          Requested: ${comprehensiveSchoolData.funding_totals.category_1.requested.toLocaleString()}
+                        </div>
+                      </div>
+                      
+                      {/* Category 2 */}
+                      <div className="bg-white/70 rounded-lg p-4 text-center">
+                        <div className="text-sm font-medium text-emerald-700 mb-1">Category 2</div>
+                        <div className="text-xs text-slate-500 mb-2">(Internal Connections)</div>
+                        <div className="text-2xl font-bold text-emerald-800">
+                          ${comprehensiveSchoolData.funding_totals.category_2.funded.toLocaleString()}
+                        </div>
+                        <div className="text-xs text-slate-500 mt-1">
+                          Requested: ${comprehensiveSchoolData.funding_totals.category_2.requested.toLocaleString()}
+                        </div>
+                      </div>
+                      
+                      {/* Total */}
+                      <div className="bg-emerald-100/70 rounded-lg p-4 text-center">
+                        <div className="text-sm font-medium text-emerald-700 mb-1">Lifetime Total</div>
+                        <div className="text-xs text-slate-500 mb-2">(All Categories)</div>
+                        <div className="text-2xl font-bold text-emerald-900">
+                          ${comprehensiveSchoolData.funding_totals.lifetime_total.toLocaleString()}
+                        </div>
+                        <div className="text-xs text-emerald-600 mt-1">
+                          Total funded E-Rate
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Funding by Year (last 5 years) */}
+                  {comprehensiveSchoolData.years.length > 0 && (
+                    <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-5 border border-blue-100">
+                      <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center gap-2">
+                        <span>📅</span> Funding by Year
+                      </h3>
+                      
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="text-left text-blue-700 border-b border-blue-200">
+                              <th className="pb-2 font-medium">Year</th>
+                              <th className="pb-2 font-medium text-right">C1 Funded</th>
+                              <th className="pb-2 font-medium text-right">C2 Funded</th>
+                              <th className="pb-2 font-medium text-right">Total</th>
+                              <th className="pb-2 font-medium text-center">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {comprehensiveSchoolData.years.slice(0, 5).map((year) => (
+                              <tr key={year.year} className="border-b border-blue-100">
+                                <td className="py-2 font-medium text-blue-900">{year.year}</td>
+                                <td className="py-2 text-right text-slate-700">${year.c1_funded.toLocaleString()}</td>
+                                <td className="py-2 text-right text-slate-700">${year.c2_funded.toLocaleString()}</td>
+                                <td className="py-2 text-right font-medium text-blue-800">${(year.c1_funded + year.c2_funded).toLocaleString()}</td>
+                                <td className="py-2 text-center">
+                                  {Object.entries(year.status_summary).map(([status, count]) => (
+                                    <span 
+                                      key={status} 
+                                      className={`inline-block px-2 py-0.5 rounded text-xs mr-1 ${
+                                        status.includes('funded') || status.includes('committed') ? 'bg-green-100 text-green-700' :
+                                        status.includes('denied') ? 'bg-red-100 text-red-700' :
+                                        status.includes('pending') ? 'bg-yellow-100 text-yellow-700' :
+                                        'bg-slate-100 text-slate-600'
+                                      }`}
+                                    >
+                                      {count as number}x {status}
+                                    </span>
+                                  ))}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

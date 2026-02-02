@@ -169,7 +169,7 @@ export default function HomePage() {
             <div className="p-6 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/20 text-center">
               <div className="text-4xl mb-4">🤖</div>
               <h3 className="text-lg font-semibold text-white mb-2">AI-Powered Analysis</h3>
-              <p className="text-purple-100 text-sm">GPT-4 powered denial analysis and appeal generation</p>
+              <p className="text-purple-100 text-sm">Advanced AI denial analysis and appeal generation</p>
             </div>
             <div className="p-6 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/20 text-center">
               <div className="text-4xl mb-4">📊</div>
@@ -541,10 +541,10 @@ export default function HomePage() {
               <p className="text-slate-600 mb-6">Ideal for E-Rate vendors tracking leads and competitors</p>
               <div className="mb-6">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-slate-900">$500</span>
+                  <span className="text-4xl font-bold text-slate-900">$200</span>
                   <span className="text-slate-600">/month</span>
                 </div>
-                <p className="text-sm text-slate-500 mt-1">or $5,000/year (save $1,000)</p>
+                <p className="text-sm text-slate-500 mt-1">or $2,000/year (save $400)</p>
               </div>
               <ul className="space-y-3 mb-8">
                 <li className="flex items-center gap-2 text-slate-700">
@@ -595,7 +595,7 @@ export default function HomePage() {
             <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900 mb-2">How does AI appeal generation work?</h3>
               <p className="text-slate-600">
-                Our AI analyzes the specific denial reason, funding year, and relevant FCC orders to generate a customized appeal letter. It uses GPT-4 with specialized training on E-Rate regulations to craft compelling, compliant appeals.
+                Our AI analyzes the specific denial reason, funding year, and relevant FCC orders to generate a customized appeal letter. It uses advanced AI with specialized training on E-Rate regulations to craft compelling, compliant appeals.
               </p>
             </div>
             <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">

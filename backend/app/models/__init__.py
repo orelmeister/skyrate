@@ -4,6 +4,7 @@ from .subscription import Subscription, SubscriptionStatus, SubscriptionPlan
 from .consultant import ConsultantProfile, ConsultantSchool
 from .vendor import VendorProfile, VendorSearch
 from .application import SchoolSnapshot, Application, AppealRecord, QueryHistory
+from .alert import Alert, AlertConfig, AlertType, AlertPriority
 
 __all__ = [
     "User",
@@ -19,4 +20,8 @@ __all__ = [
     "Application",
     "AppealRecord",
     "QueryHistory",
+    "Alert",
+    "AlertConfig",
+    "AlertType",
+    "AlertPriority",
 ]

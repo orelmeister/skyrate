@@ -316,6 +316,55 @@ export interface EntityFRNStatusResponse {
   error?: string;
 }
 
+// ==================== ALERTS TYPES ====================
+
+export interface AlertRecord {
+  id: number;
+  user_id: number;
+  alert_type: string;
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  title: string;
+  message: string;
+  entity_type?: string;
+  entity_id?: string;
+  entity_name?: string;
+  metadata?: Record<string, any>;
+  is_read: boolean;
+  is_dismissed: boolean;
+  is_actioned: boolean;
+  email_sent: boolean;
+  created_at: string;
+  read_at?: string;
+}
+
+export interface AlertConfig {
+  id: number;
+  user_id: number;
+  alert_on_denial: boolean;
+  alert_on_status_change: boolean;
+  alert_on_deadline: boolean;
+  alert_on_disbursement: boolean;
+  alert_on_funding_approved: boolean;
+  alert_on_form_470: boolean;
+  alert_on_competitor: boolean;
+  deadline_warning_days: number;
+  min_alert_amount: number;
+  email_notifications: boolean;
+  in_app_notifications: boolean;
+  daily_digest: boolean;
+  notification_email?: string;
+  alert_filters?: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AlertType {
+  type: string;
+  name: string;
+  description: string;
+  roles: string[];
+}
+
 // ==================== FORM 470 LEAD GENERATION TYPES (Sprint 3) ====================
 
 export interface Form470Service {
@@ -711,7 +760,7 @@ class ApiClient {
     return this.request(`/api/v1/consultant/denied-applications${params}`);
   }
 
-  async getConsultantSchools(includeUsacData: boolean = false): Promise<ApiResponse<{ schools: ConsultantSchool[]; count: number }>> {
+  async getConsultantSchools(includeUsacData: boolean = false): Promise<ApiResponse<{ schools: ConsultantSchool[]; count: number; synced?: boolean }>> {
     const params = includeUsacData ? '?include_usac_data=true' : '';
     return this.request(`/api/v1/consultant/schools${params}`);
   }
@@ -815,6 +864,210 @@ class ApiClient {
   async getSchoolFunding(ben: string, year?: number): Promise<ApiResponse<any>> {
     const params = year ? `?year=${year}` : '';
     return this.request(`/api/v1/consultant/schools/${ben}/funding${params}`);
+  }
+
+  // ==================== COMPREHENSIVE SCHOOL DATA ====================
+
+  /**
+   * Get comprehensive C2 budget data for a school
+   */
+  async getSchoolBudget(ben: string): Promise<ApiResponse<{
+    success: boolean;
+    ben: string;
+    school_name: string;
+    current_cycle: {
+      cycle: string;
+      c2_budget: number;
+      funded_amount: number;
+      pending_amount: number;
+      available_amount: number;
+      budget_algorithm: string;
+      child_entity_count: number;
+      full_time_students: number;
+    };
+    previous_cycle?: Record<string, any>;
+    all_cycles: Record<string, any>;
+    summary: {
+      total_c2_budget: number;
+      total_funded: number;
+      total_available: number;
+    };
+  }>> {
+    return this.request(`/api/v1/consultant/schools/${ben}/budget`);
+  }
+
+  /**
+   * Get comprehensive data for a school (funding + budget + history)
+   */
+  async getComprehensiveSchoolData(ben: string): Promise<ApiResponse<{
+    success: boolean;
+    school: {
+      ben: string;
+      name: string;
+      state: string;
+      entity_type: string | null;
+    };
+    c2_budget: Record<string, {
+      c2_budget: number;
+      funded: number;
+      pending: number;
+      available: number;
+    }>;
+    c2_budget_summary: {
+      current_cycle: Record<string, any>;
+      previous_cycle: Record<string, any>;
+    };
+    funding_totals: {
+      category_1: { funded: number; requested: number };
+      category_2: { funded: number; requested: number };
+      lifetime_total: number;
+    };
+    years: Array<{
+      year: string;
+      applications: any[];
+      c1_funded: number;
+      c1_requested: number;
+      c2_funded: number;
+      c2_requested: number;
+      status_summary: Record<string, number>;
+    }>;
+    applications_count: number;
+  }>> {
+    return this.request(`/api/v1/consultant/schools/${ben}/comprehensive`);
+  }
+
+  // ==================== NATIONAL INSTITUTION SEARCH ====================
+
+  /**
+   * Search for institutions nationwide
+   */
+  async searchInstitutions(query: string, state?: string, limit: number = 50): Promise<ApiResponse<{
+    success: boolean;
+    count: number;
+    results: Array<{
+      ben: string;
+      name: string;
+      city: string;
+      state: string;
+      entity_type: string;
+      c2_budget: number;
+      c2_funded: number;
+      c2_available: number;
+      has_consultant: boolean;
+      in_portfolio: boolean;
+    }>;
+    query: string;
+    state_filter: string | null;
+  }>> {
+    const params = new URLSearchParams();
+    params.set('query', query);
+    if (state) params.set('state', state);
+    if (limit) params.set('limit', String(limit));
+    return this.request(`/api/v1/consultant/search/institutions?${params.toString()}`);
+  }
+
+  /**
+   * Get details for any institution by BEN (national search result details)
+   */
+  async getInstitutionDetails(ben: string): Promise<ApiResponse<{
+    success: boolean;
+    ben: string;
+    entity: {
+      name: string;
+      state: string;
+      entity_type: string;
+      contact_name?: string;
+      contact_email?: string;
+    };
+    c2_budgets: Record<string, {
+      budget: number;
+      funded: number;
+      pending: number;
+      available: number;
+    }>;
+    years: Array<{
+      year: string;
+      frn_count: number;
+      total_committed: number;
+      statuses: Record<string, number>;
+    }>;
+    total_applications: number;
+    in_portfolio: boolean;
+  }>> {
+    return this.request(`/api/v1/consultant/search/institutions/${ben}`);
+  }
+
+  // ==================== CONSULTANT FRN STATUS MONITORING ====================
+
+  /**
+   * Get FRN status for all schools in consultant's portfolio
+   */
+  async getConsultantFRNStatus(year?: number, status?: string, limit: number = 500): Promise<ApiResponse<{
+    success: boolean;
+    total_frns: number;
+    total_schools: number;
+    summary: {
+      funded: { count: number; amount: number };
+      denied: { count: number; amount: number };
+      pending: { count: number; amount: number };
+      other: { count: number; amount: number };
+    };
+    year_filter?: number;
+    schools: Array<{
+      ben: string;
+      entity_name: string;
+      total_frns: number;
+      funded: number;
+      denied: number;
+      pending: number;
+      total_amount: number;
+      frns: FRNStatusRecord[];
+    }>;
+  }>> {
+    const params = new URLSearchParams();
+    if (year) params.set('year', String(year));
+    if (status) params.set('status_filter', status);
+    if (limit) params.set('limit', String(limit));
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/api/v1/consultant/frn-status${queryString}`);
+  }
+
+  /**
+   * Get FRN status summary for consultant's portfolio
+   */
+  async getConsultantFRNStatusSummary(year?: number): Promise<ApiResponse<{
+    success: boolean;
+    total_schools: number;
+    total_frns: number;
+    summary: {
+      funded: { count: number; amount: number };
+      denied: { count: number; amount: number };
+      pending: { count: number; amount: number };
+    };
+    year_filter?: number;
+  }>> {
+    const params = year ? `?year=${year}` : '';
+    return this.request(`/api/v1/consultant/frn-status/summary${params}`);
+  }
+
+  /**
+   * Get FRN status for a specific school in consultant's portfolio
+   */
+  async getConsultantSchoolFRNStatus(ben: string, year?: number): Promise<ApiResponse<{
+    success: boolean;
+    ben: string;
+    entity_name: string;
+    total_frns: number;
+    frns: FRNStatusRecord[];
+    years: string[];
+    summary: {
+      funded: { count: number; amount: number };
+      denied: { count: number; amount: number };
+      pending: { count: number; amount: number };
+    };
+  }>> {
+    const params = year ? `?year=${year}` : '';
+    return this.request(`/api/v1/consultant/frn-status/school/${ben}${params}`);
   }
 
   // ==================== SCHOOL ENRICHMENT ====================
@@ -1366,6 +1619,116 @@ class ApiClient {
     return this.request('/api/v1/consultant/crn/import', {
       method: 'POST',
     });
+  }
+
+  // ==================== ALERTS ====================
+
+  /**
+   * Get all alerts for the current user
+   */
+  async getAlerts(options?: {
+    unread_only?: boolean;
+    alert_type?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ApiResponse<{
+    success: boolean;
+    total: number;
+    unread_count: number;
+    limit: number;
+    offset: number;
+    alerts: AlertRecord[];
+  }>> {
+    const params = new URLSearchParams();
+    if (options?.unread_only) params.set('unread_only', 'true');
+    if (options?.alert_type) params.set('alert_type', options.alert_type);
+    if (options?.limit) params.set('limit', String(options.limit));
+    if (options?.offset) params.set('offset', String(options.offset));
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/api/v1/alerts${queryString}`);
+  }
+
+  /**
+   * Get count of unread alerts (for badge display)
+   */
+  async getUnreadAlertCount(): Promise<ApiResponse<{ unread_count: number }>> {
+    return this.request('/api/v1/alerts/unread-count');
+  }
+
+  /**
+   * Get alert configuration/preferences
+   */
+  async getAlertConfig(): Promise<ApiResponse<{ success: boolean; config: AlertConfig }>> {
+    return this.request('/api/v1/alerts/config');
+  }
+
+  /**
+   * Update alert configuration/preferences
+   */
+  async updateAlertConfig(config: Partial<AlertConfig>): Promise<ApiResponse<{ success: boolean; config: AlertConfig }>> {
+    return this.request('/api/v1/alerts/config', {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    });
+  }
+
+  /**
+   * Mark specific alerts as read
+   */
+  async markAlertsRead(alertIds: number[]): Promise<ApiResponse<{ success: boolean; marked_read: number }>> {
+    return this.request('/api/v1/alerts/mark-read', {
+      method: 'POST',
+      body: JSON.stringify({ alert_ids: alertIds }),
+    });
+  }
+
+  /**
+   * Mark all alerts as read
+   */
+  async markAllAlertsRead(): Promise<ApiResponse<{ success: boolean; marked_read: number }>> {
+    return this.request('/api/v1/alerts/mark-all-read', {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Dismiss specific alerts (soft delete)
+   */
+  async dismissAlerts(alertIds: number[]): Promise<ApiResponse<{ success: boolean; dismissed: number }>> {
+    return this.request('/api/v1/alerts/dismiss', {
+      method: 'POST',
+      body: JSON.stringify({ alert_ids: alertIds }),
+    });
+  }
+
+  /**
+   * Delete an alert permanently
+   */
+  async deleteAlert(alertId: number): Promise<ApiResponse<{ success: boolean; deleted: boolean }>> {
+    return this.request(`/api/v1/alerts/${alertId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Get available alert types with descriptions
+   */
+  async getAlertTypes(): Promise<ApiResponse<{ success: boolean; alert_types: AlertType[] }>> {
+    return this.request('/api/v1/alerts/types');
+  }
+
+  /**
+   * Get alerts summary for the last N days
+   */
+  async getAlertsSummary(days: number = 7): Promise<ApiResponse<{
+    success: boolean;
+    period_days: number;
+    total_alerts: number;
+    unread_count: number;
+    by_type: Record<string, number>;
+    by_priority: Record<string, number>;
+  }>> {
+    return this.request(`/api/v1/alerts/summary?days=${days}`);
   }
 }
 
