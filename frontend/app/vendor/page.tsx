@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
-import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse, FRNStatusResponse, FRNStatusSummaryResponse, FRNStatusRecord } from "@/lib/api";
+import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse, FRNStatusResponse, FRNStatusSummaryResponse, FRNStatusRecord, Form470Lead, Form470LeadsResponse, Form470DetailResponse } from "@/lib/api";
 
 interface SearchResult {
   ben: string;
@@ -69,6 +69,22 @@ export default function VendorPortalPage() {
   const [frnStatusLoading, setFrnStatusLoading] = useState(false);
   const [frnStatusYear, setFrnStatusYear] = useState<number | undefined>(undefined);
   const [frnStatusFilter, setFrnStatusFilter] = useState<string>("");
+  
+  // Form 470 Lead Generation state (Sprint 3)
+  const [form470Leads, setForm470Leads] = useState<Form470Lead[]>([]);
+  const [form470Loading, setForm470Loading] = useState(false);
+  const [form470Error, setForm470Error] = useState<string | null>(null);
+  const [form470Filters, setForm470Filters] = useState<{
+    year?: number;
+    state?: string;
+    category?: string;
+    service_type?: string;
+    manufacturer?: string;
+  }>({});
+  const [form470TotalLeads, setForm470TotalLeads] = useState(0);
+  const [form470Detail, setForm470Detail] = useState<Form470DetailResponse | null>(null);
+  const [form470DetailLoading, setForm470DetailLoading] = useState(false);
+  const [showForm470Modal, setShowForm470Modal] = useState(false);
   
   // Payment guard - check if user needs to complete payment setup
   const [checkingPayment, setCheckingPayment] = useState(true);
@@ -288,6 +304,63 @@ export default function VendorPortalPage() {
     }
   };
 
+  // Form 470 Lead Generation functions (Sprint 3)
+  const load470Leads = async (filters?: {
+    year?: number;
+    state?: string;
+    category?: string;
+    service_type?: string;
+    manufacturer?: string;
+  }) => {
+    setForm470Loading(true);
+    setForm470Error(null);
+    
+    try {
+      const searchFilters = filters || form470Filters;
+      const response = await api.get470Leads({
+        ...searchFilters,
+        limit: 200
+      });
+      
+      if (response.success && response.data) {
+        setForm470Leads(response.data.leads || []);
+        setForm470TotalLeads(response.data.total_leads || 0);
+        setForm470Filters(response.data.filters_applied || {});
+      } else {
+        setForm470Error(response.error || "Failed to fetch 470 leads");
+        setForm470Leads([]);
+        setForm470TotalLeads(0);
+      }
+    } catch (error) {
+      console.error("Failed to load 470 leads:", error);
+      setForm470Error("Failed to fetch Form 470 leads");
+    } finally {
+      setForm470Loading(false);
+    }
+  };
+
+  const load470Detail = async (applicationNumber: string) => {
+    setForm470DetailLoading(true);
+    setShowForm470Modal(true);
+    setForm470Detail(null);
+    
+    try {
+      const response = await api.get470Detail(applicationNumber);
+      if (response.success && response.data) {
+        setForm470Detail(response.data);
+      }
+    } catch (error) {
+      console.error("Failed to load 470 detail:", error);
+    } finally {
+      setForm470DetailLoading(false);
+    }
+  };
+
+  const closeForm470Modal = () => {
+    setShowForm470Modal(false);
+    setForm470Detail(null);
+  };
+
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -396,7 +469,8 @@ export default function VendorPortalPage() {
     { id: "dashboard", label: "Dashboard", icon: "📊" },
     { id: "my-entities", label: "My Entities", icon: "🏫" },
     { id: "frn-status", label: "FRN Status", icon: "📈" },
-    { id: "competitive", label: "471 Lookup", icon: "🎯" },
+    { id: "470-leads", label: "Form 470 Leads", icon: "🎯" },
+    { id: "competitive", label: "471 Lookup", icon: "🔎" },
     { id: "search", label: "School Search", icon: "🔍" },
     { id: "leads", label: "Saved Leads", icon: "📋" },
     { id: "settings", label: "Settings", icon: "⚙️" },
@@ -974,6 +1048,284 @@ export default function VendorPortalPage() {
                   </div>
                 )}
               </>
+            )}
+          </div>
+        )}
+
+        {/* Form 470 Lead Generation Tab (Sprint 3) */}
+        {activeTab === "470-leads" && (
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 rounded-2xl p-6 text-white shadow-lg">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
+                    <span className="text-3xl">🎯</span>
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold">Form 470 Lead Generation</h1>
+                    <p className="text-orange-100 mt-1">Find schools seeking vendors for E-Rate services</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm text-orange-100">Key Differentiator</div>
+                  <div className="text-xl font-bold">Manufacturer Filtering</div>
+                  <div className="text-sm text-orange-100">Query Bob doesn't have this!</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Search Filters */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-slate-900 mb-4">Search Filters</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                {/* Year Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Funding Year</label>
+                  <select
+                    value={form470Filters.year || ""}
+                    onChange={(e) => setForm470Filters({ ...form470Filters, year: e.target.value ? parseInt(e.target.value) : undefined })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    <option value="">Current/Next Year</option>
+                    {[2026, 2025, 2024, 2023, 2022].map((year) => (
+                      <option key={year} value={year}>{year}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* State Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">State</label>
+                  <select
+                    value={form470Filters.state || ""}
+                    onChange={(e) => setForm470Filters({ ...form470Filters, state: e.target.value || undefined })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    <option value="">All States</option>
+                    {US_STATES.map((state) => (
+                      <option key={state} value={state}>{state}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Category Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Category</label>
+                  <select
+                    value={form470Filters.category || ""}
+                    onChange={(e) => setForm470Filters({ ...form470Filters, category: e.target.value || undefined })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    <option value="">All Categories</option>
+                    <option value="1">Category 1 (Internet/WAN)</option>
+                    <option value="2">Category 2 (Equipment)</option>
+                  </select>
+                </div>
+
+                {/* Manufacturer Filter - KEY DIFFERENTIATOR */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Manufacturer <span className="text-orange-500 text-xs">(Exclusive!)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={form470Filters.manufacturer || ""}
+                    onChange={(e) => setForm470Filters({ ...form470Filters, manufacturer: e.target.value || undefined })}
+                    placeholder="e.g., Cisco, Meraki, Aruba"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
+
+                {/* Search Button */}
+                <div className="flex items-end">
+                  <button
+                    onClick={() => load470Leads(form470Filters)}
+                    disabled={form470Loading}
+                    className="w-full px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-lg font-medium hover:from-orange-600 hover:to-amber-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {form470Loading ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        Searching...
+                      </>
+                    ) : (
+                      <>
+                        <span>🔍</span>
+                        Search 470s
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick Manufacturer Buttons */}
+              <div className="mt-4 flex flex-wrap gap-2">
+                <span className="text-sm text-slate-500">Quick search:</span>
+                {['Cisco', 'Meraki', 'Aruba', 'Fortinet', 'SonicWall', 'HP', 'Ubiquiti', 'Ruckus'].map((mfr) => (
+                  <button
+                    key={mfr}
+                    onClick={() => {
+                      setForm470Filters({ ...form470Filters, manufacturer: mfr });
+                      load470Leads({ ...form470Filters, manufacturer: mfr });
+                    }}
+                    className="px-3 py-1 bg-orange-50 text-orange-700 rounded-full text-sm hover:bg-orange-100 transition-colors"
+                  >
+                    {mfr}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Error Display */}
+            {form470Error && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700">
+                {form470Error}
+              </div>
+            )}
+
+            {/* Results Summary */}
+            {form470TotalLeads > 0 && (
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">✅</span>
+                  <div>
+                    <div className="font-medium text-green-800">Found {form470TotalLeads} Form 470 Leads</div>
+                    <div className="text-sm text-green-600">
+                      {form470Filters.manufacturer && `Manufacturer: ${form470Filters.manufacturer} • `}
+                      {form470Filters.state && `State: ${form470Filters.state} • `}
+                      {form470Filters.category && `Category ${form470Filters.category}`}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    // Export leads as CSV
+                    const csv = [
+                      "Application Number,Entity Name,State,City,Type,Status,Posting Date,Manufacturers,Service Types,Contact Name,Contact Email,Contact Phone",
+                      ...form470Leads.map(lead =>
+                        `${lead.application_number},"${lead.entity_name || ''}",${lead.state || ''},"${lead.city || ''}","${lead.applicant_type || ''}","${lead.status || ''}","${lead.posting_date || ''}","${lead.manufacturers?.join('; ') || ''}","${lead.service_types?.join('; ') || ''}","${lead.contact_name || ''}","${lead.contact_email || ''}","${lead.contact_phone || ''}"`
+                      )
+                    ].join('\n');
+                    const blob = new Blob([csv], { type: 'text/csv' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `form470_leads_${new Date().toISOString().split('T')[0]}.csv`;
+                    a.click();
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                >
+                  <span>📥</span>
+                  Export CSV
+                </button>
+              </div>
+            )}
+
+            {/* Results Table */}
+            {form470Leads.length > 0 && (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Entity</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Location</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Year</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Manufacturers</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Services</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Contact</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {form470Leads.map((lead) => (
+                        <tr key={lead.application_number} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-slate-900">{lead.entity_name || 'Unknown'}</div>
+                            <div className="text-sm text-slate-500">
+                              470 #{lead.application_number} • {lead.applicant_type}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="text-slate-700">{lead.city}, {lead.state}</div>
+                            <div className="text-xs text-slate-500">BEN: {lead.ben}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                              {lead.funding_year}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap gap-1">
+                              {lead.manufacturers?.slice(0, 3).map((mfr, idx) => (
+                                <span key={idx} className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">
+                                  {mfr}
+                                </span>
+                              ))}
+                              {(lead.manufacturers?.length || 0) > 3 && (
+                                <span className="text-xs text-slate-500">+{lead.manufacturers!.length - 3} more</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap gap-1">
+                              {lead.categories?.map((cat, idx) => (
+                                <span key={idx} className={`px-2 py-0.5 rounded text-xs ${
+                                  cat.includes('1') ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                                }`}>
+                                  {cat}
+                                </span>
+                              ))}
+                            </div>
+                            <div className="text-xs text-slate-500 mt-1">
+                              {lead.service_types?.slice(0, 2).join(', ')}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="text-sm text-slate-700">{lead.contact_name || '-'}</div>
+                            {lead.contact_email && (
+                              <a href={`mailto:${lead.contact_email}`} className="text-xs text-blue-600 hover:underline">
+                                {lead.contact_email}
+                              </a>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => load470Detail(lead.application_number)}
+                              className="px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg text-sm hover:bg-orange-200 transition-colors"
+                            >
+                              View Details
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {!form470Loading && form470Leads.length === 0 && !form470Error && (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center">
+                <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-3xl">🎯</span>
+                </div>
+                <h3 className="text-lg font-medium text-slate-900 mb-2">Search for Form 470 Leads</h3>
+                <p className="text-slate-600 mb-4">
+                  Use the filters above to find schools seeking vendors.<br/>
+                  Try searching by <strong>manufacturer</strong> to find leads for specific product lines!
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <button
+                    onClick={() => load470Leads({})}
+                    className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+                  >
+                    Show All Recent 470s
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -2131,6 +2483,259 @@ export default function VendorPortalPage() {
               <button
                 onClick={closeEntityModal}
                 className="px-4 py-2 text-slate-700 hover:bg-slate-200 rounded-xl transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Form 470 Detail Modal (Sprint 3) */}
+      {showForm470Modal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={closeForm470Modal}
+          />
+          
+          {/* Modal */}
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-orange-500 to-amber-500 text-white">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-xl font-bold">{form470Detail?.entity?.name || 'Loading...'}</h2>
+                  <p className="text-orange-100 mt-1">
+                    Form 470 #{form470Detail?.application_number} • {form470Detail?.funding_year}
+                  </p>
+                </div>
+                <button
+                  onClick={closeForm470Modal}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {form470DetailLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
+                </div>
+              ) : form470Detail ? (
+                <div className="space-y-6">
+                  {/* Entity Info */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-slate-50 rounded-xl p-4">
+                      <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                        <span>🏫</span> Entity Information
+                      </h3>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">BEN:</span>
+                          <span className="font-medium">{form470Detail.entity?.ben}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Type:</span>
+                          <span className="font-medium">{form470Detail.entity?.type}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Location:</span>
+                          <span className="font-medium">{form470Detail.entity?.city}, {form470Detail.entity?.state}</span>
+                        </div>
+                        {form470Detail.entity?.website && (
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Website:</span>
+                            <a href={form470Detail.entity.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                              Visit →
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 rounded-xl p-4">
+                      <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                        <span>👤</span> Contact Information
+                      </h3>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Contact:</span>
+                          <span className="font-medium">{form470Detail.contact?.name}</span>
+                        </div>
+                        {form470Detail.contact?.email && (
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Email:</span>
+                            <a href={`mailto:${form470Detail.contact.email}`} className="text-blue-600 hover:underline">
+                              {form470Detail.contact.email}
+                            </a>
+                          </div>
+                        )}
+                        {form470Detail.contact?.phone && (
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Phone:</span>
+                            <a href={`tel:${form470Detail.contact.phone}`} className="text-blue-600 hover:underline">
+                              {form470Detail.contact.phone}
+                            </a>
+                          </div>
+                        )}
+                        {form470Detail.technical_contact?.name && (
+                          <>
+                            <div className="border-t border-slate-200 my-2"></div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">Tech Contact:</span>
+                              <span className="font-medium">{form470Detail.technical_contact.name}</span>
+                            </div>
+                            {form470Detail.technical_contact?.email && (
+                              <div className="flex justify-between">
+                                <span className="text-slate-500">Tech Email:</span>
+                                <a href={`mailto:${form470Detail.technical_contact.email}`} className="text-blue-600 hover:underline">
+                                  {form470Detail.technical_contact.email}
+                                </a>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Manufacturers & Service Types */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-orange-50 rounded-xl p-4">
+                      <h3 className="font-semibold text-orange-800 mb-3 flex items-center gap-2">
+                        <span>🏭</span> Manufacturers Requested
+                      </h3>
+                      <div className="flex flex-wrap gap-2">
+                        {form470Detail.manufacturers?.length > 0 ? (
+                          form470Detail.manufacturers.map((mfr, idx) => (
+                            <span key={idx} className="px-3 py-1 bg-orange-200 text-orange-800 rounded-full text-sm">
+                              {mfr}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-slate-500">No specific manufacturers requested</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-blue-50 rounded-xl p-4">
+                      <h3 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                        <span>📋</span> Categories & Services
+                      </h3>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {form470Detail.categories?.map((cat, idx) => (
+                          <span key={idx} className={`px-3 py-1 rounded-full text-sm ${
+                            cat.includes('1') ? 'bg-blue-200 text-blue-800' : 'bg-purple-200 text-purple-800'
+                          }`}>
+                            {cat}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="text-sm text-slate-600">
+                        {form470Detail.service_types?.join(', ')}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Services Details */}
+                  {form470Detail.services && form470Detail.services.length > 0 && (
+                    <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                      <div className="p-4 border-b border-slate-200 bg-slate-50">
+                        <h3 className="font-semibold text-slate-900">Services Requested ({form470Detail.total_services})</h3>
+                      </div>
+                      <div className="divide-y divide-slate-100 max-h-60 overflow-y-auto">
+                        {form470Detail.services.map((service, idx) => (
+                          <div key={idx} className="p-4 flex items-start justify-between">
+                            <div>
+                              <div className="font-medium text-slate-900">{service.service_type}</div>
+                              <div className="text-sm text-slate-500">{service.function}</div>
+                              {service.manufacturer && (
+                                <span className="inline-block mt-1 px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">
+                                  {service.manufacturer}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-right text-sm">
+                              <div className="text-slate-700">{service.quantity} {service.unit}</div>
+                              {service.min_capacity && (
+                                <div className="text-slate-500">{service.min_capacity} - {service.max_capacity}</div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Descriptions */}
+                  {(form470Detail.category_one_description || form470Detail.category_two_description) && (
+                    <div className="space-y-4">
+                      {form470Detail.category_one_description && (
+                        <div className="bg-blue-50 rounded-xl p-4">
+                          <h3 className="font-semibold text-blue-800 mb-2">Category 1 Description</h3>
+                          <p className="text-sm text-slate-700 whitespace-pre-wrap">{form470Detail.category_one_description}</p>
+                        </div>
+                      )}
+                      {form470Detail.category_two_description && (
+                        <div className="bg-purple-50 rounded-xl p-4">
+                          <h3 className="font-semibold text-purple-800 mb-2">Category 2 Description</h3>
+                          <p className="text-sm text-slate-700 whitespace-pre-wrap">{form470Detail.category_two_description}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Dates */}
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-slate-900 mb-3">Important Dates</h3>
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <div className="text-slate-500">Posted</div>
+                        <div className="font-medium">{form470Detail.posting_date ? new Date(form470Detail.posting_date).toLocaleDateString() : '-'}</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-500">Allowable Contract Date</div>
+                        <div className="font-medium">{form470Detail.allowable_contract_date ? new Date(form470Detail.allowable_contract_date).toLocaleDateString() : '-'}</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-500">Status</div>
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                          form470Detail.status === 'Certified' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                        }`}>
+                          {form470Detail.status}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center text-slate-500 py-12">
+                  Failed to load details
+                </div>
+              )}
+            </div>
+            
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-between gap-3">
+              {form470Detail?.contact?.email && (
+                <a
+                  href={`mailto:${form470Detail.contact.email}?subject=Regarding Form 470 ${form470Detail.application_number}`}
+                  className="px-4 py-2 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors flex items-center gap-2"
+                >
+                  <span>📧</span>
+                  Contact Entity
+                </a>
+              )}
+              <button
+                onClick={closeForm470Modal}
+                className="px-4 py-2 text-slate-700 hover:bg-slate-200 rounded-xl transition-colors ml-auto"
               >
                 Close
               </button>

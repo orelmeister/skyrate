@@ -533,6 +533,205 @@ async def lookup_spin_details(
         )
 
 
+# ==================== FORM 470 LEAD GENERATION (Sprint 3) ====================
+
+class Form470SearchRequest(BaseModel):
+    year: Optional[int] = None
+    state: Optional[str] = None
+    category: Optional[str] = None  # '1' or '2'
+    service_type: Optional[str] = None
+    manufacturer: Optional[str] = None
+    limit: int = 500
+
+
+@router.get("/470/leads")
+async def get_470_leads(
+    year: Optional[int] = None,
+    state: Optional[str] = None,
+    category: Optional[str] = None,
+    service_type: Optional[str] = None,
+    manufacturer: Optional[str] = None,
+    limit: int = 500,
+    current_user: User = Depends(require_role("admin", "vendor")),
+):
+    """
+    Get Form 470 postings for lead generation.
+    This is the CORE SALES WORKFLOW for vendors - finding schools seeking services.
+    
+    Key differentiator vs Query Bob: We support manufacturer filtering!
+    
+    Args:
+        year: Optional funding year filter (defaults to current/next year)
+        state: Optional two-letter state code (e.g., 'NY', 'CA')
+        category: Optional category filter ('1' for Cat1, '2' for Cat2)
+        service_type: Optional service type filter
+        manufacturer: Optional manufacturer name (partial match - e.g., 'Cisco', 'Meraki')
+        limit: Maximum records (default 500)
+    """
+    try:
+        from utils.usac_client import USACDataClient
+        
+        client = USACDataClient()
+        result = client.get_470_leads(
+            year=year,
+            state=state,
+            category=category,
+            service_type=service_type,
+            manufacturer=manufacturer,
+            limit=limit
+        )
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch 470 leads: {str(e)}"
+        )
+
+
+@router.get("/470/state/{state}")
+async def get_470_by_state(
+    state: str,
+    year: Optional[int] = None,
+    category: Optional[str] = None,
+    limit: int = 500,
+    current_user: User = Depends(require_role("admin", "vendor")),
+):
+    """
+    Get Form 470 postings for a specific state.
+    Quick way to find opportunities in target markets.
+    
+    Args:
+        state: Two-letter state code (e.g., 'NY', 'CA')
+        year: Optional funding year filter
+        category: Optional category filter ('1' or '2')
+        limit: Maximum records (default 500)
+    """
+    try:
+        from utils.usac_client import USACDataClient
+        
+        client = USACDataClient()
+        result = client.get_470_by_state(state, year, category, limit)
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch 470 leads for state {state}: {str(e)}"
+        )
+
+
+@router.get("/470/manufacturer/{manufacturer}")
+async def get_470_by_manufacturer(
+    manufacturer: str,
+    year: Optional[int] = None,
+    state: Optional[str] = None,
+    limit: int = 500,
+    current_user: User = Depends(require_role("admin", "vendor")),
+):
+    """
+    Get Form 470 postings that mention a specific manufacturer.
+    KEY DIFFERENTIATOR vs Query Bob - they don't have this!
+    
+    Perfect for vendors representing specific product lines:
+    - Cisco, Cisco Systems
+    - Meraki
+    - Aruba, HP Aruba
+    - Sonic Wall, SonicWall
+    - Fortinet
+    - Ubiquiti
+    
+    Args:
+        manufacturer: Manufacturer name (partial match supported)
+        year: Optional funding year filter
+        state: Optional state filter
+        limit: Maximum records (default 500)
+    """
+    try:
+        from utils.usac_client import USACDataClient
+        
+        client = USACDataClient()
+        result = client.get_470_by_manufacturer(manufacturer, year, state, limit)
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch 470 leads for manufacturer {manufacturer}: {str(e)}"
+        )
+
+
+@router.get("/470/{application_number}")
+async def get_470_detail(
+    application_number: str,
+    current_user: User = Depends(require_role("admin", "vendor")),
+):
+    """
+    Get detailed information about a specific Form 470 application.
+    Includes all services requested, contact information, and descriptions.
+    
+    Use this when a vendor wants to see full details before reaching out.
+    
+    Args:
+        application_number: The Form 470 application number
+    """
+    try:
+        from utils.usac_client import USACDataClient
+        
+        client = USACDataClient()
+        result = client.get_470_detail(application_number)
+        
+        if not result.get('success'):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=result.get('error', 'Form 470 not found')
+            )
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch 470 details: {str(e)}"
+        )
+
+
+@router.post("/470/search")
+async def search_470(
+    data: Form470SearchRequest,
+    current_user: User = Depends(require_role("admin", "vendor")),
+):
+    """
+    Advanced Form 470 search with multiple filters.
+    Flexible endpoint for customized lead generation queries.
+    """
+    try:
+        from utils.usac_client import USACDataClient
+        
+        client = USACDataClient()
+        result = client.get_470_leads(
+            year=data.year,
+            state=data.state,
+            category=data.category,
+            service_type=data.service_type,
+            manufacturer=data.manufacturer,
+            limit=data.limit
+        )
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to search 470 data: {str(e)}"
+        )
+
+
 # ==================== SEARCH ENDPOINTS ====================
 
 @router.post("/search")

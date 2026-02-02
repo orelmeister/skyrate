@@ -316,6 +316,111 @@ export interface EntityFRNStatusResponse {
   error?: string;
 }
 
+// ==================== FORM 470 LEAD GENERATION TYPES (Sprint 3) ====================
+
+export interface Form470Service {
+  service_category: string;
+  service_type: string;
+  function: string;
+  manufacturer: string | null;
+  quantity: string;
+  unit: string;
+  min_capacity: string | null;
+  max_capacity: string | null;
+  installation_required: string;
+}
+
+export interface Form470Lead {
+  application_number: string;
+  funding_year: string;
+  ben: string;
+  entity_name: string;
+  state: string;
+  city: string;
+  applicant_type: string;
+  status: string;
+  posting_date: string;
+  allowable_contract_date: string;
+  // Contacts
+  contact_name: string;
+  contact_email: string;
+  contact_phone: string;
+  technical_contact: string | null;
+  technical_email: string | null;
+  technical_phone: string | null;
+  // Descriptions
+  cat1_description: string | null;
+  cat2_description: string | null;
+  // Services
+  services: Form470Service[];
+  manufacturers: string[];
+  service_types: string[];
+  categories: string[];
+}
+
+export interface Form470LeadsResponse {
+  success: boolean;
+  total_leads: number;
+  leads: Form470Lead[];
+  filters_applied: {
+    year?: number;
+    state?: string;
+    category?: string;
+    service_type?: string;
+    manufacturer?: string;
+  };
+  error?: string;
+}
+
+export interface Form470DetailEntity {
+  ben: string;
+  name: string;
+  type: string;
+  address: string;
+  address2: string | null;
+  city: string;
+  state: string;
+  zip: string;
+  phone: string;
+  email: string | null;
+  website: string | null;
+  eligible_entities: string;
+}
+
+export interface Form470Contact {
+  name: string;
+  email: string;
+  phone: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  title?: string;
+}
+
+export interface Form470DetailResponse {
+  success: boolean;
+  application_number: string;
+  funding_year: string;
+  status: string;
+  form_nickname: string;
+  entity: Form470DetailEntity;
+  contact: Form470Contact;
+  technical_contact: Form470Contact;
+  authorized_person: Form470Contact;
+  category_one_description: string | null;
+  category_two_description: string | null;
+  posting_date: string;
+  allowable_contract_date: string;
+  created_date: string;
+  services: Form470Service[];
+  total_services: number;
+  manufacturers: string[];
+  service_types: string[];
+  categories: string[];
+  error?: string;
+}
+
 // ==================== APPEALS TYPES ====================
 
 export interface ChatMessage {
@@ -1008,6 +1113,78 @@ class ApiClient {
   async getEntityFRNStatus(ben: string, year?: number): Promise<ApiResponse<EntityFRNStatusResponse>> {
     const params = year ? `?year=${year}` : '';
     return this.request(`/api/v1/vendor/frn-status/entity/${ben}${params}`);
+  }
+
+  // ==================== FORM 470 LEAD GENERATION (Sprint 3) ====================
+
+  /**
+   * Get Form 470 leads (core sales workflow)
+   * KEY DIFFERENTIATOR: Supports manufacturer filtering (Query Bob doesn't have this!)
+   */
+  async get470Leads(filters: {
+    year?: number;
+    state?: string;
+    category?: string;
+    service_type?: string;
+    manufacturer?: string;
+    limit?: number;
+  }): Promise<ApiResponse<Form470LeadsResponse>> {
+    const params = new URLSearchParams();
+    if (filters.year) params.append('year', filters.year.toString());
+    if (filters.state) params.append('state', filters.state);
+    if (filters.category) params.append('category', filters.category);
+    if (filters.service_type) params.append('service_type', filters.service_type);
+    if (filters.manufacturer) params.append('manufacturer', filters.manufacturer);
+    if (filters.limit) params.append('limit', filters.limit.toString());
+    const queryString = params.toString();
+    return this.request(`/api/v1/vendor/470/leads${queryString ? '?' + queryString : ''}`);
+  }
+
+  /**
+   * Get Form 470 leads by state
+   */
+  async get470ByState(state: string, year?: number, category?: string, limit: number = 500): Promise<ApiResponse<Form470LeadsResponse>> {
+    const params = new URLSearchParams();
+    if (year) params.append('year', year.toString());
+    if (category) params.append('category', category);
+    params.append('limit', limit.toString());
+    return this.request(`/api/v1/vendor/470/state/${state}?${params}`);
+  }
+
+  /**
+   * Get Form 470 leads by manufacturer - KEY DIFFERENTIATOR!
+   * This is what Query Bob doesn't have
+   */
+  async get470ByManufacturer(manufacturer: string, year?: number, state?: string, limit: number = 500): Promise<ApiResponse<Form470LeadsResponse>> {
+    const params = new URLSearchParams();
+    if (year) params.append('year', year.toString());
+    if (state) params.append('state', state);
+    params.append('limit', limit.toString());
+    return this.request(`/api/v1/vendor/470/manufacturer/${encodeURIComponent(manufacturer)}?${params}`);
+  }
+
+  /**
+   * Get detailed Form 470 application info
+   */
+  async get470Detail(applicationNumber: string): Promise<ApiResponse<Form470DetailResponse>> {
+    return this.request(`/api/v1/vendor/470/${applicationNumber}`);
+  }
+
+  /**
+   * Search Form 470 with advanced filters
+   */
+  async search470(filters: {
+    year?: number;
+    state?: string;
+    category?: string;
+    service_type?: string;
+    manufacturer?: string;
+    limit?: number;
+  }): Promise<ApiResponse<Form470LeadsResponse>> {
+    return this.request('/api/v1/vendor/470/search', {
+      method: 'POST',
+      body: JSON.stringify(filters),
+    });
   }
 
   // ==================== SUBSCRIPTIONS ====================

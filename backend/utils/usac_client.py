@@ -29,6 +29,9 @@ USAC_ENDPOINTS = {
     'invoice_disbursements': 'https://opendata.usac.org/resource/jpiu-tj8h.json',
     'frn_status': 'https://opendata.usac.org/resource/qdmp-ygft.json',  # Form 471 FRN Status
     '471_combined': 'https://opendata.usac.org/resource/avi8-svp9.json',  # Recipient Details & Commitments
+    # Form 470 Lead Generation (Sprint 3)
+    '470_services': 'https://opendata.usac.org/resource/39tn-hjzv.json',  # Services Requested (has manufacturer!)
+    '470_basic': 'https://opendata.usac.org/resource/jp7a-89nd.json',  # Basic Info (contacts, entity details)
 }
 
 # Field name mapping from common names to USAC API field names
@@ -1422,4 +1425,393 @@ class USACDataClient:
             return {
                 'success': False,
                 'error': f'Failed to get entity FRN summary: {str(e)}'
+            }
+    
+    # ==========================================================================
+    # FORM 470 LEAD GENERATION METHODS (Sprint 3)
+    # ==========================================================================
+    
+    def get_470_leads(
+        self,
+        year: Optional[int] = None,
+        state: Optional[str] = None,
+        category: Optional[str] = None,
+        service_type: Optional[str] = None,
+        manufacturer: Optional[str] = None,
+        limit: int = 500
+    ) -> Dict[str, Any]:
+        """
+        Get Form 470 postings for lead generation.
+        This is the core sales workflow for vendors - finding schools seeking services.
+        
+        Joins 470_services (for manufacturer/service details) with 470_basic (for entity info).
+        
+        Args:
+            year: Optional funding year filter (default: current + next year)
+            state: Optional two-letter state code filter
+            category: Optional category filter ('1' for Cat1, '2' for Cat2)
+            service_type: Optional service type filter
+            manufacturer: Optional manufacturer name filter (partial match)
+            limit: Maximum records to return
+            
+        Returns:
+            Dictionary with 470 leads including entity info and services requested
+        """
+        try:
+            # Default to current and next funding year if not specified
+            if not year:
+                import datetime
+                current_year = datetime.datetime.now().year
+                # E-Rate funding years typically are current year + 1
+                year_filter = f"funding_year IN ('{current_year}', '{current_year + 1}')"
+            else:
+                year_filter = f"funding_year = '{year}'"
+            
+            # Build WHERE clause for services dataset
+            where_conditions = [year_filter]
+            
+            if category:
+                cat_name = f"Category {category}" if category in ['1', '2'] else category
+                where_conditions.append(f"service_category = '{cat_name}'")
+            
+            if service_type:
+                where_conditions.append(f"service_type LIKE '%{service_type}%'")
+            
+            if manufacturer:
+                where_conditions.append(f"UPPER(manufacturer) LIKE UPPER('%{manufacturer}%')")
+            
+            # Fetch services data
+            services_url = USAC_ENDPOINTS['470_services']
+            params = {
+                '$where': ' AND '.join(where_conditions),
+                '$limit': limit * 2,  # Fetch more since we'll group
+                '$order': 'funding_year DESC'
+            }
+            
+            logger.info(f"Fetching 470 services with: {params}")
+            response = self.session.get(services_url, params=params, timeout=60)
+            response.raise_for_status()
+            services_data = response.json()
+            
+            if not services_data:
+                return {
+                    'success': True,
+                    'total_leads': 0,
+                    'leads': [],
+                    'filters_applied': {
+                        'year': year,
+                        'state': state,
+                        'category': category,
+                        'service_type': service_type,
+                        'manufacturer': manufacturer
+                    }
+                }
+            
+            # Get unique application numbers to fetch basic info
+            app_numbers = list(set(s.get('application_number') for s in services_data if s.get('application_number')))
+            
+            # Fetch basic info for these applications (entity details, contacts)
+            basic_url = USAC_ENDPOINTS['470_basic']
+            
+            # Build state filter for basic info - join app numbers with proper quoting
+            quoted_app_nums = ','.join(f"'{an}'" for an in app_numbers[:100])
+            basic_where = f"application_number IN ({quoted_app_nums})"
+            if state:
+                basic_where += f" AND billed_entity_state = '{state.upper()}'"
+            
+            basic_params = {
+                '$where': basic_where,
+                '$limit': 500
+            }
+            
+            logger.info(f"Fetching 470 basic info for {len(app_numbers)} applications")
+            basic_response = self.session.get(basic_url, params=basic_params, timeout=60)
+            basic_response.raise_for_status()
+            basic_data = basic_response.json()
+            
+            # Create lookup for basic info by application_number
+            basic_lookup = {b.get('application_number'): b for b in basic_data}
+            
+            # Group services by application and build lead records
+            leads_by_app = {}
+            for service in services_data:
+                app_num = service.get('application_number')
+                if not app_num:
+                    continue
+                
+                basic_info = basic_lookup.get(app_num, {})
+                
+                # Apply state filter if we have basic info
+                if state and basic_info.get('billed_entity_state', '').upper() != state.upper():
+                    continue
+                
+                if app_num not in leads_by_app:
+                    leads_by_app[app_num] = {
+                        'application_number': app_num,
+                        'funding_year': service.get('funding_year'),
+                        'ben': basic_info.get('ben'),
+                        'entity_name': basic_info.get('billed_entity_name'),
+                        'state': basic_info.get('billed_entity_state'),
+                        'city': basic_info.get('billed_entity_city'),
+                        'applicant_type': basic_info.get('applicant_type'),
+                        'status': basic_info.get('f470_status'),
+                        'posting_date': basic_info.get('certified_datetime'),
+                        'allowable_contract_date': basic_info.get('allowable_contract_date'),
+                        # Contact info
+                        'contact_name': basic_info.get('contact_name'),
+                        'contact_email': basic_info.get('contact_email'),
+                        'contact_phone': basic_info.get('contact_phone'),
+                        'technical_contact': basic_info.get('technical_contact_name'),
+                        'technical_email': basic_info.get('technical_contact_email'),
+                        'technical_phone': basic_info.get('technical_contact_phone'),
+                        # Category descriptions
+                        'cat1_description': basic_info.get('category_one_description'),
+                        'cat2_description': basic_info.get('category_two_description'),
+                        # Service details
+                        'services': [],
+                        'manufacturers': set(),
+                        'service_types': set(),
+                        'categories': set()
+                    }
+                
+                # Add service details
+                leads_by_app[app_num]['services'].append({
+                    'service_category': service.get('service_category'),
+                    'service_type': service.get('service_type'),
+                    'function': service.get('function'),
+                    'manufacturer': service.get('manufacturer'),
+                    'quantity': service.get('quantity'),
+                    'unit': service.get('unit'),
+                    'min_capacity': service.get('minimum_capacity'),
+                    'max_capacity': service.get('maximum_capacity'),
+                    'installation_required': service.get('installation_initial_configuration')
+                })
+                
+                if service.get('manufacturer'):
+                    leads_by_app[app_num]['manufacturers'].add(service.get('manufacturer'))
+                if service.get('service_type'):
+                    leads_by_app[app_num]['service_types'].add(service.get('service_type'))
+                if service.get('service_category'):
+                    leads_by_app[app_num]['categories'].add(service.get('service_category'))
+            
+            # Convert sets to lists for JSON serialization
+            leads = []
+            for lead in leads_by_app.values():
+                lead['manufacturers'] = list(lead['manufacturers'])
+                lead['service_types'] = list(lead['service_types'])
+                lead['categories'] = list(lead['categories'])
+                leads.append(lead)
+            
+            # Sort by posting date (newest first)
+            leads.sort(key=lambda x: x.get('posting_date') or '', reverse=True)
+            
+            return {
+                'success': True,
+                'total_leads': len(leads),
+                'leads': leads[:limit],
+                'filters_applied': {
+                    'year': year,
+                    'state': state,
+                    'category': category,
+                    'service_type': service_type,
+                    'manufacturer': manufacturer
+                }
+            }
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching 470 leads: {e}")
+            return {
+                'success': False,
+                'error': f'Failed to fetch Form 470 leads: {str(e)}'
+            }
+        except Exception as e:
+            logger.error(f"Error in get_470_leads: {e}")
+            return {
+                'success': False,
+                'error': f'Failed to process 470 leads: {str(e)}'
+            }
+    
+    def get_470_by_state(
+        self,
+        state: str,
+        year: Optional[int] = None,
+        category: Optional[str] = None,
+        limit: int = 500
+    ) -> Dict[str, Any]:
+        """
+        Get Form 470 postings for a specific state.
+        Convenience method for state-based lead generation.
+        
+        Args:
+            state: Two-letter state code (e.g., 'NY', 'CA')
+            year: Optional funding year filter
+            category: Optional category filter ('1' or '2')
+            limit: Maximum records
+            
+        Returns:
+            Dictionary with 470 leads for the state
+        """
+        return self.get_470_leads(
+            year=year,
+            state=state,
+            category=category,
+            limit=limit
+        )
+    
+    def get_470_by_manufacturer(
+        self,
+        manufacturer: str,
+        year: Optional[int] = None,
+        state: Optional[str] = None,
+        limit: int = 500
+    ) -> Dict[str, Any]:
+        """
+        Get Form 470 postings that mention a specific manufacturer.
+        This is a KEY DIFFERENTIATOR vs Query Bob - they don't have this!
+        
+        Useful for vendors who represent specific product lines (Cisco, Meraki, Aruba, etc.)
+        
+        Args:
+            manufacturer: Manufacturer name to search for (partial match)
+            year: Optional funding year filter
+            state: Optional state filter
+            limit: Maximum records
+            
+        Returns:
+            Dictionary with 470 leads mentioning the manufacturer
+        """
+        return self.get_470_leads(
+            year=year,
+            state=state,
+            manufacturer=manufacturer,
+            limit=limit
+        )
+    
+    def get_470_detail(
+        self,
+        application_number: str
+    ) -> Dict[str, Any]:
+        """
+        Get detailed information about a specific Form 470 application.
+        Includes all services requested, contacts, and descriptions.
+        
+        Args:
+            application_number: The 470 application number
+            
+        Returns:
+            Dictionary with complete 470 details
+        """
+        try:
+            # Fetch basic info
+            basic_url = USAC_ENDPOINTS['470_basic']
+            basic_params = {
+                '$where': f"application_number = '{application_number}'",
+                '$limit': 1
+            }
+            
+            basic_response = self.session.get(basic_url, params=basic_params, timeout=30)
+            basic_response.raise_for_status()
+            basic_data = basic_response.json()
+            
+            if not basic_data:
+                return {
+                    'success': False,
+                    'error': f'Form 470 application {application_number} not found'
+                }
+            
+            basic_info = basic_data[0]
+            
+            # Fetch all services for this application
+            services_url = USAC_ENDPOINTS['470_services']
+            services_params = {
+                '$where': f"application_number = '{application_number}'",
+                '$limit': 100
+            }
+            
+            services_response = self.session.get(services_url, params=services_params, timeout=30)
+            services_response.raise_for_status()
+            services_data = services_response.json()
+            
+            # Build comprehensive response
+            return {
+                'success': True,
+                'application_number': application_number,
+                'funding_year': basic_info.get('funding_year'),
+                'status': basic_info.get('f470_status'),
+                'form_nickname': basic_info.get('form_nickname'),
+                # Entity info
+                'entity': {
+                    'ben': basic_info.get('ben'),
+                    'name': basic_info.get('billed_entity_name'),
+                    'type': basic_info.get('applicant_type'),
+                    'address': basic_info.get('billed_entity_address1'),
+                    'address2': basic_info.get('billed_entity_address2'),
+                    'city': basic_info.get('billed_entity_city'),
+                    'state': basic_info.get('billed_entity_state'),
+                    'zip': basic_info.get('billed_entity_zip'),
+                    'phone': basic_info.get('billed_entity_phone'),
+                    'email': basic_info.get('billed_entity_email'),
+                    'website': basic_info.get('website_url'),
+                    'eligible_entities': basic_info.get('number_of_eligible_entities')
+                },
+                # Contacts
+                'contact': {
+                    'name': basic_info.get('contact_name'),
+                    'email': basic_info.get('contact_email'),
+                    'phone': basic_info.get('contact_phone'),
+                    'address': basic_info.get('contact_address1'),
+                    'city': basic_info.get('contact_city'),
+                    'state': basic_info.get('contact_state'),
+                    'zip': basic_info.get('contact_zip')
+                },
+                'technical_contact': {
+                    'name': basic_info.get('technical_contact_name'),
+                    'title': basic_info.get('technical_contact_title'),
+                    'email': basic_info.get('technical_contact_email'),
+                    'phone': basic_info.get('technical_contact_phone')
+                },
+                'authorized_person': {
+                    'name': basic_info.get('authorized_person_name'),
+                    'title': basic_info.get('authorized_person_title'),
+                    'email': basic_info.get('authorized_person_email'),
+                    'phone': basic_info.get('authorized_person_phone')
+                },
+                # Descriptions
+                'category_one_description': basic_info.get('category_one_description'),
+                'category_two_description': basic_info.get('category_two_description'),
+                # Dates
+                'posting_date': basic_info.get('certified_datetime'),
+                'allowable_contract_date': basic_info.get('allowable_contract_date'),
+                'created_date': basic_info.get('created_datetime'),
+                # Services requested
+                'services': [{
+                    'service_category': s.get('service_category'),
+                    'service_type': s.get('service_type'),
+                    'function': s.get('function'),
+                    'manufacturer': s.get('manufacturer'),
+                    'quantity': s.get('quantity'),
+                    'unit': s.get('unit'),
+                    'entities': s.get('entities'),
+                    'min_capacity': s.get('minimum_capacity'),
+                    'max_capacity': s.get('maximum_capacity'),
+                    'installation_required': s.get('installation_initial_configuration')
+                } for s in services_data],
+                # Summary
+                'total_services': len(services_data),
+                'manufacturers': list(set(s.get('manufacturer') for s in services_data if s.get('manufacturer'))),
+                'service_types': list(set(s.get('service_type') for s in services_data if s.get('service_type'))),
+                'categories': list(set(s.get('service_category') for s in services_data if s.get('service_category')))
+            }
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching 470 detail: {e}")
+            return {
+                'success': False,
+                'error': f'Failed to fetch Form 470 details: {str(e)}'
+            }
+        except Exception as e:
+            logger.error(f"Error in get_470_detail: {e}")
+            return {
+                'success': False,
+                'error': f'Failed to process 470 details: {str(e)}'
             }
