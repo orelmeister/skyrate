@@ -19,19 +19,11 @@ from slowapi.errors import RateLimitExceeded
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
-# Add parent directory to path to import existing utils (skyrate-ai)
-skyrate_ai_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'skyrate-ai')
-if os.path.exists(skyrate_ai_path):
-    sys.path.insert(0, skyrate_ai_path)
-
 # Import core modules
 from app.core.config import settings
 from app.core.database import engine, Base
 
-# Import services
-from app.services import get_usac_service, get_ai_service, get_denial_service, get_appeals_service
-
-# Import API routers
+# Import API routers - services are imported lazily within these
 from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals
 
 # Configure logging
