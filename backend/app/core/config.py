@@ -104,6 +104,9 @@ class Settings(BaseSettings):
     # Vendors: $200/month or $2,000/year  
     VENDOR_MONTHLY_PRICE: int = 20000       # $200
     VENDOR_YEARLY_PRICE: int = 200000       # $2,000
+    # Applicants: $99/month or $990/year
+    APPLICANT_MONTHLY_PRICE: int = 9900     # $99
+    APPLICANT_YEARLY_PRICE: int = 99000     # $990
     
     # Test/Demo Account Settings
     # Emails containing these patterns get free access (case-insensitive)

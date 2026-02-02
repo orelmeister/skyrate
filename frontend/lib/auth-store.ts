@@ -13,7 +13,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 export interface User {
   id: number;
   email: string;
-  role: "consultant" | "vendor" | "admin";
+  role: "consultant" | "vendor" | "admin" | "applicant";
   first_name?: string;
   last_name?: string;
   full_name?: string;
@@ -43,9 +43,10 @@ export interface RegisterData {
   first_name?: string;
   last_name?: string;
   company_name?: string;
-  role: "consultant" | "vendor";
+  role: "consultant" | "vendor" | "applicant";
   crn?: string;  // For consultants
   spin?: string; // For vendors
+  ben?: string;  // For applicants
 }
 
 // Auth state interface

@@ -5,6 +5,14 @@ from .consultant import ConsultantProfile, ConsultantSchool
 from .vendor import VendorProfile, VendorSearch
 from .application import SchoolSnapshot, Application, AppealRecord, QueryHistory
 from .alert import Alert, AlertConfig, AlertType, AlertPriority
+from .applicant import (
+    ApplicantProfile, 
+    ApplicantFRN, 
+    ApplicantAutoAppeal, 
+    ApplicantStatusHistory,
+    DataSyncStatus,
+    FRNStatusType
+)
 
 __all__ = [
     "User",
@@ -24,4 +32,11 @@ __all__ = [
     "AlertConfig",
     "AlertType",
     "AlertPriority",
+    # Applicant models
+    "ApplicantProfile",
+    "ApplicantFRN",
+    "ApplicantAutoAppeal",
+    "ApplicantStatusHistory",
+    "DataSyncStatus",
+    "FRNStatusType",
 ]

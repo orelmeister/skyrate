@@ -15,6 +15,7 @@ class UserRole(str, enum.Enum):
     ADMIN = "admin"
     CONSULTANT = "consultant"
     VENDOR = "vendor"
+    APPLICANT = "applicant"
 
 
 class User(Base):
@@ -45,6 +46,7 @@ class User(Base):
     subscription = relationship("Subscription", back_populates="user", uselist=False)
     consultant_profile = relationship("ConsultantProfile", back_populates="user", uselist=False)
     vendor_profile = relationship("VendorProfile", back_populates="user", uselist=False)
+    applicant_profile = relationship("ApplicantProfile", back_populates="user", uselist=False)
     query_history = relationship("QueryHistory", back_populates="user")
     
     @property

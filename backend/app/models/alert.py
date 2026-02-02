@@ -121,7 +121,7 @@ class Alert(Base):
     entity_name = Column(String(255))  # School name, vendor name, etc.
     
     # Additional context (JSON for flexibility)
-    metadata = Column(JSON, default=dict)  # Store additional alert-specific data
+    alert_metadata = Column(JSON, default=dict)  # Store additional alert-specific data
     
     # Status
     is_read = Column(Boolean, default=False, index=True)
@@ -150,7 +150,7 @@ class Alert(Base):
             "entity_type": self.entity_type,
             "entity_id": self.entity_id,
             "entity_name": self.entity_name,
-            "metadata": self.metadata,
+            "metadata": self.alert_metadata,
             "is_read": self.is_read,
             "is_dismissed": self.is_dismissed,
             "is_actioned": self.is_actioned,
@@ -178,7 +178,7 @@ class Alert(Base):
             entity_type="frn",
             entity_id=frn,
             entity_name=school_name,
-            metadata={
+            alert_metadata={
                 "denial_reason": denial_reason,
                 "amount": amount,
             }
@@ -211,7 +211,7 @@ class Alert(Base):
             entity_type="frn",
             entity_id=frn,
             entity_name=school_name,
-            metadata={
+            alert_metadata={
                 "old_status": old_status,
                 "new_status": new_status,
                 "amount": amount,
@@ -240,7 +240,7 @@ class Alert(Base):
             entity_type="deadline",
             entity_id=entity_id,
             entity_name=entity_name,
-            metadata={
+            alert_metadata={
                 "deadline_type": deadline_type,
                 "deadline_date": deadline_date,
                 "days_remaining": days_remaining,
@@ -267,7 +267,7 @@ class Alert(Base):
             entity_type="form_470",
             entity_id=form_470_id,
             entity_name=entity_name,
-            metadata={
+            alert_metadata={
                 "state": state,
                 "category": category,
                 "manufacturers": manufacturers,

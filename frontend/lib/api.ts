@@ -15,7 +15,7 @@ export interface ApiResponse<T = any> {
 export interface User {
   id: number;
   email: string;
-  role: 'consultant' | 'vendor' | 'admin';
+  role: 'consultant' | 'vendor' | 'admin' | 'applicant';
   first_name: string | null;
   last_name: string | null;
   full_name: string | null;

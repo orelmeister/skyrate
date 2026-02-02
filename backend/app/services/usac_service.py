@@ -795,6 +795,169 @@ class USACService:
             result["error"] = f"Unexpected error: {str(e)}"
             return result
 
+    # ==================== APPLICANT (BEN) LOOKUP ====================
+    
+    def get_ben_info(self, ben: str) -> Optional[Dict[str, Any]]:
+        """
+        Get organization information for a BEN (Billed Entity Number).
+        
+        Args:
+            ben: Billed Entity Number
+            
+        Returns:
+            Dictionary with organization info or None if not found
+        """
+        try:
+            # Query Form 471 for the most recent application from this BEN
+            df = self._client.fetch_data(
+                filters={'ben': ben.strip()},
+                limit=1,
+                dataset='form_471'
+            )
+            
+            if df.empty:
+                return None
+            
+            row = df.iloc[0]
+            return {
+                'ben': ben.strip(),
+                'organization_name': row.get('organization_name'),
+                'state': row.get('state'),
+                'city': row.get('city'),
+                'entity_type': row.get('organization_entity_type_name'),
+                'discount_rate': row.get('discount_pct'),
+            }
+        except Exception as e:
+            print(f"Error fetching BEN info: {e}")
+            return None
+    
+    def get_applications_by_ben(self, ben: str, years: Optional[List[int]] = None) -> Dict[str, Any]:
+        """
+        Fetch all Form 471 applications for a BEN.
+        
+        Args:
+            ben: Billed Entity Number
+            years: Optional list of funding years (defaults to last 5 years)
+            
+        Returns:
+            Dictionary with applications list and summary
+        """
+        if not years:
+            current_year = datetime.now().year
+            years = list(range(current_year - 4, current_year + 1))
+        
+        all_applications = []
+        
+        for year in years:
+            try:
+                # Fetch Form 471 data for this BEN and year
+                df = self._client.fetch_data(
+                    year=year,
+                    filters={'ben': ben.strip()},
+                    limit=500,
+                    dataset='form_471'
+                )
+                
+                if not df.empty:
+                    for _, row in df.iterrows():
+                        app = {
+                            'frn': row.get('frn'),
+                            'application_number': row.get('form_471_application_number'),
+                            'funding_year': year,
+                            'status': row.get('form_471_frn_status_name'),
+                            'service_type': row.get('form_471_service_type_name'),
+                            'service_description': row.get('function_name'),
+                            'amount_requested': row.get('total_monthly_cost'),
+                            'amount_funded': row.get('original_commitment_request'),
+                            'discount_rate': row.get('discount_pct'),
+                            'fcdl_comment': row.get('fcdl_comment'),
+                        }
+                        all_applications.append(clean_nan_values(app))
+            except Exception as e:
+                print(f"Error fetching applications for year {year}: {e}")
+        
+        return {
+            'ben': ben.strip(),
+            'application_count': len(all_applications),
+            'applications': all_applications,
+            'years_queried': years
+        }
+    
+    def get_frn_status_by_ben(self, ben: str) -> Dict[str, Any]:
+        """
+        Fetch FRN status information for a BEN using the FRN Status dataset.
+        This provides detailed status tracking including PIA review stages.
+        
+        Args:
+            ben: Billed Entity Number
+            
+        Returns:
+            Dictionary with FRN status records
+        """
+        try:
+            # Use the FRN Status dataset endpoint
+            url = "https://opendata.usac.org/resource/qdmp-ygft.json"
+            
+            session = self._create_enrichment_session()
+            params = {
+                "ben": ben.strip(),
+                "$limit": 500,
+                "$order": "funding_year DESC"
+            }
+            
+            response = session.get(url, params=params, timeout=45)
+            
+            if response.status_code != 200:
+                return {'error': f"API error: {response.status_code}", 'records': []}
+            
+            data = response.json()
+            
+            return {
+                'ben': ben.strip(),
+                'record_count': len(data),
+                'records': data
+            }
+        except Exception as e:
+            print(f"Error fetching FRN status: {e}")
+            return {'error': str(e), 'records': []}
+    
+    def get_disbursements_by_ben(self, ben: str) -> Dict[str, Any]:
+        """
+        Fetch invoice/disbursement data for a BEN.
+        
+        Args:
+            ben: Billed Entity Number
+            
+        Returns:
+            Dictionary with disbursement records
+        """
+        try:
+            # Use the Invoice Disbursements dataset
+            url = "https://opendata.usac.org/resource/jpiu-tj8h.json"
+            
+            session = self._create_enrichment_session()
+            params = {
+                "ben": ben.strip(),
+                "$limit": 500,
+                "$order": "funding_year DESC"
+            }
+            
+            response = session.get(url, params=params, timeout=45)
+            
+            if response.status_code != 200:
+                return {'error': f"API error: {response.status_code}", 'records': []}
+            
+            data = response.json()
+            
+            return {
+                'ben': ben.strip(),
+                'record_count': len(data),
+                'records': data
+            }
+        except Exception as e:
+            print(f"Error fetching disbursements: {e}")
+            return {'error': str(e), 'records': []}
+
 
 # Singleton accessor
 def get_usac_service() -> USACService:

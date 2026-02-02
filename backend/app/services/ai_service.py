@@ -390,6 +390,238 @@ Format as a professional legal document ready for USAC submission. Include speci
         """
         
         return self._manager.call_gemini(prompt)
+    
+    # ==================== APPLICANT APPEAL METHODS ====================
+    
+    def analyze_denial_for_appeal(self, denial_info: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Analyze a denial and generate appeal strategy for applicants.
+        Used for auto-generating appeals when denials are detected.
+        
+        Args:
+            denial_info: Dictionary with frn, funding_year, denial_reason, service_type, amount_requested
+            
+        Returns:
+            Dictionary with denial_category, success_probability, evidence_needed, analysis
+        """
+        import json
+        
+        prompt = f"""Analyze this E-Rate denial and provide an appeal strategy.
+
+DENIAL INFORMATION:
+- FRN: {denial_info.get('frn', 'Unknown')}
+- Funding Year: {denial_info.get('funding_year', 'Unknown')}
+- Amount Requested: ${denial_info.get('amount_requested', 0):,.2f}
+- Service Type: {denial_info.get('service_type', 'Not specified')}
+
+DENIAL REASON:
+{denial_info.get('denial_reason', 'No denial reason provided')}
+
+Analyze and return a JSON object with:
+1. "denial_category": Categorize the denial (e.g., "Competitive Bidding", "Documentation", "Eligibility", "Procedural", "Timing", "Other")
+2. "success_probability": Estimated appeal success rate (0-100)
+3. "evidence_needed": List of specific documents/evidence needed for appeal
+4. "key_arguments": List of main arguments to use in appeal
+5. "fcc_citations": Relevant FCC rules that could support the appeal
+6. "analysis": Brief text analysis of the denial and appeal strategy
+
+Return ONLY valid JSON, no markdown formatting."""
+
+        try:
+            response = self._manager.call_gemini(prompt)
+            # Clean up response and parse JSON
+            response = response.strip()
+            if response.startswith("```"):
+                response = response.split("```")[1]
+                if response.startswith("json"):
+                    response = response[4:]
+            result = json.loads(response)
+            return result
+        except Exception as e:
+            print(f"Error analyzing denial: {e}")
+            # Return default structure
+            return {
+                "denial_category": "Unknown",
+                "success_probability": 50,
+                "evidence_needed": ["Form 470", "Bid evaluation documentation", "Signed contracts"],
+                "key_arguments": ["Good faith compliance", "Procedural technicality"],
+                "fcc_citations": ["47 C.F.R. §54.503"],
+                "analysis": "Unable to automatically analyze denial. Manual review recommended."
+            }
+    
+    def generate_appeal_letter(self, denial_info: Dict[str, Any], strategy: Dict[str, Any]) -> str:
+        """
+        Generate a complete appeal letter for applicants.
+        
+        Args:
+            denial_info: Dictionary with frn, funding_year, denial_reason, etc.
+            strategy: Strategy from analyze_denial_for_appeal
+            
+        Returns:
+            Complete appeal letter text ready for submission
+        """
+        frn = denial_info.get('frn', 'Unknown')
+        funding_year = denial_info.get('funding_year', 'Unknown')
+        amount = denial_info.get('amount_requested', 0)
+        denial_reason = denial_info.get('denial_reason', 'Not specified')
+        service_type = denial_info.get('service_type', 'Not specified')
+        
+        key_arguments = strategy.get('key_arguments', [])
+        fcc_citations = strategy.get('fcc_citations', [])
+        denial_category = strategy.get('denial_category', 'Procedural')
+        
+        prompt = f"""Generate a formal E-Rate appeal letter ready for submission to USAC.
+
+CASE DETAILS:
+- FRN: {frn}
+- Funding Year: {funding_year}
+- Amount Denied: ${amount:,.2f}
+- Service Type: {service_type}
+- Denial Category: {denial_category}
+
+DENIAL REASON FROM USAC:
+"{denial_reason}"
+
+APPEAL STRATEGY:
+Key Arguments: {', '.join(key_arguments) if key_arguments else 'Address procedural compliance'}
+FCC Citations: {', '.join(fcc_citations) if fcc_citations else '47 C.F.R. §54.503'}
+
+REQUIREMENTS:
+1. Start with "Dear USAC Appeals Committee:"
+2. Include formal header with FRN and funding year reference
+3. Summarize the denial clearly
+4. Present 3-5 specific arguments addressing the denial
+5. Cite relevant FCC regulations (47 C.F.R.)
+6. Demonstrate good faith compliance efforts
+7. List supporting documentation to be attached
+8. End with "Respectfully submitted," and signature block
+9. Keep professional and persuasive tone
+10. Make it ready for immediate submission
+
+Generate the complete appeal letter now:"""
+
+        try:
+            # Try Claude first for best formal writing
+            result = self._manager.call_claude(
+                [{"role": "user", "content": prompt}],
+                system="You are an expert E-Rate appeals consultant. Generate formal, professional appeal letters.",
+                max_tokens=6000
+            )
+            if result and len(result) > 500:
+                return result
+        except Exception as e:
+            print(f"Claude failed for appeal letter: {e}")
+        
+        # Fallback to Gemini
+        try:
+            result = self._manager.call_gemini(prompt)
+            if result and len(result) > 500:
+                return result
+        except Exception as e:
+            print(f"Gemini failed for appeal letter: {e}")
+        
+        # Return template if AI fails
+        return self._generate_template_appeal(denial_info, strategy)
+    
+    def _generate_template_appeal(self, denial_info: Dict[str, Any], strategy: Dict[str, Any]) -> str:
+        """Generate a template appeal letter when AI is unavailable."""
+        from datetime import datetime
+        
+        frn = denial_info.get('frn', 'Unknown')
+        funding_year = denial_info.get('funding_year', 'Unknown')
+        amount = denial_info.get('amount_requested', 0)
+        denial_reason = denial_info.get('denial_reason', 'Not specified')
+        
+        return f"""Dear USAC Appeals Committee:
+
+RE: Appeal of Funding Denial - FRN {frn}, Funding Year {funding_year}
+    Amount: ${amount:,.2f}
+
+I am writing to formally appeal the denial of funding for the above-referenced Funding Request Number (FRN).
+
+BACKGROUND:
+The applicant submitted Form 471 for funding year {funding_year}, requesting E-Rate support in the amount of ${amount:,.2f}.
+
+DENIAL REASON:
+The application was denied with the following reason:
+"{denial_reason}"
+
+GROUNDS FOR APPEAL:
+The applicant respectfully requests reconsideration of this denial for the following reasons:
+
+1. Good Faith Compliance: The applicant made every reasonable effort to comply with all applicable E-Rate program rules and regulations.
+
+2. Procedural Compliance: To the extent any procedural requirements were not met, the applicant believes such non-compliance was technical in nature and did not undermine the competitive bidding process or program integrity.
+
+3. Program Intent: The denial does not serve the underlying purpose of the E-Rate program, which is to ensure that schools and libraries have affordable access to telecommunications and information services.
+
+SUPPORTING DOCUMENTATION:
+The following documents are attached in support of this appeal:
+- Copy of Form 470
+- Copy of Form 471
+- Bid evaluation documentation
+- Contract documentation
+
+CONCLUSION:
+For the foregoing reasons, the applicant respectfully requests that USAC reverse the denial of funding for FRN {frn} and commit the requested amount of ${amount:,.2f}.
+
+Respectfully submitted,
+
+[Applicant Name]
+[Title]
+[Organization]
+[Date: {datetime.now().strftime('%B %d, %Y')}]
+[Contact Information]
+"""
+    
+    def chat_about_appeal(
+        self, 
+        message: str, 
+        chat_history: List[Dict[str, str]], 
+        context: Dict[str, Any]
+    ) -> str:
+        """
+        Chat with AI about refining an appeal.
+        
+        Args:
+            message: User's message
+            chat_history: Previous chat messages
+            context: Appeal context (frn, denial_reason, current_letter, strategy)
+            
+        Returns:
+            AI response
+        """
+        import json
+        
+        # Build conversation context
+        history_text = ""
+        for msg in chat_history[-10:]:  # Last 10 messages
+            role = "User" if msg.get("role") == "user" else "Assistant"
+            history_text += f"{role}: {msg.get('content', '')}\n\n"
+        
+        prompt = f"""You are an E-Rate appeals expert helping to refine an appeal letter.
+
+APPEAL CONTEXT:
+- FRN: {context.get('frn', 'Unknown')}
+- Denial Reason: {context.get('denial_reason', 'Not specified')}
+
+CURRENT APPEAL LETTER:
+{context.get('current_letter', 'No letter yet')[:2000]}...
+
+CONVERSATION HISTORY:
+{history_text}
+
+USER'S NEW MESSAGE:
+{message}
+
+Provide helpful, specific guidance about the appeal. If they ask to modify the letter, suggest specific changes. Be concise but thorough."""
+
+        try:
+            result = self._manager.call_gemini(prompt)
+            return result if result else "I apologize, I couldn't generate a response. Please try again."
+        except Exception as e:
+            print(f"Chat error: {e}")
+            return "I apologize, I'm having trouble responding. Please try again in a moment."
 
 
 # Singleton accessor
