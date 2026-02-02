@@ -91,7 +91,7 @@ def seed_demo_accounts():
                 hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
                 user = User(
                     email=email,
-                    hashed_password=hashed,
+                    password_hash=hashed,
                     role=role,
                     is_active=True
                 )
