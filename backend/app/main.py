@@ -334,20 +334,49 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # ==================== API ROUTERS ====================
 # V1 API - Authentication, Subscriptions, Portals
-# Mount at BOTH prefixes:
-# - /api/v1 for local development (frontend calls http://localhost:8001/api/v1/...)
-# - /v1 for Digital Ocean (DO strips /api, so /api/v1/... becomes /v1/...)
-for prefix in ["/api/v1", "/v1"]:
-    app.include_router(auth.router, prefix=prefix)
-    app.include_router(subscriptions.router, prefix=prefix)
-    app.include_router(consultant.router, prefix=prefix)
-    app.include_router(vendor.router, prefix=prefix)
-    app.include_router(admin.router, prefix=prefix)
-    app.include_router(query.router, prefix=prefix)
-    app.include_router(schools.router, prefix=prefix)
-    app.include_router(appeals.router, prefix=prefix)
-    app.include_router(alerts.router, prefix=prefix)
-    app.include_router(applicant.router, prefix=prefix)
+#
+# ROUTING EXPLAINED:
+# - Digital Ocean routing rule "/api" strips the prefix before forwarding to backend
+# - So when frontend calls /api/v1/auth/login, backend receives /v1/auth/login
+# - Therefore we mount all routers at /v1 (not /api/v1)
+#
+# For local development:
+# - Frontend .env.local should set NEXT_PUBLIC_API_URL=http://localhost:8001/api
+# - This way frontend calls http://localhost:8001/api/v1/auth/login
+# - Which hits backend at /api/v1/auth/login, but we also need /v1 for local
+#
+# SOLUTION: Mount at /v1 for production (DO strips /api)
+# Also add a redirect from /api/v1/* to /v1/* for local development
+
+# Middleware to rewrite /api/v1/* to /v1/* for local development
+# This simulates what Digital Ocean does (stripping /api prefix)
+class ApiPrefixRewriteMiddleware(BaseHTTPMiddleware):
+    """Rewrite /api/v1/* paths to /v1/* for local development compatibility"""
+    
+    async def dispatch(self, request: Request, call_next) -> Response:
+        # Check if path starts with /api/v1 or /api/ (for local dev)
+        path = request.scope.get("path", "")
+        if path.startswith("/api/"):
+            # Rewrite to remove /api prefix (simulating DO routing)
+            new_path = path[4:]  # Remove "/api" (4 chars)
+            request.scope["path"] = new_path
+            logger.debug(f"Rewriting path: {path} -> {new_path}")
+        return await call_next(request)
+
+# Add the rewrite middleware BEFORE routes are processed
+app.add_middleware(ApiPrefixRewriteMiddleware)
+
+# Primary routes at /v1 (this is what DO sends after stripping /api)
+app.include_router(auth.router, prefix="/v1")
+app.include_router(subscriptions.router, prefix="/v1")
+app.include_router(consultant.router, prefix="/v1")
+app.include_router(vendor.router, prefix="/v1")
+app.include_router(admin.router, prefix="/v1")
+app.include_router(query.router, prefix="/v1")
+app.include_router(schools.router, prefix="/v1")
+app.include_router(appeals.router, prefix="/v1")
+app.include_router(alerts.router, prefix="/v1")
+app.include_router(applicant.router, prefix="/v1")
 
 # ==================== MODELS ====================
 
@@ -398,12 +427,12 @@ async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "version": "2.0.0"}
 
-# Keep /api/v1/health for backwards compatibility
-@app.get("/api/v1/health")
+# Health check at /v1/health (after /api prefix strip)
+@app.get("/v1/health")
 async def health_check_v1():
     return {"status": "healthy", "version": "2.0.0"}
 
-@app.post("/api/v1/query", response_model=QueryResponse)
+@app.post("/v1/query", response_model=QueryResponse)
 async def process_query(request: QueryRequest):
     """Process a natural language query about E-Rate data"""
     try:
@@ -432,7 +461,7 @@ async def process_query(request: QueryRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/search")
+@app.post("/v1/search")
 async def direct_search(request: SearchRequest):
     """Direct search with explicit filters (no AI interpretation)"""
     try:
@@ -454,7 +483,7 @@ async def direct_search(request: SearchRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/analyze")
+@app.post("/v1/analyze")
 async def analyze_records(request: AnalysisRequest):
     """Perform AI analysis on selected records"""
     try:
@@ -471,18 +500,18 @@ async def analyze_records(request: AnalysisRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/v1/history")
+@app.get("/v1/history")
 async def get_history(limit: int = 20):
     """Get recent query history - placeholder"""
-    return {"success": True, "history": [], "message": "Query history available via /api/v1/query/history"}
+    return {"success": True, "history": [], "message": "Query history available via /v1/query/history"}
 
-@app.post("/api/v1/campaigns/send")
+@app.post("/v1/campaigns/send")
 async def send_campaign(request: EmailCampaignRequest, background_tasks: BackgroundTasks):
     """Send email campaign (runs in background) - placeholder for future implementation"""
     # Email campaigns will be implemented in a future version
     raise HTTPException(
         status_code=501, 
-        detail="Email campaigns feature not yet implemented. Use /api/v1/consultant/email for direct emails."
+        detail="Email campaigns feature not yet implemented. Use /v1/consultant/email for direct emails."
     )
 
 # ==================== STARTUP ====================
