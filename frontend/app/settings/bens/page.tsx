@@ -105,7 +105,9 @@ export default function BENSettingsPage() {
       });
       
       // Add to list
-      setBens(prev => [...prev, response.ben]);
+      if (response.data?.ben) {
+        setBens(prev => [...prev, response.data!.ben]);
+      }
       
       // Reset form
       setNewBen('');
@@ -113,7 +115,7 @@ export default function BENSettingsPage() {
       setShowAddModal(false);
       
       // If payment is needed, show alert or redirect
-      if (response.needs_payment) {
+      if (response.data?.needs_payment) {
         alert(`BEN added! Payment of $49/month is required to activate monitoring for ${newBen}.`);
         // In production, redirect to Stripe checkout
       }
