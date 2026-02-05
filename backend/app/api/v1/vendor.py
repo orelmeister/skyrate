@@ -763,10 +763,27 @@ async def search_schools(
             filters["application_status"] = status_map.get(data.status.lower(), data.status)
         
         if data.service_type:
-            if data.service_type.lower() in ["1", "category 1", "cat1"]:
+            # Map service type names to E-Rate categories
+            # Category 1: Telecommunications, Internet Access, Data Transmission, Voice
+            # Category 2: Internal Connections, Basic Maintenance, MIBS
+            service_type_lower = data.service_type.lower()
+            
+            category_1_services = [
+                "1", "category 1", "cat1",
+                "internet access", "data transmission", "voice",
+                "telecommunications"
+            ]
+            category_2_services = [
+                "2", "category 2", "cat2",
+                "internal connections", "basic maintenance",
+                "managed internal broadband services", "mibs"
+            ]
+            
+            if service_type_lower in category_1_services:
                 filters["form_471_service_type_name"] = "Category 1"
-            elif data.service_type.lower() in ["2", "category 2", "cat2"]:
+            elif service_type_lower in category_2_services:
                 filters["form_471_service_type_name"] = "Category 2"
+            # If service type doesn't match, don't add filter (search all)
         
         # Fetch data
         df = client.fetch_data(year=data.year, filters=filters, limit=data.limit)
@@ -793,26 +810,33 @@ async def search_schools(
                    keyword in str(r.get('form_471_service_type_name', '')).lower()
             ]
         
-        # Save search to history
-        search_record = VendorSearch(
-            vendor_profile_id=profile.id,
-            search_params={
-                "year": data.year,
-                "state": data.state,
-                "status": data.status,
-                "service_type": data.service_type,
-                "equipment_keyword": data.equipment_keyword,
-            },
-            results_count=len(results)
-        )
-        db.add(search_record)
-        db.commit()
+        # Save search to history (optional - don't fail if DB issue)
+        search_id = None
+        try:
+            search_record = VendorSearch(
+                vendor_profile_id=profile.id,
+                search_params={
+                    "year": data.year,
+                    "state": data.state,
+                    "status": data.status,
+                    "service_type": data.service_type,
+                    "equipment_keyword": data.equipment_keyword,
+                },
+                results_count=len(results)
+            )
+            db.add(search_record)
+            db.commit()
+            search_id = search_record.id
+        except Exception as db_error:
+            # Log but don't fail the search
+            print(f"Warning: Could not save search history: {db_error}")
+            db.rollback()
         
         return {
             "success": True,
             "count": len(results),
             "results": results[:data.limit],
-            "search_id": search_record.id
+            "search_id": search_id
         }
     
     except Exception as e:
