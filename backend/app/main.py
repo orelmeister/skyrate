@@ -334,16 +334,18 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # ==================== API ROUTERS ====================
 # V1 API - Authentication, Subscriptions, Portals
-app.include_router(auth.router, prefix="/api/v1")
-app.include_router(subscriptions.router, prefix="/api/v1")
-app.include_router(consultant.router, prefix="/api/v1")
-app.include_router(vendor.router, prefix="/api/v1")
-app.include_router(admin.router, prefix="/api/v1")
-app.include_router(query.router, prefix="/api/v1")
-app.include_router(schools.router, prefix="/api/v1")
-app.include_router(appeals.router, prefix="/api/v1")
-app.include_router(alerts.router, prefix="/api/v1")
-app.include_router(applicant.router, prefix="/api/v1")
+# Note: Digital Ocean App Platform strips /api from path when routing rule is "/api"
+# So /api/v1/auth/login arrives at backend as /v1/auth/login
+app.include_router(auth.router, prefix="/v1")
+app.include_router(subscriptions.router, prefix="/v1")
+app.include_router(consultant.router, prefix="/v1")
+app.include_router(vendor.router, prefix="/v1")
+app.include_router(admin.router, prefix="/v1")
+app.include_router(query.router, prefix="/v1")
+app.include_router(schools.router, prefix="/v1")
+app.include_router(appeals.router, prefix="/v1")
+app.include_router(alerts.router, prefix="/v1")
+app.include_router(applicant.router, prefix="/v1")
 
 # ==================== MODELS ====================
 
