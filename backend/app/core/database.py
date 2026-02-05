@@ -1,6 +1,6 @@
 """
 Database Configuration
-SQLAlchemy setup - supports SQLite (dev) and PostgreSQL (prod)
+SQLAlchemy setup - supports SQLite (dev), PostgreSQL (prod), and MySQL (Bluehost)
 """
 
 from sqlalchemy import create_engine
@@ -10,15 +10,26 @@ from typing import Generator
 
 from .config import settings
 
-# Determine if using SQLite (for local development)
+# Determine database type
 is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+is_mysql = settings.DATABASE_URL.startswith("mysql")
 
 # Create engine with appropriate settings
 if is_sqlite:
-    # SQLite-specific settings
+    # SQLite-specific settings (local development)
     engine = create_engine(
         settings.DATABASE_URL,
         connect_args={"check_same_thread": False},  # Required for SQLite
+        echo=settings.DEBUG
+    )
+elif is_mysql:
+    # MySQL settings (Bluehost production)
+    engine = create_engine(
+        settings.DATABASE_URL,
+        pool_pre_ping=True,
+        pool_size=5,
+        max_overflow=10,
+        pool_recycle=3600,  # Recycle connections after 1 hour (important for MySQL)
         echo=settings.DEBUG
     )
 else:
