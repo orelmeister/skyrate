@@ -791,6 +791,11 @@ async def search_schools(
         if df.empty:
             return {"success": True, "count": 0, "results": []}
         
+        # Clean NaN/Infinity values that aren't JSON serializable
+        import math
+        df = df.fillna('')  # Replace NaN with empty string
+        df = df.replace([float('inf'), float('-inf')], '')  # Replace infinity
+        
         # Apply additional filters
         results = df.to_dict('records')
         
