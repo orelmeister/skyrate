@@ -69,6 +69,8 @@ export default function VendorPortalPage() {
   const [frnStatusLoading, setFrnStatusLoading] = useState(false);
   const [frnStatusYear, setFrnStatusYear] = useState<number | undefined>(undefined);
   const [frnStatusFilter, setFrnStatusFilter] = useState<string>("");
+  const [selectedFRN, setSelectedFRN] = useState<FRNStatusRecord | null>(null);
+  const [showFRNDetailModal, setShowFRNDetailModal] = useState(false);
   
   // Form 470 Lead Generation state (Sprint 3)
   const [form470Leads, setForm470Leads] = useState<Form470Lead[]>([]);
@@ -1213,7 +1215,11 @@ export default function VendorPortalPage() {
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {frnStatusData.frns.slice(0, 100).map((frn, idx) => (
-                            <tr key={`${frn.frn}-${idx}`} className="hover:bg-slate-50">
+                            <tr 
+                              key={`${frn.frn}-${idx}`} 
+                              className="hover:bg-slate-50 cursor-pointer transition-colors"
+                              onClick={() => { setSelectedFRN(frn); setShowFRNDetailModal(true); }}
+                            >
                               <td className="px-4 py-3">
                                 <div className="font-mono text-xs text-slate-900">{frn.frn}</div>
                                 <div className="text-xs text-slate-500">{frn.application_number}</div>
@@ -3010,6 +3016,238 @@ export default function VendorPortalPage() {
             <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-3">
               <button
                 onClick={closeEntityModal}
+                className="px-4 py-2 text-slate-700 hover:bg-slate-200 rounded-xl transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FRN Detail Modal */}
+      {showFRNDetailModal && selectedFRN && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowFRNDetailModal(false)}
+          />
+          
+          {/* Modal */}
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className={`p-6 border-b border-slate-200 text-white ${
+              selectedFRN.status?.toLowerCase().includes('funded') || selectedFRN.status?.toLowerCase().includes('committed')
+                ? 'bg-gradient-to-r from-green-600 to-emerald-600'
+                : selectedFRN.status?.toLowerCase().includes('denied')
+                ? 'bg-gradient-to-r from-red-600 to-rose-600'
+                : 'bg-gradient-to-r from-amber-500 to-orange-500'
+            }`}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl">
+                      {selectedFRN.status?.toLowerCase().includes('funded') || selectedFRN.status?.toLowerCase().includes('committed')
+                        ? '✅'
+                        : selectedFRN.status?.toLowerCase().includes('denied')
+                        ? '❌'
+                        : '⏳'}
+                    </span>
+                    <div>
+                      <h2 className="text-xl font-bold">FRN: {selectedFRN.frn}</h2>
+                      <div className="text-white/80 text-sm mt-0.5">Application #{selectedFRN.application_number}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-3">
+                    <span className="px-3 py-1 bg-white/20 rounded-full text-sm font-medium">
+                      {selectedFRN.status || 'Unknown Status'}
+                    </span>
+                    <span className="px-3 py-1 bg-white/20 rounded-full text-sm">
+                      FY {selectedFRN.funding_year}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowFRNDetailModal(false)}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="space-y-6">
+                {/* Entity Information */}
+                <div className="bg-slate-50 rounded-xl p-4">
+                  <h3 className="text-sm font-semibold text-slate-600 mb-3 flex items-center gap-2">
+                    <span className="text-lg">🏫</span> Entity Information
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-xs text-slate-500">Entity Name</div>
+                      <div className="font-medium text-slate-900">{selectedFRN.entity_name || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500">BEN</div>
+                      <div className="font-mono text-slate-900">{selectedFRN.ben || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500">State</div>
+                      <div className="text-slate-900">{selectedFRN.state || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500">Service Type</div>
+                      <div className="text-slate-900">{selectedFRN.service_type || 'N/A'}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Funding Information */}
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4 border border-green-100">
+                  <h3 className="text-sm font-semibold text-green-700 mb-3 flex items-center gap-2">
+                    <span className="text-lg">💰</span> Funding Information
+                  </h3>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <div className="text-xs text-green-600">Commitment Amount</div>
+                      <div className="text-2xl font-bold text-green-700">
+                        ${selectedFRN.commitment_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || '0'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-green-600">Disbursed Amount</div>
+                      <div className="text-2xl font-bold text-green-700">
+                        ${selectedFRN.disbursed_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || '0'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-green-600">Discount Rate</div>
+                      <div className="text-2xl font-bold text-green-700">
+                        {selectedFRN.discount_rate ? `${selectedFRN.discount_rate}%` : 'N/A'}
+                      </div>
+                    </div>
+                  </div>
+                  {selectedFRN.commitment_amount && selectedFRN.disbursed_amount !== undefined && (
+                    <div className="mt-4">
+                      <div className="flex justify-between text-xs text-green-600 mb-1">
+                        <span>Disbursement Progress</span>
+                        <span>{((selectedFRN.disbursed_amount / selectedFRN.commitment_amount) * 100).toFixed(1)}%</span>
+                      </div>
+                      <div className="w-full bg-green-200 rounded-full h-2">
+                        <div 
+                          className="bg-green-600 h-2 rounded-full transition-all"
+                          style={{ width: `${Math.min((selectedFRN.disbursed_amount / selectedFRN.commitment_amount) * 100, 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Status & Pending Reason */}
+                {selectedFRN.pending_reason && (
+                  <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
+                    <h3 className="text-sm font-semibold text-amber-700 mb-2 flex items-center gap-2">
+                      <span className="text-lg">⚠️</span> Pending Reason
+                    </h3>
+                    <p className="text-amber-800">{selectedFRN.pending_reason}</p>
+                  </div>
+                )}
+
+                {/* FCDL Comment */}
+                {selectedFRN.fcdl_comment && (
+                  <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+                    <h3 className="text-sm font-semibold text-blue-700 mb-2 flex items-center gap-2">
+                      <span className="text-lg">📝</span> FCDL Comment
+                    </h3>
+                    <p className="text-blue-800">{selectedFRN.fcdl_comment}</p>
+                  </div>
+                )}
+
+                {/* Key Dates */}
+                <div className="bg-slate-50 rounded-xl p-4">
+                  <h3 className="text-sm font-semibold text-slate-600 mb-3 flex items-center gap-2">
+                    <span className="text-lg">📅</span> Key Dates
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div>
+                      <div className="text-xs text-slate-500">Award Date</div>
+                      <div className="text-slate-900">{selectedFRN.award_date || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500">FCDL Date</div>
+                      <div className="text-slate-900">{selectedFRN.fcdl_date || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500">Last Invoice Date</div>
+                      <div className="text-slate-900">{selectedFRN.last_invoice_date || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500">Service Start</div>
+                      <div className="text-slate-900">{selectedFRN.service_start || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500">Service End</div>
+                      <div className="text-slate-900">{selectedFRN.service_end || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500">Funding Year</div>
+                      <div className="text-slate-900">{selectedFRN.funding_year || 'N/A'}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Invoicing Information */}
+                <div className="bg-slate-50 rounded-xl p-4">
+                  <h3 className="text-sm font-semibold text-slate-600 mb-3 flex items-center gap-2">
+                    <span className="text-lg">📋</span> Invoicing Information
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <div className="text-xs text-slate-500">Invoicing Mode</div>
+                      <div className="text-slate-900">{selectedFRN.invoicing_mode || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500">Invoicing Ready</div>
+                      <div className={`font-medium ${selectedFRN.invoicing_ready === 'Yes' ? 'text-green-600' : 'text-slate-600'}`}>
+                        {selectedFRN.invoicing_ready || 'N/A'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500">F486 Status</div>
+                      <div className="text-slate-900">{selectedFRN.f486_status || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500">Wave Number</div>
+                      <div className="text-slate-900">{selectedFRN.wave_number || 'N/A'}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Vendor Information */}
+                <div className="bg-purple-50 rounded-xl p-4 border border-purple-100">
+                  <h3 className="text-sm font-semibold text-purple-700 mb-3 flex items-center gap-2">
+                    <span className="text-lg">🏢</span> Vendor Information
+                  </h3>
+                  <div>
+                    <div className="text-xs text-purple-600">Service Provider</div>
+                    <div className="font-medium text-purple-900">{selectedFRN.spin_name || 'N/A'}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center">
+              <div className="text-sm text-slate-500">
+                FRN: {selectedFRN.frn} • Application: {selectedFRN.application_number}
+              </div>
+              <button
+                onClick={() => setShowFRNDetailModal(false)}
                 className="px-4 py-2 text-slate-700 hover:bg-slate-200 rounded-xl transition-colors"
               >
                 Close
