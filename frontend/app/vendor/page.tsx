@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
-import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse, FRNStatusResponse, FRNStatusSummaryResponse, FRNStatusRecord, Form470Lead, Form470LeadsResponse, Form470DetailResponse } from "@/lib/api";
+import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse, FRNStatusResponse, FRNStatusSummaryResponse, FRNStatusRecord, Form470Lead, Form470LeadsResponse, Form470DetailResponse, SavedLead, EnrichedContactData } from "@/lib/api";
 
 interface SearchResult {
   ben: string;
@@ -86,6 +86,23 @@ export default function VendorPortalPage() {
   const [form470DetailLoading, setForm470DetailLoading] = useState(false);
   const [showForm470Modal, setShowForm470Modal] = useState(false);
   
+  // Saved Leads state
+  const [savedLeads, setSavedLeads] = useState<SavedLead[]>([]);
+  const [savedLeadsLoading, setSavedLeadsLoading] = useState(false);
+  const [savedLeadsTotalCount, setSavedLeadsTotalCount] = useState(0);
+  const [savedLeadsFilter, setSavedLeadsFilter] = useState<string>('');
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<number>>(new Set());
+  
+  // Lead saving/enrichment state for the modal
+  const [isLeadSaved, setIsLeadSaved] = useState(false);
+  const [savingLead, setSavingLead] = useState(false);
+  const [enrichingLead, setEnrichingLead] = useState(false);
+  const [currentSavedLead, setCurrentSavedLead] = useState<SavedLead | null>(null);
+  const [enrichmentData, setEnrichmentData] = useState<EnrichedContactData | null>(null);
+  
+  // Form 470 Leads selection for export
+  const [selectedForm470Leads, setSelectedForm470Leads] = useState<Set<string>>(new Set());
+  
   // Payment guard - check if user needs to complete payment setup
   const [checkingPayment, setCheckingPayment] = useState(true);
 
@@ -96,7 +113,9 @@ export default function VendorPortalPage() {
         return;
       }
       if (user?.role !== "vendor" && user?.role !== "admin") {
-        router.push("/consultant");
+        // Redirect to appropriate dashboard based on role
+        const dashboard = user?.role === 'applicant' ? '/applicant' : '/consultant';
+        router.push(dashboard);
         return;
       }
       
@@ -119,6 +138,13 @@ export default function VendorPortalPage() {
     
     checkPaymentStatus();
   }, [isAuthenticated, user, router]);
+
+  // Load saved leads when the "leads" tab is activated
+  useEffect(() => {
+    if (activeTab === "leads" && savedLeads.length === 0 && !savedLeadsLoading) {
+      loadSavedLeads();
+    }
+  }, [activeTab]);
 
   const loadProfile = async () => {
     setIsLoading(true);
@@ -343,11 +369,24 @@ export default function VendorPortalPage() {
     setForm470DetailLoading(true);
     setShowForm470Modal(true);
     setForm470Detail(null);
+    setIsLeadSaved(false);
+    setCurrentSavedLead(null);
+    setEnrichmentData(null);
     
     try {
       const response = await api.get470Detail(applicationNumber);
       if (response.success && response.data) {
         setForm470Detail(response.data);
+        
+        // Check if lead is already saved
+        const savedCheck = await api.checkLeadSaved('470', applicationNumber);
+        if (savedCheck.success && savedCheck.data?.is_saved) {
+          setIsLeadSaved(true);
+          setCurrentSavedLead(savedCheck.data.lead);
+          if (savedCheck.data.lead?.enriched_data) {
+            setEnrichmentData(savedCheck.data.lead.enriched_data);
+          }
+        }
       }
     } catch (error) {
       console.error("Failed to load 470 detail:", error);
@@ -359,6 +398,221 @@ export default function VendorPortalPage() {
   const closeForm470Modal = () => {
     setShowForm470Modal(false);
     setForm470Detail(null);
+    setIsLeadSaved(false);
+    setCurrentSavedLead(null);
+    setEnrichmentData(null);
+  };
+
+  // Saved Leads functions
+  const loadSavedLeads = async (status?: string) => {
+    setSavedLeadsLoading(true);
+    try {
+      const response = await api.getSavedLeads({
+        lead_status: status || undefined,
+        limit: 100,
+      });
+      if (response.success && response.data) {
+        setSavedLeads(response.data.leads || []);
+        setSavedLeadsTotalCount(response.data.total || 0);
+      }
+    } catch (error) {
+      console.error("Failed to load saved leads:", error);
+    } finally {
+      setSavedLeadsLoading(false);
+    }
+  };
+
+  const saveCurrentLead = async () => {
+    if (!form470Detail) return;
+    
+    setSavingLead(true);
+    try {
+      const response = await api.saveLead({
+        form_type: '470',
+        application_number: form470Detail.application_number,
+        ben: form470Detail.entity?.ben || '',
+        entity_name: form470Detail.entity?.name,
+        entity_type: form470Detail.entity?.type,
+        entity_state: form470Detail.entity?.state,
+        entity_city: form470Detail.entity?.city,
+        contact_name: form470Detail.contact?.name,
+        contact_email: form470Detail.contact?.email,
+        contact_phone: form470Detail.contact?.phone,
+        funding_year: parseInt(form470Detail.funding_year) || undefined,
+        categories: form470Detail.categories,
+        services: form470Detail.service_types,
+        manufacturers: form470Detail.manufacturers,
+      });
+      
+      if (response.success && response.data?.lead) {
+        setIsLeadSaved(true);
+        setCurrentSavedLead(response.data.lead);
+      } else {
+        // May already be saved
+        if (response.data?.error === 'Lead already saved') {
+          setIsLeadSaved(true);
+          setCurrentSavedLead(response.data.lead || null);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to save lead:", error);
+    } finally {
+      setSavingLead(false);
+    }
+  };
+
+  const unsaveLead = async () => {
+    if (!currentSavedLead) return;
+    
+    try {
+      await api.deleteSavedLead(currentSavedLead.id);
+      setIsLeadSaved(false);
+      setCurrentSavedLead(null);
+      setEnrichmentData(null);
+    } catch (error) {
+      console.error("Failed to unsave lead:", error);
+    }
+  };
+
+  const enrichCurrentLead = async () => {
+    if (!currentSavedLead) {
+      console.log("enrichCurrentLead: No currentSavedLead");
+      return;
+    }
+    
+    console.log("Starting enrichment for lead:", currentSavedLead.id);
+    console.log("Contact info:", {
+      email: form470Detail?.contact?.email,
+      name: form470Detail?.contact?.name,
+    });
+    
+    setEnrichingLead(true);
+    try {
+      const response = await api.enrichSavedLead(currentSavedLead.id, {
+        contact_email: form470Detail?.contact?.email,
+        contact_name: form470Detail?.contact?.name,
+      });
+      
+      console.log("Enrichment response:", response);
+      
+      if (response.success && response.data?.enrichment) {
+        setEnrichmentData(response.data.enrichment);
+        console.log("Enrichment data set:", response.data.enrichment);
+        if (response.data.lead) {
+          setCurrentSavedLead(response.data.lead);
+        }
+      } else if (response.data?.error) {
+        console.error("Enrichment error:", response.data.error);
+        alert(`Enrichment error: ${response.data.error}`);
+      }
+    } catch (error) {
+      console.error("Failed to enrich lead:", error);
+      alert(`Failed to enrich lead: ${error}`);
+    } finally {
+      setEnrichingLead(false);
+    }
+  };
+
+  const updateLeadStatus = async (leadId: number, status: string) => {
+    try {
+      await api.updateSavedLead(leadId, { lead_status: status });
+      // Refresh saved leads list
+      loadSavedLeads(savedLeadsFilter || undefined);
+    } catch (error) {
+      console.error("Failed to update lead status:", error);
+    }
+  };
+
+  const deleteSavedLead = async (leadId: number) => {
+    if (!confirm("Are you sure you want to remove this lead?")) return;
+    
+    try {
+      await api.deleteSavedLead(leadId);
+      setSavedLeads(prev => prev.filter(l => l.id !== leadId));
+      setSavedLeadsTotalCount(prev => prev - 1);
+    } catch (error) {
+      console.error("Failed to delete lead:", error);
+    }
+  };
+
+  const toggleForm470LeadSelection = (applicationNumber: string) => {
+    setSelectedForm470Leads(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(applicationNumber)) {
+        newSet.delete(applicationNumber);
+      } else {
+        newSet.add(applicationNumber);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllForm470Leads = () => {
+    setSelectedForm470Leads(new Set(form470Leads.map(l => l.application_number)));
+  };
+
+  const clearForm470Selection = () => {
+    setSelectedForm470Leads(new Set());
+  };
+
+  const exportSelectedForm470Leads = () => {
+    const leadsToExport = selectedForm470Leads.size > 0
+      ? form470Leads.filter(l => selectedForm470Leads.has(l.application_number))
+      : form470Leads;
+    
+    const csv = [
+      "Application #,Funding Year,BEN,Entity Name,State,City,Type,Status,Contact Name,Contact Email,Contact Phone,Posted Date,Contract Date,Categories,Services,Manufacturers",
+      ...leadsToExport.map(l => 
+        `"${l.application_number}","${l.funding_year}","${l.ben}","${l.entity_name?.replace(/"/g, '""') || ''}","${l.state}","${l.city}","${l.applicant_type}","${l.status}","${l.contact_name?.replace(/"/g, '""') || ''}","${l.contact_email || ''}","${l.contact_phone || ''}","${l.posting_date || ''}","${l.allowable_contract_date || ''}","${l.categories?.join('; ') || ''}","${l.service_types?.join('; ') || ''}","${l.manufacturers?.join('; ') || ''}"`
+      )
+    ].join("\n");
+    
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `form470_leads_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportSavedLeads = async () => {
+    const leadIdsToExport = selectedLeadIds.size > 0 ? Array.from(selectedLeadIds) : undefined;
+    
+    try {
+      const response = await api.exportSavedLeads({
+        lead_ids: leadIdsToExport,
+        lead_status: !leadIdsToExport ? (savedLeadsFilter || undefined) : undefined,
+      });
+      
+      if (response.success && response.data?.data) {
+        const data = response.data.data;
+        const columns = response.data.columns;
+        
+        const csv = [
+          columns.join(","),
+          ...data.map(row => 
+            columns.map(col => `"${String(row[col] || '').replace(/"/g, '""')}"`).join(",")
+          )
+        ].join("\n");
+        
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `saved_leads_${new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error("Failed to export saved leads:", error);
+    }
+  };
+
+  const generateLinkedInSearchUrl = (name?: string, company?: string, location?: string) => {
+    const keywords = [name, company].filter(Boolean).join(' ');
+    const encodedKeywords = encodeURIComponent(keywords);
+    return `https://www.linkedin.com/search/results/people/?keywords=${encodedKeywords}`;
   };
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -1195,30 +1449,35 @@ export default function VendorPortalPage() {
                       {form470Filters.manufacturer && `Manufacturer: ${form470Filters.manufacturer} • `}
                       {form470Filters.state && `State: ${form470Filters.state} • `}
                       {form470Filters.category && `Category ${form470Filters.category}`}
+                      {selectedForm470Leads.size > 0 && ` • ${selectedForm470Leads.size} selected`}
                     </div>
                   </div>
                 </div>
-                <button
-                  onClick={() => {
-                    // Export leads as CSV
-                    const csv = [
-                      "Application Number,Entity Name,State,City,Type,Status,Posting Date,Manufacturers,Service Types,Contact Name,Contact Email,Contact Phone",
-                      ...form470Leads.map(lead =>
-                        `${lead.application_number},"${lead.entity_name || ''}",${lead.state || ''},"${lead.city || ''}","${lead.applicant_type || ''}","${lead.status || ''}","${lead.posting_date || ''}","${lead.manufacturers?.join('; ') || ''}","${lead.service_types?.join('; ') || ''}","${lead.contact_name || ''}","${lead.contact_email || ''}","${lead.contact_phone || ''}"`
-                      )
-                    ].join('\n');
-                    const blob = new Blob([csv], { type: 'text/csv' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `form470_leads_${new Date().toISOString().split('T')[0]}.csv`;
-                    a.click();
-                  }}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-                >
-                  <span>📥</span>
-                  Export CSV
-                </button>
+                <div className="flex items-center gap-2">
+                  {selectedForm470Leads.size > 0 && selectedForm470Leads.size < form470Leads.length && (
+                    <button
+                      onClick={selectAllForm470Leads}
+                      className="px-3 py-1.5 text-sm text-green-700 hover:bg-green-100 rounded-lg transition-colors"
+                    >
+                      Select All
+                    </button>
+                  )}
+                  {selectedForm470Leads.size > 0 && (
+                    <button
+                      onClick={clearForm470Selection}
+                      className="px-3 py-1.5 text-sm text-green-700 hover:bg-green-100 rounded-lg transition-colors"
+                    >
+                      Clear Selection
+                    </button>
+                  )}
+                  <button
+                    onClick={exportSelectedForm470Leads}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                  >
+                    <span>📥</span>
+                    {selectedForm470Leads.size > 0 ? `Export (${selectedForm470Leads.size})` : 'Export All'}
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1229,6 +1488,20 @@ export default function VendorPortalPage() {
                   <table className="w-full">
                     <thead className="bg-slate-50 border-b border-slate-200">
                       <tr>
+                        <th className="px-4 py-3 text-left">
+                          <input
+                            type="checkbox"
+                            checked={selectedForm470Leads.size === form470Leads.length && form470Leads.length > 0}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                selectAllForm470Leads();
+                              } else {
+                                clearForm470Selection();
+                              }
+                            }}
+                            className="w-4 h-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                          />
+                        </th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Entity</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Location</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Year</th>
@@ -1240,7 +1513,15 @@ export default function VendorPortalPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {form470Leads.map((lead) => (
-                        <tr key={lead.application_number} className="hover:bg-slate-50 transition-colors">
+                        <tr key={lead.application_number} className={`hover:bg-slate-50 transition-colors ${selectedForm470Leads.has(lead.application_number) ? 'bg-orange-50' : ''}`}>
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              checked={selectedForm470Leads.has(lead.application_number)}
+                              onChange={() => toggleForm470LeadSelection(lead.application_number)}
+                              className="w-4 h-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
+                            />
+                          </td>
                           <td className="px-4 py-3">
                             <div className="font-medium text-slate-900">{lead.entity_name || 'Unknown'}</div>
                             <div className="text-sm text-slate-500">
@@ -1796,21 +2077,268 @@ export default function VendorPortalPage() {
 
         {activeTab === "leads" && (
           <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-purple-100 flex items-center justify-center mx-auto mb-4">
-                <span className="text-3xl">📋</span>
+            {/* Header with filters and export */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900">Saved Leads</h2>
+                  <p className="text-sm text-slate-500 mt-1">
+                    {savedLeadsTotalCount} leads saved • Manage and enrich your leads
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {/* Status Filter */}
+                  <select
+                    value={savedLeadsFilter}
+                    onChange={(e) => {
+                      setSavedLeadsFilter(e.target.value);
+                      loadSavedLeads(e.target.value || undefined);
+                    }}
+                    className="px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="">All Status</option>
+                    <option value="new">New</option>
+                    <option value="contacted">Contacted</option>
+                    <option value="qualified">Qualified</option>
+                    <option value="won">Won</option>
+                    <option value="lost">Lost</option>
+                  </select>
+                  
+                  {/* Export Button */}
+                  <button
+                    onClick={exportSavedLeads}
+                    disabled={savedLeads.length === 0}
+                    className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <span>📥</span>
+                    Export {selectedLeadIds.size > 0 ? `(${selectedLeadIds.size})` : 'All'}
+                  </button>
+                  
+                  {/* Refresh */}
+                  <button
+                    onClick={() => loadSavedLeads(savedLeadsFilter || undefined)}
+                    disabled={savedLeadsLoading}
+                    className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
+                  >
+                    {savedLeadsLoading ? (
+                      <div className="w-5 h-5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
-              <h2 className="text-lg font-semibold text-slate-900">No Saved Leads</h2>
-              <p className="text-slate-500 mt-2 max-w-md mx-auto">
-                Search for schools and save them to build your lead list for targeted outreach.
-              </p>
-              <button
-                onClick={() => setActiveTab("search")}
-                className="mt-6 px-6 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:shadow-lg hover:shadow-purple-200 transition-all font-medium"
-              >
-                Start Searching
-              </button>
+              
+              {/* Selection controls */}
+              {savedLeads.length > 0 && (
+                <div className="flex items-center gap-3 mb-4 pb-4 border-b border-slate-100">
+                  <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedLeadIds.size === savedLeads.length && savedLeads.length > 0}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedLeadIds(new Set(savedLeads.map(l => l.id)));
+                        } else {
+                          setSelectedLeadIds(new Set());
+                        }
+                      }}
+                      className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    Select All
+                  </label>
+                  {selectedLeadIds.size > 0 && (
+                    <span className="text-sm text-slate-500">
+                      {selectedLeadIds.size} selected
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
+            
+            {/* Saved Leads List */}
+            {savedLeadsLoading ? (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center">
+                <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="text-slate-500">Loading saved leads...</p>
+              </div>
+            ) : savedLeads.length > 0 ? (
+              <div className="space-y-3">
+                {savedLeads.map((lead) => (
+                  <div key={lead.id} className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="p-4">
+                      <div className="flex items-start gap-4">
+                        {/* Checkbox */}
+                        <input
+                          type="checkbox"
+                          checked={selectedLeadIds.has(lead.id)}
+                          onChange={(e) => {
+                            const newSet = new Set(selectedLeadIds);
+                            if (e.target.checked) {
+                              newSet.add(lead.id);
+                            } else {
+                              newSet.delete(lead.id);
+                            }
+                            setSelectedLeadIds(newSet);
+                          }}
+                          className="w-4 h-4 mt-1 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                        />
+                        
+                        {/* Lead Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <h3 className="font-semibold text-slate-900 truncate">
+                                {lead.entity_name || `BEN: ${lead.ben}`}
+                              </h3>
+                              <p className="text-sm text-slate-500 mt-0.5">
+                                Form {lead.form_type} #{lead.application_number} • {lead.entity_city}, {lead.entity_state}
+                              </p>
+                            </div>
+                            
+                            {/* Status Badge */}
+                            <select
+                              value={lead.lead_status}
+                              onChange={(e) => updateLeadStatus(lead.id, e.target.value)}
+                              className={`px-3 py-1 rounded-full text-xs font-medium border-0 cursor-pointer focus:ring-2 focus:ring-purple-500 ${
+                                lead.lead_status === 'new' ? 'bg-blue-100 text-blue-700' :
+                                lead.lead_status === 'contacted' ? 'bg-yellow-100 text-yellow-700' :
+                                lead.lead_status === 'qualified' ? 'bg-purple-100 text-purple-700' :
+                                lead.lead_status === 'won' ? 'bg-green-100 text-green-700' :
+                                lead.lead_status === 'lost' ? 'bg-red-100 text-red-700' :
+                                'bg-slate-100 text-slate-700'
+                              }`}
+                            >
+                              <option value="new">New</option>
+                              <option value="contacted">Contacted</option>
+                              <option value="qualified">Qualified</option>
+                              <option value="won">Won</option>
+                              <option value="lost">Lost</option>
+                            </select>
+                          </div>
+                          
+                          {/* Contact Info */}
+                          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                            {lead.contact_name && (
+                              <span className="text-slate-600">
+                                <span className="text-slate-400">Contact:</span> {lead.contact_name}
+                              </span>
+                            )}
+                            {lead.contact_email && (
+                              <a href={`mailto:${lead.contact_email}`} className="text-blue-600 hover:underline">
+                                {lead.contact_email}
+                              </a>
+                            )}
+                            {lead.contact_phone && (
+                              <a href={`tel:${lead.contact_phone}`} className="text-blue-600 hover:underline">
+                                {lead.contact_phone}
+                              </a>
+                            )}
+                            {lead.enriched_data?.linkedin_url && (
+                              <a 
+                                href={lead.enriched_data.linkedin_url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline flex items-center gap-1"
+                              >
+                                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                                  <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+                                </svg>
+                                LinkedIn
+                              </a>
+                            )}
+                          </div>
+                          
+                          {/* Tags */}
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {lead.categories?.map((cat, idx) => (
+                              <span key={idx} className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
+                                {cat}
+                              </span>
+                            ))}
+                            {lead.manufacturers?.slice(0, 3).map((mfr, idx) => (
+                              <span key={idx} className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">
+                                {mfr}
+                              </span>
+                            ))}
+                            {lead.enrichment_date && (
+                              <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs">
+                                ✨ Enriched
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Actions */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              // Open the form 470 detail modal for this lead
+                              load470Detail(lead.application_number);
+                            }}
+                            className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                            title="View Details"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => deleteSavedLead(lead.id)}
+                            className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Remove Lead"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {/* Additional Contacts Preview */}
+                      {lead.enriched_data?.additional_contacts && lead.enriched_data.additional_contacts.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-slate-100">
+                          <p className="text-xs text-slate-500 mb-2">
+                            Additional Contacts ({lead.enriched_data.additional_contacts.length})
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {lead.enriched_data.additional_contacts.slice(0, 3).map((contact, idx) => (
+                              <div key={idx} className="flex items-center gap-2 px-2 py-1 bg-slate-50 rounded text-xs">
+                                <span className="font-medium">{contact.name}</span>
+                                {contact.email && (
+                                  <a href={`mailto:${contact.email}`} className="text-blue-600 hover:underline">
+                                    {contact.email}
+                                  </a>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-purple-100 flex items-center justify-center mx-auto mb-4">
+                  <span className="text-3xl">📋</span>
+                </div>
+                <h2 className="text-lg font-semibold text-slate-900">No Saved Leads</h2>
+                <p className="text-slate-500 mt-2 max-w-md mx-auto">
+                  Browse Form 470 leads and save them to build your lead list for targeted outreach.
+                </p>
+                <button
+                  onClick={() => setActiveTab("470-leads")}
+                  className="mt-6 px-6 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:shadow-lg hover:shadow-purple-200 transition-all font-medium"
+                >
+                  Browse Form 470 Leads
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -2552,7 +3080,12 @@ export default function VendorPortalPage() {
                         {form470Detail.entity?.website && (
                           <div className="flex justify-between">
                             <span className="text-slate-500">Website:</span>
-                            <a href={form470Detail.entity.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                            <a 
+                              href={form470Detail.entity.website.startsWith('http') ? form470Detail.entity.website : `https://${form470Detail.entity.website}`} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-blue-600 hover:underline"
+                            >
                               Visit →
                             </a>
                           </div>
@@ -2563,14 +3096,29 @@ export default function VendorPortalPage() {
                     <div className="bg-slate-50 rounded-xl p-4">
                       <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
                         <span>👤</span> Contact Information
+                        {/* LinkedIn Search Button */}
+                        {form470Detail.contact?.name && (
+                          <a
+                            href={generateLinkedInSearchUrl(form470Detail.contact.name, form470Detail.entity?.name)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="ml-auto px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs hover:bg-blue-200 transition-colors flex items-center gap-1"
+                            title="Search LinkedIn for this contact"
+                          >
+                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+                            </svg>
+                            LinkedIn
+                          </a>
+                        )}
                       </h3>
                       <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
+                        <div className="flex justify-between items-center">
                           <span className="text-slate-500">Contact:</span>
                           <span className="font-medium">{form470Detail.contact?.name}</span>
                         </div>
                         {form470Detail.contact?.email && (
-                          <div className="flex justify-between">
+                          <div className="flex justify-between items-center">
                             <span className="text-slate-500">Email:</span>
                             <a href={`mailto:${form470Detail.contact.email}`} className="text-blue-600 hover:underline">
                               {form470Detail.contact.email}
@@ -2578,22 +3126,62 @@ export default function VendorPortalPage() {
                           </div>
                         )}
                         {form470Detail.contact?.phone && (
-                          <div className="flex justify-between">
+                          <div className="flex justify-between items-center">
                             <span className="text-slate-500">Phone:</span>
                             <a href={`tel:${form470Detail.contact.phone}`} className="text-blue-600 hover:underline">
                               {form470Detail.contact.phone}
                             </a>
                           </div>
                         )}
+                        
+                        {/* Enriched LinkedIn if available */}
+                        {enrichmentData?.linkedin_url && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-slate-500">LinkedIn:</span>
+                            <a 
+                              href={enrichmentData.linkedin_url} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-blue-600 hover:underline flex items-center gap-1"
+                            >
+                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+                              </svg>
+                              View Profile
+                            </a>
+                          </div>
+                        )}
+                        
+                        {/* Enriched Position if available */}
+                        {enrichmentData?.person?.position && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-slate-500">Position:</span>
+                            <span className="font-medium">{enrichmentData.person.position}</span>
+                          </div>
+                        )}
+                        
                         {form470Detail.technical_contact?.name && (
                           <>
                             <div className="border-t border-slate-200 my-2"></div>
-                            <div className="flex justify-between">
+                            <div className="flex justify-between items-center">
                               <span className="text-slate-500">Tech Contact:</span>
-                              <span className="font-medium">{form470Detail.technical_contact.name}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{form470Detail.technical_contact.name}</span>
+                                <a
+                                  href={generateLinkedInSearchUrl(form470Detail.technical_contact.name, form470Detail.entity?.name)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-500 hover:text-blue-700"
+                                  title="Search LinkedIn"
+                                >
+                                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+                                  </svg>
+                                </a>
+                              </div>
                             </div>
                             {form470Detail.technical_contact?.email && (
-                              <div className="flex justify-between">
+                              <div className="flex justify-between items-center">
                                 <span className="text-slate-500">Tech Email:</span>
                                 <a href={`mailto:${form470Detail.technical_contact.email}`} className="text-blue-600 hover:underline">
                                   {form470Detail.technical_contact.email}
@@ -2605,6 +3193,55 @@ export default function VendorPortalPage() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Additional Contacts from Enrichment */}
+                  {enrichmentData?.additional_contacts && enrichmentData.additional_contacts.length > 0 && (
+                    <div className="bg-indigo-50 rounded-xl p-4">
+                      <h3 className="font-semibold text-indigo-800 mb-3 flex items-center gap-2">
+                        <span>👥</span> Additional Contacts at Organization
+                      </h3>
+                      <div className="space-y-3">
+                        {enrichmentData.additional_contacts.slice(0, 5).map((contact, idx) => (
+                          <div key={idx} className="flex items-center justify-between bg-white rounded-lg p-3 border border-indigo-100">
+                            <div>
+                              <div className="font-medium text-slate-900">{contact.name}</div>
+                              {contact.position && (
+                                <div className="text-xs text-slate-500">{contact.position}</div>
+                              )}
+                              {contact.email && (
+                                <a href={`mailto:${contact.email}`} className="text-xs text-blue-600 hover:underline">
+                                  {contact.email}
+                                </a>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {contact.linkedin && (
+                                <a
+                                  href={contact.linkedin}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-1 text-blue-600 hover:text-blue-800"
+                                >
+                                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+                                  </svg>
+                                </a>
+                              )}
+                              {contact.confidence && (
+                                <span className={`text-xs px-2 py-0.5 rounded ${
+                                  contact.confidence > 80 ? 'bg-green-100 text-green-700' :
+                                  contact.confidence > 50 ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-slate-100 text-slate-600'
+                                }`}>
+                                  {contact.confidence}% confident
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Manufacturers & Service Types */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2723,7 +3360,69 @@ export default function VendorPortalPage() {
             </div>
             
             {/* Modal Footer */}
-            <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-between gap-3">
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center gap-3">
+              {/* Save/Unsave Lead Button */}
+              {!isLeadSaved ? (
+                <button
+                  onClick={saveCurrentLead}
+                  disabled={savingLead || !form470Detail}
+                  className="px-4 py-2 bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {savingLead ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <span>💾</span>
+                      Save Lead
+                    </>
+                  )}
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-2 bg-emerald-100 text-emerald-700 rounded-xl text-sm flex items-center gap-2">
+                    <span>✓</span>
+                    Saved
+                  </span>
+                  <button
+                    onClick={unsaveLead}
+                    className="px-3 py-2 text-slate-500 hover:text-red-500 hover:bg-red-50 rounded-xl text-sm transition-colors"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+              
+              {/* Enrich Button - only shown when lead is saved */}
+              {isLeadSaved && currentSavedLead && (
+                <button
+                  onClick={enrichCurrentLead}
+                  disabled={enrichingLead}
+                  className="px-4 py-2 bg-indigo-500 text-white rounded-xl hover:bg-indigo-600 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Find additional contacts and LinkedIn profiles"
+                >
+                  {enrichingLead ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Enriching...
+                    </>
+                  ) : enrichmentData ? (
+                    <>
+                      <span>🔄</span>
+                      Re-enrich
+                    </>
+                  ) : (
+                    <>
+                      <span>✨</span>
+                      Find More Contacts
+                    </>
+                  )}
+                </button>
+              )}
+              
+              {/* Contact Email Button */}
               {form470Detail?.contact?.email && (
                 <a
                   href={`mailto:${form470Detail.contact.email}?subject=Regarding Form 470 ${form470Detail.application_number}`}
@@ -2733,6 +3432,23 @@ export default function VendorPortalPage() {
                   Contact Entity
                 </a>
               )}
+              
+              {/* LinkedIn Search for Organization */}
+              {(form470Detail?.entity?.name || form470Detail?.entity_name) && (
+                <a
+                  href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(form470Detail?.entity?.name || form470Detail?.entity_name || '')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-2"
+                  title="Find more contacts at this organization on LinkedIn (FREE - no API credits)"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+                  </svg>
+                  Find Staff
+                </a>
+              )}
+              
               <button
                 onClick={closeForm470Modal}
                 className="px-4 py-2 text-slate-700 hover:bg-slate-200 rounded-xl transition-colors ml-auto"

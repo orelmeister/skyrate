@@ -799,7 +799,8 @@ class USACService:
     
     def get_ben_info(self, ben: str) -> Optional[Dict[str, Any]]:
         """
-        Get organization information for a BEN (Billed Entity Number).
+        Get comprehensive organization information for a BEN (Billed Entity Number).
+        Fetches from multiple USAC datasets for complete data.
         
         Args:
             ben: Billed Entity Number
@@ -808,10 +809,31 @@ class USACService:
             Dictionary with organization info or None if not found
         """
         try:
-            # Query Form 471 for the most recent application from this BEN
+            # First try the enrichment method which aggregates multiple sources
+            enriched = self.enrich_ben(ben)
+            
+            if enriched and enriched.get('organization_name'):
+                return {
+                    'ben': ben.strip(),
+                    'organization_name': enriched.get('organization_name'),
+                    'state': enriched.get('state'),
+                    'city': enriched.get('city'),
+                    'entity_type': enriched.get('entity_type'),
+                    'discount_rate': enriched.get('discount_rate'),
+                    'address': enriched.get('address'),
+                    'zip_code': enriched.get('zip_code'),
+                    'total_funding_committed': enriched.get('total_funding_committed'),
+                    'total_funding_requested': enriched.get('total_funding_requested'),
+                    'funding_years': enriched.get('funding_years'),
+                    'applications_count': enriched.get('applications_count'),
+                    'status': enriched.get('status'),
+                }
+            
+            # Fallback: Query Form 471 for the most recent application from this BEN
             df = self._client.fetch_data(
                 filters={'ben': ben.strip()},
-                limit=1,
+                limit=10,
+                order_by='funding_year DESC',
                 dataset='form_471'
             )
             
@@ -833,20 +855,29 @@ class USACService:
     
     def get_applications_by_ben(self, ben: str, years: Optional[List[int]] = None) -> Dict[str, Any]:
         """
-        Fetch all Form 471 applications for a BEN.
+        Fetch all Form 471 applications and FRNs for a BEN.
+        This is the core function that populates the applicant dashboard.
         
         Args:
             ben: Billed Entity Number
             years: Optional list of funding years (defaults to last 5 years)
             
         Returns:
-            Dictionary with applications list and summary
+            Dictionary with applications list, FRN details, and summary
         """
+        from datetime import datetime, timedelta
+        
         if not years:
             current_year = datetime.now().year
             years = list(range(current_year - 4, current_year + 1))
         
         all_applications = []
+        frn_set = set()  # Track unique FRNs
+        
+        print(f"[USAC] Fetching applications for BEN {ben} across years: {years}")
+        
+        # First, get the comprehensive entity info
+        ben_info = self.enrich_ben(ben)
         
         for year in years:
             try:
@@ -854,30 +885,104 @@ class USACService:
                 df = self._client.fetch_data(
                     year=year,
                     filters={'ben': ben.strip()},
-                    limit=500,
+                    limit=1000,
                     dataset='form_471'
                 )
                 
                 if not df.empty:
+                    print(f"[USAC] Found {len(df)} records for year {year}")
                     for _, row in df.iterrows():
+                        frn = str(row.get('frn') or row.get('funding_request_number') or '')
+                        if not frn or frn in frn_set:
+                            continue
+                        frn_set.add(frn)
+                        
+                        # Parse status
+                        status = row.get('form_471_frn_status_name') or row.get('frn_status') or row.get('application_status') or 'Unknown'
+                        
+                        # Get FCDL comment (denial reason)
+                        fcdl_comment = row.get('fcdl_comment') or row.get('fcdl_letter_comment') or ''
+                        
+                        # Parse FCDL date and calculate appeal deadline
+                        fcdl_date_str = row.get('fcdl_date') or row.get('fcdl_letter_date')
+                        fcdl_date = None
+                        appeal_deadline = None
+                        if fcdl_date_str:
+                            try:
+                                if isinstance(fcdl_date_str, str):
+                                    fcdl_date = datetime.fromisoformat(fcdl_date_str.replace('Z', '+00:00').replace('T', ' ').split('.')[0])
+                                appeal_deadline = fcdl_date + timedelta(days=60)
+                            except:
+                                pass
+                        
                         app = {
-                            'frn': row.get('frn'),
-                            'application_number': row.get('form_471_application_number'),
-                            'funding_year': year,
-                            'status': row.get('form_471_frn_status_name'),
-                            'service_type': row.get('form_471_service_type_name'),
-                            'service_description': row.get('function_name'),
-                            'amount_requested': row.get('total_monthly_cost'),
-                            'amount_funded': row.get('original_commitment_request'),
-                            'discount_rate': row.get('discount_pct'),
-                            'fcdl_comment': row.get('fcdl_comment'),
+                            'frn': frn,
+                            'application_number': row.get('form_471_application_number') or row.get('application_number'),
+                            'funding_year': int(year),
+                            'status': status,
+                            'service_type': row.get('form_471_service_type_name') or row.get('service_type') or row.get('form_471_category'),
+                            'service_description': row.get('function_name') or row.get('service_description') or row.get('product_service'),
+                            'amount_requested': float(row.get('total_monthly_cost') or row.get('original_total_pre_discount_costs') or 0),
+                            'amount_funded': float(row.get('original_commitment_request') or row.get('funding_commitment_request') or 0),
+                            'amount_disbursed': float(row.get('total_disbursement') or 0),
+                            'discount_rate': float(row.get('discount_pct') or row.get('discount_rate') or row.get('erate_discount_percentage') or 0),
+                            'fcdl_comment': fcdl_comment,
+                            'fcdl_date': fcdl_date.isoformat() if fcdl_date else None,
+                            'appeal_deadline': appeal_deadline.isoformat() if appeal_deadline else None,
+                            'review_stage': row.get('current_wave_name') or row.get('review_stage'),
+                            'pia_question_type': row.get('pia_question_type'),
+                            'days_in_review': int(row.get('days_in_current_stage') or 0) if row.get('days_in_current_stage') else None,
+                            'raw_data': row.to_dict() if hasattr(row, 'to_dict') else dict(row),
                         }
                         all_applications.append(clean_nan_values(app))
+                        
             except Exception as e:
-                print(f"Error fetching applications for year {year}: {e}")
+                print(f"[USAC] Error fetching applications for year {year}: {e}")
+        
+        # Also try to get FRN status data for more details
+        try:
+            frn_status = self.get_frn_status_by_ben(ben)
+            if frn_status and frn_status.get('records'):
+                print(f"[USAC] Found {len(frn_status['records'])} FRN status records")
+                for record in frn_status['records']:
+                    frn = str(record.get('frn') or '')
+                    if frn and frn not in frn_set:
+                        frn_set.add(frn)
+                        app = {
+                            'frn': frn,
+                            'application_number': record.get('application_number'),
+                            'funding_year': int(record.get('funding_year') or 0),
+                            'status': record.get('frn_status') or 'Unknown',
+                            'service_type': record.get('service_type'),
+                            'amount_requested': float(record.get('amount_requested') or 0),
+                            'amount_funded': float(record.get('amount_committed') or 0),
+                            'raw_data': record,
+                        }
+                        all_applications.append(clean_nan_values(app))
+        except Exception as e:
+            print(f"[USAC] Error fetching FRN status: {e}")
+        
+        # Also fetch disbursement data
+        try:
+            disbursements = self.get_disbursements_by_ben(ben)
+            if disbursements and disbursements.get('records'):
+                print(f"[USAC] Found {len(disbursements['records'])} disbursement records")
+                # Update existing applications with disbursement info
+                for record in disbursements['records']:
+                    frn = str(record.get('frn') or '')
+                    for app in all_applications:
+                        if app.get('frn') == frn:
+                            app['amount_disbursed'] = float(record.get('total_authorized_disbursement') or app.get('amount_disbursed') or 0)
+                            app['disbursement_status'] = record.get('invoice_status')
+                            break
+        except Exception as e:
+            print(f"[USAC] Error fetching disbursements: {e}")
+        
+        print(f"[USAC] Total unique FRNs found: {len(all_applications)}")
         
         return {
             'ben': ben.strip(),
+            'organization_name': ben_info.get('organization_name') if ben_info else None,
             'application_count': len(all_applications),
             'applications': all_applications,
             'years_queried': years

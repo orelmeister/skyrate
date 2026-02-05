@@ -3,7 +3,7 @@
  * Handles all HTTP requests to the FastAPI backend
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
 
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -470,6 +470,102 @@ export interface Form470DetailResponse {
   error?: string;
 }
 
+// ==================== SAVED LEADS TYPES ====================
+
+export interface EnrichedContactData {
+  linkedin_url?: string;
+  twitter?: string;
+  additional_contacts?: {
+    name: string;
+    email: string;
+    position?: string;
+    phone?: string;
+    linkedin?: string;
+    confidence?: number;
+    verified?: boolean;
+  }[];
+  person?: {
+    name?: string;
+    position?: string;
+    linkedin?: string;
+    twitter?: string;
+    phone?: string;
+    location?: string;
+  };
+  company?: {
+    name?: string;
+    domain?: string;
+    linkedin?: string;
+    description?: string;
+    industry?: string;
+    employees?: string;
+    location?: string;
+    logo?: string;
+    phone?: string;
+  };
+  linkedin_search_url?: string;
+  source?: string;
+  enriched_at?: string;
+  api_available?: boolean;
+  error?: string;
+}
+
+export interface SavedLead {
+  id: number;
+  form_type: '470' | '471';
+  application_number: string;
+  ben: string;
+  entity_name: string | null;
+  entity_type: string | null;
+  entity_state: string | null;
+  entity_city: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  enriched_data: EnrichedContactData;
+  enrichment_date: string | null;
+  lead_status: 'new' | 'contacted' | 'qualified' | 'won' | 'lost';
+  notes: string | null;
+  funding_year: number | null;
+  categories: string[];
+  services: string[];
+  manufacturers: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SavedLeadsResponse {
+  success: boolean;
+  total: number;
+  leads: SavedLead[];
+  limit: number;
+  offset: number;
+}
+
+export interface SaveLeadRequest {
+  form_type: '470' | '471';
+  application_number: string;
+  ben: string;
+  entity_name?: string;
+  entity_type?: string;
+  entity_state?: string;
+  entity_city?: string;
+  contact_name?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  funding_year?: number;
+  categories?: string[];
+  services?: string[];
+  manufacturers?: string[];
+}
+
+export interface EnrichmentResponse {
+  success: boolean;
+  lead?: SavedLead;
+  enrichment?: EnrichedContactData;
+  error?: string;
+}
+
 // ==================== APPEALS TYPES ====================
 
 export interface ChatMessage {
@@ -627,6 +723,29 @@ class ApiClient {
         error: error instanceof Error ? error.message : 'Network error',
       };
     }
+  }
+
+  // Generic HTTP method wrappers
+  async get<T = any>(endpoint: string): Promise<ApiResponse<T>> {
+    return this.request<T>(`/api/v1${endpoint}`, { method: 'GET' });
+  }
+
+  async post<T = any>(endpoint: string, body?: any): Promise<ApiResponse<T>> {
+    return this.request<T>(`/api/v1${endpoint}`, {
+      method: 'POST',
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }
+
+  async put<T = any>(endpoint: string, body?: any): Promise<ApiResponse<T>> {
+    return this.request<T>(`/api/v1${endpoint}`, {
+      method: 'PUT',
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }
+
+  async delete<T = any>(endpoint: string): Promise<ApiResponse<T>> {
+    return this.request<T>(`/api/v1${endpoint}`, { method: 'DELETE' });
   }
 
   private async refreshAccessToken(): Promise<boolean> {
@@ -1437,6 +1556,110 @@ class ApiClient {
     return this.request('/api/v1/vendor/470/search', {
       method: 'POST',
       body: JSON.stringify(filters),
+    });
+  }
+
+  // ==================== SAVED LEADS ====================
+
+  /**
+   * Get all saved leads for the vendor
+   */
+  async getSavedLeads(filters?: {
+    lead_status?: string;
+    form_type?: string;
+    state?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ApiResponse<SavedLeadsResponse>> {
+    const params = new URLSearchParams();
+    if (filters?.lead_status) params.append('lead_status', filters.lead_status);
+    if (filters?.form_type) params.append('form_type', filters.form_type);
+    if (filters?.state) params.append('state', filters.state);
+    if (filters?.limit) params.append('limit', filters.limit.toString());
+    if (filters?.offset) params.append('offset', filters.offset.toString());
+    const query = params.toString();
+    return this.request(`/api/v1/vendor/saved-leads${query ? `?${query}` : ''}`);
+  }
+
+  /**
+   * Save a lead for follow-up
+   */
+  async saveLead(data: SaveLeadRequest): Promise<ApiResponse<{ success: boolean; lead?: SavedLead; error?: string }>> {
+    return this.request('/api/v1/vendor/saved-leads', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * Check if a lead is already saved
+   */
+  async checkLeadSaved(formType: string, applicationNumber: string): Promise<ApiResponse<{
+    success: boolean;
+    is_saved: boolean;
+    lead: SavedLead | null;
+  }>> {
+    return this.request(`/api/v1/vendor/saved-leads/check/${formType}/${applicationNumber}`);
+  }
+
+  /**
+   * Get a specific saved lead
+   */
+  async getSavedLead(leadId: number): Promise<ApiResponse<{ success: boolean; lead: SavedLead }>> {
+    return this.request(`/api/v1/vendor/saved-leads/${leadId}`);
+  }
+
+  /**
+   * Update a saved lead's status or notes
+   */
+  async updateSavedLead(leadId: number, data: {
+    lead_status?: string;
+    notes?: string;
+  }): Promise<ApiResponse<{ success: boolean; lead: SavedLead }>> {
+    return this.request(`/api/v1/vendor/saved-leads/${leadId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * Delete a saved lead
+   */
+  async deleteSavedLead(leadId: number): Promise<ApiResponse<{ success: boolean; message: string }>> {
+    return this.request(`/api/v1/vendor/saved-leads/${leadId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Enrich a saved lead with additional contact info from Hunter.io
+   */
+  async enrichSavedLead(leadId: number, data?: {
+    contact_email?: string;
+    contact_name?: string;
+    company_domain?: string;
+  }): Promise<ApiResponse<EnrichmentResponse>> {
+    return this.request(`/api/v1/vendor/saved-leads/${leadId}/enrich`, {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    });
+  }
+
+  /**
+   * Export saved leads
+   */
+  async exportSavedLeads(options?: {
+    lead_ids?: number[];
+    lead_status?: string;
+  }): Promise<ApiResponse<{
+    success: boolean;
+    count: number;
+    data: Record<string, any>[];
+    columns: string[];
+  }>> {
+    return this.request('/api/v1/vendor/saved-leads/export', {
+      method: 'POST',
+      body: JSON.stringify(options || {}),
     });
   }
 

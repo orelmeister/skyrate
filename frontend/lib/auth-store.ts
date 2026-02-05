@@ -7,7 +7,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 // API base URL
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
 // User interface
 export interface User {
@@ -81,6 +81,13 @@ export const useAuthStore = create<AuthState>()(
       login: async (email: string, password: string) => {
         set({ isLoading: true, error: null });
         
+        // Clear any stale legacy tokens before login
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          localStorage.removeItem('token');
+        }
+        
         try {
           const response = await fetch(`${API_URL}/api/v1/auth/login`, {
             method: "POST",
@@ -119,6 +126,13 @@ export const useAuthStore = create<AuthState>()(
 
       loginWithGoogle: async (credential: string) => {
         set({ isLoading: true, error: null });
+        
+        // Clear any stale legacy tokens before login
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          localStorage.removeItem('token');
+        }
         
         try {
           const response = await fetch(`${API_URL}/api/v1/auth/google`, {
@@ -196,6 +210,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        // Clear Zustand state
         set({
           user: null,
           token: null,
@@ -203,6 +218,13 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: false,
           error: null,
         });
+        
+        // Also clear legacy localStorage keys to prevent stale token issues
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          localStorage.removeItem('token');  // Some components use 'token' key
+        }
       },
 
       clearError: () => {

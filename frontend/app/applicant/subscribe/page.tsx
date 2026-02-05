@@ -11,7 +11,7 @@ import Link from "next/link";
  * This is the payment step before they see their dashboard.
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
 export default function ApplicantSubscribePage() {
   const router = useRouter();
@@ -67,8 +67,8 @@ export default function ApplicantSubscribePage() {
   };
 
   const pricing = {
-    monthly: { price: 99, label: '/month' },
-    yearly: { price: 990, label: '/year', savings: 198 },
+    monthly: { price: 200, label: '/month' },
+    yearly: { price: 2000, label: '/year', savings: 400 },
   };
 
   return (
@@ -181,7 +181,7 @@ export default function ApplicantSubscribePage() {
           </button>
 
           <p className="text-xs text-slate-500 text-center mt-4">
-            No credit card required. Cancel anytime during trial.
+            Pay with credit card or bank account (ACH). Cancel anytime during trial.
           </p>
         </div>
 

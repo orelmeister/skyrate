@@ -1092,3 +1092,554 @@ async def export_leads(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Export failed: {str(e)}"
         )
+
+
+# ==================== SAVED LEADS MANAGEMENT ====================
+
+class SaveLeadRequest(BaseModel):
+    form_type: str  # '470' or '471'
+    application_number: str
+    ben: str
+    entity_name: Optional[str] = None
+    entity_type: Optional[str] = None
+    entity_state: Optional[str] = None
+    entity_city: Optional[str] = None
+    contact_name: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    funding_year: Optional[int] = None
+    categories: Optional[List[str]] = []
+    services: Optional[List[str]] = []
+    manufacturers: Optional[List[str]] = []
+
+
+class UpdateLeadStatusRequest(BaseModel):
+    lead_status: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class EnrichLeadRequest(BaseModel):
+    contact_email: Optional[str] = None
+    contact_name: Optional[str] = None
+    company_domain: Optional[str] = None
+    force_refresh: bool = False  # If True, bypass cache and fetch fresh data
+
+
+class ExportLeadsRequest(BaseModel):
+    lead_ids: Optional[List[int]] = None
+    lead_status: Optional[str] = None
+
+
+@router.get("/saved-leads")
+async def get_saved_leads(
+    lead_status: Optional[str] = None,
+    form_type: Optional[str] = None,
+    state: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all saved leads for the vendor.
+    
+    Args:
+        lead_status: Filter by status ('new', 'contacted', 'qualified', 'won', 'lost')
+        form_type: Filter by form type ('470' or '471')
+        state: Filter by entity state
+        limit: Maximum records to return (default 100)
+        offset: Records to skip for pagination
+    """
+    from ...models.vendor import SavedLead
+    
+    query = db.query(SavedLead).filter(SavedLead.vendor_profile_id == profile.id)
+    
+    if lead_status:
+        query = query.filter(SavedLead.lead_status == lead_status)
+    if form_type:
+        query = query.filter(SavedLead.form_type == form_type)
+    if state:
+        query = query.filter(SavedLead.entity_state == state)
+    
+    total = query.count()
+    leads = query.order_by(SavedLead.created_at.desc()).offset(offset).limit(limit).all()
+    
+    return {
+        "success": True,
+        "total": total,
+        "leads": [lead.to_dict() for lead in leads],
+        "limit": limit,
+        "offset": offset
+    }
+
+
+@router.post("/saved-leads")
+async def save_lead(
+    data: SaveLeadRequest,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """
+    Save a lead for follow-up.
+    
+    This stores the lead in the vendor's saved leads list for tracking and enrichment.
+    """
+    from ...models.vendor import SavedLead
+    
+    # Check if lead already saved
+    existing = db.query(SavedLead).filter(
+        SavedLead.vendor_profile_id == profile.id,
+        SavedLead.form_type == data.form_type,
+        SavedLead.application_number == data.application_number
+    ).first()
+    
+    if existing:
+        return {
+            "success": False,
+            "error": "Lead already saved",
+            "lead": existing.to_dict()
+        }
+    
+    # Create new saved lead
+    lead = SavedLead(
+        vendor_profile_id=profile.id,
+        form_type=data.form_type,
+        application_number=data.application_number,
+        ben=data.ben,
+        entity_name=data.entity_name,
+        entity_type=data.entity_type,
+        entity_state=data.entity_state,
+        entity_city=data.entity_city,
+        contact_name=data.contact_name,
+        contact_email=data.contact_email,
+        contact_phone=data.contact_phone,
+        funding_year=data.funding_year,
+        categories=data.categories or [],
+        services=data.services or [],
+        manufacturers=data.manufacturers or [],
+        lead_status='new'
+    )
+    
+    db.add(lead)
+    db.commit()
+    db.refresh(lead)
+    
+    return {
+        "success": True,
+        "lead": lead.to_dict()
+    }
+
+
+@router.get("/saved-leads/{lead_id}")
+async def get_saved_lead(
+    lead_id: int,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """Get a specific saved lead by ID."""
+    from ...models.vendor import SavedLead
+    
+    lead = db.query(SavedLead).filter(
+        SavedLead.id == lead_id,
+        SavedLead.vendor_profile_id == profile.id
+    ).first()
+    
+    if not lead:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Saved lead not found"
+        )
+    
+    return {
+        "success": True,
+        "lead": lead.to_dict()
+    }
+
+
+@router.put("/saved-leads/{lead_id}")
+async def update_saved_lead(
+    lead_id: int,
+    data: UpdateLeadStatusRequest,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """Update a saved lead's status or notes."""
+    from ...models.vendor import SavedLead
+    
+    lead = db.query(SavedLead).filter(
+        SavedLead.id == lead_id,
+        SavedLead.vendor_profile_id == profile.id
+    ).first()
+    
+    if not lead:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Saved lead not found"
+        )
+    
+    if data.lead_status is not None:
+        lead.lead_status = data.lead_status
+    if data.notes is not None:
+        lead.notes = data.notes
+    
+    db.commit()
+    db.refresh(lead)
+    
+    return {
+        "success": True,
+        "lead": lead.to_dict()
+    }
+
+
+@router.delete("/saved-leads/{lead_id}")
+async def delete_saved_lead(
+    lead_id: int,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """Remove a lead from saved leads."""
+    from ...models.vendor import SavedLead
+    
+    lead = db.query(SavedLead).filter(
+        SavedLead.id == lead_id,
+        SavedLead.vendor_profile_id == profile.id
+    ).first()
+    
+    if not lead:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Saved lead not found"
+        )
+    
+    db.delete(lead)
+    db.commit()
+    
+    return {
+        "success": True,
+        "message": "Lead removed from saved leads"
+    }
+
+
+@router.post("/saved-leads/{lead_id}/enrich")
+async def enrich_saved_lead(
+    lead_id: int,
+    data: EnrichLeadRequest,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """
+    Enrich a saved lead with additional contact information.
+    
+    Uses Hunter.io API to find:
+    - LinkedIn profile for the contact
+    - Additional contacts at the organization
+    - Verified email information
+    
+    CACHING: Results are cached by domain. Multiple vendors looking at 
+    the same organization will get cached results (no extra credits used).
+    
+    Force refresh is only allowed when cache is expired (90+ days old).
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    from ...models.vendor import SavedLead, OrganizationEnrichmentCache
+    from ...services.enrichment_service import EnrichmentService
+    
+    logger.info(f"Enriching lead {lead_id} for vendor profile {profile.id}")
+    logger.info(f"Request data: email={data.contact_email}, name={data.contact_name}, domain={data.company_domain}")
+    
+    lead = db.query(SavedLead).filter(
+        SavedLead.id == lead_id,
+        SavedLead.vendor_profile_id == profile.id
+    ).first()
+    
+    if not lead:
+        logger.error(f"Lead {lead_id} not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Saved lead not found"
+        )
+    
+    # Use provided data or fall back to saved data
+    email = data.contact_email or lead.contact_email
+    name = data.contact_name or lead.contact_name
+    domain = data.company_domain
+    
+    # If no domain provided, try to extract from email
+    if not domain and email and '@' in email:
+        domain = email.split('@')[1]
+    
+    logger.info(f"Using: email={email}, name={name}, domain={domain}")
+    
+    if not domain:
+        logger.warning("No domain available for enrichment")
+        return {
+            "success": False,
+            "error": "No domain available for enrichment. Provide an email or domain."
+        }
+    
+    # Check if force_refresh is allowed (only when cache is expired)
+    force_refresh = data.force_refresh if hasattr(data, 'force_refresh') else False
+    if force_refresh:
+        # Check cache age - only allow force refresh if expired (90+ days)
+        cache_entry = db.query(OrganizationEnrichmentCache).filter(
+            OrganizationEnrichmentCache.domain == domain.lower()
+        ).first()
+        
+        if cache_entry and not cache_entry.is_expired:
+            # Cache is still valid - don't allow force refresh
+            cache_age_days = (datetime.utcnow() - cache_entry.created_at).days if cache_entry.created_at else 0
+            days_until_refresh = 90 - cache_age_days
+            logger.warning(f"Force refresh rejected - cache is only {cache_age_days} days old for domain: {domain}")
+            return {
+                "success": False,
+                "error": f"Cannot refresh yet. Data is only {cache_age_days} days old. You can refresh in {days_until_refresh} days.",
+                "cache_age_days": cache_age_days,
+                "days_until_refresh": days_until_refresh
+            }
+    
+    try:
+        enrichment_service = EnrichmentService()
+        logger.info(f"Enriching with cache for domain: {domain}")
+        
+        # Use cached enrichment - checks DB first before calling API
+        enrichment_result = await enrichment_service.enrich_contact_with_cache(
+            db=db,
+            email=email,
+            name=name,
+            domain=domain,
+            ben=lead.ben,
+            organization_name=lead.entity_name,
+            force_refresh=force_refresh
+        )
+        
+        # Log cache status
+        if enrichment_result.get('from_cache'):
+            logger.info(f"Served from CACHE for domain: {domain} (age: {enrichment_result.get('cache_age_days', 0)} days, credits: 0)")
+        else:
+            logger.info(f"Fetched FRESH data for domain: {domain} (credits used: {enrichment_result.get('credits_used', 0)})")
+        
+        # Update lead with enriched data
+        lead.enriched_data = enrichment_result
+        lead.enrichment_date = datetime.utcnow()
+        
+        # Update contact info if we got better data
+        if enrichment_result.get('person', {}).get('linkedin'):
+            existing_enriched = lead.enriched_data or {}
+            existing_enriched['linkedin_url'] = enrichment_result['person']['linkedin']
+            lead.enriched_data = existing_enriched
+        
+        db.commit()
+        db.refresh(lead)
+        
+        logger.info(f"Enrichment complete for lead {lead_id}")
+        
+        return {
+            "success": True,
+            "lead": lead.to_dict(),
+            "enrichment": enrichment_result
+        }
+        
+    except Exception as e:
+        logger.error(f"Enrichment failed: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "error": f"Enrichment failed: {str(e)}",
+            "lead": lead.to_dict()
+        }
+
+
+@router.get("/saved-leads/check/{form_type}/{application_number}")
+async def check_lead_saved(
+    form_type: str,
+    application_number: str,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """Check if a lead is already saved."""
+    from ...models.vendor import SavedLead
+    
+    existing = db.query(SavedLead).filter(
+        SavedLead.vendor_profile_id == profile.id,
+        SavedLead.form_type == form_type,
+        SavedLead.application_number == application_number
+    ).first()
+    
+    return {
+        "success": True,
+        "is_saved": existing is not None,
+        "lead": existing.to_dict() if existing else None
+    }
+
+
+@router.post("/saved-leads/export")
+async def export_saved_leads(
+    request: ExportLeadsRequest,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """
+    Export saved leads as CSV-ready data.
+    
+    Args:
+        request: ExportLeadsRequest with optional lead_ids or lead_status filter
+    """
+    from ...models.vendor import SavedLead
+    
+    query = db.query(SavedLead).filter(SavedLead.vendor_profile_id == profile.id)
+    
+    if request.lead_ids:
+        query = query.filter(SavedLead.id.in_(request.lead_ids))
+    elif request.lead_status:
+        query = query.filter(SavedLead.lead_status == request.lead_status)
+    
+    leads = query.order_by(SavedLead.created_at.desc()).all()
+    
+    # Format for CSV export - one row per contact with all lead info repeated
+    export_data = []
+    
+    for lead in leads:
+        enriched = lead.enriched_data or {}
+        
+        # Base lead data that will be repeated for each contact
+        base_data = {
+            "Form Type": lead.form_type,
+            "Application #": lead.application_number,
+            "BEN": lead.ben,
+            "Entity Name": lead.entity_name,
+            "Entity Type": lead.entity_type,
+            "State": lead.entity_state,
+            "City": lead.entity_city,
+            "Status": lead.lead_status,
+            "Funding Year": lead.funding_year,
+            "Categories": ", ".join(lead.categories) if lead.categories else "",
+            "Notes": lead.notes or "",
+            "Saved Date": lead.created_at.strftime("%Y-%m-%d") if lead.created_at else "",
+            "LinkedIn": enriched.get('linkedin_url', ''),
+        }
+        
+        # First row: Primary contact (from Form 470 - has phone number)
+        primary_row = base_data.copy()
+        primary_row["Contact Name"] = lead.contact_name or ""
+        primary_row["Contact Email"] = lead.contact_email or ""
+        primary_row["Contact Phone"] = lead.contact_phone or ""
+        export_data.append(primary_row)
+        
+        # Additional rows: Enriched contacts (no phone numbers available)
+        additional_contacts = enriched.get('additional_contacts', [])
+        for contact in additional_contacts:
+            name = contact.get('name', '').strip()
+            email = contact.get('email', '').strip()
+            
+            # Skip if same as primary contact
+            if email and email.lower() == (lead.contact_email or '').lower():
+                continue
+            
+            contact_row = base_data.copy()
+            contact_row["Contact Name"] = name
+            contact_row["Contact Email"] = email
+            contact_row["Contact Phone"] = ""  # No phone for enriched contacts
+            export_data.append(contact_row)
+    
+    # Define column order with Contact fields in the right position
+    columns = [
+        "Form Type", "Application #", "BEN", "Entity Name", "Entity Type",
+        "State", "City", "Contact Name", "Contact Email", "Contact Phone",
+        "Status", "Funding Year", "Categories", "Notes", "Saved Date", "LinkedIn"
+    ]
+    
+    return {
+        "success": True,
+        "count": len(export_data),
+        "data": export_data,
+        "columns": columns
+    }
+
+
+
+# ===========================================
+# ENRICHMENT CACHE ENDPOINTS
+# ===========================================
+
+@router.get("/enrichment-cache/stats")
+async def get_enrichment_cache_stats(
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """
+    Get statistics about the enrichment cache.
+    Shows how many organizations are cached and credits saved.
+    """
+    from sqlalchemy import func
+    from ...models.vendor import OrganizationEnrichmentCache
+    
+    total_cached = db.query(func.count(OrganizationEnrichmentCache.id)).scalar() or 0
+    total_credits_used = db.query(func.sum(OrganizationEnrichmentCache.credits_used)).scalar() or 0
+    total_access_count = db.query(func.sum(OrganizationEnrichmentCache.access_count)).scalar() or 0
+    
+    # Credits saved = total_access_count - total_cached (since each after the first is "free")
+    credits_saved = max(0, (total_access_count or 0) - (total_cached or 0))
+    
+    # Most accessed organizations
+    top_orgs = db.query(OrganizationEnrichmentCache).order_by(
+        OrganizationEnrichmentCache.access_count.desc()
+    ).limit(10).all()
+    
+    # Expired entries
+    expired_count = db.query(func.count(OrganizationEnrichmentCache.id)).filter(
+        OrganizationEnrichmentCache.expires_at < datetime.utcnow()
+    ).scalar() or 0
+    
+    return {
+        "success": True,
+        "stats": {
+            "total_organizations_cached": total_cached,
+            "total_api_credits_used": total_credits_used,
+            "total_cache_hits": total_access_count,
+            "estimated_credits_saved": credits_saved,
+            "expired_entries": expired_count,
+        },
+        "top_accessed_organizations": [
+            {
+                "domain": org.domain,
+                "organization_name": org.organization_name,
+                "access_count": org.access_count,
+                "cached_since": org.created_at.isoformat() if org.created_at else None,
+            }
+            for org in top_orgs
+        ]
+    }
+
+
+@router.get("/enrichment-cache/lookup/{domain}")
+async def lookup_enrichment_cache(
+    domain: str,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """
+    Look up cached enrichment data for a specific domain.
+    Useful for checking if data exists before enriching.
+    """
+    from ...models.vendor import OrganizationEnrichmentCache
+    
+    cache_entry = db.query(OrganizationEnrichmentCache).filter(
+        OrganizationEnrichmentCache.domain == domain.lower()
+    ).first()
+    
+    if not cache_entry:
+        return {
+            "success": True,
+            "cached": False,
+            "domain": domain,
+            "message": "No cached data for this domain"
+        }
+    
+    return {
+        "success": True,
+        "cached": True,
+        "is_expired": cache_entry.is_expired,
+        "is_stale": cache_entry.is_stale,
+        "data": cache_entry.to_dict()
+    }

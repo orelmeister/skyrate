@@ -13,7 +13,7 @@ import Link from "next/link";
  * Just email, password, and BEN - that's all we need!
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
 export default function ApplicantSignUpPage() {
   const router = useRouter();

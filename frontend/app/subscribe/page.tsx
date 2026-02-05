@@ -54,7 +54,7 @@ const VENDOR_PLANS: PricingPlan[] = [
   {
     type: "monthly",
     name: "Monthly",
-    price: 200,
+    price: 300,
     interval: "month",
     description: "Flexible monthly billing",
     features: [
@@ -68,9 +68,9 @@ const VENDOR_PLANS: PricingPlan[] = [
   {
     type: "yearly",
     name: "Annual",
-    price: 2000,
+    price: 3000,
     interval: "year",
-    description: "Best value - Save $400/year",
+    description: "Best value - Save $600/year",
     savings: "Save 17%",
     features: [
       "Everything in Monthly",
@@ -338,7 +338,7 @@ export default function SubscribePage() {
                 </button>
 
                 <p className="text-center text-sm text-slate-500 mt-4">
-                  🔒 Secure checkout powered by Stripe
+                  🔒 Secure checkout powered by Stripe • Pay with card or bank account (ACH)
                 </p>
 
                 {/* Coupon Code Section */}

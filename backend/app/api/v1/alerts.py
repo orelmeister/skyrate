@@ -400,3 +400,36 @@ def create_alert_for_user(
     db.refresh(alert)
     
     return alert
+
+
+@router.post("/test")
+async def send_test_alert(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Send a test alert to verify notifications are working"""
+    alert = create_alert_for_user(
+        db=db,
+        user_id=current_user.id,
+        alert_type=AlertType.FRN_STATUS_CHANGE.value,
+        priority=AlertPriority.LOW.value,
+        title="🧪 Test Alert",
+        message="This is a test alert to verify your notification settings are working correctly. "
+                "If you see this, your in-app notifications are configured properly!",
+        entity_type="test",
+        entity_id="test-123",
+        entity_name="Test Entity"
+    )
+    
+    if alert:
+        return {
+            "success": True,
+            "message": "Test alert sent successfully",
+            "alert_id": alert.id
+        }
+    else:
+        return {
+            "success": False,
+            "message": "Alert was not created (check your notification preferences)",
+            "alert_id": None
+        }

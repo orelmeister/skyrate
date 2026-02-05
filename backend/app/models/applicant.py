@@ -4,6 +4,12 @@ Handles applicant profiles, FRN tracking, and auto-generated appeals
 
 The applicant tier is designed for "Sign up → Enter BEN → Pay → BOOM - Everything's ready!"
 Minimal input from user, maximum automation from backend.
+
+Multi-BEN Support:
+- Schools can have multiple BEN numbers (admin office, junior high, high school, library)
+- Each BEN is a separate subscription/payment
+- Primary BEN is stored in ApplicantProfile
+- Additional BENs are stored in ApplicantBEN table
 """
 
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, Boolean, Numeric, Enum as SQLEnum
@@ -32,6 +38,103 @@ class FRNStatusType(str, enum.Enum):
     CANCELLED = "cancelled"
     APPEALED = "appealed"
     UNKNOWN = "unknown"
+
+
+class BENSubscriptionStatus(str, enum.Enum):
+    """Status of a BEN subscription"""
+    ACTIVE = "active"
+    TRIAL = "trial"
+    PENDING_PAYMENT = "pending_payment"
+    EXPIRED = "expired"
+    CANCELLED = "cancelled"
+
+
+class ApplicantBEN(Base):
+    """
+    Individual BEN (Billed Entity Number) subscription.
+    Schools can monitor multiple BENs, each requiring its own subscription.
+    
+    Example: A school district with:
+    - Admin Office (BEN: 123456)
+    - High School (BEN: 123457)  
+    - Junior High (BEN: 123458)
+    - Library (BEN: 123459)
+    
+    Each BEN is tracked separately with its own subscription and data.
+    """
+    __tablename__ = "applicant_bens"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    applicant_profile_id = Column(Integer, ForeignKey("applicant_profiles.id"), nullable=False)
+    
+    # BEN identification
+    ben = Column(String(50), nullable=False, index=True)
+    is_primary = Column(Boolean, default=False)  # Is this the main/first BEN?
+    display_name = Column(String(255))  # User-friendly name like "High School"
+    
+    # Organization info (auto-populated from USAC)
+    organization_name = Column(String(255))
+    state = Column(String(2))
+    city = Column(String(100))
+    entity_type = Column(String(100))
+    discount_rate = Column(Numeric(5, 2))  # E-Rate discount percentage
+    
+    # Subscription/Payment status
+    subscription_status = Column(String(50), default=BENSubscriptionStatus.PENDING_PAYMENT.value)
+    is_paid = Column(Boolean, default=False)
+    paid_at = Column(DateTime)
+    subscription_start = Column(DateTime)
+    subscription_end = Column(DateTime)
+    stripe_subscription_item_id = Column(String(255))  # For metered billing
+    monthly_price_cents = Column(Integer, default=4900)  # $49/month per BEN
+    
+    # Data sync status
+    sync_status = Column(String(50), default=DataSyncStatus.PENDING.value)
+    last_sync_at = Column(DateTime)
+    sync_error = Column(Text)
+    
+    # Dashboard stats (cached for this BEN)
+    total_applications = Column(Integer, default=0)
+    total_funded = Column(Numeric(15, 2), default=0)
+    total_pending = Column(Numeric(15, 2), default=0)
+    total_denied = Column(Numeric(15, 2), default=0)
+    active_appeals_count = Column(Integer, default=0)
+    pending_deadlines_count = Column(Integer, default=0)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    applicant_profile = relationship("ApplicantProfile", back_populates="monitored_bens")
+    frn_records = relationship("ApplicantFRN", back_populates="applicant_ben", cascade="all, delete-orphan", 
+                               foreign_keys="ApplicantFRN.applicant_ben_id")
+    
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "ben": self.ben,
+            "is_primary": self.is_primary,
+            "display_name": self.display_name,
+            "organization_name": self.organization_name,
+            "state": self.state,
+            "city": self.city,
+            "entity_type": self.entity_type,
+            "discount_rate": float(self.discount_rate) if self.discount_rate else None,
+            "subscription_status": self.subscription_status,
+            "is_paid": self.is_paid,
+            "sync_status": self.sync_status,
+            "last_sync_at": self.last_sync_at.isoformat() if self.last_sync_at else None,
+            "stats": {
+                "total_applications": self.total_applications or 0,
+                "total_funded": float(self.total_funded) if self.total_funded else 0,
+                "total_pending": float(self.total_pending) if self.total_pending else 0,
+                "total_denied": float(self.total_denied) if self.total_denied else 0,
+                "active_appeals_count": self.active_appeals_count or 0,
+                "pending_deadlines_count": self.pending_deadlines_count or 0,
+            },
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
 
 
 class ApplicantProfile(Base):
@@ -87,9 +190,11 @@ class ApplicantProfile(Base):
     
     # Relationships
     user = relationship("User", back_populates="applicant_profile")
-    frn_records = relationship("ApplicantFRN", back_populates="applicant_profile", cascade="all, delete-orphan")
+    frn_records = relationship("ApplicantFRN", back_populates="applicant_profile", cascade="all, delete-orphan",
+                               foreign_keys="ApplicantFRN.applicant_profile_id")
     auto_appeals = relationship("ApplicantAutoAppeal", back_populates="applicant_profile", cascade="all, delete-orphan")
     status_history = relationship("ApplicantStatusHistory", back_populates="applicant_profile", cascade="all, delete-orphan")
+    monitored_bens = relationship("ApplicantBEN", back_populates="applicant_profile", cascade="all, delete-orphan")
     
     def to_dict(self) -> dict:
         return {
@@ -112,6 +217,7 @@ class ApplicantProfile(Base):
                 "active_appeals_count": self.active_appeals_count or 0,
                 "pending_deadlines_count": self.pending_deadlines_count or 0,
             },
+            "monitored_bens_count": len(self.monitored_bens) if self.monitored_bens else 0,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
     
@@ -123,6 +229,7 @@ class ApplicantProfile(Base):
         base["recent_status_changes"] = [
             sh.to_dict() for sh in sorted(self.status_history, key=lambda x: x.changed_at, reverse=True)[:10]
         ] if self.status_history else []
+        base["monitored_bens"] = [ben.to_dict() for ben in self.monitored_bens] if self.monitored_bens else []
         return base
 
 
@@ -130,11 +237,16 @@ class ApplicantFRN(Base):
     """
     Individual FRN (Funding Request Number) records for an applicant.
     Auto-fetched from USAC based on their BEN.
+    
+    Can be linked to either:
+    - applicant_profile_id (legacy, for single-BEN users)
+    - applicant_ben_id (multi-BEN support)
     """
     __tablename__ = "applicant_frns"
     
     id = Column(Integer, primary_key=True, index=True)
     applicant_profile_id = Column(Integer, ForeignKey("applicant_profiles.id"), nullable=False)
+    applicant_ben_id = Column(Integer, ForeignKey("applicant_bens.id"), nullable=True)  # Link to specific BEN
     
     # FRN identification
     frn = Column(String(50), nullable=False, index=True)
@@ -180,7 +292,10 @@ class ApplicantFRN(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    applicant_profile = relationship("ApplicantProfile", back_populates="frn_records")
+    applicant_profile = relationship("ApplicantProfile", back_populates="frn_records", 
+                                     foreign_keys=[applicant_profile_id])
+    applicant_ben = relationship("ApplicantBEN", back_populates="frn_records",
+                                 foreign_keys=[applicant_ben_id])
     
     def to_dict(self) -> dict:
         return {

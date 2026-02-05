@@ -3,11 +3,14 @@ Vendor Models
 Handles vendor profiles and search history
 """
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, ARRAY
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, JSON, ARRAY, Boolean
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from ..core.database import Base
+
+# Default cache expiry in days
+ENRICHMENT_CACHE_EXPIRY_DAYS = 90
 
 
 class VendorProfile(Base):
@@ -41,6 +44,7 @@ class VendorProfile(Base):
     # Relationships
     user = relationship("User", back_populates="vendor_profile")
     searches = relationship("VendorSearch", back_populates="vendor_profile", cascade="all, delete-orphan")
+    saved_leads = relationship("SavedLead", back_populates="vendor_profile", cascade="all, delete-orphan")
     
     def to_dict(self) -> dict:
         return {
@@ -91,4 +95,184 @@ class VendorSearch(Base):
             "results_count": self.results_count,
             "exported": self.exported.isoformat() if self.exported else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class SavedLead(Base):
+    """Saved leads for vendor follow-up and management"""
+    __tablename__ = "saved_leads"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    vendor_profile_id = Column(Integer, ForeignKey("vendor_profiles.id"), nullable=False)
+    
+    # Lead identification
+    form_type = Column(String(10), nullable=False)  # '470' or '471'
+    application_number = Column(String(50), nullable=False)
+    ben = Column(String(50), nullable=False)  # Billed Entity Number
+    
+    # Entity info (denormalized for quick display)
+    entity_name = Column(String(500))
+    entity_type = Column(String(100))
+    entity_state = Column(String(10))
+    entity_city = Column(String(100))
+    
+    # Contact info (denormalized)
+    contact_name = Column(String(255))
+    contact_email = Column(String(255))
+    contact_phone = Column(String(50))
+    
+    # Enriched contact info (from Hunter.io, etc)
+    enriched_data = Column(JSON, default={})  # LinkedIn URL, additional contacts, etc
+    enrichment_date = Column(DateTime)  # When data was enriched
+    
+    # Status tracking
+    lead_status = Column(String(50), default='new')  # new, contacted, qualified, won, lost
+    notes = Column(Text)
+    
+    # Funding details
+    funding_year = Column(Integer)
+    categories = Column(JSON, default=[])
+    services = Column(JSON, default=[])
+    manufacturers = Column(JSON, default=[])
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship
+    vendor_profile = relationship("VendorProfile", back_populates="saved_leads")
+    
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "form_type": self.form_type,
+            "application_number": self.application_number,
+            "ben": self.ben,
+            "entity_name": self.entity_name,
+            "entity_type": self.entity_type,
+            "entity_state": self.entity_state,
+            "entity_city": self.entity_city,
+            "contact_name": self.contact_name,
+            "contact_email": self.contact_email,
+            "contact_phone": self.contact_phone,
+            "enriched_data": self.enriched_data or {},
+            "enrichment_date": self.enrichment_date.isoformat() if self.enrichment_date else None,
+            "lead_status": self.lead_status,
+            "notes": self.notes,
+            "funding_year": self.funding_year,
+            "categories": self.categories or [],
+            "services": self.services or [],
+            "manufacturers": self.manufacturers or [],
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class OrganizationEnrichmentCache(Base):
+    """
+    Cache for organization enrichment data.
+    
+    Stores enriched contact information at the organization/domain level
+    so multiple vendors looking at the same organization don't trigger
+    duplicate API calls and credit usage.
+    
+    Cache Strategy:
+    - Key: domain (unique)
+    - Expiry: 90 days (contacts change jobs/emails)
+    - Access tracking: know which orgs are popular
+    """
+    __tablename__ = "organization_enrichment_cache"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Organization identification - domain is the primary key for lookups
+    domain = Column(String(255), unique=True, index=True, nullable=False)  # e.g., "cnyric.org"
+    ben = Column(String(20), index=True, nullable=True)  # USAC BEN if available
+    organization_name = Column(String(500))
+    
+    # Cached enrichment data (JSON blobs)
+    company_data = Column(JSON, default={})  # Company profile info
+    contacts = Column(JSON, default=[])  # Array of enriched contacts
+    primary_contact = Column(JSON, default={})  # The main contact found
+    
+    # LinkedIn search URLs (pre-generated, free)
+    linkedin_search_url = Column(String(500))
+    org_linkedin_search_url = Column(String(500))
+    
+    # Source and cost tracking
+    enrichment_source = Column(String(50), default='hunter')  # 'hunter', 'apollo', 'manual', etc.
+    credits_used = Column(Integer, default=0)  # Total credits spent on this org
+    
+    # Cache management
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    expires_at = Column(DateTime)  # When to refresh (default: 90 days from created)
+    
+    # Access tracking - useful for analytics
+    last_accessed_at = Column(DateTime, default=datetime.utcnow)
+    access_count = Column(Integer, default=1)  # How many times data was served from cache
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Set expiry date if not provided
+        if not self.expires_at:
+            self.expires_at = datetime.utcnow() + timedelta(days=ENRICHMENT_CACHE_EXPIRY_DAYS)
+    
+    @property
+    def is_expired(self) -> bool:
+        """Check if cache entry has expired."""
+        if not self.expires_at:
+            return True
+        return datetime.utcnow() > self.expires_at
+    
+    @property
+    def is_stale(self) -> bool:
+        """Check if cache is getting old (>30 days) but not yet expired."""
+        if not self.created_at:
+            return True
+        age_days = (datetime.utcnow() - self.created_at).days
+        return age_days > 30
+    
+    def record_access(self):
+        """Record that this cache entry was accessed."""
+        self.last_accessed_at = datetime.utcnow()
+        self.access_count = (self.access_count or 0) + 1
+    
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "domain": self.domain,
+            "ben": self.ben,
+            "organization_name": self.organization_name,
+            "company_data": self.company_data or {},
+            "contacts": self.contacts or [],
+            "primary_contact": self.primary_contact or {},
+            "linkedin_search_url": self.linkedin_search_url,
+            "org_linkedin_search_url": self.org_linkedin_search_url,
+            "enrichment_source": self.enrichment_source,
+            "credits_used": self.credits_used,
+            "is_expired": self.is_expired,
+            "is_stale": self.is_stale,
+            "access_count": self.access_count,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
+            "last_accessed_at": self.last_accessed_at.isoformat() if self.last_accessed_at else None,
+        }
+    
+    def to_enrichment_result(self) -> dict:
+        """Convert cache entry to the format expected by the enrichment API response."""
+        return {
+            "success": True,
+            "person": self.primary_contact or {},
+            "company": self.company_data or {},
+            "additional_contacts": self.contacts or [],
+            "linkedin_search_url": self.linkedin_search_url,
+            "org_linkedin_search_url": self.org_linkedin_search_url,
+            "source": self.enrichment_source,
+            "enriched_at": self.updated_at.isoformat() if self.updated_at else self.created_at.isoformat() if self.created_at else None,
+            "credits_used": 0,  # No credits used when serving from cache!
+            "from_cache": True,
+            "cache_age_days": (datetime.utcnow() - self.created_at).days if self.created_at else 0,
+            "api_available": True,
         }

@@ -72,23 +72,30 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 def seed_demo_accounts():
-    """Create demo accounts if they don't exist"""
+    """Create demo accounts if they don't exist, and auto-sync data from USAC"""
+    from app.models.applicant import ApplicantBEN
     from sqlalchemy.orm import Session
     from app.models.user import User, UserRole
+    from app.models.applicant import ApplicantProfile
     from app.core.database import SessionLocal
     import bcrypt
+    import threading
+    
+    # Track profiles that need USAC data sync
+    _profiles_to_sync = []
     
     db = SessionLocal()
     try:
         demo_accounts = [
             ("test_consultant@example.com", UserRole.CONSULTANT.value, "TestPass123!"),
             ("test_vendor@example.com", UserRole.VENDOR.value, "TestPass123!"),
+            ("test_applicant@example.com", UserRole.APPLICANT.value, "TestPass123!"),
         ]
         
         for email, role, password in demo_accounts:
             existing = db.query(User).filter(User.email == email).first()
+            hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
             if not existing:
-                hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
                 user = User(
                     email=email,
                     password_hash=hashed,
@@ -96,9 +103,136 @@ def seed_demo_accounts():
                     is_active=True
                 )
                 db.add(user)
+                db.flush()  # Get the user ID
                 logger.info(f"Created demo account: {email}")
+            else:
+                # Update existing user's password hash to ensure login works
+                existing.password_hash = hashed
+                existing.is_active = True
+                user = existing
+                logger.info(f"Updated password for demo account: {email}")
+            
+            # Create applicant profile for test_applicant (whether new or existing user)
+            if role == UserRole.APPLICANT.value:
+                existing_profile = db.query(ApplicantProfile).filter(
+                    ApplicantProfile.user_id == user.id
+                ).first()
+                if not existing_profile:
+                    profile = ApplicantProfile(
+                        user_id=user.id,
+                        ben="16056315",  # Real BEN - will auto-sync from USAC
+                        sync_status="pending",  # Will trigger auto-sync
+                        is_paid=True,  # Mark as paid for demo
+                    )
+                    db.add(profile)
+                    db.flush()  # Get the profile ID
+                    
+                    # Also create the ApplicantBEN record for the primary BEN
+                    primary_ben = ApplicantBEN(
+                        applicant_profile_id=profile.id,
+                        ben="16056315",
+                        is_primary=True,
+                        is_paid=True,
+                        subscription_status="active",
+                        sync_status="pending",
+                    )
+                    db.add(primary_ben)
+                    db.flush()
+                    
+                    logger.info(f"Created applicant profile for {email} with BEN 16056315")
+                    # Queue data sync (will happen after commit)
+                    _profiles_to_sync.append(profile.id)
+        
+        # Also check if existing test_applicant user needs a profile
+        test_applicant = db.query(User).filter(User.email == "test_applicant@example.com").first()
+        if test_applicant:
+            existing_profile = db.query(ApplicantProfile).filter(
+                ApplicantProfile.user_id == test_applicant.id
+            ).first()
+            if not existing_profile:
+                profile = ApplicantProfile(
+                    user_id=test_applicant.id,
+                    ben="16056315",  # Real BEN - will auto-sync from USAC
+                    sync_status="pending",  # Will trigger auto-sync
+                    is_paid=True,  # Mark as paid for demo
+                )
+                db.add(profile)
+                db.flush()
+                
+                # Also create the ApplicantBEN record for the primary BEN
+                primary_ben = ApplicantBEN(
+                    applicant_profile_id=profile.id,
+                    ben="16056315",
+                    is_primary=True,
+                    is_paid=True,
+                    subscription_status="active",
+                    sync_status="pending",
+                )
+                db.add(primary_ben)
+                db.flush()
+                
+                logger.info(f"Created applicant profile for existing test_applicant with BEN 16056315")
+                _profiles_to_sync.append(profile.id)
+            else:
+                # Check if ApplicantBEN exists, create if not
+                existing_ben = db.query(ApplicantBEN).filter(
+                    ApplicantBEN.applicant_profile_id == existing_profile.id,
+                    ApplicantBEN.ben == existing_profile.ben
+                ).first()
+                
+                if not existing_ben:
+                    primary_ben = ApplicantBEN(
+                        applicant_profile_id=existing_profile.id,
+                        ben=existing_profile.ben,
+                        is_primary=True,
+                        is_paid=True,
+                        subscription_status="active",
+                        sync_status="pending",
+                        organization_name=existing_profile.organization_name,
+                        state=existing_profile.state,
+                        city=existing_profile.city,
+                        entity_type=existing_profile.entity_type,
+                        discount_rate=existing_profile.discount_rate,
+                    )
+                    db.add(primary_ben)
+                    logger.info(f"Created ApplicantBEN for existing profile with BEN {existing_profile.ben}")
+                
+                if existing_profile.ben != "16056315":
+                    # Update existing profile to use real BEN and resync
+                    existing_profile.ben = "16056315"
+                    existing_profile.sync_status = "pending"
+                    existing_profile.organization_name = None  # Will be auto-populated
+                    logger.info(f"Updated test_applicant BEN to 16056315, queuing resync")
+                    _profiles_to_sync.append(existing_profile.id)
+                elif existing_profile.sync_status in ("pending", None) or not existing_profile.last_sync_at:
+                    # Profile exists with correct BEN but hasn't synced - trigger sync
+                    existing_profile.sync_status = "pending"
+                    logger.info(f"Test applicant profile needs sync, queuing sync")
+                    _profiles_to_sync.append(existing_profile.id)
         
         db.commit()
+        logger.info("Demo accounts seeded")
+        
+        # Now trigger USAC data sync for profiles that need it
+        if _profiles_to_sync:
+            logger.info(f"Queuing USAC data sync for {len(_profiles_to_sync)} profile(s)")
+            
+            def run_sync():
+                """Run the sync in background thread"""
+                import time
+                time.sleep(2)  # Wait for server to fully start
+                from app.api.v1.applicant import sync_applicant_data
+                for profile_id in _profiles_to_sync:
+                    try:
+                        logger.info(f"Starting USAC data sync for profile {profile_id}")
+                        sync_applicant_data(profile_id)
+                        logger.info(f"Completed USAC data sync for profile {profile_id}")
+                    except Exception as e:
+                        logger.error(f"Error syncing profile {profile_id}: {e}")
+            
+            sync_thread = threading.Thread(target=run_sync, daemon=True)
+            sync_thread.start()
+            
     except Exception as e:
         logger.error(f"Error seeding demo accounts: {e}")
         db.rollback()
@@ -128,10 +262,25 @@ async def lifespan(app: FastAPI):
     seed_demo_accounts()
     logger.info("Demo accounts seeded")
     
+    # Initialize background scheduler for alerts/digests
+    from app.services.scheduler_service import init_scheduler, shutdown_scheduler
+    try:
+        init_scheduler()
+        logger.info("Background scheduler initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize scheduler: {e}")
+    
     yield
     
     # Shutdown
     logger.info("Shutting down SkyRate AI Backend...")
+    
+    # Stop background scheduler
+    try:
+        shutdown_scheduler()
+        logger.info("Background scheduler stopped")
+    except Exception as e:
+        logger.error(f"Error stopping scheduler: {e}")
 
 
 # Initialize FastAPI

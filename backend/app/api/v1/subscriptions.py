@@ -318,9 +318,18 @@ async def create_checkout_session(
         # Create checkout session with 14-day free trial
         # Card is collected but NOT charged for the first 14 days
         # After the trial period, Stripe automatically charges the subscription fee
+        # Supports both credit card and ACH (US bank account) payment methods
         session = stripe.checkout.Session.create(
             customer=customer_id,
-            payment_method_types=["card"],
+            payment_method_types=["card", "us_bank_account"],
+            payment_method_options={
+                "us_bank_account": {
+                    "verification_method": "instant",
+                    "financial_connections": {
+                        "permissions": ["payment_method"]
+                    }
+                }
+            },
             line_items=[{
                 "price_data": {
                     "currency": "usd",

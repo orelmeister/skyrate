@@ -244,7 +244,9 @@ export default function ConsultantPortalPage() {
         return;
       }
       if (user?.role !== "consultant" && user?.role !== "admin") {
-        router.push("/vendor");
+        // Redirect to appropriate dashboard based on role
+        const dashboard = user?.role === 'applicant' ? '/applicant' : '/vendor';
+        router.push(dashboard);
         return;
       }
       

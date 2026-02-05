@@ -105,6 +105,47 @@ class AppealUpdate(BaseModel):
     status: Optional[str] = None
 
 
+# ==================== ALERT HELPERS ====================
+
+def trigger_denial_alert(db: Session, profile, frn: str, denial_reason: str, amount: float, funding_year: int):
+    """Trigger an alert when a denial is detected"""
+    try:
+        from ...services.alert_service import AlertService
+        alert_service = AlertService(db)
+        alert_service.alert_on_denial(
+            user_id=profile.user_id,
+            frn=frn,
+            school_name=profile.organization_name or f"BEN {profile.ben}",
+            denial_reason=denial_reason,
+            amount=float(amount or 0),
+            funding_year=funding_year
+        )
+    except Exception as e:
+        print(f"[Alert] Failed to trigger denial alert: {e}")
+
+
+def trigger_status_change_alert(db: Session, profile, frn: str, old_status: str, new_status: str, amount: float, is_denial: bool):
+    """Trigger an alert when FRN status changes"""
+    try:
+        from ...services.alert_service import AlertService
+        alert_service = AlertService(db)
+        
+        if is_denial:
+            # Denial alerts are handled separately
+            return
+        
+        alert_service.alert_on_status_change(
+            user_id=profile.user_id,
+            frn=frn,
+            school_name=profile.organization_name or f"BEN {profile.ben}",
+            old_status=old_status or "Unknown",
+            new_status=new_status or "Unknown",
+            amount=float(amount or 0)
+        )
+    except Exception as e:
+        print(f"[Alert] Failed to trigger status change alert: {e}")
+
+
 # ==================== BACKGROUND TASKS ====================
 
 def sync_applicant_data(applicant_profile_id: int):
@@ -224,6 +265,13 @@ def sync_applicant_data(applicant_profile_id: int):
                             is_important=is_denied,
                         )
                         db.add(status_change)
+                        
+                        # Trigger status change alert
+                        if old_status != app.get('status'):
+                            trigger_status_change_alert(
+                                db, profile, frn, old_status, 
+                                app.get('status'), app.get('amount_requested', 0), is_denied
+                            )
                 else:
                     # Create new FRN
                     new_frn = ApplicantFRN(**frn_data)
@@ -245,6 +293,11 @@ def sync_applicant_data(applicant_profile_id: int):
                     # Auto-generate appeal for denials!
                     if is_denied:
                         generate_auto_appeal(db, profile.id, new_frn.id, app)
+                        # Trigger denial alert
+                        trigger_denial_alert(
+                            db, profile, frn, app.get('fcdl_comment', 'Unknown reason'),
+                            app.get('amount_requested', 0), app.get('funding_year')
+                        )
             
             # Update profile stats
             profile.total_applications = len(applications.get('applications', []))
@@ -832,3 +885,446 @@ async def mark_all_changes_read(
     db.commit()
     
     return {"success": True}
+
+
+# ==================== MULTI-BEN MANAGEMENT ====================
+# "sometimes schools they have multiple Ben numbers because they have different locations"
+
+from ...models.applicant import ApplicantBEN, BENSubscriptionStatus
+
+
+class AddBENRequest(BaseModel):
+    """Request to add a new BEN to monitor"""
+    ben: str = Field(..., description="Billed Entity Number to add")
+    display_name: Optional[str] = Field(None, description="Friendly name like 'High School' or 'Library'")
+    
+    @field_validator('ben')
+    @classmethod
+    def validate_ben_format(cls, v: str) -> str:
+        """Validate BEN format - should be numeric"""
+        cleaned = v.strip()
+        if not cleaned.isdigit():
+            raise ValueError("BEN must be a numeric value")
+        return cleaned
+
+
+class UpdateBENRequest(BaseModel):
+    """Request to update BEN settings"""
+    display_name: Optional[str] = None
+
+
+@router.get("/bens")
+async def list_monitored_bens(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    List all BENs being monitored by this applicant.
+    "schools they have multiple Ben numbers and because they have different locations"
+    """
+    if current_user.role != UserRole.APPLICANT.value:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
+    
+    profile = db.query(ApplicantProfile).filter(
+        ApplicantProfile.user_id == current_user.id
+    ).first()
+    
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+    
+    # Get all BENs
+    bens = db.query(ApplicantBEN).filter(
+        ApplicantBEN.applicant_profile_id == profile.id
+    ).order_by(ApplicantBEN.is_primary.desc(), ApplicantBEN.created_at).all()
+    
+    return {
+        "bens": [ben.to_dict() for ben in bens],
+        "total_count": len(bens),
+        "active_count": len([b for b in bens if b.is_paid]),
+        "primary_ben": profile.ben,
+    }
+
+
+@router.post("/bens")
+async def add_monitored_ben(
+    request: AddBENRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Add a new BEN to monitor.
+    "when they add a number we then send them to the paywall"
+    
+    Returns info about the BEN and whether payment is required.
+    """
+    if current_user.role != UserRole.APPLICANT.value:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
+    
+    profile = db.query(ApplicantProfile).filter(
+        ApplicantProfile.user_id == current_user.id
+    ).first()
+    
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+    
+    # Check if BEN already exists
+    existing = db.query(ApplicantBEN).filter(
+        ApplicantBEN.applicant_profile_id == profile.id,
+        ApplicantBEN.ben == request.ben
+    ).first()
+    
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="This BEN is already being monitored"
+        )
+    
+    # Try to get organization info from USAC
+    usac_service = get_usac_service()
+    org_info = None
+    try:
+        org_info = usac_service.get_ben_info(request.ben)
+    except Exception as e:
+        print(f"[BEN] Could not fetch org info for {request.ben}: {e}")
+    
+    # Create the BEN record
+    new_ben = ApplicantBEN(
+        applicant_profile_id=profile.id,
+        ben=request.ben,
+        display_name=request.display_name,
+        is_primary=False,  # Only the first BEN is primary
+        organization_name=org_info.get('organization_name') if org_info else None,
+        state=org_info.get('state') if org_info else None,
+        city=org_info.get('city') if org_info else None,
+        entity_type=org_info.get('entity_type') if org_info else None,
+        subscription_status=BENSubscriptionStatus.PENDING_PAYMENT.value,
+        is_paid=False,
+    )
+    
+    db.add(new_ben)
+    db.commit()
+    db.refresh(new_ben)
+    
+    return {
+        "ben": new_ben.to_dict(),
+        "needs_payment": True,
+        "message": "BEN added successfully. Payment required to activate monitoring.",
+        "payment_info": {
+            "monthly_price": 49.00,
+            "currency": "USD",
+            "ben_id": new_ben.id,
+        }
+    }
+
+
+@router.get("/bens/{ben_id}")
+async def get_ben_details(
+    ben_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get detailed information about a specific BEN"""
+    if current_user.role != UserRole.APPLICANT.value:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
+    
+    profile = db.query(ApplicantProfile).filter(
+        ApplicantProfile.user_id == current_user.id
+    ).first()
+    
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+    
+    ben = db.query(ApplicantBEN).filter(
+        ApplicantBEN.id == ben_id,
+        ApplicantBEN.applicant_profile_id == profile.id
+    ).first()
+    
+    if not ben:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="BEN not found")
+    
+    # Get FRNs for this BEN
+    frns = db.query(ApplicantFRN).filter(
+        ApplicantFRN.applicant_ben_id == ben.id
+    ).all()
+    
+    ben_dict = ben.to_dict()
+    ben_dict["frn_records"] = [frn.to_dict() for frn in frns]
+    
+    return ben_dict
+
+
+@router.patch("/bens/{ben_id}")
+async def update_ben(
+    ben_id: int,
+    request: UpdateBENRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update BEN settings (e.g., display name)"""
+    if current_user.role != UserRole.APPLICANT.value:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
+    
+    profile = db.query(ApplicantProfile).filter(
+        ApplicantProfile.user_id == current_user.id
+    ).first()
+    
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+    
+    ben = db.query(ApplicantBEN).filter(
+        ApplicantBEN.id == ben_id,
+        ApplicantBEN.applicant_profile_id == profile.id
+    ).first()
+    
+    if not ben:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="BEN not found")
+    
+    if request.display_name is not None:
+        ben.display_name = request.display_name
+    
+    ben.updated_at = datetime.utcnow()
+    db.commit()
+    
+    return {"success": True, "ben": ben.to_dict()}
+
+
+@router.delete("/bens/{ben_id}")
+async def remove_ben(
+    ben_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Remove a BEN from monitoring.
+    Cannot remove the primary BEN.
+    """
+    if current_user.role != UserRole.APPLICANT.value:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
+    
+    profile = db.query(ApplicantProfile).filter(
+        ApplicantProfile.user_id == current_user.id
+    ).first()
+    
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+    
+    ben = db.query(ApplicantBEN).filter(
+        ApplicantBEN.id == ben_id,
+        ApplicantBEN.applicant_profile_id == profile.id
+    ).first()
+    
+    if not ben:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="BEN not found")
+    
+    if ben.is_primary:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot remove primary BEN. Change your primary BEN first or contact support."
+        )
+    
+    # Delete the BEN (cascades to related FRNs)
+    db.delete(ben)
+    db.commit()
+    
+    return {"success": True, "message": "BEN removed successfully"}
+
+
+@router.post("/bens/{ben_id}/sync")
+async def sync_ben_data(
+    ben_id: int,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Trigger data sync for a specific BEN.
+    Only works if BEN subscription is active.
+    """
+    if current_user.role != UserRole.APPLICANT.value:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
+    
+    profile = db.query(ApplicantProfile).filter(
+        ApplicantProfile.user_id == current_user.id
+    ).first()
+    
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+    
+    ben = db.query(ApplicantBEN).filter(
+        ApplicantBEN.id == ben_id,
+        ApplicantBEN.applicant_profile_id == profile.id
+    ).first()
+    
+    if not ben:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="BEN not found")
+    
+    if not ben.is_paid:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Payment required to sync this BEN's data"
+        )
+    
+    # Update sync status
+    ben.sync_status = DataSyncStatus.SYNCING.value
+    db.commit()
+    
+    # Queue background sync
+    background_tasks.add_task(sync_individual_ben_data, ben.id)
+    
+    return {
+        "success": True,
+        "message": "Sync started",
+        "ben": ben.to_dict()
+    }
+
+
+def sync_individual_ben_data(ben_id: int):
+    """Background task to sync data for a specific BEN"""
+    from ...core.database import SessionLocal
+    from ...services.usac_service import get_usac_service
+    
+    db = SessionLocal()
+    try:
+        ben = db.query(ApplicantBEN).filter(ApplicantBEN.id == ben_id).first()
+        if not ben:
+            return
+        
+        usac_service = get_usac_service()
+        
+        try:
+            # Fetch organization info
+            org_info = usac_service.get_ben_info(ben.ben)
+            if org_info:
+                ben.organization_name = org_info.get('organization_name')
+                ben.state = org_info.get('state')
+                ben.city = org_info.get('city')
+                ben.entity_type = org_info.get('entity_type')
+            
+            # Fetch all applications
+            applications = usac_service.get_applications_by_ben(ben.ben)
+            
+            total_funded = 0
+            total_pending = 0
+            total_denied = 0
+            
+            for app in applications.get('applications', []):
+                frn = app.get('frn')
+                if not frn:
+                    continue
+                
+                # Check if FRN already exists
+                existing_frn = db.query(ApplicantFRN).filter(
+                    ApplicantFRN.applicant_ben_id == ben.id,
+                    ApplicantFRN.frn == frn
+                ).first()
+                
+                # Determine status type
+                raw_status = app.get('status', '').lower()
+                status_type = FRNStatusType.UNKNOWN.value
+                is_denied = False
+                
+                if 'funded' in raw_status or 'committed' in raw_status:
+                    status_type = FRNStatusType.FUNDED.value
+                    total_funded += float(app.get('amount_funded', 0) or 0)
+                elif 'denied' in raw_status:
+                    status_type = FRNStatusType.DENIED.value
+                    is_denied = True
+                    total_denied += float(app.get('amount_requested', 0) or 0)
+                elif 'pending' in raw_status or 'review' in raw_status:
+                    status_type = FRNStatusType.PENDING_REVIEW.value
+                    total_pending += float(app.get('amount_requested', 0) or 0)
+                
+                frn_data = {
+                    'applicant_profile_id': ben.applicant_profile_id,
+                    'applicant_ben_id': ben.id,
+                    'frn': frn,
+                    'application_number': app.get('application_number'),
+                    'funding_year': app.get('funding_year'),
+                    'status': app.get('status'),
+                    'status_type': status_type,
+                    'service_type': app.get('service_type'),
+                    'amount_requested': app.get('amount_requested'),
+                    'amount_funded': app.get('amount_funded'),
+                    'is_denied': is_denied,
+                    'denial_reason': app.get('fcdl_comment') if is_denied else None,
+                    'raw_data': app,
+                }
+                
+                if existing_frn:
+                    for key, value in frn_data.items():
+                        if key not in ['applicant_profile_id', 'applicant_ben_id']:
+                            setattr(existing_frn, key, value)
+                    existing_frn.updated_at = datetime.utcnow()
+                else:
+                    new_frn = ApplicantFRN(**frn_data)
+                    db.add(new_frn)
+            
+            # Update BEN stats
+            ben.total_applications = len(applications.get('applications', []))
+            ben.total_funded = total_funded
+            ben.total_pending = total_pending
+            ben.total_denied = total_denied
+            ben.sync_status = DataSyncStatus.COMPLETED.value
+            ben.last_sync_at = datetime.utcnow()
+            ben.sync_error = None
+            
+            db.commit()
+            print(f"[BEN Sync] Successfully synced data for BEN {ben.ben}")
+            
+        except Exception as e:
+            ben.sync_status = DataSyncStatus.FAILED.value
+            ben.sync_error = str(e)
+            db.commit()
+            print(f"[BEN Sync] Error syncing BEN {ben.ben}: {e}")
+            
+    finally:
+        db.close()
+
+
+@router.post("/bens/{ben_id}/activate")
+async def activate_ben_subscription(
+    ben_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = None
+):
+    """
+    Activate a BEN subscription (called after payment).
+    This is typically called by a webhook, but can be called manually for testing.
+    """
+    if current_user.role != UserRole.APPLICANT.value:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
+    
+    profile = db.query(ApplicantProfile).filter(
+        ApplicantProfile.user_id == current_user.id
+    ).first()
+    
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+    
+    ben = db.query(ApplicantBEN).filter(
+        ApplicantBEN.id == ben_id,
+        ApplicantBEN.applicant_profile_id == profile.id
+    ).first()
+    
+    if not ben:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="BEN not found")
+    
+    # Activate subscription
+    ben.is_paid = True
+    ben.paid_at = datetime.utcnow()
+    ben.subscription_status = BENSubscriptionStatus.ACTIVE.value
+    ben.subscription_start = datetime.utcnow()
+    
+    db.commit()
+    
+    # Start data sync
+    if background_tasks:
+        background_tasks.add_task(sync_individual_ben_data, ben.id)
+    
+    return {
+        "success": True,
+        "message": "BEN subscription activated",
+        "ben": ben.to_dict()
+    }

@@ -232,6 +232,7 @@ Use these credentials to test the application:
 |------|-------|----------|
 | **Consultant** | test_consultant@example.com | TestPass123! |
 | **Vendor** | test_vendor@example.com | TestPass123! |
+| **Applicant** | test_applicant@example.com | TestPass123! |
 
 > ⚠️ **Note**: These demo accounts are for testing only. Credentials will be removed for production deployment.
 

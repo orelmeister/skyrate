@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useAuthStore } from "@/lib/auth-store";
 
 /**
  * Applicant Dashboard
@@ -16,7 +17,7 @@ import Link from "next/link";
  * - Recent changes
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
 interface FRN {
   id: number;
@@ -128,6 +129,7 @@ function getStatusColor(statusType: string): string {
 
 export default function ApplicantDashboard() {
   const router = useRouter();
+  const { user, token, isAuthenticated, logout } = useAuthStore();
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -135,13 +137,23 @@ export default function ApplicantDashboard() {
   const [selectedAppeal, setSelectedAppeal] = useState<Appeal | null>(null);
 
   useEffect(() => {
+    // Check authentication and role
+    if (!isAuthenticated || !token) {
+      router.push('/sign-in');
+      return;
+    }
+    if (user?.role !== 'applicant' && user?.role !== 'admin') {
+      // Redirect to appropriate dashboard
+      const dashboard = user?.role === 'vendor' ? '/vendor' : '/consultant';
+      router.push(dashboard);
+      return;
+    }
     fetchDashboard();
-  }, []);
+  }, [isAuthenticated, token, user, router]);
 
   const fetchDashboard = async () => {
-    const token = localStorage.getItem('token');
     if (!token) {
-      router.push('/applicant/sign-up');
+      router.push('/sign-in');
       return;
     }
 
@@ -153,14 +165,15 @@ export default function ApplicantDashboard() {
       });
 
       if (response.status === 401) {
-        localStorage.removeItem('token');
+        logout();
         router.push('/sign-in');
         return;
       }
 
       if (response.status === 403) {
-        // Not an applicant
-        router.push('/dashboard');
+        // Not an applicant - redirect based on role
+        const dashboard = user?.role === 'vendor' ? '/vendor' : '/consultant';
+        router.push(dashboard);
         return;
       }
 
@@ -179,7 +192,7 @@ export default function ApplicantDashboard() {
   };
 
   const triggerSync = async () => {
-    const token = localStorage.getItem('token');
+    if (!token) return;
     try {
       await fetch(`${API_URL}/api/v1/applicant/sync`, {
         method: 'POST',
@@ -247,6 +260,14 @@ export default function ApplicantDashboard() {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              {/* Settings link */}
+              <Link
+                href="/settings/bens"
+                className="text-sm text-slate-600 hover:text-emerald-600 flex items-center gap-1"
+                title="Manage BEN Numbers"
+              >
+                ⚙️ Settings
+              </Link>
               {summary.sync_status === 'syncing' ? (
                 <div className="flex items-center gap-2 text-sm text-emerald-600">
                   <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
@@ -262,8 +283,7 @@ export default function ApplicantDashboard() {
               )}
               <button
                 onClick={() => {
-                  localStorage.removeItem('token');
-                  localStorage.removeItem('user');
+                  logout();
                   router.push('/sign-in');
                 }}
                 className="text-sm text-slate-600 hover:text-red-600"

@@ -14,7 +14,8 @@ export default function SignInPage() {
   useEffect(() => {
     if (isAuthenticated && user) {
       const dashboard = user.role === 'vendor' ? '/vendor' : 
-                       user.role === 'admin' ? '/admin' : '/consultant';
+                       user.role === 'admin' ? '/admin' :
+                       user.role === 'applicant' ? '/applicant' : '/consultant';
       router.push(dashboard);
     }
   }, [isAuthenticated, user, router]);
@@ -27,7 +28,8 @@ export default function SignInPage() {
     if (success) {
       const currentUser = useAuthStore.getState().user;
       const dashboard = currentUser?.role === 'vendor' ? '/vendor' : 
-                       currentUser?.role === 'admin' ? '/admin' : '/consultant';
+                       currentUser?.role === 'admin' ? '/admin' :
+                       currentUser?.role === 'applicant' ? '/applicant' : '/consultant';
       router.push(dashboard);
     }
   };
@@ -208,6 +210,7 @@ export default function SignInPage() {
             <div className="space-y-1 text-sm text-amber-800">
               <p><span className="font-medium">Consultant:</span> test_consultant@example.com / TestPass123!</p>
               <p><span className="font-medium">Vendor:</span> test_vendor@example.com / TestPass123!</p>
+              <p><span className="font-medium">Applicant:</span> test_applicant@example.com / TestPass123!</p>
             </div>
           </div>
         </div>

@@ -2,16 +2,18 @@
 from .user import User, UserRole
 from .subscription import Subscription, SubscriptionStatus, SubscriptionPlan
 from .consultant import ConsultantProfile, ConsultantSchool
-from .vendor import VendorProfile, VendorSearch
+from .vendor import VendorProfile, VendorSearch, SavedLead, OrganizationEnrichmentCache
 from .application import SchoolSnapshot, Application, AppealRecord, QueryHistory
 from .alert import Alert, AlertConfig, AlertType, AlertPriority
 from .applicant import (
     ApplicantProfile, 
+    ApplicantBEN,
     ApplicantFRN, 
     ApplicantAutoAppeal, 
     ApplicantStatusHistory,
     DataSyncStatus,
-    FRNStatusType
+    FRNStatusType,
+    BENSubscriptionStatus
 )
 
 __all__ = [
@@ -24,6 +26,8 @@ __all__ = [
     "ConsultantSchool",
     "VendorProfile",
     "VendorSearch",
+    "SavedLead",
+    "OrganizationEnrichmentCache",
     "SchoolSnapshot",
     "Application",
     "AppealRecord",
@@ -34,9 +38,11 @@ __all__ = [
     "AlertPriority",
     # Applicant models
     "ApplicantProfile",
+    "ApplicantBEN",
     "ApplicantFRN",
     "ApplicantAutoAppeal",
     "ApplicantStatusHistory",
     "DataSyncStatus",
     "FRNStatusType",
+    "BENSubscriptionStatus",
 ]

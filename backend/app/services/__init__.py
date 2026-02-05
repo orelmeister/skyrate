@@ -26,6 +26,14 @@ from .usac_service import USACService, get_usac_service
 from .ai_service import AIService, get_ai_service
 from .denial_service import DenialService, get_denial_service
 from .appeals_service import AppealsService, get_appeals_service
+from .alert_service import AlertService, get_alert_service
+from .email_service import EmailService, get_email_service
+from .scheduler_service import (
+    init_scheduler, 
+    shutdown_scheduler, 
+    get_scheduler_status,
+    run_job_now
+)
 
 __all__ = [
     # Service classes
@@ -33,10 +41,20 @@ __all__ = [
     'AIService', 
     'DenialService',
     'AppealsService',
+    'AlertService',
+    'EmailService',
     
     # Singleton accessors
     'get_usac_service',
     'get_ai_service',
     'get_denial_service',
     'get_appeals_service',
+    'get_alert_service',
+    'get_email_service',
+    
+    # Scheduler functions
+    'init_scheduler',
+    'shutdown_scheduler',
+    'get_scheduler_status',
+    'run_job_now',
 ]

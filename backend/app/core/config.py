@@ -94,6 +94,9 @@ class Settings(BaseSettings):
     # USAC / Socrata
     SOCRATA_APP_TOKEN: Optional[str] = None
     
+    # Hunter.io API for contact enrichment
+    HUNTER_API_KEY: Optional[str] = None
+    
     # CORS
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000", "https://skyrate.ai", "https://*.skyrate.ai"]
     
@@ -101,12 +104,12 @@ class Settings(BaseSettings):
     # Consultants: $300/month or $3,000/year
     CONSULTANT_MONTHLY_PRICE: int = 30000   # $300
     CONSULTANT_YEARLY_PRICE: int = 300000   # $3,000
-    # Vendors: $200/month or $2,000/year  
-    VENDOR_MONTHLY_PRICE: int = 20000       # $200
-    VENDOR_YEARLY_PRICE: int = 200000       # $2,000
-    # Applicants: $99/month or $990/year
-    APPLICANT_MONTHLY_PRICE: int = 9900     # $99
-    APPLICANT_YEARLY_PRICE: int = 99000     # $990
+    # Vendors: $300/month or $3,000/year  
+    VENDOR_MONTHLY_PRICE: int = 30000       # $300
+    VENDOR_YEARLY_PRICE: int = 300000       # $3,000
+    # Applicants: $200/month or $2,000/year
+    APPLICANT_MONTHLY_PRICE: int = 20000    # $200
+    APPLICANT_YEARLY_PRICE: int = 200000    # $2,000
     
     # Test/Demo Account Settings
     # Emails containing these patterns get free access (case-insensitive)

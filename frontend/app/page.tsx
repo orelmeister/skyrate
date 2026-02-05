@@ -487,7 +487,48 @@ export default function HomePage() {
               Choose the plan that fits your needs. All plans include a 14-day free trial.
             </p>
           </div>
-          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+            {/* Applicant Plan */}
+            <div className="p-8 rounded-2xl border-2 border-emerald-200 bg-gradient-to-br from-emerald-50 to-white">
+              <div className="flex items-center gap-3 mb-4">
+                <span className="text-3xl">🏫</span>
+                <h3 className="text-2xl font-bold text-slate-900">Applicant</h3>
+              </div>
+              <p className="text-slate-600 mb-6">For schools and libraries managing their own E-Rate applications</p>
+              <div className="mb-6">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl font-bold text-slate-900">$200</span>
+                  <span className="text-slate-600">/month</span>
+                </div>
+                <p className="text-sm text-slate-500 mt-1">or $2,000/year (save $400)</p>
+              </div>
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-center gap-2 text-slate-700">
+                  <span className="text-green-500">✓</span> Automatic FRN tracking
+                </li>
+                <li className="flex items-center gap-2 text-slate-700">
+                  <span className="text-green-500">✓</span> Real-time status alerts
+                </li>
+                <li className="flex items-center gap-2 text-slate-700">
+                  <span className="text-green-500">✓</span> AI-generated appeal letters
+                </li>
+                <li className="flex items-center gap-2 text-slate-700">
+                  <span className="text-green-500">✓</span> Deadline reminders
+                </li>
+                <li className="flex items-center gap-2 text-slate-700">
+                  <span className="text-green-500">✓</span> Unlimited appeal refinements
+                </li>
+                <li className="flex items-center gap-2 text-slate-700">
+                  <span className="text-green-500">✓</span> Email support
+                </li>
+              </ul>
+              <Link
+                href="/applicant/sign-up"
+                className="block w-full py-3 text-center bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition"
+              >
+                Start Free Trial
+              </Link>
+            </div>
             {/* Consultant Plan */}
             <div className="p-8 rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 to-white relative overflow-hidden">
               <div className="absolute top-4 right-4">
@@ -541,10 +582,10 @@ export default function HomePage() {
               <p className="text-slate-600 mb-6">Ideal for E-Rate vendors tracking leads and competitors</p>
               <div className="mb-6">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-slate-900">$200</span>
+                  <span className="text-4xl font-bold text-slate-900">$300</span>
                   <span className="text-slate-600">/month</span>
                 </div>
-                <p className="text-sm text-slate-500 mt-1">or $2,000/year (save $400)</p>
+                <p className="text-sm text-slate-500 mt-1">or $3,000/year (save $600)</p>
               </div>
               <ul className="space-y-3 mb-8">
                 <li className="flex items-center gap-2 text-slate-700">
