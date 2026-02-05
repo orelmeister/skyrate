@@ -20,8 +20,10 @@ class Settings(BaseSettings):
     PORT: int = 8000
     ENVIRONMENT: str = "development"
     
-    # Database
-    DATABASE_URL: str = "sqlite:///./skyrate.db"  # Default to SQLite for local dev
+    # Database - Use environment variable DATABASE_URL
+    # Production: mysql+pymysql://user:pass@host/database
+    # Local dev: sqlite:///./skyrate.db
+    DATABASE_URL: str = "sqlite:///./skyrate.db"  # Override with env var for production
     
     # Redis
     REDIS_URL: str = "redis://localhost:6379"
