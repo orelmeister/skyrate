@@ -1,0 +1,31 @@
+{
+  "generated_at": "2026-02-05T15:53:13.083903",
+  "successful": 24,
+  "failed": 0,
+  "files": {
+    "logo_main": "C:\\Dev\\skyrate\\assets\\generated\\logos\\logo_main.png",
+    "logo_icon": "C:\\Dev\\skyrate\\assets\\generated\\logos\\logo_icon.png",
+    "logo_dark": "C:\\Dev\\skyrate\\assets\\generated\\logos\\logo_dark.png",
+    "logo_horizontal": "C:\\Dev\\skyrate\\assets\\generated\\logos\\logo_horizontal.png",
+    "icon_dashboard": "C:\\Dev\\skyrate\\assets\\generated\\icons\\icon_dashboard.png",
+    "icon_school": "C:\\Dev\\skyrate\\assets\\generated\\icons\\icon_school.png",
+    "icon_funding": "C:\\Dev\\skyrate\\assets\\generated\\icons\\icon_funding.png",
+    "icon_appeal": "C:\\Dev\\skyrate\\assets\\generated\\icons\\icon_appeal.png",
+    "icon_ai": "C:\\Dev\\skyrate\\assets\\generated\\icons\\icon_ai.png",
+    "icon_vendor": "C:\\Dev\\skyrate\\assets\\generated\\icons\\icon_vendor.png",
+    "icon_consultant": "C:\\Dev\\skyrate\\assets\\generated\\icons\\icon_consultant.png",
+    "icon_notification": "C:\\Dev\\skyrate\\assets\\generated\\icons\\icon_notification.png",
+    "bg_hero": "C:\\Dev\\skyrate\\assets\\generated\\backgrounds\\bg_hero.png",
+    "bg_network": "C:\\Dev\\skyrate\\assets\\generated\\backgrounds\\bg_network.png",
+    "bg_gradient": "C:\\Dev\\skyrate\\assets\\generated\\backgrounds\\bg_gradient.png",
+    "bg_data": "C:\\Dev\\skyrate\\assets\\generated\\backgrounds\\bg_data.png",
+    "illus_erate": "C:\\Dev\\skyrate\\assets\\generated\\illustrations\\illus_erate.png",
+    "illus_consultant": "C:\\Dev\\skyrate\\assets\\generated\\illustrations\\illus_consultant.png",
+    "illus_success": "C:\\Dev\\skyrate\\assets\\generated\\illustrations\\illus_success.png",
+    "illus_ai": "C:\\Dev\\skyrate\\assets\\generated\\illustrations\\illus_ai.png",
+    "illus_vendor": "C:\\Dev\\skyrate\\assets\\generated\\illustrations\\illus_vendor.png",
+    "social_linkedin": "C:\\Dev\\skyrate\\assets\\generated\\marketing\\social_linkedin.png",
+    "social_twitter": "C:\\Dev\\skyrate\\assets\\generated\\marketing\\social_twitter.png",
+    "og_image": "C:\\Dev\\skyrate\\assets\\generated\\marketing\\og_image.png"
+  }
+}

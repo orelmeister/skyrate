@@ -1828,25 +1828,24 @@ class USACDataClient:
     ) -> Dict[str, Any]:
         """
         Get detailed FRN status information for a BEN.
-        Queries the Form 471 FRN Status dataset (qdmp-ygft) which has actual status.
+        Queries the Form 471 FRN Status dataset (qdmp-ygft).
         
-        Args:
-            ben: Billed Entity Number
-            year: Optional funding year filter
-            frn: Optional specific FRN to look up
-            
-        Returns:
-            Dict with FRN status details
+        Actual field names in qdmp-ygft:
+        - ben (not billed_entity_number)
+        - form_471_frn_status_name (Funded/Denied/Pending)
+        - funding_request_number
+        - funding_commitment_request
+        - total_authorized_disbursement
         """
         try:
             url = USAC_ENDPOINTS['frn_status']
             
-            # Build query
+            # Build query - qdmp-ygft uses simple field names
             where_parts = [f"ben = '{ben}'"]
             if year:
                 where_parts.append(f"funding_year = '{year}'")
             if frn:
-                where_parts.append(f"frn = '{frn}'")
+                where_parts.append(f"funding_request_number = '{frn}'")
             
             params = {
                 '$where': ' AND '.join(where_parts),
@@ -1861,25 +1860,25 @@ class USACDataClient:
             if not frn_data:
                 return {'success': True, 'frns': [], 'count': 0}
             
-            # Process FRN status data
+            # Process FRN status data with correct field names
             frns = []
             for frn_record in frn_data:
                 frns.append({
-                    'frn': frn_record.get('frn'),
-                    'frn_status': frn_record.get('frn_status'),  # Funded, Denied, Pending, etc.
+                    'frn': frn_record.get('funding_request_number'),
+                    'frn_status': frn_record.get('form_471_frn_status_name'),  # Funded, Denied, Pending
                     'funding_year': frn_record.get('funding_year'),
                     'application_number': frn_record.get('application_number'),
-                    'commitment_amount': float(frn_record.get('commitment_amount') or 0),
-                    'original_request': float(frn_record.get('original_funding_request_amount') or 0),
+                    'commitment_amount': float(frn_record.get('funding_commitment_request') or 0),
+                    'original_request': float(frn_record.get('funding_commitment_request') or 0),
                     'funded_amount': float(frn_record.get('total_authorized_disbursement') or 0),
-                    'denied_amount': float(frn_record.get('denied_amount') or 0),
-                    'pending_amount': float(frn_record.get('pending_amount') or 0),
+                    'denied_amount': 0,
+                    'pending_amount': 0,
                     'service_type': frn_record.get('form_471_service_type_name'),
-                    'category': frn_record.get('form_471_category_of_service'),
-                    'frn_nickname': frn_record.get('frn_nickname'),
-                    'wave_number': frn_record.get('wave_number'),
-                    'fcdl_date': frn_record.get('fcdl_date'),
-                    'fcdl_comment': frn_record.get('fcdl_comment')
+                    'category': '',
+                    'frn_nickname': frn_record.get('nickname'),
+                    'wave_number': frn_record.get('wave_sequence_number'),
+                    'fcdl_date': frn_record.get('fcdl_letter_date'),
+                    'fcdl_comment': frn_record.get('fcdl_comment_frn')
                 })
             
             # Calculate summary stats

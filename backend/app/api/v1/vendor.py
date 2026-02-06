@@ -752,24 +752,21 @@ async def search_schools(
         client = USACDataClient()
         filters = {}
         
-        # Build filters
+        # Build filters - FRN Status dataset (qdmp-ygft) field names
         if data.state:
             filters["state"] = data.state.upper()
         
         if data.status:
-            # Use frn_status field for actual funding status
+            # Status field is form_471_frn_status_name (not frn_status!)
             status_map = {
                 "funded": "Funded",
                 "denied": "Denied", 
                 "pending": "Pending",
             }
-            filters["frn_status"] = status_map.get(data.status.lower(), data.status)
+            filters["form_471_frn_status_name"] = status_map.get(data.status.lower(), data.status)
         
         if data.service_type:
-            # Map service type names - the FRN status dataset has form_471_service_type_name
             service_type_lower = data.service_type.lower()
-            
-            # Service type mapping for frn_status dataset
             service_type_map = {
                 "internal connections": "Internal Connections",
                 "basic maintenance": "Basic Maintenance of Internal Connections",
@@ -779,13 +776,12 @@ async def search_schools(
                 "data transmission": "Data Transmission and/or Internet Access",
                 "voice": "Voice",
             }
-            
             for key, value in service_type_map.items():
                 if key in service_type_lower:
                     filters["form_471_service_type_name"] = value
                     break
         
-        # Use FRN Status dataset which has actual funding status
+        # Use FRN Status dataset (qdmp-ygft)
         df = client.fetch_data(dataset='frn_status', year=data.year, filters=filters, limit=data.limit)
         
         if df.empty:
@@ -817,58 +813,45 @@ async def search_schools(
         
         # Transform results to frontend-expected field names
         def transform_result(r):
-            """Map USAC field names to frontend SearchResult interface
+            """Map FRN Status dataset (qdmp-ygft) fields to frontend
             
-            Note: Using frn_status dataset which has actual Funded/Denied/Pending status
+            Actual field names from dataset:
+            - ben, organization_name, state
+            - form_471_frn_status_name (Funded/Denied/Pending)
+            - funding_commitment_request, total_authorized_disbursement
+            - form_471_service_type_name
+            - funding_request_number (FRN)
             """
-            # Handle funding amount - frn_status dataset has different field names
-            # Priority: commitment_amount (committed funds), original_funding_request_amount (requested)
-            funding = (
-                r.get('commitment_amount') or 
-                r.get('original_funding_request_amount') or 
-                r.get('original_total_pre_discount_costs') or 
-                r.get('total_authorized_disbursement') or 
-                0
-            )
+            # Funding amount
+            funding = r.get('funding_commitment_request') or r.get('total_authorized_disbursement') or 0
             try:
                 funding_amount = float(funding) if funding else 0
             except (ValueError, TypeError):
                 funding_amount = 0
             
-            # Determine status - prioritize frn_status (actual funding status)
-            # frn_status values: "Funded", "Denied", "Pending", "Cancelled", etc.
-            status = r.get('frn_status') or r.get('application_status') or 'Pending'
+            # Status - form_471_frn_status_name is the actual status field!
+            status = r.get('form_471_frn_status_name') or 'Unknown'
             
-            # Service type from frn_status dataset
-            service_type = r.get('form_471_service_type_name') or r.get('service_type') or ''
+            # Service type
+            service_type = r.get('form_471_service_type_name') or ''
             
-            # Get entity name - frn_status dataset uses different field
-            entity_name = (
-                r.get('organization_name') or 
-                r.get('applicant_name') or 
-                r.get('billed_entity_name') or
-                r.get('applicant_ben_name') or  # frn_status dataset field
-                ''
-            )
+            # Entity name
+            entity_name = r.get('organization_name') or ''
             
             return {
                 'ben': str(r.get('ben', '')),
                 'name': entity_name,
-                'state': r.get('state') or r.get('billed_entity_state', ''),
-                'city': r.get('city') or r.get('billed_entity_city', ''),
+                'state': r.get('state', ''),
+                'city': '',  # Not in this dataset
                 'status': status,
                 'funding_amount': funding_amount,
                 'service_type': service_type,
                 'funding_year': r.get('funding_year', data.year),
                 'application_number': r.get('application_number', ''),
-                'frn': r.get('frn') or r.get('funding_request_number', ''),
-                # Additional fields from frn_status dataset
-                'committed_amount': float(r.get('commitment_amount') or 0),
+                'frn': r.get('funding_request_number', ''),
+                'committed_amount': float(r.get('funding_commitment_request') or 0),
                 'funded_amount': float(r.get('total_authorized_disbursement') or 0),
-                'category': r.get('form_471_category_of_service', ''),
-                'wave_number': r.get('wave_number', ''),
-                'fcdl_date': r.get('fcdl_date', ''),
-                # Keep original fields for detail view
+                'category': '',
                 '_raw': r
             }
         

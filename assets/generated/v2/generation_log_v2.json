@@ -1,0 +1,38 @@
+{
+  "version": "v2",
+  "generated_at": "2026-02-05T16:04:15.476961",
+  "brand_changes": [
+    "Purple to Blue gradient (#8B5CF6 to #3B82F6)",
+    "Icons without text/logos",
+    "Backgrounds without text/logos",
+    "Consistent logo description in marketing"
+  ],
+  "successful": 24,
+  "failed": 0,
+  "files": {
+    "logo_main_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\logos\\logo_main_v2.png",
+    "logo_icon_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\logos\\logo_icon_v2.png",
+    "logo_dark_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\logos\\logo_dark_v2.png",
+    "logo_wordmark_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\logos\\logo_wordmark_v2.png",
+    "icon_dashboard_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\icons\\icon_dashboard_v2.png",
+    "icon_school_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\icons\\icon_school_v2.png",
+    "icon_funding_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\icons\\icon_funding_v2.png",
+    "icon_appeal_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\icons\\icon_appeal_v2.png",
+    "icon_ai_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\icons\\icon_ai_v2.png",
+    "icon_vendor_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\icons\\icon_vendor_v2.png",
+    "icon_consultant_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\icons\\icon_consultant_v2.png",
+    "icon_notification_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\icons\\icon_notification_v2.png",
+    "bg_hero_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\backgrounds\\bg_hero_v2.png",
+    "bg_network_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\backgrounds\\bg_network_v2.png",
+    "bg_gradient_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\backgrounds\\bg_gradient_v2.png",
+    "bg_data_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\backgrounds\\bg_data_v2.png",
+    "illus_erate_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\illustrations\\illus_erate_v2.png",
+    "illus_consultant_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\illustrations\\illus_consultant_v2.png",
+    "illus_success_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\illustrations\\illus_success_v2.png",
+    "illus_ai_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\illustrations\\illus_ai_v2.png",
+    "illus_vendor_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\illustrations\\illus_vendor_v2.png",
+    "social_linkedin_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\marketing\\social_linkedin_v2.png",
+    "social_twitter_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\marketing\\social_twitter_v2.png",
+    "og_image_v2": "C:\\Dev\\skyrate\\assets\\generated\\v2\\marketing\\og_image_v2.png"
+  }
+}
