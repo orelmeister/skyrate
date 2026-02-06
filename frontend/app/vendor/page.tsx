@@ -14,6 +14,10 @@ interface SearchResult {
   status: string;
   funding_amount: number;
   service_type: string;
+  funding_year?: number;
+  application_number?: string;
+  frn?: string;
+  _raw?: any; // Raw USAC data for detail view
 }
 
 export default function VendorPortalPage() {
@@ -55,6 +59,11 @@ export default function VendorPortalPage() {
   const [entityDetailLoading, setEntityDetailLoading] = useState(false);
   const [entityDetail, setEntityDetail] = useState<EntityDetailResponse | null>(null);
   const [showEntityModal, setShowEntityModal] = useState(false);
+  
+  // Search result detail modal state
+  const [selectedSearchResult, setSelectedSearchResult] = useState<SearchResult | null>(null);
+  const [searchResultDetailLoading, setSearchResultDetailLoading] = useState(false);
+  const [showSearchResultModal, setShowSearchResultModal] = useState(false);
   
   // Form 471 Competitive Analysis state
   const [form471BenInput, setForm471BenInput] = useState("");
@@ -650,6 +659,25 @@ export default function VendorPortalPage() {
       newSelection.add(ben);
     }
     setSelectedSchools(newSelection);
+  };
+
+  // Handle clicking on BEN to view school details
+  const handleViewSchoolDetail = async (school: SearchResult) => {
+    setSelectedSearchResult(school);
+    setShowSearchResultModal(true);
+    setSearchResultDetailLoading(true);
+    
+    try {
+      // Fetch full entity details including all applications/FRNs
+      const response = await api.getEntityDetail(school.ben);
+      if (response.success && response.data) {
+        setEntityDetail(response.data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch school detail:", error);
+    } finally {
+      setSearchResultDetailLoading(false);
+    }
   };
 
   const handleExport = async () => {
@@ -2043,22 +2071,32 @@ export default function VendorPortalPage() {
                               onChange={() => toggleSchoolSelection(school.ben)}
                             />
                           </td>
-                          <td className="px-4 py-3 font-mono">{school.ben}</td>
-                          <td className="px-4 py-3">{school.name}</td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => handleViewSchoolDetail(school)}
+                              className="font-mono text-indigo-600 hover:text-indigo-800 hover:underline focus:outline-none"
+                              title="Click to view school details"
+                            >
+                              {school.ben}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3 font-medium text-slate-900">{school.name || '-'}</td>
                           <td className="px-4 py-3">{school.state}</td>
                           <td className="px-4 py-3">
-                            <span className={`px-2 py-1 rounded text-xs ${
-                              school.status === 'Funded' 
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              school.status === 'Funded' || school.status === 'FUNDED'
                                 ? 'bg-green-100 text-green-700'
-                                : school.status === 'Denied'
+                                : school.status === 'Denied' || school.status === 'DENIED'
                                 ? 'bg-red-100 text-red-700'
-                                : 'bg-yellow-100 text-yellow-700'
+                                : school.status === 'Pending' || school.status === 'PENDING'
+                                ? 'bg-yellow-100 text-yellow-700'
+                                : 'bg-slate-100 text-slate-700'
                             }`}>
-                              {school.status}
+                              {school.status || '-'}
                             </span>
                           </td>
-                          <td className="px-4 py-3">${school.funding_amount?.toLocaleString()}</td>
-                          <td className="px-4 py-3 text-sm">{school.service_type}</td>
+                          <td className="px-4 py-3 font-medium">{school.funding_amount ? `$${school.funding_amount.toLocaleString()}` : '-'}</td>
+                          <td className="px-4 py-3 text-sm">{school.service_type || '-'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -3689,6 +3727,223 @@ export default function VendorPortalPage() {
               
               <button
                 onClick={closeForm470Modal}
+                className="px-4 py-2 text-slate-700 hover:bg-slate-200 rounded-xl transition-colors ml-auto"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Search Result Detail Modal */}
+      {showSearchResultModal && selectedSearchResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => {
+              setShowSearchResultModal(false);
+              setSelectedSearchResult(null);
+              setEntityDetail(null);
+            }}
+          />
+          
+          {/* Modal */}
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-xl font-bold">{selectedSearchResult.name || 'School Details'}</h2>
+                  <div className="flex items-center gap-3 mt-2 flex-wrap">
+                    <span className="font-mono bg-white/20 px-2 py-0.5 rounded text-sm">
+                      BEN: {selectedSearchResult.ben}
+                    </span>
+                    <span className="px-2 py-0.5 bg-white/20 rounded text-sm">
+                      {selectedSearchResult.city && `${selectedSearchResult.city}, `}{selectedSearchResult.state}
+                    </span>
+                    {selectedSearchResult.funding_year && (
+                      <span className="px-2 py-0.5 bg-white/20 rounded text-sm">
+                        FY {selectedSearchResult.funding_year}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowSearchResultModal(false);
+                    setSelectedSearchResult(null);
+                    setEntityDetail(null);
+                  }}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {searchResultDetailLoading ? (
+                <div className="py-12 text-center">
+                  <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                  <p className="text-slate-600">Loading school details...</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Current Application Info */}
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-slate-900 mb-3">Selected Application</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div>
+                        <span className="text-sm text-slate-500">Status</span>
+                        <div className={`mt-1 inline-block px-3 py-1 rounded-full text-sm font-medium ${
+                          selectedSearchResult.status === 'Funded' || selectedSearchResult.status === 'FUNDED'
+                            ? 'bg-green-100 text-green-700'
+                            : selectedSearchResult.status === 'Denied' || selectedSearchResult.status === 'DENIED'
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-yellow-100 text-yellow-700'
+                        }`}>
+                          {selectedSearchResult.status || 'Unknown'}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-sm text-slate-500">Funding Amount</span>
+                        <div className="mt-1 text-lg font-bold text-slate-900">
+                          {selectedSearchResult.funding_amount 
+                            ? `$${selectedSearchResult.funding_amount.toLocaleString()}`
+                            : '-'}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-sm text-slate-500">Service Type</span>
+                        <div className="mt-1 font-medium text-slate-900">
+                          {selectedSearchResult.service_type || '-'}
+                        </div>
+                      </div>
+                      {selectedSearchResult.application_number && (
+                        <div>
+                          <span className="text-sm text-slate-500">Application #</span>
+                          <div className="mt-1 font-mono text-slate-900">
+                            {selectedSearchResult.application_number}
+                          </div>
+                        </div>
+                      )}
+                      {selectedSearchResult.frn && (
+                        <div>
+                          <span className="text-sm text-slate-500">FRN</span>
+                          <div className="mt-1 font-mono text-slate-900">
+                            {selectedSearchResult.frn}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Full Entity History (if loaded) */}
+                  {entityDetail && (
+                    <>
+                      {/* Summary Stats */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-blue-50 rounded-xl p-4">
+                          <div className="text-sm text-blue-600 font-medium">Total Cat 1</div>
+                          <div className="text-2xl font-bold text-blue-700">
+                            ${((entityDetail.total_cat1 || 0) / 1000).toFixed(1)}K
+                          </div>
+                        </div>
+                        <div className="bg-emerald-50 rounded-xl p-4">
+                          <div className="text-sm text-emerald-600 font-medium">Total Cat 2</div>
+                          <div className="text-2xl font-bold text-emerald-700">
+                            ${((entityDetail.total_cat2 || 0) / 1000).toFixed(1)}K
+                          </div>
+                        </div>
+                        <div className="bg-purple-50 rounded-xl p-4">
+                          <div className="text-sm text-purple-600 font-medium">Lifetime Total</div>
+                          <div className="text-2xl font-bold text-purple-700">
+                            ${((entityDetail.total_all || 0) / 1000).toFixed(1)}K
+                          </div>
+                        </div>
+                        <div className="bg-amber-50 rounded-xl p-4">
+                          <div className="text-sm text-amber-600 font-medium">Total FRNs</div>
+                          <div className="text-2xl font-bold text-amber-700">
+                            {entityDetail.total_frns || 0}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Yearly Breakdown */}
+                      {entityDetail.years && entityDetail.years.length > 0 && (
+                        <div>
+                          <h3 className="font-semibold text-slate-900 mb-3">Funding History by Year</h3>
+                          <div className="border border-slate-200 rounded-xl overflow-hidden">
+                            <table className="w-full">
+                              <thead className="bg-slate-50">
+                                <tr>
+                                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Year</th>
+                                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Category 1</th>
+                                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Category 2</th>
+                                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Total</th>
+                                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">FRNs</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-200">
+                                {entityDetail.years.map((year: any) => (
+                                  <tr key={year.year} className="hover:bg-slate-50">
+                                    <td className="px-4 py-3 font-medium">{year.year}</td>
+                                    <td className="px-4 py-3">${((year.cat1 || 0) / 1000).toFixed(1)}K</td>
+                                    <td className="px-4 py-3">${((year.cat2 || 0) / 1000).toFixed(1)}K</td>
+                                    <td className="px-4 py-3 font-medium">${((year.total || 0) / 1000).toFixed(1)}K</td>
+                                    <td className="px-4 py-3">{year.frn_count || 0}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* No detailed history available */}
+                  {!entityDetail && !searchResultDetailLoading && (
+                    <div className="bg-slate-50 rounded-xl p-6 text-center">
+                      <p className="text-slate-600">
+                        Unable to load detailed funding history. The basic application information is shown above.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center gap-3">
+              <button
+                onClick={() => {
+                  // Add to selection if not already selected
+                  if (!selectedSchools.has(selectedSearchResult.ben)) {
+                    const newSelection = new Set(selectedSchools);
+                    newSelection.add(selectedSearchResult.ben);
+                    setSelectedSchools(newSelection);
+                  }
+                  setShowSearchResultModal(false);
+                }}
+                className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                Add to Export
+              </button>
+              <button
+                onClick={() => {
+                  setShowSearchResultModal(false);
+                  setSelectedSearchResult(null);
+                  setEntityDetail(null);
+                }}
                 className="px-4 py-2 text-slate-700 hover:bg-slate-200 rounded-xl transition-colors ml-auto"
               >
                 Close

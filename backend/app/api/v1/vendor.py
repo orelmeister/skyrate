@@ -815,6 +815,39 @@ async def search_schools(
                    keyword in str(r.get('form_471_service_type_name', '')).lower()
             ]
         
+        # Transform results to frontend-expected field names
+        def transform_result(r):
+            """Map USAC field names to frontend SearchResult interface"""
+            # Handle funding amount - could be in different fields
+            funding = r.get('original_total_pre_discount_costs') or r.get('total_authorized_disbursement') or 0
+            try:
+                funding_amount = float(funding) if funding else 0
+            except (ValueError, TypeError):
+                funding_amount = 0
+            
+            # Determine status from application_status or frn_status
+            status = r.get('application_status') or r.get('frn_status') or 'Unknown'
+            
+            # Service type
+            service_type = r.get('form_471_service_type_name') or r.get('service_type') or ''
+            
+            return {
+                'ben': str(r.get('ben', '')),
+                'name': r.get('organization_name') or r.get('applicant_name') or r.get('billed_entity_name') or '',
+                'state': r.get('state', ''),
+                'city': r.get('city', ''),
+                'status': status,
+                'funding_amount': funding_amount,
+                'service_type': service_type,
+                'funding_year': r.get('funding_year', data.year),
+                'application_number': r.get('application_number', ''),
+                'frn': r.get('funding_request_number') or r.get('frn', ''),
+                # Keep original fields for detail view
+                '_raw': r
+            }
+        
+        transformed_results = [transform_result(r) for r in results]
+        
         # Save search to history (optional - don't fail if DB issue)
         search_id = None
         try:
@@ -827,7 +860,7 @@ async def search_schools(
                     "service_type": data.service_type,
                     "equipment_keyword": data.equipment_keyword,
                 },
-                results_count=len(results)
+                results_count=len(transformed_results)
             )
             db.add(search_record)
             db.commit()
@@ -839,8 +872,8 @@ async def search_schools(
         
         return {
             "success": True,
-            "count": len(results),
-            "results": results[:data.limit],
+            "count": len(transformed_results),
+            "results": transformed_results[:data.limit],
             "search_id": search_id
         }
     
