@@ -6,7 +6,7 @@ Handles school search, equipment matching, and lead generation
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
 import sys
 import os
@@ -743,6 +743,8 @@ async def search_schools(
     """
     Search for schools/applications matching criteria.
     Great for finding leads - schools that need vendor's products/services.
+    
+    Uses the FRN Status dataset (qdmp-ygft) which has actual Funded/Denied/Pending status.
     """
     try:
         from utils.usac_client import USACDataClient
@@ -755,38 +757,36 @@ async def search_schools(
             filters["state"] = data.state.upper()
         
         if data.status:
+            # Use frn_status field for actual funding status
             status_map = {
                 "funded": "Funded",
-                "denied": "Denied",
+                "denied": "Denied", 
                 "pending": "Pending",
             }
-            filters["application_status"] = status_map.get(data.status.lower(), data.status)
+            filters["frn_status"] = status_map.get(data.status.lower(), data.status)
         
         if data.service_type:
-            # Map service type names to E-Rate categories
-            # Category 1: Telecommunications, Internet Access, Data Transmission, Voice
-            # Category 2: Internal Connections, Basic Maintenance, MIBS
+            # Map service type names - the FRN status dataset has form_471_service_type_name
             service_type_lower = data.service_type.lower()
             
-            category_1_services = [
-                "1", "category 1", "cat1",
-                "internet access", "data transmission", "voice",
-                "telecommunications"
-            ]
-            category_2_services = [
-                "2", "category 2", "cat2",
-                "internal connections", "basic maintenance",
-                "managed internal broadband services", "mibs"
-            ]
+            # Service type mapping for frn_status dataset
+            service_type_map = {
+                "internal connections": "Internal Connections",
+                "basic maintenance": "Basic Maintenance of Internal Connections",
+                "managed internal broadband services": "Managed Internal Broadband Services",
+                "mibs": "Managed Internal Broadband Services",
+                "internet access": "Data Transmission and/or Internet Access",
+                "data transmission": "Data Transmission and/or Internet Access",
+                "voice": "Voice",
+            }
             
-            if service_type_lower in category_1_services:
-                filters["form_471_service_type_name"] = "Category 1"
-            elif service_type_lower in category_2_services:
-                filters["form_471_service_type_name"] = "Category 2"
-            # If service type doesn't match, don't add filter (search all)
+            for key, value in service_type_map.items():
+                if key in service_type_lower:
+                    filters["form_471_service_type_name"] = value
+                    break
         
-        # Fetch data
-        df = client.fetch_data(year=data.year, filters=filters, limit=data.limit)
+        # Use FRN Status dataset which has actual funding status
+        df = client.fetch_data(dataset='frn_status', year=data.year, filters=filters, limit=data.limit)
         
         if df.empty:
             return {"success": True, "count": 0, "results": []}
@@ -817,31 +817,57 @@ async def search_schools(
         
         # Transform results to frontend-expected field names
         def transform_result(r):
-            """Map USAC field names to frontend SearchResult interface"""
-            # Handle funding amount - could be in different fields
-            funding = r.get('original_total_pre_discount_costs') or r.get('total_authorized_disbursement') or 0
+            """Map USAC field names to frontend SearchResult interface
+            
+            Note: Using frn_status dataset which has actual Funded/Denied/Pending status
+            """
+            # Handle funding amount - frn_status dataset has different field names
+            # Priority: commitment_amount (committed funds), original_funding_request_amount (requested)
+            funding = (
+                r.get('commitment_amount') or 
+                r.get('original_funding_request_amount') or 
+                r.get('original_total_pre_discount_costs') or 
+                r.get('total_authorized_disbursement') or 
+                0
+            )
             try:
                 funding_amount = float(funding) if funding else 0
             except (ValueError, TypeError):
                 funding_amount = 0
             
-            # Determine status from application_status or frn_status
-            status = r.get('application_status') or r.get('frn_status') or 'Unknown'
+            # Determine status - prioritize frn_status (actual funding status)
+            # frn_status values: "Funded", "Denied", "Pending", "Cancelled", etc.
+            status = r.get('frn_status') or r.get('application_status') or 'Pending'
             
-            # Service type
+            # Service type from frn_status dataset
             service_type = r.get('form_471_service_type_name') or r.get('service_type') or ''
+            
+            # Get entity name - frn_status dataset uses different field
+            entity_name = (
+                r.get('organization_name') or 
+                r.get('applicant_name') or 
+                r.get('billed_entity_name') or
+                r.get('applicant_ben_name') or  # frn_status dataset field
+                ''
+            )
             
             return {
                 'ben': str(r.get('ben', '')),
-                'name': r.get('organization_name') or r.get('applicant_name') or r.get('billed_entity_name') or '',
-                'state': r.get('state', ''),
-                'city': r.get('city', ''),
+                'name': entity_name,
+                'state': r.get('state') or r.get('billed_entity_state', ''),
+                'city': r.get('city') or r.get('billed_entity_city', ''),
                 'status': status,
                 'funding_amount': funding_amount,
                 'service_type': service_type,
                 'funding_year': r.get('funding_year', data.year),
                 'application_number': r.get('application_number', ''),
-                'frn': r.get('funding_request_number') or r.get('frn', ''),
+                'frn': r.get('frn') or r.get('funding_request_number', ''),
+                # Additional fields from frn_status dataset
+                'committed_amount': float(r.get('commitment_amount') or 0),
+                'funded_amount': float(r.get('total_authorized_disbursement') or 0),
+                'category': r.get('form_471_category_of_service', ''),
+                'wave_number': r.get('wave_number', ''),
+                'fcdl_date': r.get('fcdl_date', ''),
                 # Keep original fields for detail view
                 '_raw': r
             }
@@ -1705,3 +1731,429 @@ async def lookup_enrichment_cache(
         "is_stale": cache_entry.is_stale,
         "data": cache_entry.to_dict()
     }
+
+# ==================== ENTITY ENRICHMENT ENDPOINT ====================
+
+@router.get("/entity/{ben}/enrich")
+async def enrich_entity(
+    ben: str,
+    year: Optional[int] = None,
+    application_number: Optional[str] = None,
+    frn: Optional[str] = None,
+    profile: VendorProfile = Depends(get_vendor_profile),
+):
+    """
+    Get comprehensive enriched data for an entity/school.
+    
+    Queries multiple USAC datasets to provide:
+    - Entity information (name, address, type)
+    - Application status and details
+    - FRN history with actual status (Funded/Denied/Pending)
+    - Contact information from Form 470 and Entity Supplemental data
+    - Funding summary
+    
+    This is the primary endpoint for getting full lead details before saving.
+    """
+    try:
+        from utils.usac_client import USACDataClient
+        
+        client = USACDataClient()
+        
+        # Get comprehensive enriched data
+        enriched = client.enrich_entity(
+            ben=ben,
+            year=year,
+            application_number=application_number,
+            frn=frn
+        )
+        
+        if not enriched.get('success'):
+            return {
+                "success": False,
+                "error": enriched.get('error', 'Failed to enrich entity'),
+                "ben": ben
+            }
+        
+        return {
+            "success": True,
+            "ben": ben,
+            "entity": enriched.get('entity', {}),
+            "applications": enriched.get('applications', []),
+            "frns": enriched.get('frns', []),
+            "frn_status": enriched.get('frn_status', {}),
+            "contacts": enriched.get('contacts', []),
+            "funding_summary": enriched.get('funding_summary', {}),
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to enrich entity: {str(e)}"
+        )
+
+
+# ==================== LEADS MANAGEMENT ENDPOINTS ====================
+
+class SaveLeadRequest(BaseModel):
+    """Request to save a school/application as a lead"""
+    ben: str
+    entity_name: str
+    entity_state: str
+    entity_city: Optional[str] = None
+    entity_address: Optional[str] = None
+    entity_zip: Optional[str] = None
+    entity_phone: Optional[str] = None
+    entity_website: Optional[str] = None
+    entity_type: Optional[str] = None
+    
+    # Application details
+    form_type: str = "471"
+    application_number: Optional[str] = None
+    frn: Optional[str] = None
+    funding_year: Optional[int] = None
+    application_status: Optional[str] = None
+    frn_status: Optional[str] = None
+    
+    # Funding details
+    funding_amount: Optional[int] = 0
+    committed_amount: Optional[int] = 0
+    funded_amount: Optional[int] = 0
+    service_type: Optional[str] = None
+    services: Optional[List[str]] = []
+    categories: Optional[List[str]] = []
+    
+    # Contact info
+    contact_name: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    contact_title: Optional[str] = None
+    all_contacts: Optional[List[Dict]] = []
+    
+    # Lead tracking
+    lead_status: str = "new"
+    notes: Optional[str] = None
+    tags: Optional[List[str]] = []
+    
+    # Source data
+    source_data: Optional[Dict] = {}
+
+
+class UpdateLeadRequest(BaseModel):
+    """Request to update a lead"""
+    lead_status: Optional[str] = None
+    notes: Optional[str] = None
+    tags: Optional[List[str]] = None
+    contact_name: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    contact_title: Optional[str] = None
+    all_contacts: Optional[List[Dict]] = None
+
+
+@router.post("/leads")
+async def save_lead(
+    data: SaveLeadRequest,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """
+    Save a school/application as a lead for follow-up.
+    
+    The lead includes:
+    - Entity information (school/library details)
+    - Application/FRN status from USAC
+    - Contact information (enriched from USAC)
+    - Lead tracking status (new, contacted, qualified, won, lost)
+    - Notes and tags
+    """
+    try:
+        from ...models.vendor import SavedLead
+        
+        # Check if lead already exists for this vendor
+        existing = db.query(SavedLead).filter(
+            SavedLead.vendor_profile_id == profile.id,
+            SavedLead.ben == data.ben,
+            SavedLead.application_number == data.application_number
+        ).first()
+        
+        if existing:
+            # Update existing lead
+            existing.entity_name = data.entity_name
+            existing.entity_state = data.entity_state
+            existing.entity_city = data.entity_city
+            existing.entity_address = data.entity_address
+            existing.entity_zip = data.entity_zip
+            existing.entity_phone = data.entity_phone
+            existing.entity_website = data.entity_website
+            existing.entity_type = data.entity_type
+            existing.frn = data.frn
+            existing.funding_year = data.funding_year
+            existing.application_status = data.application_status
+            existing.frn_status = data.frn_status
+            existing.funding_amount = data.funding_amount
+            existing.committed_amount = data.committed_amount
+            existing.funded_amount = data.funded_amount
+            existing.service_type = data.service_type
+            existing.services = data.services
+            existing.categories = data.categories
+            existing.contact_name = data.contact_name
+            existing.contact_email = data.contact_email
+            existing.contact_phone = data.contact_phone
+            existing.contact_title = data.contact_title
+            existing.all_contacts = data.all_contacts
+            existing.source_data = data.source_data
+            existing.updated_at = datetime.utcnow()
+            
+            db.commit()
+            db.refresh(existing)
+            
+            return {
+                "success": True,
+                "message": "Lead updated",
+                "lead": existing.to_dict()
+            }
+        
+        # Create new lead
+        lead = SavedLead(
+            vendor_profile_id=profile.id,
+            ben=data.ben,
+            entity_name=data.entity_name,
+            entity_state=data.entity_state,
+            entity_city=data.entity_city,
+            entity_address=data.entity_address,
+            entity_zip=data.entity_zip,
+            entity_phone=data.entity_phone,
+            entity_website=data.entity_website,
+            entity_type=data.entity_type,
+            form_type=data.form_type,
+            application_number=data.application_number or '',
+            frn=data.frn,
+            funding_year=data.funding_year,
+            application_status=data.application_status,
+            frn_status=data.frn_status,
+            funding_amount=data.funding_amount,
+            committed_amount=data.committed_amount,
+            funded_amount=data.funded_amount,
+            service_type=data.service_type,
+            services=data.services,
+            categories=data.categories,
+            contact_name=data.contact_name,
+            contact_email=data.contact_email,
+            contact_phone=data.contact_phone,
+            contact_title=data.contact_title,
+            all_contacts=data.all_contacts,
+            lead_status=data.lead_status,
+            notes=data.notes,
+            tags=data.tags,
+            source_data=data.source_data
+        )
+        
+        db.add(lead)
+        db.commit()
+        db.refresh(lead)
+        
+        return {
+            "success": True,
+            "message": "Lead saved",
+            "lead": lead.to_dict()
+        }
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save lead: {str(e)}"
+        )
+
+
+@router.get("/leads")
+async def get_leads(
+    lead_status: Optional[str] = None,
+    state: Optional[str] = None,
+    year: Optional[int] = None,
+    limit: int = 100,
+    offset: int = 0,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """
+    Get all saved leads for the vendor.
+    
+    Optional filters:
+    - lead_status: Filter by lead status (new, contacted, qualified, won, lost)
+    - state: Filter by entity state
+    - year: Filter by funding year
+    """
+    try:
+        from ...models.vendor import SavedLead
+        
+        query = db.query(SavedLead).filter(
+            SavedLead.vendor_profile_id == profile.id
+        )
+        
+        if lead_status:
+            query = query.filter(SavedLead.lead_status == lead_status)
+        if state:
+            query = query.filter(SavedLead.entity_state == state.upper())
+        if year:
+            query = query.filter(SavedLead.funding_year == year)
+        
+        # Get total count
+        total = query.count()
+        
+        # Get paginated results
+        leads = query.order_by(SavedLead.updated_at.desc()).offset(offset).limit(limit).all()
+        
+        # Calculate summary stats
+        all_leads = db.query(SavedLead).filter(
+            SavedLead.vendor_profile_id == profile.id
+        ).all()
+        
+        status_counts = {}
+        for lead in all_leads:
+            status_counts[lead.lead_status] = status_counts.get(lead.lead_status, 0) + 1
+        
+        return {
+            "success": True,
+            "total": total,
+            "count": len(leads),
+            "leads": [lead.to_dict() for lead in leads],
+            "summary": {
+                "total_leads": len(all_leads),
+                "by_status": status_counts
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch leads: {str(e)}"
+        )
+
+
+@router.get("/leads/{lead_id}")
+async def get_lead(
+    lead_id: int,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """Get a specific lead by ID"""
+    try:
+        from ...models.vendor import SavedLead
+        
+        lead = db.query(SavedLead).filter(
+            SavedLead.id == lead_id,
+            SavedLead.vendor_profile_id == profile.id
+        ).first()
+        
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        return {
+            "success": True,
+            "lead": lead.to_dict()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch lead: {str(e)}"
+        )
+
+
+@router.patch("/leads/{lead_id}")
+async def update_lead(
+    lead_id: int,
+    data: UpdateLeadRequest,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """
+    Update a lead's status, notes, or contact information.
+    """
+    try:
+        from ...models.vendor import SavedLead
+        
+        lead = db.query(SavedLead).filter(
+            SavedLead.id == lead_id,
+            SavedLead.vendor_profile_id == profile.id
+        ).first()
+        
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        # Update fields if provided
+        if data.lead_status is not None:
+            lead.lead_status = data.lead_status
+        if data.notes is not None:
+            lead.notes = data.notes
+        if data.tags is not None:
+            lead.tags = data.tags
+        if data.contact_name is not None:
+            lead.contact_name = data.contact_name
+        if data.contact_email is not None:
+            lead.contact_email = data.contact_email
+        if data.contact_phone is not None:
+            lead.contact_phone = data.contact_phone
+        if data.contact_title is not None:
+            lead.contact_title = data.contact_title
+        if data.all_contacts is not None:
+            lead.all_contacts = data.all_contacts
+        
+        lead.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(lead)
+        
+        return {
+            "success": True,
+            "message": "Lead updated",
+            "lead": lead.to_dict()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update lead: {str(e)}"
+        )
+
+
+@router.delete("/leads/{lead_id}")
+async def delete_lead(
+    lead_id: int,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """Delete a saved lead"""
+    try:
+        from ...models.vendor import SavedLead
+        
+        lead = db.query(SavedLead).filter(
+            SavedLead.id == lead_id,
+            SavedLead.vendor_profile_id == profile.id
+        ).first()
+        
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        
+        db.delete(lead)
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": "Lead deleted"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete lead: {str(e)}"
+        )

@@ -510,28 +510,119 @@ export interface EnrichedContactData {
   error?: string;
 }
 
+export interface USACContact {
+  source: string;
+  year?: number | string;
+  name: string;
+  title?: string;
+  email?: string;
+  phone?: string;
+  role: string;
+}
+
 export interface SavedLead {
   id: number;
   form_type: '470' | '471';
   application_number: string;
   ben: string;
+  frn?: string;
   entity_name: string | null;
   entity_type: string | null;
   entity_state: string | null;
   entity_city: string | null;
+  entity_address?: string;
+  entity_zip?: string;
+  entity_phone?: string;
+  entity_website?: string;
   contact_name: string | null;
   contact_email: string | null;
   contact_phone: string | null;
+  contact_title?: string;
+  all_contacts?: USACContact[];
   enriched_data: EnrichedContactData;
   enrichment_date: string | null;
   lead_status: 'new' | 'contacted' | 'qualified' | 'won' | 'lost';
   notes: string | null;
+  tags?: string[];
+  application_status?: string;
+  frn_status?: string;
   funding_year: number | null;
+  funding_amount?: number;
+  committed_amount?: number;
+  funded_amount?: number;
+  service_type?: string;
   categories: string[];
   services: string[];
   manufacturers: string[];
   created_at: string;
   updated_at: string;
+}
+
+// Entity enrichment response from USAC data
+export interface EntityEnrichmentResponse {
+  success: boolean;
+  ben: string;
+  entity: {
+    name?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    phone?: string;
+    website?: string;
+    entity_type?: string;
+  };
+  applications: {
+    application_number: string;
+    funding_year: string;
+    application_status: string;
+    category?: string;
+    total_requested: number;
+    certified_date?: string;
+    billed_entity_name?: string;
+  }[];
+  frns: {
+    frn: string;
+    frn_status: string;
+    funding_year: string;
+    application_number?: string;
+    commitment_amount: number;
+    original_request: number;
+    funded_amount: number;
+    denied_amount: number;
+    pending_amount: number;
+    service_type?: string;
+    category?: string;
+    frn_nickname?: string;
+    wave_number?: string;
+    fcdl_date?: string;
+    fcdl_comment?: string;
+  }[];
+  frn_status: {
+    success: boolean;
+    summary?: {
+      total_frns: number;
+      funded_count: number;
+      denied_count: number;
+      pending_count: number;
+      total_committed: number;
+      total_funded: number;
+      total_denied: number;
+    };
+  };
+  contacts: USACContact[];
+  funding_summary: {
+    total_frns: number;
+    total_committed: number;
+    total_funded: number;
+    years_with_funding: number;
+    funding_years: string[];
+    status_breakdown?: {
+      funded: number;
+      denied: number;
+      pending: number;
+    };
+  };
 }
 
 export interface SavedLeadsResponse {
@@ -1410,6 +1501,28 @@ class ApiClient {
 
   async getEntityDetail(ben: string): Promise<ApiResponse<EntityDetailResponse>> {
     return this.request(`/api/v1/vendor/spin/entity/${ben}`);
+  }
+
+  /**
+   * Get comprehensive enriched data for an entity/school
+   * Queries multiple USAC datasets for full lead profile including:
+   * - Entity information (name, address, type)
+   * - Application status and details
+   * - FRN history with actual status (Funded/Denied/Pending)
+   * - Contact information from Form 470 and Entity Supplemental data
+   * - Funding summary
+   */
+  async enrichEntity(ben: string, options?: {
+    year?: number;
+    application_number?: string;
+    frn?: string;
+  }): Promise<ApiResponse<EntityEnrichmentResponse>> {
+    const params = new URLSearchParams();
+    if (options?.year) params.set('year', String(options.year));
+    if (options?.application_number) params.set('application_number', options.application_number);
+    if (options?.frn) params.set('frn', options.frn);
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/api/v1/vendor/entity/${ben}/enrich${queryString}`);
   }
 
   async lookupSpin(spin: string, year?: number): Promise<ApiResponse<{

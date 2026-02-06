@@ -662,21 +662,105 @@ export default function VendorPortalPage() {
   };
 
   // Handle clicking on BEN to view school details
+  // Entity enrichment state for the search result modal
+  const [entityEnrichment, setEntityEnrichment] = useState<any>(null);
+  const [enrichmentLoading, setEnrichmentLoading] = useState(false);
+
   const handleViewSchoolDetail = async (school: SearchResult) => {
     setSelectedSearchResult(school);
     setShowSearchResultModal(true);
-    setSearchResultDetailLoading(true);
+    setEnrichmentLoading(true);
+    setEntityEnrichment(null);
+    setIsLeadSaved(false);
+    setCurrentSavedLead(null);
     
     try {
-      // Fetch full entity details including all applications/FRNs
-      const response = await api.getEntityDetail(school.ben);
+      // Fetch enriched entity data from multiple USAC sources
+      const response = await api.enrichEntity(school.ben, {
+        year: school.funding_year,
+        application_number: school.application_number,
+        frn: school.frn
+      });
+      
       if (response.success && response.data) {
-        setEntityDetail(response.data);
+        setEntityEnrichment(response.data);
+        
+        // Check if this lead is already saved
+        try {
+          const leadsResponse = await api.getSavedLeads({ state: school.state });
+          if (leadsResponse.success && leadsResponse.data?.leads) {
+            const existingLead = leadsResponse.data.leads.find(
+              l => l.ben === school.ben && l.application_number === school.application_number
+            );
+            if (existingLead) {
+              setIsLeadSaved(true);
+              setCurrentSavedLead(existingLead);
+            }
+          }
+        } catch (e) {
+          // Ignore errors checking for existing lead
+        }
       }
     } catch (error) {
-      console.error("Failed to fetch school detail:", error);
+      console.error("Failed to fetch enriched school detail:", error);
     } finally {
-      setSearchResultDetailLoading(false);
+      setEnrichmentLoading(false);
+    }
+  };
+  
+  const handleSaveAsLead = async () => {
+    if (!selectedSearchResult) return;
+    
+    setSavingLead(true);
+    try {
+      const enriched = entityEnrichment;
+      const primaryContact = enriched?.contacts?.[0] || {};
+      
+      const leadData = {
+        ben: selectedSearchResult.ben,
+        entity_name: enriched?.entity?.name || selectedSearchResult.name,
+        entity_state: enriched?.entity?.state || selectedSearchResult.state,
+        entity_city: enriched?.entity?.city || selectedSearchResult.city,
+        entity_address: enriched?.entity?.address,
+        entity_zip: enriched?.entity?.zip,
+        entity_phone: enriched?.entity?.phone,
+        entity_website: enriched?.entity?.website,
+        entity_type: enriched?.entity?.entity_type,
+        form_type: '471' as const,
+        application_number: selectedSearchResult.application_number || '',
+        frn: selectedSearchResult.frn,
+        funding_year: selectedSearchResult.funding_year,
+        application_status: enriched?.applications?.[0]?.application_status,
+        frn_status: enriched?.frns?.find((f: any) => f.frn === selectedSearchResult.frn)?.frn_status || selectedSearchResult.status,
+        funding_amount: selectedSearchResult.funding_amount,
+        committed_amount: enriched?.frn_status?.summary?.total_committed,
+        funded_amount: enriched?.frn_status?.summary?.total_funded,
+        service_type: selectedSearchResult.service_type,
+        services: enriched?.applications?.map((a: any) => a.category) || [],
+        categories: [],
+        contact_name: primaryContact.name || null,
+        contact_email: primaryContact.email || null,
+        contact_phone: primaryContact.phone || null,
+        contact_title: primaryContact.title || null,
+        all_contacts: enriched?.contacts || [],
+        lead_status: 'new' as const,
+        source_data: enriched || {}
+      };
+      
+      const response = await api.saveLead(leadData);
+      if (response.success && response.data?.lead) {
+        setIsLeadSaved(true);
+        setCurrentSavedLead(response.data.lead);
+        // Refresh saved leads if on that tab
+        if (activeTab === 'leads') {
+          loadSavedLeads();
+        }
+      }
+    } catch (error) {
+      console.error("Failed to save lead:", error);
+      alert("Failed to save lead. Please try again.");
+    } finally {
+      setSavingLead(false);
     }
   };
 
@@ -3745,27 +3829,37 @@ export default function VendorPortalPage() {
             onClick={() => {
               setShowSearchResultModal(false);
               setSelectedSearchResult(null);
-              setEntityDetail(null);
+              setEntityEnrichment(null);
             }}
           />
           
           {/* Modal */}
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
             {/* Modal Header */}
             <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
               <div className="flex items-start justify-between">
                 <div>
-                  <h2 className="text-xl font-bold">{selectedSearchResult.name || 'School Details'}</h2>
+                  <h2 className="text-xl font-bold">
+                    {entityEnrichment?.entity?.name || selectedSearchResult.name || 'School Details'}
+                  </h2>
                   <div className="flex items-center gap-3 mt-2 flex-wrap">
                     <span className="font-mono bg-white/20 px-2 py-0.5 rounded text-sm">
                       BEN: {selectedSearchResult.ben}
                     </span>
                     <span className="px-2 py-0.5 bg-white/20 rounded text-sm">
-                      {selectedSearchResult.city && `${selectedSearchResult.city}, `}{selectedSearchResult.state}
+                      {entityEnrichment?.entity?.city || selectedSearchResult.city}{entityEnrichment?.entity?.city || selectedSearchResult.city ? ', ' : ''}{entityEnrichment?.entity?.state || selectedSearchResult.state}
                     </span>
                     {selectedSearchResult.funding_year && (
                       <span className="px-2 py-0.5 bg-white/20 rounded text-sm">
                         FY {selectedSearchResult.funding_year}
+                      </span>
+                    )}
+                    {isLeadSaved && (
+                      <span className="px-2 py-0.5 bg-green-400/30 rounded text-sm flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        Saved as Lead
                       </span>
                     )}
                   </div>
@@ -3774,7 +3868,7 @@ export default function VendorPortalPage() {
                   onClick={() => {
                     setShowSearchResultModal(false);
                     setSelectedSearchResult(null);
-                    setEntityDetail(null);
+                    setEntityEnrichment(null);
                   }}
                   className="p-2 hover:bg-white/20 rounded-lg transition-colors"
                 >
@@ -3787,31 +3881,35 @@ export default function VendorPortalPage() {
             
             {/* Modal Content */}
             <div className="flex-1 overflow-y-auto p-6">
-              {searchResultDetailLoading ? (
+              {enrichmentLoading ? (
                 <div className="py-12 text-center">
                   <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                  <p className="text-slate-600">Loading school details...</p>
+                  <p className="text-slate-600">Loading enriched school data...</p>
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {/* Current Application Info */}
+                  {/* Current Application Info with Actual Status */}
                   <div className="bg-slate-50 rounded-xl p-4">
-                    <h3 className="font-semibold text-slate-900 mb-3">Selected Application</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <h3 className="font-semibold text-slate-900 mb-3">Application Details</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                       <div>
-                        <span className="text-sm text-slate-500">Status</span>
+                        <span className="text-sm text-slate-500">FRN Status</span>
                         <div className={`mt-1 inline-block px-3 py-1 rounded-full text-sm font-medium ${
-                          selectedSearchResult.status === 'Funded' || selectedSearchResult.status === 'FUNDED'
+                          selectedSearchResult.status === 'Funded'
                             ? 'bg-green-100 text-green-700'
-                            : selectedSearchResult.status === 'Denied' || selectedSearchResult.status === 'DENIED'
+                            : selectedSearchResult.status === 'Denied'
                             ? 'bg-red-100 text-red-700'
-                            : 'bg-yellow-100 text-yellow-700'
+                            : selectedSearchResult.status === 'Pending' || selectedSearchResult.status === 'In Review'
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : selectedSearchResult.status === 'Cancelled'
+                            ? 'bg-slate-100 text-slate-700'
+                            : 'bg-blue-100 text-blue-700'
                         }`}>
-                          {selectedSearchResult.status || 'Unknown'}
+                          {selectedSearchResult.status || 'Processing'}
                         </div>
                       </div>
                       <div>
-                        <span className="text-sm text-slate-500">Funding Amount</span>
+                        <span className="text-sm text-slate-500">Commitment Amount</span>
                         <div className="mt-1 text-lg font-bold text-slate-900">
                           {selectedSearchResult.funding_amount 
                             ? `$${selectedSearchResult.funding_amount.toLocaleString()}`
@@ -3820,7 +3918,7 @@ export default function VendorPortalPage() {
                       </div>
                       <div>
                         <span className="text-sm text-slate-500">Service Type</span>
-                        <div className="mt-1 font-medium text-slate-900">
+                        <div className="mt-1 font-medium text-slate-900 text-sm">
                           {selectedSearchResult.service_type || '-'}
                         </div>
                       </div>
@@ -3843,75 +3941,206 @@ export default function VendorPortalPage() {
                     </div>
                   </div>
 
-                  {/* Full Entity History (if loaded) */}
-                  {entityDetail && (
-                    <>
-                      {/* Summary Stats */}
+                  {/* Entity Information */}
+                  {entityEnrichment?.entity && (
+                    <div className="bg-blue-50 rounded-xl p-4">
+                      <h3 className="font-semibold text-slate-900 mb-3">Entity Information</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {entityEnrichment.entity.address && (
+                          <div>
+                            <span className="text-sm text-slate-500">Address</span>
+                            <div className="mt-1 text-slate-900">
+                              {entityEnrichment.entity.address}<br />
+                              {entityEnrichment.entity.city}, {entityEnrichment.entity.state} {entityEnrichment.entity.zip}
+                            </div>
+                          </div>
+                        )}
+                        {entityEnrichment.entity.phone && (
+                          <div>
+                            <span className="text-sm text-slate-500">Phone</span>
+                            <div className="mt-1 text-slate-900">
+                              <a href={`tel:${entityEnrichment.entity.phone}`} className="text-blue-600 hover:underline">
+                                {entityEnrichment.entity.phone}
+                              </a>
+                            </div>
+                          </div>
+                        )}
+                        {entityEnrichment.entity.website && (
+                          <div>
+                            <span className="text-sm text-slate-500">Website</span>
+                            <div className="mt-1">
+                              <a 
+                                href={entityEnrichment.entity.website.startsWith('http') ? entityEnrichment.entity.website : `https://${entityEnrichment.entity.website}`} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline"
+                              >
+                                {entityEnrichment.entity.website}
+                              </a>
+                            </div>
+                          </div>
+                        )}
+                        {entityEnrichment.entity.entity_type && (
+                          <div>
+                            <span className="text-sm text-slate-500">Entity Type</span>
+                            <div className="mt-1 text-slate-900">{entityEnrichment.entity.entity_type}</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Contacts from USAC */}
+                  {entityEnrichment?.contacts && entityEnrichment.contacts.length > 0 && (
+                    <div className="bg-emerald-50 rounded-xl p-4">
+                      <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                        <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        Contacts ({entityEnrichment.contacts.length})
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {entityEnrichment.contacts.map((contact: any, idx: number) => (
+                          <div key={idx} className="bg-white rounded-lg p-3 border border-emerald-200">
+                            <div className="font-medium text-slate-900">{contact.name}</div>
+                            {contact.title && (
+                              <div className="text-sm text-slate-600">{contact.title}</div>
+                            )}
+                            <div className="text-xs text-emerald-600 mb-2">{contact.role}</div>
+                            <div className="flex flex-wrap gap-2">
+                              {contact.email && (
+                                <a 
+                                  href={`mailto:${contact.email}`}
+                                  className="inline-flex items-center gap-1 text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded hover:bg-emerald-200"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                  </svg>
+                                  {contact.email}
+                                </a>
+                              )}
+                              {contact.phone && (
+                                <a 
+                                  href={`tel:${contact.phone}`}
+                                  className="inline-flex items-center gap-1 text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded hover:bg-emerald-200"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                  </svg>
+                                  {contact.phone}
+                                </a>
+                              )}
+                            </div>
+                            {contact.year && (
+                              <div className="text-xs text-slate-400 mt-1">From FY {contact.year}</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Funding Summary */}
+                  {entityEnrichment?.funding_summary && (
+                    <div>
+                      <h3 className="font-semibold text-slate-900 mb-3">Funding Summary</h3>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-blue-50 rounded-xl p-4">
-                          <div className="text-sm text-blue-600 font-medium">Total Cat 1</div>
-                          <div className="text-2xl font-bold text-blue-700">
-                            ${((entityDetail.total_cat1 || 0) / 1000).toFixed(1)}K
-                          </div>
-                        </div>
-                        <div className="bg-emerald-50 rounded-xl p-4">
-                          <div className="text-sm text-emerald-600 font-medium">Total Cat 2</div>
-                          <div className="text-2xl font-bold text-emerald-700">
-                            ${((entityDetail.total_cat2 || 0) / 1000).toFixed(1)}K
-                          </div>
-                        </div>
                         <div className="bg-purple-50 rounded-xl p-4">
-                          <div className="text-sm text-purple-600 font-medium">Lifetime Total</div>
+                          <div className="text-sm text-purple-600 font-medium">Total Committed</div>
                           <div className="text-2xl font-bold text-purple-700">
-                            ${((entityDetail.total_all || 0) / 1000).toFixed(1)}K
+                            ${((entityEnrichment.funding_summary.total_committed || 0) / 1000).toFixed(1)}K
+                          </div>
+                        </div>
+                        <div className="bg-green-50 rounded-xl p-4">
+                          <div className="text-sm text-green-600 font-medium">Total Funded</div>
+                          <div className="text-2xl font-bold text-green-700">
+                            ${((entityEnrichment.funding_summary.total_funded || 0) / 1000).toFixed(1)}K
                           </div>
                         </div>
                         <div className="bg-amber-50 rounded-xl p-4">
                           <div className="text-sm text-amber-600 font-medium">Total FRNs</div>
                           <div className="text-2xl font-bold text-amber-700">
-                            {entityDetail.total_frns || 0}
+                            {entityEnrichment.funding_summary.total_frns || 0}
+                          </div>
+                        </div>
+                        <div className="bg-blue-50 rounded-xl p-4">
+                          <div className="text-sm text-blue-600 font-medium">Years with Funding</div>
+                          <div className="text-2xl font-bold text-blue-700">
+                            {entityEnrichment.funding_summary.years_with_funding || 0}
                           </div>
                         </div>
                       </div>
-
-                      {/* Yearly Breakdown */}
-                      {entityDetail.years && entityDetail.years.length > 0 && (
-                        <div>
-                          <h3 className="font-semibold text-slate-900 mb-3">Funding History by Year</h3>
-                          <div className="border border-slate-200 rounded-xl overflow-hidden">
-                            <table className="w-full">
-                              <thead className="bg-slate-50">
-                                <tr>
-                                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Year</th>
-                                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Category 1</th>
-                                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Category 2</th>
-                                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Total</th>
-                                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">FRNs</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-200">
-                                {entityDetail.years.map((year: any) => (
-                                  <tr key={year.year} className="hover:bg-slate-50">
-                                    <td className="px-4 py-3 font-medium">{year.year}</td>
-                                    <td className="px-4 py-3">${((year.cat1 || 0) / 1000).toFixed(1)}K</td>
-                                    <td className="px-4 py-3">${((year.cat2 || 0) / 1000).toFixed(1)}K</td>
-                                    <td className="px-4 py-3 font-medium">${((year.total || 0) / 1000).toFixed(1)}K</td>
-                                    <td className="px-4 py-3">{year.frn_count || 0}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
+                      
+                      {entityEnrichment.funding_summary.status_breakdown && (
+                        <div className="mt-3 flex items-center gap-4 text-sm">
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                            Funded: {entityEnrichment.funding_summary.status_breakdown.funded}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                            Denied: {entityEnrichment.funding_summary.status_breakdown.denied}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
+                            Pending: {entityEnrichment.funding_summary.status_breakdown.pending}
+                          </span>
                         </div>
                       )}
-                    </>
+                    </div>
                   )}
 
-                  {/* No detailed history available */}
-                  {!entityDetail && !searchResultDetailLoading && (
+                  {/* Recent FRNs */}
+                  {entityEnrichment?.frns && entityEnrichment.frns.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold text-slate-900 mb-3">Recent FRNs ({entityEnrichment.frns.length})</h3>
+                      <div className="border border-slate-200 rounded-xl overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50">
+                            <tr>
+                              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">FRN</th>
+                              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Year</th>
+                              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Status</th>
+                              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Service</th>
+                              <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">Committed</th>
+                              <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">Funded</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200">
+                            {entityEnrichment.frns.slice(0, 10).map((frn: any, idx: number) => (
+                              <tr key={idx} className="hover:bg-slate-50">
+                                <td className="px-3 py-2 font-mono text-xs">{frn.frn}</td>
+                                <td className="px-3 py-2">{frn.funding_year}</td>
+                                <td className="px-3 py-2">
+                                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                    frn.frn_status === 'Funded' ? 'bg-green-100 text-green-700'
+                                    : frn.frn_status === 'Denied' ? 'bg-red-100 text-red-700'
+                                    : 'bg-yellow-100 text-yellow-700'
+                                  }`}>
+                                    {frn.frn_status}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 text-xs truncate max-w-[150px]">{frn.service_type || '-'}</td>
+                                <td className="px-3 py-2 text-right">${(frn.commitment_amount / 1000).toFixed(1)}K</td>
+                                <td className="px-3 py-2 text-right">${(frn.funded_amount / 1000).toFixed(1)}K</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {entityEnrichment.frns.length > 10 && (
+                          <div className="px-3 py-2 bg-slate-50 text-center text-sm text-slate-500">
+                            Showing 10 of {entityEnrichment.frns.length} FRNs
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* No enrichment data available */}
+                  {!entityEnrichment && !enrichmentLoading && (
                     <div className="bg-slate-50 rounded-xl p-6 text-center">
                       <p className="text-slate-600">
-                        Unable to load detailed funding history. The basic application information is shown above.
+                        Unable to load enriched data. The basic application information is shown above.
                       </p>
                     </div>
                   )}
@@ -3921,6 +4150,40 @@ export default function VendorPortalPage() {
 
             {/* Modal Footer */}
             <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center gap-3">
+              {!isLeadSaved ? (
+                <button
+                  onClick={handleSaveAsLead}
+                  disabled={savingLead}
+                  className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2 disabled:opacity-50"
+                >
+                  {savingLead ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                      </svg>
+                      Save as Lead
+                    </>
+                  )}
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    setActiveTab('leads');
+                    setShowSearchResultModal(false);
+                  }}
+                  className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  View in Leads
+                </button>
+              )}
               <button
                 onClick={() => {
                   // Add to selection if not already selected
@@ -3942,7 +4205,7 @@ export default function VendorPortalPage() {
                 onClick={() => {
                   setShowSearchResultModal(false);
                   setSelectedSearchResult(null);
-                  setEntityDetail(null);
+                  setEntityEnrichment(null);
                 }}
                 className="px-4 py-2 text-slate-700 hover:bg-slate-200 rounded-xl transition-colors ml-auto"
               >

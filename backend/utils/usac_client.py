@@ -29,9 +29,13 @@ USAC_ENDPOINTS = {
     'invoice_disbursements': 'https://opendata.usac.org/resource/jpiu-tj8h.json',
     'frn_status': 'https://opendata.usac.org/resource/qdmp-ygft.json',  # Form 471 FRN Status
     '471_combined': 'https://opendata.usac.org/resource/avi8-svp9.json',  # Recipient Details & Commitments
+    '471_basic': 'https://opendata.usac.org/resource/9s6i-myen.json',  # Form 471 Basic Information
+    '471_line_items': 'https://opendata.usac.org/resource/hbj5-2bpj.json',  # Form 471 FRN Line Items
     # Form 470 Lead Generation (Sprint 3)
     '470_services': 'https://opendata.usac.org/resource/39tn-hjzv.json',  # Services Requested (has manufacturer!)
     '470_basic': 'https://opendata.usac.org/resource/jp7a-89nd.json',  # Basic Info (contacts, entity details)
+    # Entity Information
+    'entity_supplemental': 'https://opendata.usac.org/resource/7i5i-83qf.json',  # Supplemental Entity Info (contacts!)
 }
 
 # Field name mapping from common names to USAC API field names
@@ -1814,4 +1818,350 @@ class USACDataClient:
             return {
                 'success': False,
                 'error': f'Failed to process 470 details: {str(e)}'
+            }
+
+    def get_frn_status_for_ben(
+        self,
+        ben: str,
+        year: Optional[int] = None,
+        frn: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Get detailed FRN status information for a BEN.
+        Queries the Form 471 FRN Status dataset (qdmp-ygft) which has actual status.
+        
+        Args:
+            ben: Billed Entity Number
+            year: Optional funding year filter
+            frn: Optional specific FRN to look up
+            
+        Returns:
+            Dict with FRN status details
+        """
+        try:
+            url = USAC_ENDPOINTS['frn_status']
+            
+            # Build query
+            where_parts = [f"ben = '{ben}'"]
+            if year:
+                where_parts.append(f"funding_year = '{year}'")
+            if frn:
+                where_parts.append(f"frn = '{frn}'")
+            
+            params = {
+                '$where': ' AND '.join(where_parts),
+                '$limit': 500,
+                '$order': 'funding_year DESC'
+            }
+            
+            response = self.session.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            frn_data = response.json()
+            
+            if not frn_data:
+                return {'success': True, 'frns': [], 'count': 0}
+            
+            # Process FRN status data
+            frns = []
+            for frn_record in frn_data:
+                frns.append({
+                    'frn': frn_record.get('frn'),
+                    'frn_status': frn_record.get('frn_status'),  # Funded, Denied, Pending, etc.
+                    'funding_year': frn_record.get('funding_year'),
+                    'application_number': frn_record.get('application_number'),
+                    'commitment_amount': float(frn_record.get('commitment_amount') or 0),
+                    'original_request': float(frn_record.get('original_funding_request_amount') or 0),
+                    'funded_amount': float(frn_record.get('total_authorized_disbursement') or 0),
+                    'denied_amount': float(frn_record.get('denied_amount') or 0),
+                    'pending_amount': float(frn_record.get('pending_amount') or 0),
+                    'service_type': frn_record.get('form_471_service_type_name'),
+                    'category': frn_record.get('form_471_category_of_service'),
+                    'frn_nickname': frn_record.get('frn_nickname'),
+                    'wave_number': frn_record.get('wave_number'),
+                    'fcdl_date': frn_record.get('fcdl_date'),
+                    'fcdl_comment': frn_record.get('fcdl_comment')
+                })
+            
+            # Calculate summary stats
+            summary = {
+                'total_frns': len(frns),
+                'funded_count': len([f for f in frns if f['frn_status'] == 'Funded']),
+                'denied_count': len([f for f in frns if f['frn_status'] == 'Denied']),
+                'pending_count': len([f for f in frns if f['frn_status'] in ['Pending', 'In Review']]),
+                'total_committed': sum(f['commitment_amount'] for f in frns),
+                'total_funded': sum(f['funded_amount'] for f in frns),
+                'total_denied': sum(f['denied_amount'] for f in frns),
+            }
+            
+            return {
+                'success': True,
+                'ben': ben,
+                'frns': frns,
+                'count': len(frns),
+                'summary': summary
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching FRN status for BEN {ben}: {e}")
+            return {'success': False, 'error': str(e), 'frns': [], 'count': 0}
+
+    def get_entity_contacts(
+        self,
+        ben: str
+    ) -> Dict[str, Any]:
+        """
+        Get contact information for an entity from multiple USAC sources.
+        
+        Sources:
+        - Form 470 Basic Info (jp7a-89nd) - recent Form 470 contacts
+        - Supplemental Entity Info (7i5i-83qf) - entity directory contacts
+        
+        Args:
+            ben: Billed Entity Number
+            
+        Returns:
+            Dict with contact information from various sources
+        """
+        contacts = []
+        entity_info = {}
+        
+        try:
+            # 1. Get contacts from Form 470 Basic Info (most recent filings)
+            url_470 = USAC_ENDPOINTS['470_basic']
+            params_470 = {
+                '$where': f"ben = '{ben}'",
+                '$limit': 10,
+                '$order': 'funding_year DESC'
+            }
+            
+            try:
+                response = self.session.get(url_470, params=params_470, timeout=20)
+                response.raise_for_status()
+                data_470 = response.json()
+                
+                for record in data_470:
+                    # Primary contact
+                    if record.get('contact_name'):
+                        contacts.append({
+                            'source': 'form_470',
+                            'year': record.get('funding_year'),
+                            'name': record.get('contact_name'),
+                            'title': record.get('contact_title', 'E-Rate Contact'),
+                            'email': record.get('contact_email'),
+                            'phone': record.get('contact_phone'),
+                            'role': 'Primary Contact'
+                        })
+                    
+                    # Technical contact
+                    if record.get('technical_contact_name'):
+                        contacts.append({
+                            'source': 'form_470',
+                            'year': record.get('funding_year'),
+                            'name': record.get('technical_contact_name'),
+                            'title': record.get('technical_contact_title', 'Technical Contact'),
+                            'email': record.get('technical_contact_email'),
+                            'phone': record.get('technical_contact_phone'),
+                            'role': 'Technical Contact'
+                        })
+                    
+                    # Authorized person
+                    if record.get('authorized_person_name'):
+                        contacts.append({
+                            'source': 'form_470',
+                            'year': record.get('funding_year'),
+                            'name': record.get('authorized_person_name'),
+                            'title': record.get('authorized_person_title', 'Authorized Person'),
+                            'email': record.get('authorized_person_email'),
+                            'phone': record.get('authorized_person_phone'),
+                            'role': 'Authorized Person'
+                        })
+                    
+                    # Extract entity info from most recent record
+                    if not entity_info and record:
+                        entity_info = {
+                            'name': record.get('billed_entity_name'),
+                            'address': record.get('billed_entity_address1'),
+                            'city': record.get('billed_entity_city'),
+                            'state': record.get('billed_entity_state'),
+                            'zip': record.get('billed_entity_zip'),
+                            'phone': record.get('billed_entity_phone'),
+                            'website': record.get('website_url'),
+                            'entity_type': record.get('applicant_type')
+                        }
+            except Exception as e:
+                logger.warning(f"Error fetching 470 contacts for BEN {ben}: {e}")
+            
+            # 2. Get contacts from Supplemental Entity Info
+            url_entity = USAC_ENDPOINTS['entity_supplemental']
+            params_entity = {
+                '$where': f"ben = '{ben}'",
+                '$limit': 5
+            }
+            
+            try:
+                response = self.session.get(url_entity, params=params_entity, timeout=20)
+                response.raise_for_status()
+                data_entity = response.json()
+                
+                for record in data_entity:
+                    if record.get('contact_name'):
+                        contacts.append({
+                            'source': 'entity_supplemental',
+                            'year': None,
+                            'name': record.get('contact_name'),
+                            'title': record.get('contact_title', 'Entity Contact'),
+                            'email': record.get('contact_email'),
+                            'phone': record.get('contact_phone'),
+                            'role': 'Entity Contact'
+                        })
+                    
+                    # Update entity info if we don't have it yet
+                    if not entity_info.get('name') and record.get('entity_name'):
+                        entity_info = {
+                            'name': record.get('entity_name'),
+                            'address': record.get('address1'),
+                            'city': record.get('city'),
+                            'state': record.get('state'),
+                            'zip': record.get('zip_code'),
+                            'phone': record.get('phone'),
+                            'entity_type': record.get('entity_type')
+                        }
+            except Exception as e:
+                logger.warning(f"Error fetching entity supplemental for BEN {ben}: {e}")
+            
+            # Deduplicate contacts by email (keep most recent)
+            seen_emails = set()
+            unique_contacts = []
+            for contact in contacts:
+                email = contact.get('email', '').lower() if contact.get('email') else None
+                if email and email not in seen_emails:
+                    seen_emails.add(email)
+                    unique_contacts.append(contact)
+                elif not email:
+                    unique_contacts.append(contact)
+            
+            return {
+                'success': True,
+                'ben': ben,
+                'entity': entity_info,
+                'contacts': unique_contacts,
+                'contact_count': len(unique_contacts)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting contacts for BEN {ben}: {e}")
+            return {'success': False, 'error': str(e), 'contacts': [], 'entity': {}}
+
+    def enrich_entity(
+        self,
+        ben: str,
+        year: Optional[int] = None,
+        application_number: Optional[str] = None,
+        frn: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Get comprehensive enriched data for an entity/application.
+        Combines data from multiple USAC sources for full lead profile.
+        
+        Args:
+            ben: Billed Entity Number
+            year: Optional funding year
+            application_number: Optional specific application
+            frn: Optional specific FRN
+            
+        Returns:
+            Comprehensive entity profile with:
+            - Entity information
+            - Application status and details
+            - FRN history with actual status
+            - Contact information
+            - Funding summary
+        """
+        try:
+            result = {
+                'success': True,
+                'ben': ben,
+                'entity': {},
+                'applications': [],
+                'frn_status': {},
+                'contacts': [],
+                'funding_summary': {}
+            }
+            
+            # 1. Get FRN Status (has actual Funded/Denied/Pending status)
+            frn_result = self.get_frn_status_for_ben(ben, year, frn)
+            if frn_result.get('success'):
+                result['frn_status'] = frn_result
+                result['frns'] = frn_result.get('frns', [])
+            
+            # 2. Get Entity Contacts
+            contacts_result = self.get_entity_contacts(ben)
+            if contacts_result.get('success'):
+                result['entity'] = contacts_result.get('entity', {})
+                result['contacts'] = contacts_result.get('contacts', [])
+            
+            # 3. Get Form 471 Basic Info for application details
+            try:
+                url_471 = USAC_ENDPOINTS['471_basic']
+                where_parts = [f"ben = '{ben}'"]
+                if year:
+                    where_parts.append(f"funding_year = '{year}'")
+                if application_number:
+                    where_parts.append(f"application_number = '{application_number}'")
+                
+                params = {
+                    '$where': ' AND '.join(where_parts),
+                    '$limit': 100,
+                    '$order': 'funding_year DESC'
+                }
+                
+                response = self.session.get(url_471, params=params, timeout=30)
+                response.raise_for_status()
+                apps_data = response.json()
+                
+                for app in apps_data:
+                    result['applications'].append({
+                        'application_number': app.get('application_number'),
+                        'funding_year': app.get('funding_year'),
+                        'application_status': app.get('application_status'),
+                        'category': app.get('category_of_service'),
+                        'total_requested': float(app.get('total_funding_year_commitment_request') or 0),
+                        'certified_date': app.get('certified_timestamp'),
+                        'billed_entity_name': app.get('billed_entity_name')
+                    })
+                
+                # Update entity name if we got it
+                if apps_data and not result['entity'].get('name'):
+                    result['entity']['name'] = apps_data[0].get('billed_entity_name')
+                    result['entity']['state'] = apps_data[0].get('billed_entity_state')
+                    result['entity']['city'] = apps_data[0].get('billed_entity_city')
+                    
+            except Exception as e:
+                logger.warning(f"Error fetching 471 basic info for BEN {ben}: {e}")
+            
+            # 4. Calculate funding summary
+            frns = result.get('frns', [])
+            if frns:
+                years_funded = set(f['funding_year'] for f in frns if f['frn_status'] == 'Funded')
+                result['funding_summary'] = {
+                    'total_frns': len(frns),
+                    'total_committed': sum(f['commitment_amount'] for f in frns),
+                    'total_funded': sum(f['funded_amount'] for f in frns),
+                    'years_with_funding': len(years_funded),
+                    'funding_years': sorted(list(years_funded), reverse=True),
+                    'status_breakdown': {
+                        'funded': len([f for f in frns if f['frn_status'] == 'Funded']),
+                        'denied': len([f for f in frns if f['frn_status'] == 'Denied']),
+                        'pending': len([f for f in frns if f['frn_status'] in ['Pending', 'In Review']])
+                    }
+                }
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error enriching entity {ben}: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'ben': ben
             }

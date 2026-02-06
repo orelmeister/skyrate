@@ -109,17 +109,26 @@ class SavedLead(Base):
     form_type = Column(String(10), nullable=False)  # '470' or '471'
     application_number = Column(String(50), nullable=False)
     ben = Column(String(50), nullable=False)  # Billed Entity Number
+    frn = Column(String(50))  # FRN (Funding Request Number)
     
     # Entity info (denormalized for quick display)
     entity_name = Column(String(500))
     entity_type = Column(String(100))
     entity_state = Column(String(10))
     entity_city = Column(String(100))
+    entity_address = Column(String(500))
+    entity_zip = Column(String(20))
+    entity_phone = Column(String(50))
+    entity_website = Column(String(255))
     
-    # Contact info (denormalized)
+    # Contact info (denormalized - primary contact)
     contact_name = Column(String(255))
     contact_email = Column(String(255))
     contact_phone = Column(String(50))
+    contact_title = Column(String(100))
+    
+    # All contacts (from USAC enrichment)
+    all_contacts = Column(JSON, default=[])  # Array of {name, title, email, phone, role, source}
     
     # Enriched contact info (from Hunter.io, etc)
     enriched_data = Column(JSON, default={})  # LinkedIn URL, additional contacts, etc
@@ -128,12 +137,24 @@ class SavedLead(Base):
     # Status tracking
     lead_status = Column(String(50), default='new')  # new, contacted, qualified, won, lost
     notes = Column(Text)
+    tags = Column(JSON, default=[])  # User-defined tags
+    
+    # Application/FRN status from USAC
+    application_status = Column(String(50))  # From Form 471 Basic
+    frn_status = Column(String(50))  # Funded, Denied, Pending, etc.
     
     # Funding details
     funding_year = Column(Integer)
+    funding_amount = Column(Integer, default=0)  # Pre-discount cost
+    committed_amount = Column(Integer, default=0)
+    funded_amount = Column(Integer, default=0)
     categories = Column(JSON, default=[])
     services = Column(JSON, default=[])
+    service_type = Column(String(255))  # Primary service type
     manufacturers = Column(JSON, default=[])
+    
+    # Source data (raw USAC data for reference)
+    source_data = Column(JSON, default={})
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -148,20 +169,34 @@ class SavedLead(Base):
             "form_type": self.form_type,
             "application_number": self.application_number,
             "ben": self.ben,
+            "frn": self.frn,
             "entity_name": self.entity_name,
             "entity_type": self.entity_type,
             "entity_state": self.entity_state,
             "entity_city": self.entity_city,
+            "entity_address": self.entity_address,
+            "entity_zip": self.entity_zip,
+            "entity_phone": self.entity_phone,
+            "entity_website": self.entity_website,
             "contact_name": self.contact_name,
             "contact_email": self.contact_email,
             "contact_phone": self.contact_phone,
+            "contact_title": self.contact_title,
+            "all_contacts": self.all_contacts or [],
             "enriched_data": self.enriched_data or {},
             "enrichment_date": self.enrichment_date.isoformat() if self.enrichment_date else None,
             "lead_status": self.lead_status,
             "notes": self.notes,
+            "tags": self.tags or [],
+            "application_status": self.application_status,
+            "frn_status": self.frn_status,
             "funding_year": self.funding_year,
+            "funding_amount": self.funding_amount,
+            "committed_amount": self.committed_amount,
+            "funded_amount": self.funded_amount,
             "categories": self.categories or [],
             "services": self.services or [],
+            "service_type": self.service_type,
             "manufacturers": self.manufacturers or [],
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
