@@ -16,6 +16,19 @@ const montserrat = Montserrat({
 export const metadata: Metadata = {
   title: "SkyRate AI - E-Rate Intelligence Platform",
   description: "AI-powered E-Rate funding intelligence and compliance analysis",
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+  },
+  openGraph: {
+    title: "SkyRate AI - AI-Powered E-Rate Intelligence Platform",
+    description: "Maximize your E-Rate funding with AI-powered analysis.",
+    images: [{ url: '/images/marketing/og-image.png', width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    images: ['/images/marketing/twitter.png'],
+  },
 };
 
 export default function RootLayout({
