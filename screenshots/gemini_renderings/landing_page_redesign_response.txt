@@ -1,0 +1,15 @@
+Okay, I understand! You're looking for a complete redesign of your SkyRate AI landing page to feel less generic and more aligned with a modern SaaS aesthetic, emphasizing visual hierarchy, emotional connection, and clear value proposition for your three target audiences. The redesign should heavily incorporate your brand colors, logo, and a professional yet tech-forward tone, drawing inspiration from the style of companies like Linear, Vercel, Stripe, and Notion.
+
+I will generate a stunning desktop landing page design that includes:
+
+*   A compelling hero section with a bold headline, a captivating visual (likely an isometric dashboard preview), prominent brand gradient, and trust indicators.
+*   A visually engaging problem/solution flow using contrasting colors and icons to highlight pain points and SkyRate AI's benefits.
+*   A modern bento grid layout for the features section with a mix of card sizes and unique visuals.
+*   Dedicated sections for Consultants and Vendors using a side-by-side or tabbed interface with realistic dashboard mockups and subtle depth effects.
+*   A social proof/stats section with large, gradient-accented numbers and subtle animations.
+*   A clean, 3-column pricing table with the "Popular" plan highlighted using the brand gradient and a subtle background pattern.
+*   A full-width gradient call-to-action banner with engaging copy and visual interest.
+*   A dark slate footer with clean columns and the SkyRate AI logo.
+
+The design will utilize the provided logo, the purple-to-indigo gradient, clean sans-serif fonts (Inter and Montserrat), and incorporate subtle mesh gradients, glassmorphism, and depth to achieve a premium and trustworthy feel.
+
