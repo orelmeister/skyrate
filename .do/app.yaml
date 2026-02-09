@@ -20,7 +20,7 @@ services:
         value: WvFKVgkDWd4KVcfz1mUOkuSx_oXXZO57cgYl71P7A0c
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: mysql+pymysql://skylimi5_skyrateAI:9NUy#4XEbx0b@173.254.91.77/skylimi5_skyrate
+        type: SECRET
       - key: ENVIRONMENT
         scope: RUN_TIME
         value: production
