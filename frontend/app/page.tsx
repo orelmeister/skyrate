@@ -708,7 +708,6 @@ export default function HomePage() {
           </div>
           <div className="space-y-4 sm:space-y-6">
             {[
-              { q: "What data sources does SkyRate AI use?", a: "SkyRate AI integrates directly with USAC's Open Data Portal APIs, including Form 471, Form 470, C2 Budget Tool, and FRN status data. All data is updated in real-time from official USAC sources." },
               { q: "How does AI appeal generation work?", a: "Our AI analyzes the specific denial reason, funding year, and relevant FCC orders to generate a customized appeal letter. It uses advanced AI with specialized training on E-Rate regulations to craft compelling, compliant appeals." },
               { q: "Is my data secure?", a: "Yes. We use industry-standard encryption, secure authentication, and follow best practices for data protection. Your school and client data is never shared or sold. We're committed to FERPA compliance." },
               { q: "Can I cancel my subscription anytime?", a: "Absolutely. You can cancel your subscription at any time with no penalties. Your access continues until the end of your billing period. We also offer a 14-day free trial so you can evaluate before committing." },

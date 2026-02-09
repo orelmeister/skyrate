@@ -84,16 +84,17 @@ export default function SignUpPage() {
     <div className="min-h-screen flex">
       {/* Left Panel - Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-purple-600 via-indigo-600 to-blue-700 p-12 flex-col justify-between relative overflow-hidden">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-40 left-10 w-80 h-80 bg-white rounded-full blur-3xl"></div>
-          <div className="absolute bottom-10 right-10 w-96 h-96 bg-blue-300 rounded-full blur-3xl"></div>
+        {/* Mesh Gradient Background */}
+        <div className="absolute inset-0">
+          <div className="absolute top-40 left-10 w-80 h-80 bg-white/10 rounded-full blur-3xl floating"></div>
+          <div className="absolute bottom-10 right-10 w-96 h-96 bg-blue-400/15 rounded-full blur-3xl floating" style={{ animationDelay: '-3s' }}></div>
+          <div className="absolute top-1/3 right-1/4 w-[400px] h-[400px] bg-purple-400/10 rounded-full blur-3xl floating" style={{ animationDelay: '-6s' }}></div>
         </div>
         
         {/* Logo */}
-        <div className="relative z-10">
+        <div className="relative z-10 animate-slide-up">
           <Link href="/" className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg">
+            <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg pulse-glow">
               <span className="text-2xl font-bold text-white">S</span>
             </div>
             <span className="text-2xl font-bold text-white">SkyRate AI</span>
@@ -101,7 +102,7 @@ export default function SignUpPage() {
         </div>
 
         {/* Hero Content */}
-        <div className="relative z-10 space-y-6">
+        <div className="relative z-10 space-y-6 animate-slide-up-delay-1">
           <h1 className="text-4xl lg:text-5xl font-bold text-white leading-tight">
             Start Your<br />
             <span className="text-blue-200">14-Day Free Trial</span>
@@ -112,15 +113,15 @@ export default function SignUpPage() {
           
           {/* Stats */}
           <div className="grid grid-cols-3 gap-4 pt-4">
-            <div className="text-center">
-              <div className="text-3xl font-bold text-white">$50M+</div>
+            <div className="text-center glassmorphism-card rounded-xl p-3">
+              <div className="text-3xl font-bold text-white">$500M+</div>
               <div className="text-sm text-purple-200">Funding Tracked</div>
             </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold text-white">5,000+</div>
+            <div className="text-center glassmorphism-card rounded-xl p-3">
+              <div className="text-3xl font-bold text-white">2,500+</div>
               <div className="text-sm text-purple-200">Schools</div>
             </div>
-            <div className="text-center">
+            <div className="text-center glassmorphism-card rounded-xl p-3">
               <div className="text-3xl font-bold text-white">98%</div>
               <div className="text-sm text-purple-200">Success Rate</div>
             </div>
@@ -128,18 +129,18 @@ export default function SignUpPage() {
         </div>
 
         {/* Trust Badges */}
-        <div className="relative z-10">
-          <div className="flex items-center gap-4 text-white/70 text-sm">
-            <span className="flex items-center gap-1">🔒 SSL Secured</span>
-            <span className="flex items-center gap-1">✓ SOC 2 Compliant</span>
-            <span className="flex items-center gap-1">🛡️ FERPA Ready</span>
+        <div className="relative z-10 animate-slide-up-delay-2">
+          <div className="flex items-center gap-4 text-white/80 text-sm">
+            <span className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 rounded-full backdrop-blur-sm">🔒 SSL Secured</span>
+            <span className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 rounded-full backdrop-blur-sm">✓ SOC 2 Compliant</span>
+            <span className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 rounded-full backdrop-blur-sm">🛡️ FERPA Ready</span>
           </div>
         </div>
       </div>
 
       {/* Right Panel - Form */}
       <div className="flex-1 flex items-center justify-center p-8 bg-slate-50 overflow-y-auto">
-        <div className="w-full max-w-lg">
+        <div className="w-full max-w-lg animate-slide-up">
           {/* Mobile Logo */}
           <div className="lg:hidden text-center mb-8">
             <Link href="/" className="inline-flex items-center gap-3">
@@ -151,9 +152,9 @@ export default function SignUpPage() {
           </div>
 
           {/* Form Card */}
-          <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 p-8 border border-slate-200">
+          <div className="light-card rounded-2xl p-8">
             <div className="text-center mb-6">
-              <h1 className="text-2xl font-bold text-slate-900">Create your account</h1>
+              <h1 className="text-2xl font-bold gradient-text-dark">Create your account</h1>
               <p className="text-slate-500 mt-2">Start your free 14-day trial today</p>
             </div>
 
@@ -179,7 +180,7 @@ export default function SignUpPage() {
                   <button
                     type="button"
                     onClick={() => setFormData(prev => ({ ...prev, role: "consultant" }))}
-                    className={`p-4 rounded-xl border-2 text-center transition-all ${
+                    className={`p-4 rounded-xl border-2 text-center transition-all hover-lift ${
                       formData.role === "consultant"
                         ? "border-indigo-500 bg-indigo-50 shadow-md shadow-indigo-100"
                         : "border-slate-200 bg-white hover:border-slate-300"
@@ -197,7 +198,7 @@ export default function SignUpPage() {
                   <button
                     type="button"
                     onClick={() => setFormData(prev => ({ ...prev, role: "vendor" }))}
-                    className={`p-4 rounded-xl border-2 text-center transition-all ${
+                    className={`p-4 rounded-xl border-2 text-center transition-all hover-lift ${
                       formData.role === "vendor"
                         ? "border-purple-500 bg-purple-50 shadow-md shadow-purple-100"
                         : "border-slate-200 bg-white hover:border-slate-300"
@@ -366,7 +367,7 @@ export default function SignUpPage() {
               <button
                 type="submit"
                 disabled={isSubmitting || isLoading}
-                className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-xl hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-indigo-500/25"
+                className="w-full py-3.5 shimmer-btn bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-xl hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-indigo-500/25"
               >
                 {isSubmitting || isLoading ? (
                   <span className="flex items-center justify-center gap-2">

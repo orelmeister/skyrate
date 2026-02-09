@@ -38,16 +38,17 @@ export default function SignInPage() {
     <div className="min-h-screen flex">
       {/* Left Panel - Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-600 via-purple-600 to-indigo-800 p-12 flex-col justify-between relative overflow-hidden">
-        {/* Background Pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-20 left-20 w-72 h-72 bg-white rounded-full blur-3xl"></div>
-          <div className="absolute bottom-20 right-20 w-96 h-96 bg-purple-300 rounded-full blur-3xl"></div>
+        {/* Mesh Gradient Background */}
+        <div className="absolute inset-0">
+          <div className="absolute top-20 left-20 w-72 h-72 bg-white/10 rounded-full blur-3xl floating"></div>
+          <div className="absolute bottom-20 right-20 w-96 h-96 bg-purple-400/15 rounded-full blur-3xl floating" style={{ animationDelay: '-3s' }}></div>
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-indigo-400/10 rounded-full blur-3xl floating" style={{ animationDelay: '-5s' }}></div>
         </div>
         
         {/* Logo */}
-        <div className="relative z-10">
+        <div className="relative z-10 animate-slide-up">
           <Link href="/" className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg">
+            <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg pulse-glow">
               <span className="text-2xl font-bold text-white">S</span>
             </div>
             <span className="text-2xl font-bold text-white">SkyRate AI</span>
@@ -55,7 +56,7 @@ export default function SignInPage() {
         </div>
 
         {/* Hero Content */}
-        <div className="relative z-10 space-y-6">
+        <div className="relative z-10 space-y-6 animate-slide-up-delay-1">
           <h1 className="text-4xl lg:text-5xl font-bold text-white leading-tight">
             E-Rate Intelligence<br />
             <span className="text-purple-200">Made Simple</span>
@@ -66,25 +67,25 @@ export default function SignInPage() {
           
           {/* Feature Pills */}
           <div className="flex flex-wrap gap-3 pt-4">
-            <span className="px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-sm text-white border border-white/20">
+            <span className="px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-sm text-white border border-white/20 hover:bg-white/20 transition-all">
               ✨ AI-Powered Analysis
             </span>
-            <span className="px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-sm text-white border border-white/20">
+            <span className="px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-sm text-white border border-white/20 hover:bg-white/20 transition-all">
               📊 Real-time Data
             </span>
-            <span className="px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-sm text-white border border-white/20">
+            <span className="px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-sm text-white border border-white/20 hover:bg-white/20 transition-all">
               🎯 Smart Insights
             </span>
           </div>
         </div>
 
         {/* Testimonial */}
-        <div className="relative z-10 bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+        <div className="relative z-10 glassmorphism-card rounded-2xl p-6 animate-slide-up-delay-2">
           <p className="text-purple-100 italic mb-4">
             &quot;SkyRate AI helped us recover over $2M in denied funding. The appeal analysis is game-changing.&quot;
           </p>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-purple-300 flex items-center justify-center text-purple-700 font-semibold">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-300 to-indigo-300 flex items-center justify-center text-purple-700 font-semibold shadow-md">
               JM
             </div>
             <div>
@@ -97,7 +98,7 @@ export default function SignInPage() {
 
       {/* Right Panel - Form */}
       <div className="flex-1 flex items-center justify-center p-8 bg-slate-50">
-        <div className="w-full max-w-md">
+        <div className="w-full max-w-md animate-slide-up">
           {/* Mobile Logo */}
           <div className="lg:hidden text-center mb-8">
             <Link href="/" className="inline-flex items-center gap-3">
@@ -109,9 +110,9 @@ export default function SignInPage() {
           </div>
 
           {/* Form Card */}
-          <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 p-8 border border-slate-200">
+          <div className="light-card rounded-2xl p-8">
             <div className="text-center mb-8">
-              <h1 className="text-2xl font-bold text-slate-900">Welcome back</h1>
+              <h1 className="text-2xl font-bold gradient-text-dark">Welcome back</h1>
               <p className="text-slate-500 mt-2">Sign in to your account to continue</p>
             </div>
 
@@ -178,7 +179,7 @@ export default function SignInPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-xl hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-indigo-500/25"
+                className="w-full py-3.5 shimmer-btn bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-xl hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-indigo-500/25"
               >
                 {isLoading ? (
                   <span className="flex items-center justify-center gap-2">
@@ -205,7 +206,7 @@ export default function SignInPage() {
           </div>
 
           {/* Demo Accounts */}
-          <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+          <div className="mt-6 light-card rounded-xl p-4 border-l-4 border-l-amber-400">
             <p className="text-sm font-medium text-amber-900 mb-2 text-center">Demo Accounts</p>
             <div className="space-y-1 text-sm text-amber-800">
               <p><span className="font-medium">Consultant:</span> test_consultant@example.com / TestPass123!</p>
