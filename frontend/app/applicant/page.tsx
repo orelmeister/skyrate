@@ -597,20 +597,25 @@ export default function ApplicantDashboard() {
                               <div className="space-y-5">
                                 {/* Header */}
                                 <div className="flex items-center justify-between">
-                                  <h3 className="text-lg font-semibold text-slate-900">
-                                    FRN {frnDetail.frn} — Detailed View
-                                  </h3>
+                                  <div>
+                                    <h3 className="text-lg font-semibold text-slate-900">
+                                      FRN {frnDetail.frn} — {frnDetail.raw_data?.organization_name || 'Detailed View'}
+                                    </h3>
+                                    <p className="text-sm text-slate-500 mt-1">
+                                      Application #{frnDetail.application_number} • FY{frnDetail.funding_year}
+                                    </p>
+                                  </div>
                                   <button onClick={() => { setSelectedFrnId(null); setFrnDetail(null); }} className="text-slate-400 hover:text-slate-600 text-sm">✕ Close</button>
                                 </div>
 
-                                {/* Key Metrics Grid */}
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                {/* Key Metrics Grid - 5 columns */}
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                                   <div className="bg-white rounded-lg p-3 border border-slate-200">
                                     <div className="text-xs text-slate-500 mb-1">Requested</div>
                                     <div className="font-semibold text-slate-900">{frnDetail.amount_requested ? formatCurrency(frnDetail.amount_requested) : '—'}</div>
                                   </div>
                                   <div className="bg-white rounded-lg p-3 border border-slate-200">
-                                    <div className="text-xs text-slate-500 mb-1">Funded</div>
+                                    <div className="text-xs text-slate-500 mb-1">Committed</div>
                                     <div className="font-semibold text-green-700">{frnDetail.amount_funded ? formatCurrency(frnDetail.amount_funded) : '—'}</div>
                                   </div>
                                   <div className="bg-white rounded-lg p-3 border border-slate-200">
@@ -618,69 +623,180 @@ export default function ApplicantDashboard() {
                                     <div className="font-semibold text-blue-700">{frnDetail.amount_disbursed ? formatCurrency(frnDetail.amount_disbursed) : '—'}</div>
                                   </div>
                                   <div className="bg-white rounded-lg p-3 border border-slate-200">
-                                    <div className="text-xs text-slate-500 mb-1">Discount Rate</div>
-                                    <div className="font-semibold text-slate-900">{frnDetail.discount_rate ? `${frnDetail.discount_rate}%` : '—'}</div>
+                                    <div className="text-xs text-slate-500 mb-1">Discount</div>
+                                    <div className="font-semibold text-slate-900">{frnDetail.discount_rate ? `${frnDetail.discount_rate}%` : (frnDetail.raw_data?.discount_pct ? `${frnDetail.raw_data.discount_pct}%` : '—')}</div>
+                                  </div>
+                                  <div className="bg-white rounded-lg p-3 border border-slate-200">
+                                    <div className="text-xs text-slate-500 mb-1">Category</div>
+                                    <div className="font-semibold text-purple-700">{frnDetail.service_type || frnDetail.raw_data?.form_471_service_type_name || '—'}</div>
                                   </div>
                                 </div>
 
-                                {/* Status & Service Details */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Three-column info grid */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  {/* Status & Review */}
                                   <div className="bg-white rounded-lg p-4 border border-slate-200">
-                                    <h4 className="font-medium text-slate-900 mb-3 text-sm">Status & Review</h4>
+                                    <h4 className="font-medium text-slate-900 mb-3 text-sm flex items-center gap-2">📊 Status & Review</h4>
                                     <div className="space-y-2 text-sm">
                                       <div className="flex justify-between">
                                         <span className="text-slate-500">Status</span>
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(frnDetail.status_type)}`}>{frnDetail.status}</span>
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(frnDetail.status_type)}`}>{frnDetail.status || frnDetail.raw_data?.form_471_frn_status_name}</span>
                                       </div>
-                                      {frnDetail.review_stage && (
+                                      {(frnDetail.review_stage || frnDetail.raw_data?.frn_complete_review_flag) && (
                                         <div className="flex justify-between">
                                           <span className="text-slate-500">Review Stage</span>
-                                          <span className="text-slate-900">{frnDetail.review_stage}</span>
+                                          <span className="text-slate-900">{frnDetail.review_stage || (frnDetail.raw_data?.frn_complete_review_flag === 'Y' ? 'Complete' : 'In Progress')}</span>
                                         </div>
                                       )}
-                                      {frnDetail.days_in_review != null && (
+                                      {(frnDetail.days_in_review != null || frnDetail.raw_data?.wave_number) && (
                                         <div className="flex justify-between">
-                                          <span className="text-slate-500">Days in Review</span>
-                                          <span className="text-slate-900">{frnDetail.days_in_review}</span>
+                                          <span className="text-slate-500">{frnDetail.days_in_review != null ? 'Days in Review' : 'Wave'}</span>
+                                          <span className="text-slate-900">{frnDetail.days_in_review ?? frnDetail.raw_data?.wave_number}</span>
                                         </div>
                                       )}
-                                      {frnDetail.disbursement_status && (
+                                      {(frnDetail.disbursement_status || frnDetail.raw_data?.disbursement_status) && (
                                         <div className="flex justify-between">
                                           <span className="text-slate-500">Disbursement</span>
-                                          <span className="text-slate-900">{frnDetail.disbursement_status}</span>
+                                          <span className="text-slate-900">{frnDetail.disbursement_status || frnDetail.raw_data?.disbursement_status}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.raw_data?.funding_commitment_request && (
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-500">FCR Amount</span>
+                                          <span className="text-slate-900">{formatCurrency(parseFloat(frnDetail.raw_data.funding_commitment_request))}</span>
                                         </div>
                                       )}
                                     </div>
                                   </div>
 
+                                  {/* Service Provider */}
                                   <div className="bg-white rounded-lg p-4 border border-slate-200">
-                                    <h4 className="font-medium text-slate-900 mb-3 text-sm">Service Details</h4>
+                                    <h4 className="font-medium text-slate-900 mb-3 text-sm flex items-center gap-2">🏢 Service Provider</h4>
                                     <div className="space-y-2 text-sm">
-                                      <div className="flex justify-between">
-                                        <span className="text-slate-500">Service Type</span>
-                                        <span className="text-slate-900">{frnDetail.service_type || '—'}</span>
-                                      </div>
+                                      {(frnDetail.raw_data?.spin || frnDetail.raw_data?.service_provider_number) && (
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-500">SPIN</span>
+                                          <span className="text-slate-900 font-mono">{frnDetail.raw_data?.spin || frnDetail.raw_data?.service_provider_number}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.raw_data?.service_provider_name && (
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-500">Provider</span>
+                                          <span className="text-slate-900 text-right max-w-[150px] truncate" title={frnDetail.raw_data.service_provider_name}>{frnDetail.raw_data.service_provider_name}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.raw_data?.establishing_fcc_form_470 && (
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-500">Form 470</span>
+                                          <span className="text-slate-900 font-mono">{frnDetail.raw_data.establishing_fcc_form_470}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.raw_data?.contract_expiration_date && (
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-500">Contract Expires</span>
+                                          <span className="text-slate-900">{formatDate(frnDetail.raw_data.contract_expiration_date)}</span>
+                                        </div>
+                                      )}
+                                      {!frnDetail.raw_data?.spin && !frnDetail.raw_data?.service_provider_name && (
+                                        <div className="text-slate-400 text-xs">Provider info not available</div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Service & Dates */}
+                                  <div className="bg-white rounded-lg p-4 border border-slate-200">
+                                    <h4 className="font-medium text-slate-900 mb-3 text-sm flex items-center gap-2">📅 Service & Dates</h4>
+                                    <div className="space-y-2 text-sm">
                                       {frnDetail.service_description && (
                                         <div className="flex justify-between">
-                                          <span className="text-slate-500">Description</span>
-                                          <span className="text-slate-900 text-right max-w-[200px] truncate">{frnDetail.service_description}</span>
+                                          <span className="text-slate-500">Service</span>
+                                          <span className="text-slate-900 text-right max-w-[150px] truncate" title={frnDetail.service_description}>{frnDetail.service_description}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.raw_data?.ros_service_start_date && (
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-500">Service Start</span>
+                                          <span className="text-slate-900">{formatDate(frnDetail.raw_data.ros_service_start_date)}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.raw_data?.ros_service_end_date && (
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-500">Service End</span>
+                                          <span className="text-slate-900">{formatDate(frnDetail.raw_data.ros_service_end_date)}</span>
                                         </div>
                                       )}
                                       {frnDetail.invoice_deadline && (
                                         <div className="flex justify-between">
                                           <span className="text-slate-500">Invoice Deadline</span>
-                                          <span className="text-slate-900">{formatDate(frnDetail.invoice_deadline)}</span>
+                                          <span className="text-orange-600 font-medium">{formatDate(frnDetail.invoice_deadline)}</span>
                                         </div>
                                       )}
                                       {frnDetail.fetched_at && (
                                         <div className="flex justify-between">
-                                          <span className="text-slate-500">Last Updated</span>
+                                          <span className="text-slate-500">Last Synced</span>
                                           <span className="text-slate-900">{formatDate(frnDetail.fetched_at)}</span>
                                         </div>
                                       )}
                                     </div>
                                   </div>
                                 </div>
+
+                                {/* Additional Details Row */}
+                                {(frnDetail.raw_data?.product_type || frnDetail.raw_data?.fiber_type || frnDetail.raw_data?.purpose || frnDetail.raw_data?.function_text) && (
+                                  <div className="bg-white rounded-lg p-4 border border-slate-200">
+                                    <h4 className="font-medium text-slate-900 mb-3 text-sm flex items-center gap-2">📋 Additional Details</h4>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                      {frnDetail.raw_data?.product_type && (
+                                        <div>
+                                          <span className="text-slate-500 block text-xs">Product Type</span>
+                                          <span className="text-slate-900">{frnDetail.raw_data.product_type}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.raw_data?.fiber_type && (
+                                        <div>
+                                          <span className="text-slate-500 block text-xs">Fiber Type</span>
+                                          <span className="text-slate-900">{frnDetail.raw_data.fiber_type}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.raw_data?.purpose && (
+                                        <div>
+                                          <span className="text-slate-500 block text-xs">Purpose</span>
+                                          <span className="text-slate-900">{frnDetail.raw_data.purpose}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.raw_data?.function_text && (
+                                        <div>
+                                          <span className="text-slate-500 block text-xs">Function</span>
+                                          <span className="text-slate-900">{frnDetail.raw_data.function_text}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.raw_data?.total_monthly_cost && (
+                                        <div>
+                                          <span className="text-slate-500 block text-xs">Monthly Cost</span>
+                                          <span className="text-slate-900">{formatCurrency(parseFloat(frnDetail.raw_data.total_monthly_cost))}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.raw_data?.total_eligible_monthly_recurring_charges && (
+                                        <div>
+                                          <span className="text-slate-500 block text-xs">Eligible Monthly</span>
+                                          <span className="text-slate-900">{formatCurrency(parseFloat(frnDetail.raw_data.total_eligible_monthly_recurring_charges))}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.raw_data?.total_eligible_one_time_charges && (
+                                        <div>
+                                          <span className="text-slate-500 block text-xs">One-time Charges</span>
+                                          <span className="text-slate-900">{formatCurrency(parseFloat(frnDetail.raw_data.total_eligible_one_time_charges))}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.raw_data?.num_lines && (
+                                        <div>
+                                          <span className="text-slate-500 block text-xs">Lines/Units</span>
+                                          <span className="text-slate-900">{frnDetail.raw_data.num_lines}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
 
                                 {/* Denial Info (if applicable) */}
                                 {frnDetail.is_denied && (
@@ -699,12 +815,10 @@ export default function ApplicantDashboard() {
                                           <span className="text-red-800">{frnDetail.fcdl_comment}</span>
                                         </div>
                                       )}
-                                      {frnDetail.fcdl_date && (
-                                        <div className="flex gap-4 text-xs text-red-600">
-                                          <span>FCDL Date: {formatDate(frnDetail.fcdl_date)}</span>
-                                          {frnDetail.appeal_deadline && <span>Appeal Deadline: {formatDate(frnDetail.appeal_deadline)}</span>}
-                                        </div>
-                                      )}
+                                      <div className="flex gap-4 text-xs text-red-600 mt-2">
+                                        {frnDetail.fcdl_date && <span>FCDL Date: {formatDate(frnDetail.fcdl_date)}</span>}
+                                        {frnDetail.appeal_deadline && <span className="font-semibold">⏰ Appeal Deadline: {formatDate(frnDetail.appeal_deadline)}</span>}
+                                      </div>
                                     </div>
                                   </div>
                                 )}
@@ -712,33 +826,19 @@ export default function ApplicantDashboard() {
                                 {/* Appeal Info (if exists) */}
                                 {frnDetail.appeal && (
                                   <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
-                                    <h4 className="font-medium text-emerald-800 mb-2 text-sm flex items-center gap-2">📄 Auto-Generated Appeal</h4>
+                                    <h4 className="font-medium text-emerald-800 mb-2 text-sm flex items-center gap-2">📄 Auto-Generated Appeal Ready</h4>
                                     <div className="flex items-center gap-3 text-sm mb-2">
                                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                                         frnDetail.appeal.status === 'ready' ? 'bg-emerald-100 text-emerald-700' :
                                         frnDetail.appeal.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
                                         'bg-slate-100 text-slate-600'
-                                      }`}>{frnDetail.appeal.status}</span>
+                                      }`}>{frnDetail.appeal.status?.toUpperCase()}</span>
                                       {frnDetail.appeal.success_probability != null && (
-                                        <span className="text-emerald-700">Success probability: {frnDetail.appeal.success_probability}%</span>
+                                        <span className="text-emerald-700 font-medium">✓ {frnDetail.appeal.success_probability}% Success Rate</span>
                                       )}
                                     </div>
-                                    <p className="text-xs text-emerald-600 line-clamp-3">{frnDetail.appeal.appeal_letter?.substring(0, 300)}...</p>
+                                    <p className="text-xs text-emerald-600 line-clamp-2">{frnDetail.appeal.appeal_letter?.substring(0, 200)}...</p>
                                   </div>
-                                )}
-
-                                {/* Raw USAC Data (collapsible) */}
-                                {frnDetail.raw_data && (
-                                  <details className="bg-white rounded-lg border border-slate-200">
-                                    <summary className="px-4 py-3 cursor-pointer text-sm font-medium text-slate-700 hover:bg-slate-50">
-                                      📊 Raw USAC Data
-                                    </summary>
-                                    <div className="px-4 pb-4">
-                                      <div className="bg-slate-900 rounded-lg p-4 overflow-auto max-h-64">
-                                        <pre className="text-xs text-green-400 whitespace-pre-wrap">{JSON.stringify(frnDetail.raw_data, null, 2)}</pre>
-                                      </div>
-                                    </div>
-                                  </details>
                                 )}
                               </div>
                             ) : (
