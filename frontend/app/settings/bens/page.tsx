@@ -116,7 +116,7 @@ export default function BENSettingsPage() {
       
       // If payment is needed, show alert or redirect
       if (response.data?.needs_payment) {
-        alert(`BEN added! Payment of $49/month is required to activate monitoring for ${newBen}.`);
+        alert(`BEN added! Payment of $99/month is required to activate monitoring for ${newBen}.`);
         // In production, redirect to Stripe checkout
       }
     } catch (err: any) {
@@ -409,7 +409,7 @@ export default function BENSettingsPage() {
                         className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 text-sm"
                       >
                         <CreditCard size={14} />
-                        Activate ($49/mo)
+                        Activate ($99/mo)
                       </button>
                     )}
                     {ben.is_paid && (
@@ -465,7 +465,7 @@ export default function BENSettingsPage() {
         <div className="mt-8 p-6 rounded-xl bg-gradient-to-br from-[var(--brand-blue)]/5 to-[var(--brand-purple)]/5 border border-[var(--brand-blue)]/20">
           <h3 className="font-semibold mb-2">Multi-Location Pricing</h3>
           <p className="text-[var(--text-muted)] text-sm mb-4">
-            Each BEN number is a separate subscription at <strong className="text-white">$49/month</strong>. 
+            Each BEN number is a separate subscription at <strong className="text-purple-600 dark:text-white">$99/month</strong>. 
             Perfect for school districts with multiple locations:
           </p>
           <ul className="text-sm text-[var(--text-muted)] space-y-1">
@@ -526,7 +526,7 @@ export default function BENSettingsPage() {
 
             <div className="mt-6 p-4 rounded-lg bg-yellow-500/5 border border-yellow-500/30">
               <p className="text-sm text-yellow-400">
-                <strong>Payment Required:</strong> Adding a new BEN requires a subscription of $49/month.
+                <strong>Payment Required:</strong> Adding a new BEN requires a subscription of $99/month.
               </p>
             </div>
 
