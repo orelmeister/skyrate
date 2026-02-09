@@ -279,9 +279,6 @@ test_applicant@example.com / TestPass123!   → Applicant role, free access
 ```
 Free access coupons: `SKYRATEFREE`, `BETATESTER`, `DEMO2024`, `INTERNAL`
 
-### Test Data
-- **Test CRN**: `17026509` — Consultant Registration Number for testing CRN verification
-
 ### Dashboard Routing
 After login, users redirect based on role:
 - `vendor` → `/vendor`

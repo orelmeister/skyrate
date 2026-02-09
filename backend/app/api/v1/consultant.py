@@ -992,7 +992,12 @@ async def list_schools(
                 latest_year_apps = [a for a in sorted_apps if a.get("funding_year") == latest_year]
                 
                 # Check all possible status values from USAC
-                statuses = [a.get("application_status", "").lower() for a in latest_year_apps]
+                # IMPORTANT: Check both form_471_frn_status_name AND application_status
+                # The USAC API may return the status in either field
+                statuses = [
+                    (a.get("form_471_frn_status_name") or a.get("application_status") or "").lower() 
+                    for a in latest_year_apps
+                ]
                 
                 has_denied = any("denied" in s for s in statuses)
                 has_funded = any(s in ["funded", "committed"] for s in statuses)
@@ -1012,7 +1017,7 @@ async def list_schools(
                     school_data["status"] = "Pending"
                     school_data["status_color"] = "yellow"
                 else:
-                    actual_status = latest.get("application_status", "Unknown")
+                    actual_status = latest.get("form_471_frn_status_name") or latest.get("application_status") or "Unknown"
                     school_data["status"] = actual_status if actual_status else "Unknown"
                     school_data["status_color"] = "gray"
                 
