@@ -198,7 +198,7 @@ async def redeem_coupon(
         if not subscription or not subscription.is_active:
             subscription = grant_free_subscription(current_user, db, reason="test_account")
         
-        redirect_url = "/vendor" if current_user.role == "vendor" else "/consultant"
+        redirect_url = f"/{current_user.role}"  # /consultant, /vendor, or /applicant
         return RedeemCouponResponse(
             success=True,
             message="Test account detected - you have free access!",
@@ -215,7 +215,7 @@ async def redeem_coupon(
     # Grant free subscription
     grant_free_subscription(current_user, db, reason="coupon")
     
-    redirect_url = "/vendor" if current_user.role == "vendor" else "/consultant"
+    redirect_url = f"/{current_user.role}"  # /consultant, /vendor, or /applicant
     return RedeemCouponResponse(
         success=True,
         message="Coupon redeemed successfully! Enjoy your free access.",
@@ -284,12 +284,18 @@ async def create_checkout_session(
         else:
             price_id = settings.STRIPE_PRICE_MONTHLY or "price_consultant_monthly"
             price_cents = settings.CONSULTANT_MONTHLY_PRICE
-    else:  # vendor
+    elif current_user.role == "vendor":
         if data.plan == "yearly":
             price_cents = settings.VENDOR_YEARLY_PRICE
         else:
             price_cents = settings.VENDOR_MONTHLY_PRICE
         price_id = None  # Would need separate vendor prices
+    else:  # applicant
+        if data.plan == "yearly":
+            price_cents = getattr(settings, 'APPLICANT_YEARLY_PRICE', 200000)  # $2000
+        else:
+            price_cents = getattr(settings, 'APPLICANT_MONTHLY_PRICE', 20000)  # $200
+        price_id = None
     
     try:
         # Get or create Stripe customer

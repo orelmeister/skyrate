@@ -54,7 +54,7 @@ const VENDOR_PLANS: PricingPlan[] = [
   {
     type: "monthly",
     name: "Monthly",
-    price: 300,
+    price: 199,
     interval: "month",
     description: "Flexible monthly billing",
     features: [
@@ -68,15 +68,47 @@ const VENDOR_PLANS: PricingPlan[] = [
   {
     type: "yearly",
     name: "Annual",
-    price: 3000,
+    price: 1999,
     interval: "year",
-    description: "Best value - Save $600/year",
-    savings: "Save 17%",
+    description: "Best value - Save $389/year",
+    savings: "Save 16%",
     features: [
       "Everything in Monthly",
       "Priority support",
       "Advanced lead scoring",
       "Export capabilities",
+      "API access",
+    ],
+  },
+];
+
+const APPLICANT_PLANS: PricingPlan[] = [
+  {
+    type: "monthly",
+    name: "Monthly",
+    price: 200,
+    interval: "month",
+    description: "Flexible monthly billing",
+    features: [
+      "FRN tracking & status",
+      "Funding analysis",
+      "Auto-generated appeals",
+      "Denial analysis",
+      "Email support",
+    ],
+  },
+  {
+    type: "yearly",
+    name: "Annual",
+    price: 2000,
+    interval: "year",
+    description: "Best value - Save $400/year",
+    savings: "Save 17%",
+    features: [
+      "Everything in Monthly",
+      "Priority support",
+      "Advanced analytics",
+      "Custom reports",
       "API access",
     ],
   },
@@ -94,7 +126,7 @@ export default function SubscribePage() {
   const [couponSuccess, setCouponSuccess] = useState("");
   const [isRedeemingCoupon, setIsRedeemingCoupon] = useState(false);
 
-  const plans = user?.role === "vendor" ? VENDOR_PLANS : CONSULTANT_PLANS;
+  const plans = user?.role === "vendor" ? VENDOR_PLANS : user?.role === "applicant" ? APPLICANT_PLANS : CONSULTANT_PLANS;
   const selectedPlanDetails = plans.find((p) => p.type === selectedPlan)!;
 
   // Check if user is authenticated and needs payment setup

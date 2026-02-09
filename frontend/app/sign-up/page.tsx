@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
+import { api } from "@/lib/api";
 
-type UserRole = "consultant" | "vendor";
+type UserRole = "consultant" | "vendor" | "applicant";
+type VerificationStatus = "idle" | "verifying" | "verified" | "error";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -20,13 +22,71 @@ export default function SignUpPage() {
     role: "consultant" as UserRole,
     crn: "",  // Consultant Registration Number
     spin: "", // Service Provider Identification Number
+    ben: "",  // Billed Entity Number (for applicants)
   });
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Verification state
+  const [verificationStatus, setVerificationStatus] = useState<VerificationStatus>("idle");
+  const [verifiedName, setVerifiedName] = useState("");
+  const [verificationError, setVerificationError] = useState("");
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    
+    // Reset verification when CRN/SPIN/BEN changes
+    if (name === "crn" || name === "spin" || name === "ben") {
+      setVerificationStatus("idle");
+      setVerifiedName("");
+      setVerificationError("");
+    }
   };
+  
+  // Verify CRN/SPIN/BEN with USAC API
+  const verifyEntity = useCallback(async () => {
+    const { role, crn, spin, ben } = formData;
+    
+    let endpoint = "";
+    let value = "";
+    
+    if (role === "consultant" && crn.trim()) {
+      endpoint = "/auth/validate-crn";
+      value = crn.trim();
+    } else if (role === "vendor" && spin.trim()) {
+      endpoint = "/auth/validate-spin";
+      value = spin.trim();
+    } else if (role === "applicant" && ben.trim()) {
+      endpoint = "/auth/validate-ben";
+      value = ben.trim();
+    } else {
+      return; // Nothing to verify
+    }
+    
+    setVerificationStatus("verifying");
+    setVerificationError("");
+    
+    try {
+      const response = await api.post(endpoint, { value });
+      const data = response.data;
+      
+      if (data.valid) {
+        setVerificationStatus("verified");
+        setVerifiedName(data.name || "");
+        // Auto-populate company/entity name
+        if (data.name) {
+          setFormData(prev => ({ ...prev, company: data.name }));
+        }
+      } else {
+        setVerificationStatus("error");
+        setVerificationError(data.error || "Not found in USAC database");
+      }
+    } catch (err: any) {
+      setVerificationStatus("error");
+      setVerificationError(err.response?.data?.detail || "Verification failed. Please try again.");
+    }
+  }, [formData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,6 +118,20 @@ export default function SignUpPage() {
       setIsSubmitting(false);
       return;
     }
+    
+    // Validate BEN for applicants
+    if (formData.role === "applicant" && !formData.ben.trim()) {
+      setError("BEN (Billed Entity Number) is required");
+      setIsSubmitting(false);
+      return;
+    }
+    
+    // Ensure verification passed
+    if (verificationStatus !== "verified") {
+      setError("Please verify your registration number with USAC before continuing");
+      setIsSubmitting(false);
+      return;
+    }
 
     const success = await register({
       email: formData.email,
@@ -68,6 +142,7 @@ export default function SignUpPage() {
       role: formData.role,
       crn: formData.role === "consultant" ? formData.crn.trim() : undefined,
       spin: formData.role === "vendor" ? formData.spin.trim() : undefined,
+      ben: formData.role === "applicant" ? formData.ben.trim() : undefined,
     });
 
     if (success) {
@@ -172,41 +247,59 @@ export default function SignUpPage() {
               {/* Role Selection */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-3">I am a...</label>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-3">
                   <button
                     type="button"
-                    onClick={() => setFormData(prev => ({ ...prev, role: "consultant" }))}
-                    className={`p-4 rounded-xl border-2 text-center transition-all hover-lift ${
+                    onClick={() => { setFormData(prev => ({ ...prev, role: "consultant" })); setVerificationStatus("idle"); setVerifiedName(""); }}
+                    className={`p-3 rounded-xl border-2 text-center transition-all hover-lift ${
                       formData.role === "consultant"
                         ? "border-indigo-500 bg-indigo-50 shadow-md shadow-indigo-100"
                         : "border-slate-200 bg-white hover:border-slate-300"
                     }`}
                   >
-                    <div className="text-3xl mb-2">📋</div>
-                    <div className={`font-semibold ${formData.role === "consultant" ? "text-indigo-700" : "text-slate-700"}`}>
+                    <div className="text-2xl mb-1">📋</div>
+                    <div className={`font-semibold text-sm ${formData.role === "consultant" ? "text-indigo-700" : "text-slate-700"}`}>
                       Consultant
                     </div>
-                    <div className="text-sm text-slate-500 mt-1">Manage schools & filings</div>
-                    <div className={`text-xs mt-2 font-medium ${formData.role === "consultant" ? "text-indigo-600" : "text-slate-400"}`}>
-                      $300/mo or $3,000/yr
+                    <div className="text-xs text-slate-500 mt-0.5">Manage schools</div>
+                    <div className={`text-xs mt-1 font-medium ${formData.role === "consultant" ? "text-indigo-600" : "text-slate-400"}`}>
+                      $300/mo
                     </div>
                   </button>
                   <button
                     type="button"
-                    onClick={() => setFormData(prev => ({ ...prev, role: "vendor" }))}
-                    className={`p-4 rounded-xl border-2 text-center transition-all hover-lift ${
+                    onClick={() => { setFormData(prev => ({ ...prev, role: "vendor" })); setVerificationStatus("idle"); setVerifiedName(""); }}
+                    className={`p-3 rounded-xl border-2 text-center transition-all hover-lift ${
                       formData.role === "vendor"
                         ? "border-purple-500 bg-purple-50 shadow-md shadow-purple-100"
                         : "border-slate-200 bg-white hover:border-slate-300"
                     }`}
                   >
-                    <div className="text-3xl mb-2">🏢</div>
-                    <div className={`font-semibold ${formData.role === "vendor" ? "text-purple-700" : "text-slate-700"}`}>
+                    <div className="text-2xl mb-1">🏢</div>
+                    <div className={`font-semibold text-sm ${formData.role === "vendor" ? "text-purple-700" : "text-slate-700"}`}>
                       Vendor
                     </div>
-                    <div className="text-sm text-slate-500 mt-1">Find school leads</div>
-                    <div className={`text-xs mt-2 font-medium ${formData.role === "vendor" ? "text-purple-600" : "text-slate-400"}`}>
-                      $199/mo or $1,999/yr
+                    <div className="text-xs text-slate-500 mt-0.5">Find leads</div>
+                    <div className={`text-xs mt-1 font-medium ${formData.role === "vendor" ? "text-purple-600" : "text-slate-400"}`}>
+                      $199/mo
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setFormData(prev => ({ ...prev, role: "applicant" })); setVerificationStatus("idle"); setVerifiedName(""); }}
+                    className={`p-3 rounded-xl border-2 text-center transition-all hover-lift ${
+                      formData.role === "applicant"
+                        ? "border-emerald-500 bg-emerald-50 shadow-md shadow-emerald-100"
+                        : "border-slate-200 bg-white hover:border-slate-300"
+                    }`}
+                  >
+                    <div className="text-2xl mb-1">🏫</div>
+                    <div className={`font-semibold text-sm ${formData.role === "applicant" ? "text-emerald-700" : "text-slate-700"}`}>
+                      Applicant
+                    </div>
+                    <div className="text-xs text-slate-500 mt-0.5">Track funding</div>
+                    <div className={`text-xs mt-1 font-medium ${formData.role === "applicant" ? "text-emerald-600" : "text-slate-400"}`}>
+                      $200/mo
                     </div>
                   </button>
                 </div>
@@ -240,14 +333,25 @@ export default function SignUpPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Company Name</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  {formData.role === "applicant" ? "Entity Name" : "Company Name"}
+                  {verificationStatus === "verified" && verifiedName && (
+                    <span className="ml-2 text-emerald-600 text-xs font-normal">✓ Verified from USAC</span>
+                  )}
+                </label>
                 <input
                   type="text"
                   name="company"
                   value={formData.company}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
-                  placeholder={formData.role === "consultant" ? "E-Rate Consulting Inc." : "Network Solutions LLC"}
+                  className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all ${
+                    verificationStatus === "verified" ? "border-emerald-300 bg-emerald-50" : "border-slate-200"
+                  }`}
+                  placeholder={
+                    formData.role === "consultant" ? "E-Rate Consulting Inc." : 
+                    formData.role === "vendor" ? "Network Solutions LLC" :
+                    "Lincoln Elementary School"
+                  }
                   required
                 />
               </div>
@@ -257,18 +361,42 @@ export default function SignUpPage() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     CRN (Consultant Registration Number) <span className="text-red-500">*</span>
+                    {verificationStatus === "verified" && (
+                      <span className="ml-2 text-emerald-600 text-xs font-normal">✓ Verified</span>
+                    )}
                   </label>
-                  <input
-                    type="text"
-                    name="crn"
-                    value={formData.crn}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all uppercase"
-                    placeholder="Enter your USAC CRN"
-                    required
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      name="crn"
+                      value={formData.crn}
+                      onChange={handleChange}
+                      onBlur={verifyEntity}
+                      className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all uppercase ${
+                        verificationStatus === "verified" ? "border-emerald-400 bg-emerald-50 pr-10" :
+                        verificationStatus === "error" ? "border-red-400 bg-red-50" :
+                        "border-slate-200"
+                      }`}
+                      placeholder="Enter your USAC CRN"
+                      required
+                    />
+                    {verificationStatus === "verifying" && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <svg className="animate-spin h-5 w-5 text-indigo-500" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                      </div>
+                    )}
+                    {verificationStatus === "verified" && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-500 text-lg">✓</div>
+                    )}
+                  </div>
+                  {verificationStatus === "error" && verificationError && (
+                    <p className="mt-1 text-xs text-red-600">{verificationError}</p>
+                  )}
                   <p className="mt-1 text-xs text-slate-500">
-                    Your unique USAC Consultant Registration Number. 
+                    Your USAC CRN will be verified before registration.
                     <a href="https://www.usac.org/e-rate/applicants/consultants/" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-700 ml-1">
                       Learn more →
                     </a>
@@ -281,19 +409,91 @@ export default function SignUpPage() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     SPIN (Service Provider ID Number) <span className="text-red-500">*</span>
+                    {verificationStatus === "verified" && (
+                      <span className="ml-2 text-emerald-600 text-xs font-normal">✓ Verified</span>
+                    )}
                   </label>
-                  <input
-                    type="text"
-                    name="spin"
-                    value={formData.spin}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all uppercase"
-                    placeholder="Enter your USAC SPIN"
-                    required
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      name="spin"
+                      value={formData.spin}
+                      onChange={handleChange}
+                      onBlur={verifyEntity}
+                      className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all uppercase ${
+                        verificationStatus === "verified" ? "border-emerald-400 bg-emerald-50 pr-10" :
+                        verificationStatus === "error" ? "border-red-400 bg-red-50" :
+                        "border-slate-200"
+                      }`}
+                      placeholder="Enter your USAC SPIN"
+                      required
+                    />
+                    {verificationStatus === "verifying" && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <svg className="animate-spin h-5 w-5 text-purple-500" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                      </div>
+                    )}
+                    {verificationStatus === "verified" && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-500 text-lg">✓</div>
+                    )}
+                  </div>
+                  {verificationStatus === "error" && verificationError && (
+                    <p className="mt-1 text-xs text-red-600">{verificationError}</p>
+                  )}
                   <p className="mt-1 text-xs text-slate-500">
-                    Your unique USAC Service Provider Identification Number.
+                    Your USAC SPIN will be verified before registration.
                     <a href="https://www.usac.org/e-rate/service-providers/" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-700 ml-1">
+                      Learn more →
+                    </a>
+                  </p>
+                </div>
+              )}
+
+              {/* BEN Field for Applicants */}
+              {formData.role === "applicant" && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    BEN (Billed Entity Number) <span className="text-red-500">*</span>
+                    {verificationStatus === "verified" && (
+                      <span className="ml-2 text-emerald-600 text-xs font-normal">✓ Verified</span>
+                    )}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      name="ben"
+                      value={formData.ben}
+                      onChange={handleChange}
+                      onBlur={verifyEntity}
+                      className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all ${
+                        verificationStatus === "verified" ? "border-emerald-400 bg-emerald-50 pr-10" :
+                        verificationStatus === "error" ? "border-red-400 bg-red-50" :
+                        "border-slate-200"
+                      }`}
+                      placeholder="Enter your USAC BEN"
+                      required
+                    />
+                    {verificationStatus === "verifying" && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <svg className="animate-spin h-5 w-5 text-emerald-500" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                      </div>
+                    )}
+                    {verificationStatus === "verified" && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-500 text-lg">✓</div>
+                    )}
+                  </div>
+                  {verificationStatus === "error" && verificationError && (
+                    <p className="mt-1 text-xs text-red-600">{verificationError}</p>
+                  )}
+                  <p className="mt-1 text-xs text-slate-500">
+                    Your USAC BEN will be verified before registration.
+                    <a href="https://www.usac.org/e-rate/applicants/" target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:text-emerald-700 ml-1">
                       Learn more →
                     </a>
                   </p>
@@ -362,7 +562,7 @@ export default function SignUpPage() {
 
               <button
                 type="submit"
-                disabled={isSubmitting || isLoading}
+                disabled={isSubmitting || isLoading || verificationStatus !== "verified"}
                 className="w-full py-3.5 shimmer-btn bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-xl hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-indigo-500/25"
               >
                 {isSubmitting || isLoading ? (
@@ -373,6 +573,8 @@ export default function SignUpPage() {
                     </svg>
                     Creating account...
                   </span>
+                ) : verificationStatus !== "verified" ? (
+                  "Verify Your ID to Continue"
                 ) : (
                   "Start Free Trial →"
                 )}
@@ -389,9 +591,9 @@ export default function SignUpPage() {
             </div>
           </div>
 
-          {/* No credit card notice */}
+          {/* Credit card notice */}
           <p className="mt-6 text-center text-sm text-slate-500">
-            💳 No credit card required • Cancel anytime
+            💳 Credit card required • 14-day free trial • Cancel anytime
           </p>
         </div>
       </div>

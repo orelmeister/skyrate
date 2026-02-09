@@ -40,9 +40,10 @@ class UserRegister(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     company_name: Optional[str] = None
-    role: str = Field(default="consultant", pattern="^(consultant|vendor)$")
+    role: str = Field(default="consultant", pattern="^(consultant|vendor|applicant)$")
     crn: Optional[str] = Field(None, description="Consultant Registration Number (required for consultants)")
     spin: Optional[str] = Field(None, description="Service Provider Identification Number (required for vendors)")
+    ben: Optional[str] = Field(None, description="Billed Entity Number (required for applicants)")
     
     @field_validator('password')
     @classmethod
@@ -63,12 +64,6 @@ class UserRegister(BaseModel):
         if errors:
             raise ValueError(f"Password must contain {', '.join(errors)}")
         return v
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    company_name: Optional[str] = None
-    role: str = Field(default="consultant", pattern="^(consultant|vendor)$")
-    crn: Optional[str] = Field(None, description="Consultant Registration Number (required for consultants)")
-    spin: Optional[str] = Field(None, description="Service Provider Identification Number (required for vendors)")
 
 
 class UserLogin(BaseModel):
@@ -161,6 +156,101 @@ def auto_import_schools_from_crn(user_id: int, crn: str):
 
 # ==================== ENDPOINTS ====================
 
+# ==================== PUBLIC VALIDATION ENDPOINTS (No Auth Required) ====================
+
+class ValidationRequest(BaseModel):
+    """Request schema for USAC entity validation"""
+    value: str = Field(..., min_length=1, description="CRN, SPIN, or BEN to validate")
+
+class ValidationResponse(BaseModel):
+    """Response schema for USAC entity validation"""
+    valid: bool
+    name: Optional[str] = None
+    error: Optional[str] = None
+
+
+@router.post("/validate-crn", response_model=ValidationResponse)
+@limiter.limit("10/minute")
+async def validate_crn(request: Request, data: ValidationRequest):
+    """
+    Validate a CRN (Consultant Registration Number) against USAC database.
+    Returns the consultant's company name if valid.
+    PUBLIC endpoint - no authentication required.
+    """
+    try:
+        usac_service = get_usac_service()
+        result = usac_service.verify_crn(data.value.strip())
+        
+        if result.get("valid"):
+            consultant = result.get("consultant", {})
+            return ValidationResponse(
+                valid=True,
+                name=consultant.get("company_name") or consultant.get("consultant_name")
+            )
+        else:
+            return ValidationResponse(
+                valid=False,
+                error=result.get("error", "CRN not found in USAC database")
+            )
+    except Exception as e:
+        return ValidationResponse(valid=False, error=f"Validation failed: {str(e)}")
+
+
+@router.post("/validate-spin", response_model=ValidationResponse)
+@limiter.limit("10/minute")
+async def validate_spin(request: Request, data: ValidationRequest):
+    """
+    Validate a SPIN (Service Provider ID Number) against USAC database.
+    Returns the service provider name if valid.
+    PUBLIC endpoint - no authentication required.
+    """
+    try:
+        from utils.usac_client import USACDataClient
+        client = USACDataClient()
+        result = client.validate_spin(data.value.strip())
+        
+        if result.get("valid"):
+            return ValidationResponse(
+                valid=True,
+                name=result.get("service_provider_name")
+            )
+        else:
+            return ValidationResponse(
+                valid=False,
+                error=result.get("error", "SPIN not found in USAC database")
+            )
+    except Exception as e:
+        return ValidationResponse(valid=False, error=f"Validation failed: {str(e)}")
+
+
+@router.post("/validate-ben", response_model=ValidationResponse)
+@limiter.limit("10/minute")
+async def validate_ben(request: Request, data: ValidationRequest):
+    """
+    Validate a BEN (Billed Entity Number) against USAC database.
+    Returns the organization/entity name if valid.
+    PUBLIC endpoint - no authentication required.
+    """
+    try:
+        usac_service = get_usac_service()
+        result = usac_service.get_ben_info(data.value.strip())
+        
+        if result and result.get("organization_name"):
+            return ValidationResponse(
+                valid=True,
+                name=result.get("organization_name")
+            )
+        else:
+            return ValidationResponse(
+                valid=False,
+                error="BEN not found in USAC database"
+            )
+    except Exception as e:
+        return ValidationResponse(valid=False, error=f"Validation failed: {str(e)}")
+
+
+# ==================== REGISTRATION & LOGIN ====================
+
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("3/minute")
 async def register(
@@ -172,9 +262,11 @@ async def register(
     """
     Register a new user account.
     Creates user and starts 14-day free trial.
-    Requires CRN for consultants and SPIN for vendors.
+    Requires CRN for consultants, SPIN for vendors, and BEN for applicants.
     Rate limited to 3 requests per minute.
     """
+    from ...models.applicant import ApplicantProfile
+    
     # Validate required registration numbers
     if data.role == "consultant" and not data.crn:
         raise HTTPException(
@@ -186,6 +278,12 @@ async def register(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="SPIN (Service Provider Identification Number) is required for vendor accounts"
+        )
+    
+    if data.role == "applicant" and not data.ben:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="BEN (Billed Entity Number) is required for applicant accounts"
         )
     
     # Check if email exists
@@ -212,6 +310,15 @@ async def register(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="SPIN is already registered to another account"
+            )
+    
+    # Check if BEN already registered (for applicants)
+    if data.role == "applicant" and data.ben:
+        existing_ben = db.query(ApplicantProfile).filter(ApplicantProfile.ben == data.ben.strip()).first()
+        if existing_ben:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="BEN is already registered to another account"
             )
     
     # Create user
@@ -245,14 +352,22 @@ async def register(
             contact_name=f"{data.first_name or ''} {data.last_name or ''}".strip() or None,
         )
         db.add(vendor_profile)
+    elif data.role == "applicant":
+        applicant_profile = ApplicantProfile(
+            user_id=user.id,
+            ben=data.ben.strip() if data.ben else None,
+            organization_name=data.company_name,  # company_name contains entity name for applicants
+        )
+        db.add(applicant_profile)
     
-    # Create trial subscription
+    # Create trial subscription - price varies by role
     trial_end = datetime.utcnow() + timedelta(days=14)
-    price = (
-        settings.CONSULTANT_MONTHLY_PRICE 
-        if data.role == "consultant" 
-        else settings.VENDOR_MONTHLY_PRICE
-    )
+    if data.role == "consultant":
+        price = settings.CONSULTANT_MONTHLY_PRICE
+    elif data.role == "vendor":
+        price = settings.VENDOR_MONTHLY_PRICE
+    else:  # applicant
+        price = getattr(settings, 'APPLICANT_MONTHLY_PRICE', 20000)  # $200 default
     
     subscription = Subscription(
         user_id=user.id,
