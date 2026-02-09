@@ -94,7 +94,7 @@ export default function SignUpPage() {
         {/* Logo */}
         <div className="relative z-10 animate-slide-up">
           <Link href="/" className="flex items-center gap-3">
-            <img src="/images/logos/logo-icon.png" alt="" width={40} height={40} className="rounded-xl" />
+            <img src="/images/logos/logo-icon-transparent.png" alt="" width={40} height={40} className="rounded-xl" />
             <span className="text-white font-bold text-2xl">SkyRate<span className="text-purple-300">.AI</span></span>
           </Link>
         </div>
@@ -142,7 +142,7 @@ export default function SignUpPage() {
           {/* Mobile Logo */}
           <div className="lg:hidden text-center mb-8">
             <Link href="/" className="inline-flex items-center justify-center gap-3">
-              <img src="/images/logos/logo-icon.png" alt="" width={40} height={40} className="rounded-xl" />
+              <img src="/images/logos/logo-icon-transparent.png" alt="" width={40} height={40} className="rounded-xl" />
               <span className="text-slate-900 font-bold text-2xl">SkyRate<span className="text-purple-600">.AI</span></span>
             </Link>
           </div>

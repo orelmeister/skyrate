@@ -6,7 +6,7 @@ type LogoSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
 const LOGO_FILES: Record<LogoVariant, string> = {
   horizontal: '/images/logos/logo-horizontal.png',
-  icon: '/images/logos/logo-icon.png',
+  icon: '/images/logos/logo-icon-transparent.png',
   dark: '/images/logos/logo-dark.png',
   white: '/images/logos/logo-white.png',
 };
