@@ -29,7 +29,7 @@
 - **Framework**: FastAPI 0.109.0
 - **Language**: Python 3.x
 - **ORM**: SQLAlchemy 2.0 with Pydantic v2 settings
-- **Database**: SQLite (local dev + current prod), PostgreSQL or MySQL (future)
+- **Database**: MySQL on Bluehost (production), SQLite (local dev fallback)
 - **Auth**: JWT tokens via python-jose, bcrypt passwords via passlib
 - **Payments**: Stripe (subscriptions)
 - **Dev server**: `uvicorn app.main:app` → `localhost:8000`
@@ -54,7 +54,7 @@
 - **Backend**: Python service, `apps-s-2vcpu-4gb`, port 8000, route `/api`
 - **Frontend**: Node.js service, `apps-s-2vcpu-4gb`, port 3000, route `/`
 - **Frontend env**: `NEXT_PUBLIC_API_URL=https://skyrate-unox7.ondigitalocean.app/api`
-- **Database (prod)**: SQLite on the app instance (configured via `DATABASE_URL`)
+- **Database (prod)**: MySQL on Bluehost (`173.254.91.77`, db: `skylimi5_skyrate`, user: `skylimi5_skyrateAI`)
 
 ### Key Config
 - API keys stored in `backend/.env` (GEMINI_API_KEY, DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, etc.)
@@ -354,4 +354,7 @@ uvicorn app.main:app --reload --port 8000
 - App spec file: `.do/app.yaml`
 - Production URL: `https://skyrate-unox7.ondigitalocean.app`
 - Monitor deploys via DigitalOcean dashboard or `doctl apps list-deployments`
-- **WARNING**: SQLite is ephemeral on App Platform — DB resets on every deploy. Demo accounts are re-seeded on startup via `seed_demo_accounts()` in `main.py`. For real users, migrate to a managed PostgreSQL database.
+- **Database**: Production uses MySQL on Bluehost (persistent). `DATABASE_URL` env var in `.env` and on DigitalOcean connects to Bluehost MySQL.
+- Demo accounts are re-seeded on startup via `seed_demo_accounts()` in `main.py`.
+- Migration script: `backend/migrate_to_mysql.py` for SQLite → MySQL migration.
+- **Note**: If `DATABASE_URL` is not set, falls back to local SQLite (`skyrate.db`).
