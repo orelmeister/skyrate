@@ -397,7 +397,7 @@ export default function SignUpPage() {
                   )}
                   <p className="mt-1 text-xs text-slate-500">
                     Your USAC CRN will be verified before registration.
-                    <a href="https://www.usac.org/e-rate/applicants/consultants/" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-700 ml-1">
+                    <a href="https://www.usac.org/e-rate/applicants/before-you-begin/consultants/" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-700 ml-1">
                       Learn more →
                     </a>
                   </p>
@@ -445,7 +445,7 @@ export default function SignUpPage() {
                   )}
                   <p className="mt-1 text-xs text-slate-500">
                     Your USAC SPIN will be verified before registration.
-                    <a href="https://www.usac.org/e-rate/service-providers/" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-700 ml-1">
+                    <a href="https://www.usac.org/e-rate/service-providers/step-01-obtain-a-spin/" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-700 ml-1">
                       Learn more →
                     </a>
                   </p>
@@ -493,8 +493,8 @@ export default function SignUpPage() {
                   )}
                   <p className="mt-1 text-xs text-slate-500">
                     Your USAC BEN will be verified before registration.
-                    <a href="https://www.usac.org/e-rate/applicants/" target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:text-emerald-700 ml-1">
-                      Learn more →
+                    <a href="https://www.usac.org/e-rate/applicants/before-you-begin/entity-numbers/" target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:text-emerald-700 ml-1">
+                      Look up your BEN →
                     </a>
                   </p>
                 </div>
