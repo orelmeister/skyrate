@@ -74,6 +74,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 def seed_demo_accounts():
     """Create demo accounts if they don't exist, and auto-sync data from USAC"""
     from app.models.applicant import ApplicantBEN
+    from app.models.vendor import VendorProfile
+    from app.models.consultant import ConsultantProfile
     from sqlalchemy.orm import Session
     from app.models.user import User, UserRole
     from app.models.applicant import ApplicantProfile
@@ -111,6 +113,40 @@ def seed_demo_accounts():
                 existing.is_active = True
                 user = existing
                 logger.info(f"Updated password for demo account: {email}")
+            
+            # Create vendor profile for test_vendor (whether new or existing user)
+            if role == UserRole.VENDOR.value:
+                existing_vp = db.query(VendorProfile).filter(
+                    VendorProfile.user_id == user.id
+                ).first()
+                if not existing_vp:
+                    vp = VendorProfile(
+                        user_id=user.id,
+                        spin="143032945",  # Real SPIN - CDW-G
+                        company_name="Demo Vendor Co.",
+                        contact_name="Test Vendor",
+                    )
+                    db.add(vp)
+                    db.flush()
+                    logger.info(f"Created vendor profile for {email} with SPIN 143032945")
+                elif not existing_vp.spin:
+                    existing_vp.spin = "143032945"
+                    logger.info(f"Updated vendor profile SPIN for {email}")
+            
+            # Create consultant profile for test_consultant (whether new or existing user)
+            if role == UserRole.CONSULTANT.value:
+                existing_cp = db.query(ConsultantProfile).filter(
+                    ConsultantProfile.user_id == user.id
+                ).first()
+                if not existing_cp:
+                    cp = ConsultantProfile(
+                        user_id=user.id,
+                        company_name="Demo Consulting LLC",
+                        contact_name="Test Consultant",
+                    )
+                    db.add(cp)
+                    db.flush()
+                    logger.info(f"Created consultant profile for {email}")
             
             # Create applicant profile for test_applicant (whether new or existing user)
             if role == UserRole.APPLICANT.value:
