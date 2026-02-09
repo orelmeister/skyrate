@@ -354,3 +354,4 @@ uvicorn app.main:app --reload --port 8000
 - App spec file: `.do/app.yaml`
 - Production URL: `https://skyrate-unox7.ondigitalocean.app`
 - Monitor deploys via DigitalOcean dashboard or `doctl apps list-deployments`
+- **WARNING**: SQLite is ephemeral on App Platform — DB resets on every deploy. Demo accounts are re-seeded on startup via `seed_demo_accounts()` in `main.py`. For real users, migrate to a managed PostgreSQL database.
