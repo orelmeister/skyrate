@@ -83,9 +83,7 @@ export default function DashboardPage() {
       >
         <div className="p-4 border-b border-[var(--border-color)]">
           <Link href="/" className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--brand-blue)] to-[var(--brand-purple)] flex items-center justify-center text-white font-bold text-sm">
-              S
-            </div>
+            <img src="/images/logos/logo-icon-transparent.png" alt="SkyRate AI" width={32} height={32} className="rounded-lg" />
             <span className="font-semibold">SkyRate AI</span>
           </Link>
         </div>

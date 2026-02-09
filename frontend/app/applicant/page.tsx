@@ -248,9 +248,7 @@ export default function ApplicantDashboard() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4">
               <Link href="/" className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-600 to-teal-600 flex items-center justify-center">
-                  <span className="text-xl font-bold text-white">S</span>
-                </div>
+                <img src="/images/logos/logo-icon-transparent.png" alt="SkyRate AI" width={40} height={40} className="rounded-lg" />
                 <span className="text-xl font-bold text-slate-900 hidden sm:block">SkyRate AI</span>
               </Link>
               <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>

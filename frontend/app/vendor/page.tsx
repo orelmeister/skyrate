@@ -851,9 +851,7 @@ export default function VendorPortalPage() {
         {/* Logo */}
         <div className="h-16 flex items-center gap-3 px-6 border-b border-slate-200">
           <Link href="/" className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center shadow-lg shadow-purple-200">
-              <span className="text-white font-bold">S</span>
-            </div>
+            <img src="/images/logos/logo-icon-transparent.png" alt="SkyRate AI" width={36} height={36} className="rounded-lg" />
             <div>
               <span className="font-bold text-slate-900">SkyRate AI</span>
               <span className="block text-xs text-slate-500">Vendor Portal</span>

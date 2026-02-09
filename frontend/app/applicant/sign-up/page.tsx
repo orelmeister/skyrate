@@ -189,9 +189,7 @@ export default function ApplicantSignUpPage() {
         {/* Logo */}
         <div className="relative z-10">
           <Link href="/" className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg">
-              <span className="text-2xl font-bold text-white">S</span>
-            </div>
+            <img src="/images/logos/logo-icon-transparent.png" alt="SkyRate AI" width={48} height={48} className="rounded-xl" />
             <span className="text-2xl font-bold text-white">SkyRate AI</span>
           </Link>
         </div>
@@ -259,9 +257,7 @@ export default function ApplicantSignUpPage() {
           {/* Mobile Logo */}
           <div className="lg:hidden text-center mb-8">
             <Link href="/" className="inline-flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-600 flex items-center justify-center shadow-lg">
-                <span className="text-2xl font-bold text-white">S</span>
-              </div>
+              <img src="/images/logos/logo-icon-transparent.png" alt="SkyRate AI" width={48} height={48} className="rounded-xl" />
               <span className="text-2xl font-bold text-slate-900">SkyRate AI</span>
             </Link>
           </div>

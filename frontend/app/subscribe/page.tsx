@@ -213,9 +213,7 @@ export default function SubscribePage() {
       <header className="px-6 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-white/10 backdrop-blur-sm flex items-center justify-center">
-              <span className="text-xl font-bold text-white">S</span>
-            </div>
+            <img src="/images/logos/logo-icon-transparent.png" alt="SkyRate AI" width={40} height={40} className="rounded-lg" />
             <span className="text-xl font-semibold text-white">SkyRate AI</span>
           </Link>
           <div className="text-sm text-white/60">

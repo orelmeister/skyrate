@@ -77,9 +77,7 @@ export default function ApplicantSubscribePage() {
         {/* Header */}
         <div className="p-8 text-center border-b border-slate-100">
           <Link href="/" className="inline-flex items-center gap-2 mb-6">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-600 to-teal-600 flex items-center justify-center">
-              <span className="text-xl font-bold text-white">S</span>
-            </div>
+            <img src="/images/logos/logo-icon-transparent.png" alt="SkyRate AI" width={40} height={40} className="rounded-lg" />
             <span className="text-xl font-bold text-slate-900">SkyRate AI</span>
           </Link>
           
