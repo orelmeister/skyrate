@@ -29,7 +29,7 @@
 - **Framework**: FastAPI 0.109.0
 - **Language**: Python 3.x
 - **ORM**: SQLAlchemy 2.0 with Pydantic v2 settings
-- **Database**: SQLite (local dev), PostgreSQL or MySQL (production/Bluehost)
+- **Database**: SQLite (local dev + current prod), PostgreSQL or MySQL (future)
 - **Auth**: JWT tokens via python-jose, bcrypt passwords via passlib
 - **Payments**: Stripe (subscriptions)
 - **Dev server**: `uvicorn app.main:app` → `localhost:8000`
@@ -45,6 +45,16 @@
 - **USAC/Socrata API** (via `sodapy`) — E-Rate funding data, FRN status, school info
 - **Hunter.io** — Contact enrichment for vendor leads
 - **USAC C2 Budget Tool** — Category 2 budget tracking
+
+### Deployment
+- **Platform**: DigitalOcean App Platform
+- **App URL**: `https://skyrate-unox7.ondigitalocean.app`
+- **App spec**: `.do/app.yaml` (also mirrored in `app-spec.yaml`)
+- **Auto-deploy**: Enabled — pushes to `main` trigger automatic builds
+- **Backend**: Python service, `apps-s-2vcpu-4gb`, port 8000, route `/api`
+- **Frontend**: Node.js service, `apps-s-2vcpu-4gb`, port 3000, route `/`
+- **Frontend env**: `NEXT_PUBLIC_API_URL=https://skyrate-unox7.ondigitalocean.app/api`
+- **Database (prod)**: SQLite on the app instance (configured via `DATABASE_URL`)
 
 ### Key Config
 - API keys stored in `backend/.env` (GEMINI_API_KEY, DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, etc.)
@@ -293,7 +303,9 @@ After login, users redirect based on role:
 | `2e6e548` | **V3 light theme redesign** (current design base) |
 | `784b5cd` | Sign-in/sign-up V3 design match |
 | `422c179` | Switched to paid logo-icon.png |
-| `3a10dd1` | **Shiny purple transparent S icon** (latest) |
+| `3a10dd1` | Shiny purple transparent S icon |
+| `a6afab9` | CLAUDE.md project context |
+| `daaf0fa` | **Logo icon on all remaining pages** (latest) |
 
 ---
 
@@ -324,10 +336,10 @@ After login, users redirect based on role:
 ## Environment Setup
 
 ```bash
-# Frontend
+# Frontend (local dev)
 cd frontend && npm install && npm run dev
 
-# Backend
+# Backend (local dev)
 cd backend && pip install -r requirements.txt
 # Copy .env.example to .env and fill in keys
 uvicorn app.main:app --reload --port 8000
@@ -336,3 +348,9 @@ uvicorn app.main:app --reload --port 8000
 ./start-backend.ps1   # Windows
 ./start-backend.sh    # Linux/Mac
 ```
+
+### Production Deployment
+- Push to `main` → DigitalOcean App Platform auto-deploys both frontend & backend
+- App spec file: `.do/app.yaml`
+- Production URL: `https://skyrate-unox7.ondigitalocean.app`
+- Monitor deploys via DigitalOcean dashboard or `doctl apps list-deployments`
