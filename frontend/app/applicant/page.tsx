@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
@@ -135,6 +135,9 @@ export default function ApplicantDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [selectedTab, setSelectedTab] = useState<'overview' | 'frns' | 'appeals' | 'changes'>('overview');
   const [selectedAppeal, setSelectedAppeal] = useState<Appeal | null>(null);
+  const [selectedFrnId, setSelectedFrnId] = useState<number | null>(null);
+  const [frnDetail, setFrnDetail] = useState<any | null>(null);
+  const [loadingFrnDetail, setLoadingFrnDetail] = useState(false);
 
   useEffect(() => {
     // Check authentication and role
@@ -204,6 +207,31 @@ export default function ApplicantDashboard() {
       setTimeout(fetchDashboard, 2000);
     } catch (e) {
       console.error('Sync error:', e);
+    }
+  };
+
+  const fetchFrnDetail = async (frnId: number) => {
+    if (selectedFrnId === frnId) {
+      // Toggle off if clicking the same row
+      setSelectedFrnId(null);
+      setFrnDetail(null);
+      return;
+    }
+    setSelectedFrnId(frnId);
+    setLoadingFrnDetail(true);
+    setFrnDetail(null);
+    try {
+      const response = await fetch(`${API_URL}/api/v1/applicant/frns/${frnId}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const detail = await response.json();
+        setFrnDetail(detail);
+      }
+    } catch (e) {
+      console.error('Error fetching FRN detail:', e);
+    } finally {
+      setLoadingFrnDetail(false);
     }
   };
 
@@ -508,10 +536,20 @@ export default function ApplicantDashboard() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {frns.map((frn) => (
-                    <tr key={frn.id} className="hover:bg-slate-50">
+                    <React.Fragment key={frn.id}>
+                    <tr 
+                      key={frn.id} 
+                      onClick={() => fetchFrnDetail(frn.id)}
+                      className={`hover:bg-slate-50 cursor-pointer transition-colors ${selectedFrnId === frn.id ? 'bg-purple-50 border-l-4 border-l-purple-500' : ''}`}
+                    >
                       <td className="px-4 py-3">
-                        <div className="font-medium text-slate-900">{frn.frn}</div>
-                        <div className="text-xs text-slate-500">{frn.application_number}</div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs transition-transform ${selectedFrnId === frn.id ? 'rotate-90' : ''}`}>▶</span>
+                          <div>
+                            <div className="font-medium text-slate-900">{frn.frn}</div>
+                            <div className="text-xs text-slate-500">{frn.application_number}</div>
+                          </div>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-slate-600">{frn.funding_year}</td>
                       <td className="px-4 py-3">
@@ -533,7 +571,8 @@ export default function ApplicantDashboard() {
                       <td className="px-4 py-3 text-center">
                         {frn.is_denied && (
                           <button
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               const appeal = appeals.find(a => a.frn === frn.frn);
                               if (appeal) setSelectedAppeal(appeal);
                             }}
@@ -544,6 +583,172 @@ export default function ApplicantDashboard() {
                         )}
                       </td>
                     </tr>
+                    {/* FRN Detail Panel */}
+                    {selectedFrnId === frn.id && (
+                      <tr key={`detail-${frn.id}`}>
+                        <td colSpan={6} className="px-0 py-0">
+                          <div className="bg-gradient-to-br from-purple-50 to-slate-50 border-t border-b border-purple-200 px-6 py-5">
+                            {loadingFrnDetail ? (
+                              <div className="flex items-center justify-center py-8">
+                                <div className="w-8 h-8 border-3 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                                <span className="ml-3 text-slate-500">Loading FRN details...</span>
+                              </div>
+                            ) : frnDetail ? (
+                              <div className="space-y-5">
+                                {/* Header */}
+                                <div className="flex items-center justify-between">
+                                  <h3 className="text-lg font-semibold text-slate-900">
+                                    FRN {frnDetail.frn} — Detailed View
+                                  </h3>
+                                  <button onClick={() => { setSelectedFrnId(null); setFrnDetail(null); }} className="text-slate-400 hover:text-slate-600 text-sm">✕ Close</button>
+                                </div>
+
+                                {/* Key Metrics Grid */}
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                  <div className="bg-white rounded-lg p-3 border border-slate-200">
+                                    <div className="text-xs text-slate-500 mb-1">Requested</div>
+                                    <div className="font-semibold text-slate-900">{frnDetail.amount_requested ? formatCurrency(frnDetail.amount_requested) : '—'}</div>
+                                  </div>
+                                  <div className="bg-white rounded-lg p-3 border border-slate-200">
+                                    <div className="text-xs text-slate-500 mb-1">Funded</div>
+                                    <div className="font-semibold text-green-700">{frnDetail.amount_funded ? formatCurrency(frnDetail.amount_funded) : '—'}</div>
+                                  </div>
+                                  <div className="bg-white rounded-lg p-3 border border-slate-200">
+                                    <div className="text-xs text-slate-500 mb-1">Disbursed</div>
+                                    <div className="font-semibold text-blue-700">{frnDetail.amount_disbursed ? formatCurrency(frnDetail.amount_disbursed) : '—'}</div>
+                                  </div>
+                                  <div className="bg-white rounded-lg p-3 border border-slate-200">
+                                    <div className="text-xs text-slate-500 mb-1">Discount Rate</div>
+                                    <div className="font-semibold text-slate-900">{frnDetail.discount_rate ? `${frnDetail.discount_rate}%` : '—'}</div>
+                                  </div>
+                                </div>
+
+                                {/* Status & Service Details */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="bg-white rounded-lg p-4 border border-slate-200">
+                                    <h4 className="font-medium text-slate-900 mb-3 text-sm">Status & Review</h4>
+                                    <div className="space-y-2 text-sm">
+                                      <div className="flex justify-between">
+                                        <span className="text-slate-500">Status</span>
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(frnDetail.status_type)}`}>{frnDetail.status}</span>
+                                      </div>
+                                      {frnDetail.review_stage && (
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-500">Review Stage</span>
+                                          <span className="text-slate-900">{frnDetail.review_stage}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.days_in_review != null && (
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-500">Days in Review</span>
+                                          <span className="text-slate-900">{frnDetail.days_in_review}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.disbursement_status && (
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-500">Disbursement</span>
+                                          <span className="text-slate-900">{frnDetail.disbursement_status}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="bg-white rounded-lg p-4 border border-slate-200">
+                                    <h4 className="font-medium text-slate-900 mb-3 text-sm">Service Details</h4>
+                                    <div className="space-y-2 text-sm">
+                                      <div className="flex justify-between">
+                                        <span className="text-slate-500">Service Type</span>
+                                        <span className="text-slate-900">{frnDetail.service_type || '—'}</span>
+                                      </div>
+                                      {frnDetail.service_description && (
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-500">Description</span>
+                                          <span className="text-slate-900 text-right max-w-[200px] truncate">{frnDetail.service_description}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.invoice_deadline && (
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-500">Invoice Deadline</span>
+                                          <span className="text-slate-900">{formatDate(frnDetail.invoice_deadline)}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.fetched_at && (
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-500">Last Updated</span>
+                                          <span className="text-slate-900">{formatDate(frnDetail.fetched_at)}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Denial Info (if applicable) */}
+                                {frnDetail.is_denied && (
+                                  <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+                                    <h4 className="font-medium text-red-800 mb-3 text-sm flex items-center gap-2">🚨 Denial Information</h4>
+                                    <div className="space-y-2 text-sm">
+                                      {frnDetail.denial_reason && (
+                                        <div>
+                                          <span className="text-red-600 font-medium">Reason: </span>
+                                          <span className="text-red-800">{frnDetail.denial_reason}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.fcdl_comment && (
+                                        <div>
+                                          <span className="text-red-600 font-medium">FCDL Comment: </span>
+                                          <span className="text-red-800">{frnDetail.fcdl_comment}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.fcdl_date && (
+                                        <div className="flex gap-4 text-xs text-red-600">
+                                          <span>FCDL Date: {formatDate(frnDetail.fcdl_date)}</span>
+                                          {frnDetail.appeal_deadline && <span>Appeal Deadline: {formatDate(frnDetail.appeal_deadline)}</span>}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Appeal Info (if exists) */}
+                                {frnDetail.appeal && (
+                                  <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
+                                    <h4 className="font-medium text-emerald-800 mb-2 text-sm flex items-center gap-2">📄 Auto-Generated Appeal</h4>
+                                    <div className="flex items-center gap-3 text-sm mb-2">
+                                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                        frnDetail.appeal.status === 'ready' ? 'bg-emerald-100 text-emerald-700' :
+                                        frnDetail.appeal.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
+                                        'bg-slate-100 text-slate-600'
+                                      }`}>{frnDetail.appeal.status}</span>
+                                      {frnDetail.appeal.success_probability != null && (
+                                        <span className="text-emerald-700">Success probability: {frnDetail.appeal.success_probability}%</span>
+                                      )}
+                                    </div>
+                                    <p className="text-xs text-emerald-600 line-clamp-3">{frnDetail.appeal.appeal_letter?.substring(0, 300)}...</p>
+                                  </div>
+                                )}
+
+                                {/* Raw USAC Data (collapsible) */}
+                                {frnDetail.raw_data && (
+                                  <details className="bg-white rounded-lg border border-slate-200">
+                                    <summary className="px-4 py-3 cursor-pointer text-sm font-medium text-slate-700 hover:bg-slate-50">
+                                      📊 Raw USAC Data
+                                    </summary>
+                                    <div className="px-4 pb-4">
+                                      <div className="bg-slate-900 rounded-lg p-4 overflow-auto max-h-64">
+                                        <pre className="text-xs text-green-400 whitespace-pre-wrap">{JSON.stringify(frnDetail.raw_data, null, 2)}</pre>
+                                      </div>
+                                    </div>
+                                  </details>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-center py-4 text-slate-500">Failed to load details</div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
