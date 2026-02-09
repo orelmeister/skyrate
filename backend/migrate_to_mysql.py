@@ -3,7 +3,7 @@ Migrate data from local SQLite to MySQL on Bluehost
 Run this script to sync your local data to the production database.
 
 Usage:
-    set MYSQL_HOST=173.254.91.77
+    set MYSQL_HOST=your_host
     set MYSQL_USER=your_user
     set MYSQL_PASSWORD=your_password
     set MYSQL_DATABASE=your_database
@@ -17,10 +17,10 @@ from datetime import datetime
 
 # MySQL connection details - read from environment variables
 MYSQL_CONFIG = {
-    'host': os.getenv('MYSQL_HOST', '173.254.91.77'),
-    'user': os.getenv('MYSQL_USER', 'skylimi5_skyrateAI'),
+    'host': os.getenv('MYSQL_HOST'),
+    'user': os.getenv('MYSQL_USER'),
     'password': os.getenv('MYSQL_PASSWORD', ''),  # Must be set via environment!
-    'database': os.getenv('MYSQL_DATABASE', 'skylimi5_skyrate'),
+    'database': os.getenv('MYSQL_DATABASE'),
     'charset': 'utf8mb4'
 }
 

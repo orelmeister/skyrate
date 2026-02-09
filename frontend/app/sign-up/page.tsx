@@ -593,7 +593,7 @@ export default function SignUpPage() {
 
           {/* Credit card notice */}
           <p className="mt-6 text-center text-sm text-slate-500">
-            💳 Credit card required • 14-day free trial • Cancel anytime
+            💳 Credit card required • 14-day free trial • Cancel anytime • No commitment
           </p>
         </div>
       </div>

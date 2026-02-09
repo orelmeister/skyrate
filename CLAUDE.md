@@ -54,7 +54,7 @@
 - **Backend**: Python service, `apps-s-2vcpu-4gb`, port 8000, route `/api`
 - **Frontend**: Node.js service, `apps-s-2vcpu-4gb`, port 3000, route `/`
 - **Frontend env**: `NEXT_PUBLIC_API_URL=https://skyrate-unox7.ondigitalocean.app/api`
-- **Database (prod)**: MySQL on Bluehost (`173.254.91.77`, db: `skylimi5_skyrate`, user: `skylimi5_skyrateAI`)
+- **Database (prod)**: MySQL on Bluehost (credentials in DigitalOcean dashboard environment variables)
 
 ### Key Config
 - API keys stored in `backend/.env` (GEMINI_API_KEY, DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, etc.)

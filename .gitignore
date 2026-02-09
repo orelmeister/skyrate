@@ -44,7 +44,12 @@ frontend/.vercel
 .env
 .env.local
 .env.*.local
+backend/.env
 !.env.example
+
+# Sensitive status/deployment files
+deploy-status.json
+current-app-status.json
 
 # Database
 *.db

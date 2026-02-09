@@ -1,10 +1,11 @@
 import mysql.connector
+import os
 
 conn = mysql.connector.connect(
-    host='173.254.91.77',
-    user='skylimi5_admin',
-    password='Y=jLbSp.^8gh',
-    database='skylimi5_skyrate'
+    host=os.environ.get('MYSQL_HOST'),
+    user=os.environ.get('MYSQL_USER'),
+    password=os.environ.get('MYSQL_PASSWORD'),
+    database=os.environ.get('MYSQL_DATABASE')
 )
 cursor = conn.cursor(dictionary=True)
 
