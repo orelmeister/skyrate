@@ -47,8 +47,9 @@ export default function SignInPage() {
         
         {/* Logo */}
         <div className="relative z-10 animate-slide-up">
-          <Link href="/" className="flex items-center">
-            <img src="/images/logos/logo-white.svg" alt="SkyRate AI" width={180} height={46} className="object-contain" />
+          <Link href="/" className="flex items-center gap-3">
+            <img src="/images/logos/logo-icon.png" alt="" width={40} height={40} className="rounded-xl" />
+            <span className="text-white font-bold text-2xl">SkyRate<span className="text-purple-300">.AI</span></span>
           </Link>
         </div>
 
@@ -98,8 +99,9 @@ export default function SignInPage() {
         <div className="w-full max-w-md animate-slide-up">
           {/* Mobile Logo */}
           <div className="lg:hidden text-center mb-8">
-            <Link href="/" className="inline-flex items-center justify-center">
-              <img src="/images/logos/logo-dark.svg" alt="SkyRate AI" width={180} height={46} className="object-contain" />
+            <Link href="/" className="inline-flex items-center justify-center gap-3">
+              <img src="/images/logos/logo-icon.png" alt="" width={40} height={40} className="rounded-xl" />
+              <span className="text-slate-900 font-bold text-2xl">SkyRate<span className="text-purple-600">.AI</span></span>
             </Link>
           </div>
 

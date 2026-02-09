@@ -41,8 +41,9 @@ export default function HomePage() {
       {/* ════════════════════ HEADER ════════════════════ */}
       <header className="sticky top-0 z-50 border-b border-white/10 px-4 sm:px-6 py-3 bg-slate-950/80 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <Link href="/" className="flex items-center">
-            <img src="/images/logos/logo-white.svg" alt="SkyRate AI" width={150} height={40} className="object-contain" />
+          <Link href="/" className="flex items-center gap-2">
+            <img src="/images/logos/logo-icon.png" alt="" width={32} height={32} className="rounded-lg" />
+            <span className="text-white font-bold text-xl">SkyRate<span className="text-purple-400">.AI</span></span>
           </Link>
 
           <nav className="hidden md:flex items-center gap-6 lg:gap-8">
@@ -756,8 +757,9 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 mb-8">
             <div className="col-span-2 md:col-span-1">
-              <div className="flex items-center mb-3 sm:mb-4">
-                <img src="/images/logos/logo-white.svg" alt="SkyRate AI" width={140} height={36} className="object-contain" />
+              <div className="flex items-center gap-2 mb-3 sm:mb-4">
+                <img src="/images/logos/logo-icon.png" alt="" width={28} height={28} className="rounded-lg" />
+                <span className="text-white font-bold text-lg">SkyRate<span className="text-purple-400">.AI</span></span>
               </div>
               <p className="text-xs sm:text-sm">
                 AI-powered E-Rate intelligence for applicants, consultants, and vendors.
