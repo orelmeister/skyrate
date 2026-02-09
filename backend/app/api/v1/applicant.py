@@ -30,6 +30,7 @@ from ...models.applicant import (
     ApplicantProfile, ApplicantFRN, ApplicantAutoAppeal, 
     ApplicantStatusHistory, DataSyncStatus, FRNStatusType
 )
+from ...services.usac_service import get_usac_service
 
 router = APIRouter(prefix="/applicant", tags=["Applicant"])
 
@@ -602,7 +603,7 @@ async def get_frn_detail(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get detailed info for a specific FRN"""
+    """Get detailed info for a specific FRN with real-time USAC enrichment"""
     if current_user.role != UserRole.APPLICANT.value:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
     
@@ -629,6 +630,30 @@ async def get_frn_detail(
     result = frn.to_dict()
     result['raw_data'] = frn.raw_data  # Include full USAC data
     result['appeal'] = appeal.to_dict() if appeal else None
+    
+    # Real-time USAC enrichment for SPIN, provider, discount, disbursement
+    try:
+        usac_service = get_usac_service()
+        enrichment = usac_service.enrich_frn_details(frn.frn, frn.funding_year)
+        
+        # Merge enrichment into raw_data for frontend consumption
+        if enrichment:
+            if not result['raw_data']:
+                result['raw_data'] = {}
+            
+            # Update raw_data with enriched fields (don't overwrite if already exists)
+            for key, value in enrichment.items():
+                if value is not None and (key not in result['raw_data'] or not result['raw_data'].get(key)):
+                    result['raw_data'][key] = value
+            
+            # Also update top-level fields if empty
+            if enrichment.get('discount_pct') and not result.get('discount_rate'):
+                result['discount_rate'] = float(enrichment['discount_pct'])
+            if enrichment.get('total_disbursed') and not result.get('amount_disbursed'):
+                result['amount_disbursed'] = enrichment['total_disbursed']
+    except Exception as e:
+        print(f"[FRN Detail] Enrichment error for FRN {frn.frn}: {e}")
+        # Continue without enrichment if it fails
     
     return result
 

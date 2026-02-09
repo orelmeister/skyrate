@@ -742,7 +742,7 @@ export default function ApplicantDashboard() {
                                 </div>
 
                                 {/* Additional Details Row */}
-                                {(frnDetail.raw_data?.product_type || frnDetail.raw_data?.fiber_type || frnDetail.raw_data?.purpose || frnDetail.raw_data?.function_text) && (
+                                {(frnDetail.raw_data?.product_type || frnDetail.raw_data?.fiber_type || frnDetail.raw_data?.purpose || frnDetail.raw_data?.function_text || frnDetail.raw_data?.bandwidth_speed || frnDetail.raw_data?.make || frnDetail.raw_data?.connection_type || frnDetail.raw_data?.quantity) && (
                                   <div className="bg-white rounded-lg p-4 border border-slate-200">
                                     <h4 className="font-medium text-slate-900 mb-3 text-sm flex items-center gap-2">📋 Additional Details</h4>
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -752,10 +752,34 @@ export default function ApplicantDashboard() {
                                           <span className="text-slate-900">{frnDetail.raw_data.product_type}</span>
                                         </div>
                                       )}
+                                      {frnDetail.raw_data?.make && (
+                                        <div>
+                                          <span className="text-slate-500 block text-xs">Make/Brand</span>
+                                          <span className="text-slate-900">{frnDetail.raw_data.make}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.raw_data?.bandwidth_speed && (
+                                        <div>
+                                          <span className="text-slate-500 block text-xs">Bandwidth</span>
+                                          <span className="text-slate-900">{frnDetail.raw_data.bandwidth_speed}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.raw_data?.connection_type && (
+                                        <div>
+                                          <span className="text-slate-500 block text-xs">Connection</span>
+                                          <span className="text-slate-900">{frnDetail.raw_data.connection_type}</span>
+                                        </div>
+                                      )}
                                       {frnDetail.raw_data?.fiber_type && (
                                         <div>
                                           <span className="text-slate-500 block text-xs">Fiber Type</span>
                                           <span className="text-slate-900">{frnDetail.raw_data.fiber_type}</span>
+                                        </div>
+                                      )}
+                                      {(frnDetail.raw_data?.quantity || frnDetail.raw_data?.num_lines) && (
+                                        <div>
+                                          <span className="text-slate-500 block text-xs">Quantity</span>
+                                          <span className="text-slate-900">{frnDetail.raw_data.quantity || frnDetail.raw_data.num_lines}</span>
                                         </div>
                                       )}
                                       {frnDetail.raw_data?.purpose && (
@@ -770,10 +794,10 @@ export default function ApplicantDashboard() {
                                           <span className="text-slate-900">{frnDetail.raw_data.function_text}</span>
                                         </div>
                                       )}
-                                      {frnDetail.raw_data?.total_monthly_cost && (
+                                      {(frnDetail.raw_data?.total_monthly_cost || frnDetail.raw_data?.unit_cost) && (
                                         <div>
                                           <span className="text-slate-500 block text-xs">Monthly Cost</span>
-                                          <span className="text-slate-900">{formatCurrency(parseFloat(frnDetail.raw_data.total_monthly_cost))}</span>
+                                          <span className="text-slate-900">{formatCurrency(parseFloat(frnDetail.raw_data.total_monthly_cost || frnDetail.raw_data.unit_cost))}</span>
                                         </div>
                                       )}
                                       {frnDetail.raw_data?.total_eligible_monthly_recurring_charges && (
@@ -782,16 +806,22 @@ export default function ApplicantDashboard() {
                                           <span className="text-slate-900">{formatCurrency(parseFloat(frnDetail.raw_data.total_eligible_monthly_recurring_charges))}</span>
                                         </div>
                                       )}
-                                      {frnDetail.raw_data?.total_eligible_one_time_charges && (
+                                      {(frnDetail.raw_data?.total_eligible_one_time_charges || frnDetail.raw_data?.one_time_cost) && (
                                         <div>
                                           <span className="text-slate-500 block text-xs">One-time Charges</span>
-                                          <span className="text-slate-900">{formatCurrency(parseFloat(frnDetail.raw_data.total_eligible_one_time_charges))}</span>
+                                          <span className="text-slate-900">{formatCurrency(parseFloat(frnDetail.raw_data.total_eligible_one_time_charges || frnDetail.raw_data.one_time_cost))}</span>
                                         </div>
                                       )}
-                                      {frnDetail.raw_data?.num_lines && (
+                                      {frnDetail.raw_data?.contract_number && (
                                         <div>
-                                          <span className="text-slate-500 block text-xs">Lines/Units</span>
-                                          <span className="text-slate-900">{frnDetail.raw_data.num_lines}</span>
+                                          <span className="text-slate-500 block text-xs">Contract #</span>
+                                          <span className="text-slate-900 font-mono text-xs">{frnDetail.raw_data.contract_number}</span>
+                                        </div>
+                                      )}
+                                      {frnDetail.raw_data?.invoice_count && (
+                                        <div>
+                                          <span className="text-slate-500 block text-xs">Invoices Filed</span>
+                                          <span className="text-slate-900">{frnDetail.raw_data.invoice_count}</span>
                                         </div>
                                       )}
                                     </div>

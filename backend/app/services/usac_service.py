@@ -1063,6 +1063,101 @@ class USACService:
             print(f"Error fetching disbursements: {e}")
             return {'error': str(e), 'records': []}
 
+    def enrich_frn_details(self, frn: str, funding_year: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Enrich FRN data by querying multiple USAC datasets.
+        Gets SPIN/provider info from 471_line_items and disbursement from invoice_disbursements.
+        
+        Args:
+            frn: Funding Request Number
+            funding_year: Optional funding year for filtering
+            
+        Returns:
+            Dictionary with enriched FRN data (spin, service_provider_name, discount_pct, disbursed, etc.)
+        """
+        enrichment = {}
+        session = self._create_enrichment_session()
+        
+        # 1. Query 471_line_items for SPIN, provider, discount
+        try:
+            url = "https://opendata.usac.org/resource/hbj5-2bpj.json"
+            params = {
+                "frn": frn.strip(),
+                "$limit": 10,
+            }
+            if funding_year:
+                params["funding_year"] = str(funding_year)
+            
+            response = session.get(url, params=params, timeout=30)
+            if response.status_code == 200:
+                data = response.json()
+                if data:
+                    # Take first record (usually there's one per FRN, might have multiple line items)
+                    line = data[0]
+                    enrichment.update({
+                        'spin': line.get('spin') or line.get('service_provider_number'),
+                        'service_provider_name': line.get('service_provider_name'),
+                        'discount_pct': line.get('discount') or line.get('discount_pct'),
+                        'product_type': line.get('product_type'),
+                        'make': line.get('make'),
+                        'bandwidth_speed': line.get('download_speed') or line.get('bandwidth_download'),
+                        'connection_type': line.get('connection_type') or line.get('connection_directly_to_school_library'),
+                        'quantity': line.get('quantity') or line.get('num_lines'),
+                        'unit_cost': line.get('total_monthly_cost') or line.get('unit_monthly_cost'),
+                        'one_time_cost': line.get('total_one_time_cost') or line.get('one_time_total'),
+                        'contract_number': line.get('contract_number'),
+                        'line_items_count': len(data),
+                    })
+                    print(f"[USAC] Enriched FRN {frn} with line item data: SPIN={enrichment.get('spin')}")
+        except Exception as e:
+            print(f"[USAC] Error fetching line items for FRN {frn}: {e}")
+        
+        # 2. Query invoice_disbursements for actual disbursed amounts
+        try:
+            url = "https://opendata.usac.org/resource/jpiu-tj8h.json"
+            params = {
+                "funding_request_number": frn.strip(),
+                "$limit": 50,
+                "$select": "sum(approved_inv_line_amt) as total_disbursed, count(*) as invoice_count",
+            }
+            if funding_year:
+                params["funding_year"] = str(funding_year)
+            
+            response = session.get(url, params=params, timeout=30)
+            if response.status_code == 200:
+                data = response.json()
+                if data and data[0].get('total_disbursed'):
+                    total = float(data[0].get('total_disbursed') or 0)
+                    enrichment['total_disbursed'] = total
+                    enrichment['invoice_count'] = int(data[0].get('invoice_count') or 0)
+                    print(f"[USAC] Enriched FRN {frn} with disbursement: ${total:,.2f}")
+        except Exception as e:
+            print(f"[USAC] Error fetching disbursements for FRN {frn}: {e}")
+        
+        # 3. Also try the main Form 471 dataset for any missing fields
+        if not enrichment.get('spin'):
+            try:
+                url = "https://opendata.usac.org/resource/srbr-2d59.json"
+                params = {
+                    "frn": frn.strip(),
+                    "$limit": 1,
+                }
+                response = session.get(url, params=params, timeout=30)
+                if response.status_code == 200:
+                    data = response.json()
+                    if data:
+                        record = data[0]
+                        if not enrichment.get('spin'):
+                            enrichment['spin'] = record.get('spin') or record.get('service_provider_number')
+                        if not enrichment.get('service_provider_name'):
+                            enrichment['service_provider_name'] = record.get('service_provider_name')
+                        if not enrichment.get('discount_pct'):
+                            enrichment['discount_pct'] = record.get('discount_pct')
+            except Exception as e:
+                print(f"[USAC] Error fetching Form 471 for FRN {frn}: {e}")
+        
+        return enrichment
+
 
 # Singleton accessor
 def get_usac_service() -> USACService:
