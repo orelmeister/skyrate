@@ -21,7 +21,7 @@ class PushSubscription(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     
     # Web Push subscription data
-    endpoint = Column(Text, nullable=False, unique=True)
+    endpoint = Column(String(500), nullable=False, unique=True)
     p256dh_key = Column(String(255), nullable=False)  # Public key
     auth_key = Column(String(255), nullable=False)     # Auth secret
     
