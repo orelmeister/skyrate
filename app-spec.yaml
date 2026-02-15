@@ -12,6 +12,11 @@
         prefix: /
 name: skyrate
 region: fra
+domains:
+- domain: skyrate.ai
+  type: PRIMARY
+- domain: www.skyrate.ai
+  type: ALIAS
 services:
 - build_command: pip install -r requirements.txt
   environment_slug: python
@@ -40,6 +45,15 @@ services:
     scope: RUN_TIME
     type: SECRET
     value: EV[1:kScDw2KP4jey+9OAeZPSawPbJdl9A/Ur:fy95Kp6lgT/bKgWbANWHlg==]
+  - key: VAPID_PRIVATE_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: VAPID_PUBLIC_KEY
+    scope: RUN_TIME
+    value: BOQ_1ePgEdPmLcqMCOwM1XGJakthkvFnt3AuCJaGZMs-gm71tz7QorrUdZzBwK-6XWX_SwaRlnO02jyZZNzM-8I
+  - key: VAPID_CONTACT_EMAIL
+    scope: RUN_TIME
+    value: alerts@skyrate.ai
   github:
     branch: main
     deploy_on_push: true
@@ -55,7 +69,10 @@ services:
   envs:
   - key: NEXT_PUBLIC_API_URL
     scope: BUILD_TIME
-    value: https://skyrate-unox7.ondigitalocean.app/api
+    value: https://skyrate.ai/api
+  - key: NEXT_PUBLIC_VAPID_KEY
+    scope: BUILD_TIME
+    value: BOQ_1ePgEdPmLcqMCOwM1XGJakthkvFnt3AuCJaGZMs-gm71tz7QorrUdZzBwK-6XWX_SwaRlnO02jyZZNzM-8I
   github:
     branch: main
     deploy_on_push: true
