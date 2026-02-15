@@ -93,6 +93,11 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: Optional[str] = None
     EMAIL_FROM: Optional[str] = None
     
+    # Web Push (VAPID)
+    VAPID_PRIVATE_KEY: Optional[str] = None
+    VAPID_PUBLIC_KEY: Optional[str] = None
+    VAPID_CONTACT_EMAIL: str = "alerts@skyrate.ai"
+    
     # USAC / Socrata
     SOCRATA_APP_TOKEN: Optional[str] = None
     

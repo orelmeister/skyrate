@@ -48,6 +48,7 @@
 
 ### Deployment
 - **Platform**: DigitalOcean App Platform
+- **Production Site**: `https://skyrate.ai` (custom domain)
 - **App URL**: `https://skyrate-unox7.ondigitalocean.app`
 - **App spec**: `.do/app.yaml` (also mirrored in `app-spec.yaml`)
 - **Auto-deploy**: Enabled — pushes to `main` trigger automatic builds
@@ -352,7 +353,8 @@ uvicorn app.main:app --reload --port 8000
 ### Production Deployment
 - Push to `main` → DigitalOcean App Platform auto-deploys both frontend & backend
 - App spec file: `.do/app.yaml`
-- Production URL: `https://skyrate-unox7.ondigitalocean.app`
+- Live Site: `https://skyrate.ai` (custom domain)
+- App Platform URL: `https://skyrate-unox7.ondigitalocean.app`
 - Monitor deploys via DigitalOcean dashboard or `doctl apps list-deployments`
 - **Database**: Production uses MySQL on Bluehost (persistent). `DATABASE_URL` env var in `.env` and on DigitalOcean connects to Bluehost MySQL.
 - Demo accounts are re-seeded on startup via `seed_demo_accounts()` in `main.py`.

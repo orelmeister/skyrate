@@ -24,7 +24,7 @@ from app.core.config import settings
 from app.core.database import engine, Base
 
 # Import API routers - services are imported lazily within these
-from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals, alerts, applicant
+from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals, alerts, applicant, notifications
 
 # Configure logging
 logging.basicConfig(
@@ -289,6 +289,7 @@ async def lifespan(app: FastAPI):
         AppealRecord, QueryHistory, ApplicantProfile, ApplicantFRN,
         ApplicantAutoAppeal, ApplicantStatusHistory
     )
+    from app.models.push_subscription import PushSubscription
     
     # Create database tables
     Base.metadata.create_all(bind=engine)
@@ -414,6 +415,7 @@ app.include_router(query.router, prefix="/v1")
 app.include_router(schools.router, prefix="/v1")
 app.include_router(appeals.router, prefix="/v1")
 app.include_router(alerts.router, prefix="/v1")
+app.include_router(notifications.router, prefix="/v1")
 app.include_router(applicant.router, prefix="/v1")
 
 # ==================== MODELS ====================

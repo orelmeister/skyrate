@@ -1,7 +1,7 @@
 ---
 name: "QA Sentinel"
 description: "E2E Testing expert. Verifies the live SkyRate.ai production site."
-model: "claude-3.5-sonnet"
+model: "Claude Opus 4.6"
 tools: ["read_file", "edit_file", "run_terminal"]
 ---
 # Identity

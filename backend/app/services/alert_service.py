@@ -87,6 +87,14 @@ class AlertService:
         
         logger.info(f"Created alert {alert.id} for user {user_id}: {title}")
         
+        # Send push notification
+        try:
+            from .push_notification_service import PushNotificationService
+            push_service = PushNotificationService(self.db)
+            push_service.send_alert_as_push(alert)
+        except Exception as e:
+            logger.error(f"Failed to send push notification for alert {alert.id}: {e}")
+        
         # Send email if requested
         if send_email is None:
             send_email = config.email_notifications and not config.daily_digest
