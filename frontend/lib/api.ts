@@ -2066,6 +2066,147 @@ class ApiClient {
   }>> {
     return this.request(`/api/v1/alerts/summary?days=${days}`);
   }
+
+  // ==================== ADMIN APIs ====================
+
+  /**
+   * Get admin dashboard overview
+   */
+  async getAdminDashboard(): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/admin/dashboard');
+  }
+
+  /**
+   * List all users (admin)
+   */
+  async getAdminUsers(params?: { role?: string; search?: string; limit?: number; offset?: number }): Promise<ApiResponse<any>> {
+    const qs = new URLSearchParams();
+    if (params?.role) qs.set('role', params.role);
+    if (params?.search) qs.set('search', params.search);
+    if (params?.limit) qs.set('limit', params.limit.toString());
+    if (params?.offset) qs.set('offset', params.offset.toString());
+    return this.request(`/api/v1/admin/users?${qs.toString()}`);
+  }
+
+  /**
+   * Get admin analytics
+   */
+  async getAdminAnalytics(): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/admin/analytics');
+  }
+
+  /**
+   * List all support tickets (admin)
+   */
+  async getAdminTickets(params?: { status?: string; priority?: string; search?: string; limit?: number; offset?: number }): Promise<ApiResponse<any>> {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status_filter', params.status);
+    if (params?.priority) qs.set('priority', params.priority);
+    if (params?.search) qs.set('search', params.search);
+    if (params?.limit) qs.set('limit', params.limit.toString());
+    if (params?.offset) qs.set('offset', params.offset.toString());
+    return this.request(`/api/v1/admin/tickets?${qs.toString()}`);
+  }
+
+  /**
+   * Get a specific ticket with messages (admin)
+   */
+  async getAdminTicket(ticketId: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/tickets/${ticketId}`);
+  }
+
+  /**
+   * Update ticket status/priority (admin)
+   */
+  async updateAdminTicket(ticketId: number, data: { status?: string; priority?: string; admin_notes?: string }): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/tickets/${ticketId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * Reply to a ticket (admin)
+   */
+  async replyToTicket(ticketId: number, message: string): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/tickets/${ticketId}/reply`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  }
+
+  /**
+   * Get FRN monitor data (admin)
+   */
+  async getAdminFRNMonitor(params?: { status?: string; funding_year?: number; search?: string; limit?: number }): Promise<ApiResponse<any>> {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status_filter', params.status);
+    if (params?.funding_year) qs.set('funding_year', params.funding_year.toString());
+    if (params?.search) qs.set('search', params.search);
+    if (params?.limit) qs.set('limit', params.limit.toString());
+    return this.request(`/api/v1/admin/frn-monitor?${qs.toString()}`);
+  }
+
+  /**
+   * Get recent FRN denials (admin)
+   */
+  async getAdminDenials(days?: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/frn-monitor/denials?days=${days || 30}`);
+  }
+
+  /**
+   * Send email to a specific user (admin)
+   */
+  async emailUser(userId: number, subject: string, message: string): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/users/${userId}/email`, {
+      method: 'POST',
+      body: JSON.stringify({ subject, message }),
+    });
+  }
+
+  // ==================== SUPPORT TICKET APIs ====================
+
+  /**
+   * Create a support ticket (works for guests too)
+   */
+  async createSupportTicket(data: {
+    subject: string;
+    message: string;
+    category?: string;
+    source?: string;
+    guest_name?: string;
+    guest_email?: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/support/tickets', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * List current user's support tickets
+   */
+  async getMySupportTickets(status?: string): Promise<ApiResponse<any>> {
+    const qs = status ? `?status_filter=${status}` : '';
+    return this.request(`/api/v1/support/tickets${qs}`);
+  }
+
+  /**
+   * Get a specific support ticket with messages
+   */
+  async getSupportTicket(ticketId: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/support/tickets/${ticketId}`);
+  }
+
+  /**
+   * Add message to a support ticket
+   */
+  async addTicketMessage(ticketId: number, message: string): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/support/tickets/${ticketId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  }
 }
 
 // Singleton instance

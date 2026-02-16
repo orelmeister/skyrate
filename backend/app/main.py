@@ -24,7 +24,7 @@ from app.core.config import settings
 from app.core.database import engine, Base
 
 # Import API routers - services are imported lazily within these
-from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals, alerts, applicant, notifications
+from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals, alerts, applicant, notifications, support
 
 # Configure logging
 logging.basicConfig(
@@ -93,6 +93,31 @@ def seed_demo_accounts():
             ("test_vendor@example.com", UserRole.VENDOR.value, "TestPass123!"),
             ("test_applicant@example.com", UserRole.APPLICANT.value, "TestPass123!"),
         ]
+        
+        # Seed super admin account
+        admin_email = "admin@skyrate.ai"
+        admin_existing = db.query(User).filter(User.email == admin_email).first()
+        admin_password = os.environ.get("ADMIN_PASSWORD", "SkyRateAdmin2024!")
+        admin_hashed = bcrypt.hashpw(admin_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        if not admin_existing:
+            admin_user = User(
+                email=admin_email,
+                password_hash=admin_hashed,
+                role=UserRole.ADMIN.value,
+                first_name="David",
+                last_name="Admin",
+                company_name="SkyRate AI",
+                is_active=True,
+                is_verified=True,
+            )
+            db.add(admin_user)
+            db.flush()
+            logger.info(f"Created super admin account: {admin_email}")
+        else:
+            admin_existing.password_hash = admin_hashed
+            admin_existing.role = UserRole.ADMIN.value
+            admin_existing.is_active = True
+            logger.info(f"Updated super admin account: {admin_email}")
         
         for email, role, password in demo_accounts:
             existing = db.query(User).filter(User.email == email).first()
@@ -290,6 +315,7 @@ async def lifespan(app: FastAPI):
         ApplicantAutoAppeal, ApplicantStatusHistory
     )
     from app.models.push_subscription import PushSubscription
+    from app.models.support_ticket import SupportTicket, TicketMessage
     
     # Create database tables
     Base.metadata.create_all(bind=engine)
@@ -420,6 +446,7 @@ app.include_router(appeals.router, prefix="/v1")
 app.include_router(alerts.router, prefix="/v1")
 app.include_router(notifications.router, prefix="/v1")
 app.include_router(applicant.router, prefix="/v1")
+app.include_router(support.router, prefix="/v1")
 
 # ==================== MODELS ====================
 

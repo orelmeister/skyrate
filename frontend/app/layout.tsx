@@ -3,6 +3,7 @@ import { Inter, Montserrat } from "next/font/google";
 import "./globals.css";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import InstallPrompt from "@/components/InstallPrompt";
+import ChatWidget from "@/components/ChatWidget";
 
 const inter = Inter({ 
   subsets: ["latin"],
@@ -73,6 +74,7 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased bg-slate-50 text-slate-900`}>
         <ServiceWorkerRegistrar />
         {children}
+        <ChatWidget />
         <InstallPrompt />
       </body>
     </html>

@@ -1,11 +1,12 @@
 """
 Admin Portal API Endpoints
-Handles user management, subscriptions oversight, and analytics
+Handles user management, subscriptions oversight, analytics,
+support ticket management, FRN monitoring, and user communications
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import datetime, timedelta
@@ -17,6 +18,9 @@ from ...models.subscription import Subscription, SubscriptionStatus
 from ...models.consultant import ConsultantProfile, ConsultantSchool
 from ...models.vendor import VendorProfile, VendorSearch
 from ...models.application import QueryHistory
+from ...models.support_ticket import SupportTicket, TicketMessage, TicketStatus
+from ...models.applicant import ApplicantProfile, ApplicantFRN, ApplicantBEN
+from ...models.alert import Alert
 
 router = APIRouter(prefix="/admin", tags=["Admin Portal"])
 
@@ -406,4 +410,407 @@ async def get_revenue_analytics(
     return {
         "success": True,
         "revenue": revenue_by_month
+    }
+
+
+# ==================== SUPPORT TICKET MANAGEMENT ====================
+
+class TicketUpdateRequest(BaseModel):
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    assigned_to: Optional[int] = None
+    admin_notes: Optional[str] = None
+
+
+class AdminReplyRequest(BaseModel):
+    message: str
+
+
+class EmailUserRequest(BaseModel):
+    subject: str
+    message: str
+    email_type: Optional[str] = "support"
+
+
+@router.get("/tickets")
+async def list_tickets(
+    status_filter: Optional[str] = None,
+    priority: Optional[str] = None,
+    category: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    current_user: User = AdminUser,
+    db: Session = Depends(get_db)
+):
+    """List all support tickets with filtering"""
+    query = db.query(SupportTicket)
+
+    if status_filter:
+        query = query.filter(SupportTicket.status == status_filter)
+    if priority:
+        query = query.filter(SupportTicket.priority == priority)
+    if category:
+        query = query.filter(SupportTicket.category == category)
+    if search:
+        term = f"%{search}%"
+        query = query.filter(
+            or_(
+                SupportTicket.subject.ilike(term),
+                SupportTicket.message.ilike(term),
+                SupportTicket.guest_email.ilike(term),
+            )
+        )
+
+    total = query.count()
+    tickets = query.order_by(SupportTicket.created_at.desc()).offset(offset).limit(limit).all()
+
+    return {
+        "success": True,
+        "total": total,
+        "tickets": [t.to_dict() for t in tickets]
+    }
+
+
+@router.get("/tickets/{ticket_id}")
+async def get_ticket_detail(
+    ticket_id: int,
+    current_user: User = AdminUser,
+    db: Session = Depends(get_db)
+):
+    """Get a ticket with full message history"""
+    ticket = db.query(SupportTicket).filter(SupportTicket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    return {"success": True, "ticket": ticket.to_dict_with_messages()}
+
+
+@router.put("/tickets/{ticket_id}")
+async def update_ticket(
+    ticket_id: int,
+    data: TicketUpdateRequest,
+    current_user: User = AdminUser,
+    db: Session = Depends(get_db)
+):
+    """Update ticket status, priority, assignment, or notes"""
+    ticket = db.query(SupportTicket).filter(SupportTicket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    if data.status is not None:
+        ticket.status = data.status
+        if data.status in (TicketStatus.RESOLVED.value, TicketStatus.CLOSED.value):
+            ticket.resolved_at = datetime.utcnow()
+    if data.priority is not None:
+        ticket.priority = data.priority
+    if data.assigned_to is not None:
+        ticket.assigned_to = data.assigned_to
+    if data.admin_notes is not None:
+        ticket.admin_notes = data.admin_notes
+
+    ticket.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(ticket)
+
+    return {"success": True, "ticket": ticket.to_dict()}
+
+
+@router.post("/tickets/{ticket_id}/reply")
+async def admin_reply_ticket(
+    ticket_id: int,
+    data: AdminReplyRequest,
+    current_user: User = AdminUser,
+    db: Session = Depends(get_db)
+):
+    """Admin reply to a support ticket"""
+    ticket = db.query(SupportTicket).filter(SupportTicket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    message = TicketMessage(
+        ticket_id=ticket.id,
+        sender_type="admin",
+        sender_id=current_user.id,
+        sender_name=f"{current_user.first_name or 'Admin'} {current_user.last_name or ''}".strip(),
+        message=data.message,
+    )
+    db.add(message)
+    ticket.status = TicketStatus.WAITING_USER.value
+    ticket.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(message)
+
+    # Send email notification to ticket creator
+    recipient_email = ticket.user.email if ticket.user else ticket.guest_email
+    if recipient_email:
+        try:
+            from ...services.email_service import EmailService
+            email_service = EmailService()
+            email_service.send_email(
+                to_email=recipient_email,
+                subject=f"Re: {ticket.subject} [Ticket #{ticket.id}]",
+                html_content=f"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px;">
+                    <h2 style="color: #7c3aed;">SkyRate AI Support</h2>
+                    <p>We've responded to your support ticket:</p>
+                    <div style="background: #f8fafc; padding: 16px; border-radius: 8px; border-left: 4px solid #7c3aed;">
+                        <p>{data.message}</p>
+                    </div>
+                    <p style="color: #64748b; font-size: 12px; margin-top: 16px;">
+                        You can reply to this ticket from your 
+                        <a href="https://skyrate.ai/settings" style="color: #7c3aed;">SkyRate dashboard</a>.
+                    </p>
+                </div>
+                """,
+                email_type='support'
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to send reply email: {e}")
+
+    return {"success": True, "message": message.to_dict()}
+
+
+# ==================== FRN MONITORING (ALL USERS) ====================
+
+@router.get("/frn-monitor")
+async def get_frn_monitor(
+    status_filter: Optional[str] = None,
+    funding_year: Optional[int] = None,
+    search: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+    current_user: User = AdminUser,
+    db: Session = Depends(get_db)
+):
+    """
+    Get aggregated FRN status across ALL users.
+    Lets admin monitor every FRN being tracked in the system.
+    """
+    query = db.query(ApplicantFRN).join(
+        ApplicantProfile,
+        ApplicantFRN.applicant_profile_id == ApplicantProfile.id
+    ).join(
+        User,
+        ApplicantProfile.user_id == User.id
+    )
+
+    if status_filter:
+        query = query.filter(ApplicantFRN.status == status_filter)
+    if funding_year:
+        query = query.filter(ApplicantFRN.funding_year == funding_year)
+    if search:
+        term = f"%{search}%"
+        query = query.filter(
+            or_(
+                ApplicantFRN.frn.ilike(term),
+                ApplicantProfile.organization_name.ilike(term),
+            )
+        )
+
+    total = query.count()
+    frn_records = query.order_by(ApplicantFRN.last_checked.desc().nullslast()).offset(offset).limit(limit).all()
+
+    result = []
+    for frn in frn_records:
+        profile = db.query(ApplicantProfile).filter(
+            ApplicantProfile.id == frn.applicant_profile_id
+        ).first()
+        user = db.query(User).filter(User.id == profile.user_id).first() if profile else None
+
+        result.append({
+            "frn": frn.frn,
+            "status": frn.status,
+            "funding_year": frn.funding_year,
+            "amount_requested": float(frn.amount_requested) if frn.amount_requested else None,
+            "amount_committed": float(frn.amount_committed) if frn.amount_committed else None,
+            "service_type": frn.service_type,
+            "last_checked": frn.last_checked.isoformat() if frn.last_checked else None,
+            "organization_name": profile.organization_name if profile else None,
+            "ben": profile.ben if profile else None,
+            "user_id": user.id if user else None,
+            "user_email": user.email if user else None,
+        })
+
+    # Summary stats
+    all_frns = db.query(ApplicantFRN).count()
+    denied_frns = db.query(ApplicantFRN).filter(
+        ApplicantFRN.status.ilike("%denied%")
+    ).count()
+    pending_frns = db.query(ApplicantFRN).filter(
+        ApplicantFRN.status.ilike("%pending%")
+    ).count()
+    funded_frns = db.query(ApplicantFRN).filter(
+        or_(
+            ApplicantFRN.status.ilike("%funded%"),
+            ApplicantFRN.status.ilike("%committed%"),
+        )
+    ).count()
+
+    return {
+        "success": True,
+        "total": total,
+        "summary": {
+            "total_tracked": all_frns,
+            "denied": denied_frns,
+            "pending": pending_frns,
+            "funded": funded_frns,
+        },
+        "frns": result
+    }
+
+
+@router.get("/frn-monitor/denials")
+async def get_recent_denials(
+    days: int = 30,
+    current_user: User = AdminUser,
+    db: Session = Depends(get_db)
+):
+    """Get recent denial alerts across all users"""
+    since = datetime.utcnow() - timedelta(days=days)
+
+    denial_alerts = db.query(Alert).filter(
+        Alert.alert_type == "new_denial",
+        Alert.created_at >= since
+    ).order_by(Alert.created_at.desc()).all()
+
+    return {
+        "success": True,
+        "total": len(denial_alerts),
+        "denials": [a.to_dict() for a in denial_alerts]
+    }
+
+
+# ==================== USER COMMUNICATION ====================
+
+@router.post("/users/{user_id}/email")
+async def email_user(
+    user_id: int,
+    data: EmailUserRequest,
+    current_user: User = AdminUser,
+    db: Session = Depends(get_db)
+):
+    """Send an email to a specific user from admin"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    try:
+        from ...services.email_service import EmailService
+        email_service = EmailService()
+        success = email_service.send_email(
+            to_email=user.email,
+            subject=data.subject,
+            html_content=f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px;">
+                <div style="text-align: center; margin-bottom: 24px;">
+                    <h1 style="color: #7c3aed; margin: 0;">SkyRate<span style="color: #a78bfa;">.AI</span></h1>
+                </div>
+                <div style="padding: 16px;">
+                    {data.message}
+                </div>
+                <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">
+                <p style="color: #64748b; font-size: 12px; text-align: center;">
+                    This message was sent from your SkyRate AI admin team.<br>
+                    <a href="https://skyrate.ai" style="color: #7c3aed;">skyrate.ai</a>
+                </p>
+            </div>
+            """,
+            email_type=data.email_type or 'support'
+        )
+
+        if success:
+            return {"success": True, "message": f"Email sent to {user.email}"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to send email")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Email error: {str(e)}")
+
+
+# ==================== ADMIN DASHBOARD OVERVIEW ====================
+
+@router.get("/dashboard")
+async def get_admin_dashboard(
+    current_user: User = AdminUser,
+    db: Session = Depends(get_db)
+):
+    """
+    Comprehensive admin dashboard data.
+    Returns user stats, recent tickets, FRN overview, and recent alerts.
+    """
+    now = datetime.utcnow()
+    thirty_days_ago = now - timedelta(days=30)
+    seven_days_ago = now - timedelta(days=7)
+
+    # User stats
+    total_users = db.query(User).count()
+    active_users = db.query(User).filter(User.is_active == True).count()
+    new_users_7d = db.query(User).filter(User.created_at >= seven_days_ago).count()
+    new_users_30d = db.query(User).filter(User.created_at >= thirty_days_ago).count()
+    users_by_role = dict(
+        db.query(User.role, func.count(User.id)).group_by(User.role).all()
+    )
+
+    # Subscription stats
+    active_subs = db.query(Subscription).filter(
+        Subscription.status.in_([
+            SubscriptionStatus.ACTIVE.value,
+            SubscriptionStatus.TRIALING.value
+        ])
+    ).count()
+
+    # Support ticket stats
+    open_tickets = db.query(SupportTicket).filter(
+        SupportTicket.status.in_([TicketStatus.OPEN.value, TicketStatus.IN_PROGRESS.value])
+    ).count()
+    total_tickets = db.query(SupportTicket).count()
+    recent_tickets = db.query(SupportTicket).order_by(
+        SupportTicket.created_at.desc()
+    ).limit(5).all()
+
+    # FRN stats
+    total_frns = db.query(ApplicantFRN).count()
+    denied_frns = db.query(ApplicantFRN).filter(
+        ApplicantFRN.status.ilike("%denied%")
+    ).count()
+    recent_denials = db.query(Alert).filter(
+        Alert.alert_type == "new_denial",
+        Alert.created_at >= seven_days_ago
+    ).count()
+
+    # Recent alerts
+    recent_alerts = db.query(Alert).order_by(
+        Alert.created_at.desc()
+    ).limit(10).all()
+
+    return {
+        "success": True,
+        "dashboard": {
+            "users": {
+                "total": total_users,
+                "active": active_users,
+                "new_7d": new_users_7d,
+                "new_30d": new_users_30d,
+                "by_role": users_by_role,
+            },
+            "subscriptions": {
+                "active": active_subs,
+            },
+            "tickets": {
+                "open": open_tickets,
+                "total": total_tickets,
+                "recent": [t.to_dict() for t in recent_tickets],
+            },
+            "frn_monitoring": {
+                "total_tracked": total_frns,
+                "denied": denied_frns,
+                "recent_denials_7d": recent_denials,
+            },
+            "recent_alerts": [a.to_dict() for a in recent_alerts],
+            "generated_at": now.isoformat(),
+        }
     }

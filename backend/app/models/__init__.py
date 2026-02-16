@@ -5,6 +5,7 @@ from .consultant import ConsultantProfile, ConsultantSchool
 from .vendor import VendorProfile, VendorSearch, SavedLead, OrganizationEnrichmentCache
 from .application import SchoolSnapshot, Application, AppealRecord, QueryHistory
 from .alert import Alert, AlertConfig, AlertType, AlertPriority
+from .support_ticket import SupportTicket, TicketMessage, TicketStatus, TicketPriority, TicketCategory, TicketSource
 from .applicant import (
     ApplicantProfile, 
     ApplicantBEN,
@@ -36,6 +37,12 @@ __all__ = [
     "AlertConfig",
     "AlertType",
     "AlertPriority",
+    "SupportTicket",
+    "TicketMessage",
+    "TicketStatus",
+    "TicketPriority",
+    "TicketCategory",
+    "TicketSource",
     # Applicant models
     "ApplicantProfile",
     "ApplicantBEN",

@@ -222,6 +222,16 @@ def sync_frn_statuses():
                                     amount=float(frn_record.amount_requested or 0),
                                     funding_year=frn_record.funding_year
                                 )
+                                
+                                # Also alert admin users on ANY denial
+                                _notify_admins_of_denial(
+                                    db, alert_service,
+                                    frn=frn_record.frn,
+                                    school_name=profile.organization_name or "Unknown",
+                                    user_email=db.query(User).filter(User.id == profile.user_id).first().email if profile.user_id else "unknown",
+                                    denial_reason=frn_data.get('denial_reason', 'Unknown'),
+                                    amount=float(frn_record.amount_requested or 0),
+                                )
                             else:
                                 # Regular status change
                                 alert_service.alert_on_status_change(
@@ -243,6 +253,76 @@ def sync_frn_statuses():
         logger.error(f"FRN sync job failed: {e}")
     finally:
         db.close()
+
+
+def _notify_admins_of_denial(
+    db: Session,
+    alert_service: AlertService,
+    frn: str,
+    school_name: str,
+    user_email: str,
+    denial_reason: str,
+    amount: float,
+):
+    """
+    Notify all admin users when ANY user's FRN is denied.
+    This gives admins visibility into denials across the entire platform.
+    """
+    try:
+        admin_users = db.query(User).filter(User.role == "admin", User.is_active == True).all()
+        
+        for admin in admin_users:
+            from ..models.alert import Alert, AlertType, AlertPriority
+            admin_alert = Alert(
+                user_id=admin.id,
+                alert_type=AlertType.NEW_DENIAL.value,
+                priority=AlertPriority.HIGH.value,
+                title=f"[Admin] User Denial: {school_name}",
+                message=f"FRN {frn} for user {user_email} has been denied. Reason: {denial_reason}. Amount: ${amount:,.2f}",
+                entity_type="frn",
+                entity_id=frn,
+                entity_name=school_name,
+                alert_metadata={
+                    "denial_reason": denial_reason,
+                    "amount": amount,
+                    "user_email": user_email,
+                    "admin_notification": True,
+                }
+            )
+            db.add(admin_alert)
+        
+        db.commit()
+        logger.info(f"Notified {len(admin_users)} admin(s) about denial of FRN {frn}")
+        
+        # Also send email to admin
+        try:
+            from .email_service import EmailService
+            email_service = EmailService()
+            email_service.send_email(
+                to_email="admin@skyrate.ai",
+                subject=f"🚨 FRN Denial Alert: {frn} ({school_name})",
+                html_content=f"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px;">
+                    <h2 style="color: #dc2626;">FRN Denial Detected</h2>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr><td style="padding: 8px; font-weight: bold;">FRN:</td><td style="padding: 8px;">{frn}</td></tr>
+                        <tr><td style="padding: 8px; font-weight: bold;">School:</td><td style="padding: 8px;">{school_name}</td></tr>
+                        <tr><td style="padding: 8px; font-weight: bold;">User:</td><td style="padding: 8px;">{user_email}</td></tr>
+                        <tr><td style="padding: 8px; font-weight: bold;">Reason:</td><td style="padding: 8px;">{denial_reason}</td></tr>
+                        <tr><td style="padding: 8px; font-weight: bold;">Amount:</td><td style="padding: 8px;">${amount:,.2f}</td></tr>
+                    </table>
+                    <p style="margin-top: 16px;">
+                        <a href="https://skyrate.ai/admin" style="color: #7c3aed;">View in Admin Dashboard</a>
+                    </p>
+                </div>
+                """,
+                email_type='alert'
+            )
+        except Exception as e:
+            logger.error(f"Failed to send admin denial email: {e}")
+    
+    except Exception as e:
+        logger.error(f"Failed to notify admins of denial: {e}")
 
 
 def init_scheduler():
