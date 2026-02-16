@@ -37,7 +37,7 @@ const articles = [
       "Learn the exact process for crafting a winning E-Rate appeal, from analyzing your denial letter to submitting supporting documentation. Our AI-powered approach has a 98% success rate.",
     icon: FileText,
     color: "purple",
-    link: "/features/appeal-generator",
+    link: "/blog/how-to-appeal-erate-denial",
     category: "Guide",
   },
   {
@@ -46,7 +46,7 @@ const articles = [
       "Form 470 is the starting point for E-Rate competitive bidding. We break down every section, common mistakes, and how vendors can find opportunities before anyone else.",
     icon: Search,
     color: "indigo",
-    link: "/features/form-470-tracking",
+    link: "/blog/erate-form-470-guide",
     category: "Guide",
   },
   {
@@ -55,7 +55,7 @@ const articles = [
       "From missing documentation to competitive bidding violations — we analyze the most common E-Rate denial codes and show you how to prevent and resolve each one.",
     icon: AlertTriangle,
     color: "violet",
-    link: "/features/denial-analysis",
+    link: "/blog/top-erate-denial-reasons",
     category: "Analysis",
   },
   {
@@ -64,7 +64,7 @@ const articles = [
       "Category 2 budgets fund internal connections, Wi-Fi, and managed broadband services. Understand your school's C2 budget cap, five-year cycles, and how to maximize every dollar.",
     icon: DollarSign,
     color: "purple",
-    link: "/features/applicants",
+    link: "/blog/erate-category-2-budget-guide",
     category: "Guide",
   },
   {
@@ -73,7 +73,7 @@ const articles = [
       "Managing E-Rate across multiple schools requires the right tools. We compare key features every consultant needs — from portfolio management to AI-powered appeals.",
     icon: Users,
     color: "indigo",
-    link: "/features/consultants",
+    link: "/blog/erate-consultant-software-guide",
     category: "Industry",
   },
   {
@@ -82,7 +82,7 @@ const articles = [
       "Discover how E-Rate vendors use data intelligence to find Form 470 leads, track competitor SPINs, and prioritize the highest-value opportunities in their territory.",
     icon: ShoppingCart,
     color: "violet",
-    link: "/features/vendors",
+    link: "/blog/erate-vendor-form-470-strategy",
     category: "Strategy",
   },
 ];
@@ -215,9 +215,6 @@ export default function BlogPage() {
                           className={`text-xs font-semibold px-2.5 py-1 rounded-full ${colors.badge}`}
                         >
                           {article.category}
-                        </span>
-                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
-                          Coming Soon
                         </span>
                       </div>
                     </div>

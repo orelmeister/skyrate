@@ -47,11 +47,11 @@ export default function HomePage() {
           </Link>
 
           <nav className="hidden md:flex items-center gap-6 lg:gap-8">
-            <a href="#features" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">Features</a>
-            <a href="#for-applicants" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">For Applicants</a>
-            <a href="#for-consultants" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">For Consultants</a>
-            <a href="#for-vendors" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">For Vendors</a>
-            <a href="#pricing" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">Pricing</a>
+            <Link href="/features/consultants" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">For Consultants</Link>
+            <Link href="/features/vendors" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">For Vendors</Link>
+            <Link href="/features/applicants" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">For Applicants</Link>
+            <Link href="/pricing" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">Pricing</Link>
+            <Link href="/blog" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">Blog</Link>
           </nav>
 
           <div className="flex items-center gap-3">
@@ -69,11 +69,11 @@ export default function HomePage() {
         <input type="checkbox" id="mobile-menu-toggle" className="hidden peer" />
         <div className="hidden peer-checked:block md:!hidden border-t border-white/10 mt-3 pt-3 pb-1">
           <nav className="flex flex-col gap-3">
-            <a href="#features" className="text-slate-400 hover:text-white font-medium py-1">Features</a>
-            <a href="#for-applicants" className="text-slate-400 hover:text-white font-medium py-1">For Applicants</a>
-            <a href="#for-consultants" className="text-slate-400 hover:text-white font-medium py-1">For Consultants</a>
-            <a href="#for-vendors" className="text-slate-400 hover:text-white font-medium py-1">For Vendors</a>
-            <a href="#pricing" className="text-slate-400 hover:text-white font-medium py-1">Pricing</a>
+            <Link href="/features/consultants" className="text-slate-400 hover:text-white font-medium py-1">For Consultants</Link>
+            <Link href="/features/vendors" className="text-slate-400 hover:text-white font-medium py-1">For Vendors</Link>
+            <Link href="/features/applicants" className="text-slate-400 hover:text-white font-medium py-1">For Applicants</Link>
+            <Link href="/pricing" className="text-slate-400 hover:text-white font-medium py-1">Pricing</Link>
+            <Link href="/blog" className="text-slate-400 hover:text-white font-medium py-1">Blog</Link>
             <Link href="/sign-in" className="text-indigo-400 font-medium py-1 sm:hidden">Sign In</Link>
           </nav>
         </div>
@@ -238,7 +238,7 @@ export default function HomePage() {
               <Image src="/images/icons/ai.png" alt="" width={48} height={48} className="rounded-2xl mb-4" />
               <h3 className="text-xl sm:text-2xl font-semibold text-slate-900 mb-2">AI-Powered Analysis</h3>
               <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
-                Advanced AI denial analysis and automated appeal generation. Our AI understands E-Rate regulations, FCC orders, and USAC precedents to craft winning strategies for your schools.
+                Advanced AI <Link href="/features/denial-analysis" className="text-indigo-600 hover:text-indigo-700 font-medium">denial analysis</Link> and automated <Link href="/features/appeal-generator" className="text-indigo-600 hover:text-indigo-700 font-medium">appeal generation</Link>. Our AI understands E-Rate regulations, FCC orders, and USAC precedents to craft winning strategies for your schools.
               </p>
             </div>
             {/* Regular card */}
@@ -251,7 +251,7 @@ export default function HomePage() {
             <div className="light-card p-5 sm:p-6 rounded-2xl hover-lift border-l-4 border-l-purple-500">
               <Image src="/images/icons/dashboard.png" alt="" width={40} height={40} className="rounded-2xl mb-3" />
               <h3 className="text-base sm:text-lg font-semibold text-slate-900 mb-1 sm:mb-2">Portfolio Management</h3>
-              <p className="text-slate-600 text-xs sm:text-sm">Track schools, vendors, and funding across cycles in one view.</p>
+              <p className="text-slate-600 text-xs sm:text-sm">Track schools, vendors, and <Link href="/features/frn-monitoring" className="text-indigo-600 hover:text-indigo-700 font-medium">FRN status</Link> across cycles in one view.</p>
             </div>
             {/* Regular card */}
             <div className="light-card p-5 sm:p-6 rounded-2xl hover-lift border-l-4 border-l-emerald-500">
@@ -264,14 +264,14 @@ export default function HomePage() {
               <Image src="/images/icons/appeal.png" alt="" width={48} height={48} className="rounded-2xl mb-4" />
               <h3 className="text-xl sm:text-2xl font-semibold text-slate-900 mb-2">Automated Appeal Generation</h3>
               <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
-                Generate professional, USAC-compliant appeal letters in seconds. Our AI analyzes denial reasons, funding year rules, and relevant FCC orders to produce compelling appeals with an 87% success rate.
+                Generate professional, USAC-compliant appeal letters in seconds with our <Link href="/features/appeal-generator" className="text-indigo-600 hover:text-indigo-700 font-medium">AI appeal letter generator</Link>. Our AI analyzes denial reasons, funding year rules, and relevant FCC orders to produce compelling appeals with an 87% success rate.
               </p>
             </div>
             {/* Regular card */}
             <div className="light-card p-5 sm:p-6 rounded-2xl hover-lift border-l-4 border-l-teal-500">
               <Image src="/images/icons/vendor.png" alt="" width={40} height={40} className="rounded-2xl mb-3" />
               <h3 className="text-base sm:text-lg font-semibold text-slate-900 mb-1 sm:mb-2">Form 470 Tracking</h3>
-              <p className="text-slate-600 text-xs sm:text-sm">Monitor Form 470 postings and never miss a lead opportunity.</p>
+              <p className="text-slate-600 text-xs sm:text-sm">Monitor <Link href="/features/form-470-tracking" className="text-indigo-600 hover:text-indigo-700 font-medium">Form 470 postings</Link> and never miss a lead opportunity.</p>
             </div>
           </div>
         </div>
@@ -755,7 +755,7 @@ export default function HomePage() {
       {/* ════════════════════ FOOTER ════════════════════ */}
       <footer className="bg-slate-900 text-slate-400 py-10 sm:py-12 px-4 sm:px-6">
         <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-6 sm:gap-8 mb-8">
             <div className="col-span-2 md:col-span-1">
               <div className="flex items-center gap-2 mb-3 sm:mb-4">
                 <img src="/images/logos/logo-icon-transparent.png" alt="" width={28} height={28} className="rounded-lg" />
@@ -766,29 +766,40 @@ export default function HomePage() {
               </p>
             </div>
             <div>
+              <h4 className="text-white font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Features</h4>
+              <ul className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
+                <li><Link href="/features/consultants" className="hover:text-white transition">For Consultants</Link></li>
+                <li><Link href="/features/vendors" className="hover:text-white transition">For Vendors</Link></li>
+                <li><Link href="/features/applicants" className="hover:text-white transition">For Applicants</Link></li>
+                <li><Link href="/features/appeal-generator" className="hover:text-white transition">Appeal Generator</Link></li>
+                <li><Link href="/features/frn-monitoring" className="hover:text-white transition">FRN Monitoring</Link></li>
+                <li><Link href="/features/form-470-tracking" className="hover:text-white transition">Form 470 Search</Link></li>
+                <li><Link href="/features/denial-analysis" className="hover:text-white transition">Denial Analysis</Link></li>
+              </ul>
+            </div>
+            <div>
               <h4 className="text-white font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Product</h4>
               <ul className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
-                <li><a href="#features" className="hover:text-white transition">Features</a></li>
-                <li><a href="#for-applicants" className="hover:text-white transition">For Applicants</a></li>
-                <li><a href="#for-consultants" className="hover:text-white transition">For Consultants</a></li>
-                <li><a href="#for-vendors" className="hover:text-white transition">For Vendors</a></li>
-                <li><a href="#pricing" className="hover:text-white transition">Pricing</a></li>
+                <li><Link href="/pricing" className="hover:text-white transition">Pricing</Link></li>
+                <li><Link href="/sign-up" className="hover:text-white transition">Free Trial</Link></li>
+                <li><Link href="/sign-in" className="hover:text-white transition">Sign In</Link></li>
               </ul>
             </div>
             <div>
               <h4 className="text-white font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Resources</h4>
               <ul className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
+                <li><Link href="/blog" className="hover:text-white transition">Blog</Link></li>
                 <li><a href="#faq" className="hover:text-white transition">FAQ</a></li>
-                <li><a href="/docs" className="hover:text-white transition">API Documentation</a></li>
                 <li><a href="https://www.usac.org/e-rate/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">USAC E-Rate</a></li>
               </ul>
             </div>
             <div>
               <h4 className="text-white font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Company</h4>
               <ul className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
-                <li><a href="mailto:support@skyrate.ai" className="hover:text-white transition">Contact</a></li>
-                <li><a href="/privacy" className="hover:text-white transition">Privacy Policy</a></li>
-                <li><a href="/terms" className="hover:text-white transition">Terms of Service</a></li>
+                <li><Link href="/about" className="hover:text-white transition">About</Link></li>
+                <li><Link href="/contact" className="hover:text-white transition">Contact</Link></li>
+                <li><Link href="/privacy" className="hover:text-white transition">Privacy Policy</Link></li>
+                <li><Link href="/terms" className="hover:text-white transition">Terms of Service</Link></li>
               </ul>
             </div>
           </div>
