@@ -2193,6 +2193,124 @@ class ApiClient {
       body: JSON.stringify({ message }),
     });
   }
+
+  // ==================== ONBOARDING ====================
+
+  /**
+   * Discover FRNs from USAC based on user's BEN/CRN/SPIN
+   */
+  async discoverFRNs(): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/onboarding/discover-frns');
+  }
+
+  /**
+   * Save selected FRNs for monitoring
+   */
+  async selectFRNs(frnNumbers: string[]): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/onboarding/select-frns', {
+      method: 'POST',
+      body: JSON.stringify({ frn_numbers: frnNumbers }),
+    });
+  }
+
+  /**
+   * Get alert preferences
+   */
+  async getAlertPreferences(): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/onboarding/alert-preferences');
+  }
+
+  /**
+   * Update alert preferences
+   */
+  async updateAlertPreferences(prefs: {
+    status_changes?: boolean;
+    new_denials?: boolean;
+    deadline_reminders?: boolean;
+    funding_updates?: boolean;
+    form_470_matches?: boolean;
+    email_notifications?: boolean;
+    push_notifications?: boolean;
+    sms_notifications?: boolean;
+    notification_frequency?: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/onboarding/alert-preferences', {
+      method: 'PUT',
+      body: JSON.stringify(prefs),
+    });
+  }
+
+  /**
+   * Send phone verification code
+   */
+  async sendPhoneVerification(phoneNumber: string): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/onboarding/phone/send-code', {
+      method: 'POST',
+      body: JSON.stringify({ phone_number: phoneNumber }),
+    });
+  }
+
+  /**
+   * Verify phone code
+   */
+  async verifyPhoneCode(phoneNumber: string, code: string): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/onboarding/phone/verify-code', {
+      method: 'POST',
+      body: JSON.stringify({ phone_number: phoneNumber, code }),
+    });
+  }
+
+  /**
+   * Complete onboarding
+   */
+  async completeOnboarding(): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/onboarding/complete', { method: 'POST' });
+  }
+
+  /**
+   * Get onboarding status
+   */
+  async getOnboardingStatus(): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/onboarding/status');
+  }
+
+  // ==================== ADMIN BROADCAST ====================
+
+  /**
+   * Send broadcast notification to users (admin)
+   */
+  async adminBroadcast(data: {
+    user_ids?: number[];
+    channels: string[];
+    subject: string;
+    message: string;
+    role_filter?: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/admin/broadcast', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * Send SMS to a specific user (admin)
+   */
+  async sendSMSToUser(userId: number, message: string): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/users/${userId}/sms`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  }
+
+  /**
+   * Send push notification to a specific user (admin)
+   */
+  async sendPushToUser(userId: number, message: string): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/users/${userId}/push`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  }
 }
 
 // Singleton instance

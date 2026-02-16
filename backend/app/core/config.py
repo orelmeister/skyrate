@@ -106,6 +106,12 @@ class Settings(BaseSettings):
     VAPID_PUBLIC_KEY: Optional[str] = None
     VAPID_CONTACT_EMAIL: str = "alerts@skyrate.ai"
     
+    # Twilio (SMS + Phone Verification)
+    TWILIO_ACCOUNT_SID: Optional[str] = None
+    TWILIO_AUTH_TOKEN: Optional[str] = None
+    TWILIO_VERIFY_SERVICE_SID: Optional[str] = None
+    TWILIO_FROM_NUMBER: Optional[str] = None  # Twilio phone number for sending SMS
+    
     # USAC / Socrata
     SOCRATA_APP_TOKEN: Optional[str] = None
     

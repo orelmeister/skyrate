@@ -446,6 +446,170 @@ View Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/das
             email_type='deadline'
         )
 
+    def send_welcome_email(self, to_email: str, first_name: str, role: str) -> bool:
+        """Send welcome email after registration with role-specific content"""
+        
+        role_content = {
+            'consultant': {
+                'title': 'E-Rate Consultant',
+                'features': [
+                    ('Portfolio Management', 'Monitor all your schools and their FRN statuses from one dashboard'),
+                    ('AI-Powered Appeals', 'Generate professional appeal letters in seconds when FRNs are denied'),
+                    ('Deadline Alerts', 'Never miss an appeal deadline with automatic reminders'),
+                    ('Status Monitoring', 'Get notified instantly when any FRN status changes'),
+                ],
+                'cta_text': 'Set Up Your Portfolio',
+            },
+            'vendor': {
+                'title': 'E-Rate Vendor',
+                'features': [
+                    ('Form 470 Lead Discovery', 'Find new opportunities matching your products and services'),
+                    ('SPIN Status Tracking', 'Monitor your SPIN status and applications'),
+                    ('Competitor Analysis', 'Stay ahead with insights on competitor activity'),
+                    ('Market Intelligence', 'Track E-Rate spending trends in your service areas'),
+                ],
+                'cta_text': 'Explore Your Leads',
+            },
+            'applicant': {
+                'title': 'E-Rate Applicant',
+                'features': [
+                    ('FRN Monitoring', 'Track all your funding requests in real-time'),
+                    ('Denial Analysis', 'Understand why FRNs are denied with AI-powered analysis'),
+                    ('Auto-Generated Appeals', 'Get AI-drafted appeal letters ready for review'),
+                    ('Disbursement Tracking', 'Know exactly when funding is disbursed'),
+                ],
+                'cta_text': 'View Your FRNs',
+            },
+        }
+        
+        content = role_content.get(role, role_content['applicant'])
+        
+        features_html = ''
+        for feat_name, feat_desc in content['features']:
+            features_html += f'''
+            <tr>
+              <td style="padding: 12px 16px; border-bottom: 1px solid #f1f5f9;">
+                <strong style="color: #1e293b; font-size: 14px;">{feat_name}</strong>
+                <div style="color: #64748b; font-size: 13px; margin-top: 4px;">{feat_desc}</div>
+              </td>
+            </tr>'''
+        
+        html_content = f'''
+        <!DOCTYPE html>
+        <html>
+        <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+          <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+            <!-- Header -->
+            <div style="text-align: center; margin-bottom: 32px;">
+              <div style="display: inline-block; background: linear-gradient(135deg, #7c3aed, #4f46e5); padding: 12px 24px; border-radius: 12px;">
+                <span style="color: white; font-size: 24px; font-weight: bold;">SkyRate<span style="color: #c4b5fd;">.AI</span></span>
+              </div>
+            </div>
+            
+            <!-- Welcome Card -->
+            <div style="background: white; border-radius: 16px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+              <h1 style="color: #1e293b; font-size: 24px; margin: 0 0 8px 0;">Welcome to SkyRate AI, {first_name}! \U0001f389</h1>
+              <p style="color: #64748b; font-size: 15px; margin: 0 0 24px 0;">
+                Your account is set up as an <strong style="color: #7c3aed;">{content['title']}</strong>. 
+                Here\'s what you can do:
+              </p>
+              
+              <!-- Features -->
+              <table style="width: 100%; border-collapse: collapse; background: #f8fafc; border-radius: 12px; overflow: hidden; margin-bottom: 24px;">
+                {features_html}
+              </table>
+              
+              <!-- CTA Button -->
+              <div style="text-align: center; margin: 24px 0;">
+                <a href="{settings.FRONTEND_URL}/onboarding" 
+                   style="display: inline-block; background: linear-gradient(135deg, #7c3aed, #4f46e5); color: white; padding: 14px 32px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 15px;">
+                  {content['cta_text']} \u2192
+                </a>
+              </div>
+              
+              <!-- What's Next -->
+              <div style="background: #faf5ff; border-radius: 10px; padding: 16px; margin-top: 16px;">
+                <p style="color: #6b21a8; font-size: 14px; font-weight: 600; margin: 0 0 8px 0;">What happens next?</p>
+                <ol style="color: #7e22ce; font-size: 13px; margin: 0; padding-left: 20px; line-height: 1.8;">
+                  <li>We\'ll pull your E-Rate data from USAC</li>
+                  <li>Choose your alert preferences</li>
+                  <li>Start monitoring your FRNs automatically</li>
+                </ol>
+              </div>
+            </div>
+            
+            <!-- Trial Info -->
+            <div style="text-align: center; margin-top: 24px; padding: 16px;">
+              <p style="color: #94a3b8; font-size: 13px; margin: 0;">
+                You have a <strong>14-day free trial</strong>. No charges until your trial ends.
+              </p>
+            </div>
+            
+            <!-- Footer -->
+            <div style="text-align: center; margin-top: 16px; padding: 16px; border-top: 1px solid #e2e8f0;">
+              <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+                SkyRate AI \u00b7 E-Rate Funding Intelligence<br>
+                <a href="{settings.FRONTEND_URL}" style="color: #7c3aed;">skyrate.ai</a> \u00b7 
+                <a href="mailto:support@skyrate.ai" style="color: #7c3aed;">support@skyrate.ai</a>
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
+        '''
+        
+        text_content = f"""Welcome to SkyRate AI, {first_name}!
+
+Your account is set up as an {content['title']}.
+
+Get started: {settings.FRONTEND_URL}/onboarding
+
+What's next:
+1. We'll pull your E-Rate data from USAC
+2. Choose your alert preferences
+3. Start monitoring your FRNs automatically
+
+You have a 14-day free trial. No charges until your trial ends.
+
+---
+SkyRate AI - E-Rate Funding Intelligence
+https://skyrate.ai | support@skyrate.ai
+"""
+        
+        return self.send_email(
+            to_email=to_email,
+            subject=f"Welcome to SkyRate AI, {first_name}! \U0001f680",
+            html_content=html_content,
+            text_content=text_content,
+            email_type='welcome'
+        )
+
+    def send_admin_new_user_notification(self, user_email: str, user_name: str, role: str) -> bool:
+        """Notify admin when a new user signs up"""
+        html_content = f'''
+        <div style="font-family: sans-serif; padding: 20px; background: #f8fafc;">
+          <div style="max-width: 500px; margin: 0 auto; background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+            <h2 style="color: #1e293b; margin: 0 0 16px 0;">\U0001f195 New User Registration</h2>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr><td style="padding: 8px 0; color: #64748b;">Name:</td><td style="padding: 8px 0; color: #1e293b; font-weight: 600;">{user_name}</td></tr>
+              <tr><td style="padding: 8px 0; color: #64748b;">Email:</td><td style="padding: 8px 0; color: #1e293b;">{user_email}</td></tr>
+              <tr><td style="padding: 8px 0; color: #64748b;">Role:</td><td style="padding: 8px 0; color: #7c3aed; font-weight: 600;">{role.title()}</td></tr>
+            </table>
+            <div style="margin-top: 16px;">
+              <a href="{settings.FRONTEND_URL}/admin" style="display: inline-block; background: #7c3aed; color: white; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-size: 14px;">View in Admin Dashboard</a>
+            </div>
+          </div>
+        </div>
+        '''
+        
+        return self.send_email(
+            to_email='admin@skyrate.ai',
+            subject=f"New User: {user_name} ({role.title()})",
+            html_content=html_content,
+            text_content=f"New user registration: {user_name} ({user_email}) - {role.title()}",
+            email_type='alert'
+        )
+
 
 # Convenience function
 def get_email_service() -> EmailService:

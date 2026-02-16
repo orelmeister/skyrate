@@ -140,8 +140,11 @@ export default function SubscribePage() {
       try {
         const response = await api.getPaymentStatus();
         if (response.success && response.data && !response.data.requires_payment_setup) {
-          // User already has payment set up, redirect to dashboard
-          if (user?.role === "vendor") {
+          // User already has payment set up, check if onboarding completed
+          const onboardingRes = await api.getOnboardingStatus().catch(() => null);
+          if (onboardingRes?.success && !onboardingRes.data?.onboarding_completed) {
+            router.push("/onboarding");
+          } else if (user?.role === "vendor") {
             router.push("/vendor");
           } else {
             router.push("/consultant");
@@ -166,9 +169,7 @@ export default function SubscribePage() {
 
     try {
       const baseUrl = window.location.origin;
-      const successUrl = user?.role === "vendor" 
-        ? `${baseUrl}/vendor` 
-        : `${baseUrl}/consultant`;
+      const successUrl = `${baseUrl}/onboarding`;
       const cancelUrl = `${baseUrl}/subscribe`;
 
       const response = await api.createCheckoutSession({
@@ -213,7 +214,7 @@ export default function SubscribePage() {
           if (response.data?.redirect_url) {
             router.push(response.data.redirect_url);
           } else {
-            router.push(user?.role === "vendor" ? "/vendor" : "/consultant");
+            router.push("/onboarding");
           }
         }, 1500);
       } else {

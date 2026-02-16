@@ -59,10 +59,16 @@ class AlertConfig(Base):
     # Notification preferences
     email_notifications = Column(Boolean, default=True)
     in_app_notifications = Column(Boolean, default=True)
+    push_notifications = Column(Boolean, default=True)
+    sms_notifications = Column(Boolean, default=False)
     daily_digest = Column(Boolean, default=False)  # Send daily summary email
+    
+    # Notification frequency: 'realtime', 'every_6_hours', 'daily', 'weekly'
+    notification_frequency = Column(String(20), default='realtime')
     
     # Email settings
     notification_email = Column(String(255))  # Override email for alerts
+    notification_phone = Column(String(50))  # Override phone for SMS alerts
     
     # Filters (JSON for flexibility)
     # For consultants: filter by BEN list
@@ -91,8 +97,12 @@ class AlertConfig(Base):
             "min_alert_amount": self.min_alert_amount,
             "email_notifications": self.email_notifications,
             "in_app_notifications": self.in_app_notifications,
+            "push_notifications": self.push_notifications,
+            "sms_notifications": self.sms_notifications,
             "daily_digest": self.daily_digest,
+            "notification_frequency": self.notification_frequency,
             "notification_email": self.notification_email,
+            "notification_phone": self.notification_phone,
             "alert_filters": self.alert_filters,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,

@@ -32,6 +32,8 @@ class User(Base):
     last_name = Column(String(100))
     company_name = Column(String(255))
     phone = Column(String(50))
+    phone_verified = Column(Boolean, default=False)
+    onboarding_completed = Column(Boolean, default=False)
     
     # Status
     is_active = Column(Boolean, default=True)

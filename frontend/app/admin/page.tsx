@@ -678,12 +678,156 @@ function CommunicationsTab({
   emailMessage: string; setEmailMessage: (s: string) => void;
   sending: boolean; onSend: () => void; loadUsers: () => void;
 }) {
+  const [broadcastSubject, setBroadcastSubject] = useState("");
+  const [broadcastMessage, setBroadcastMessage] = useState("");
+  const [broadcastChannels, setBroadcastChannels] = useState<string[]>(["email"]);
+  const [broadcastRole, setBroadcastRole] = useState<string>("");
+  const [broadcastSending, setBroadcastSending] = useState(false);
+  const [broadcastResult, setBroadcastResult] = useState<string>("");
+  const [smsMessage, setSmsMessage] = useState("");
+  const [smsSending, setSmsSending] = useState(false);
+  const [smsResult, setSmsResult] = useState<string>("");
+
   useEffect(() => {
     if (users.length === 0) loadUsers();
   }, []);
 
+  const toggleChannel = (ch: string) => {
+    setBroadcastChannels((prev) =>
+      prev.includes(ch) ? prev.filter((c) => c !== ch) : [...prev, ch]
+    );
+  };
+
+  const handleBroadcast = async () => {
+    if (!broadcastSubject.trim() || !broadcastMessage.trim() || broadcastChannels.length === 0) return;
+    setBroadcastSending(true);
+    setBroadcastResult("");
+    try {
+      const res = await api.adminBroadcast({
+        channels: broadcastChannels,
+        subject: broadcastSubject,
+        message: broadcastMessage,
+        role_filter: broadcastRole || undefined,
+      });
+      if (res.success) {
+        const r = res.data?.results;
+        setBroadcastResult(
+          `Sent to ${r?.total_users || 0} users (Email: ${r?.email || 0}, Push: ${r?.push || 0}, SMS: ${r?.sms || 0}, In-app: ${r?.in_app || 0})`
+        );
+        setBroadcastSubject("");
+        setBroadcastMessage("");
+      } else {
+        setBroadcastResult(`Error: ${res.error}`);
+      }
+    } catch (err: any) {
+      setBroadcastResult(`Error: ${err.message}`);
+    } finally {
+      setBroadcastSending(false);
+    }
+  };
+
+  const handleSendSMS = async () => {
+    if (!emailUserId || !smsMessage.trim()) return;
+    setSmsSending(true);
+    setSmsResult("");
+    try {
+      const res = await api.sendSMSToUser(emailUserId, smsMessage);
+      setSmsResult(res.success ? "SMS sent successfully" : `Error: ${res.error}`);
+      if (res.success) setSmsMessage("");
+    } catch (err: any) {
+      setSmsResult(`Error: ${err.message}`);
+    } finally {
+      setSmsSending(false);
+    }
+  };
+
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
+    <div className="max-w-2xl mx-auto space-y-6">
+      {/* Broadcast Section */}
+      <div className="bg-white rounded-xl shadow-sm border p-6">
+        <h2 className="text-lg font-semibold text-slate-900 mb-1">Broadcast Notification</h2>
+        <p className="text-sm text-slate-500 mb-4">Send a message to all users or filter by role</p>
+
+        <div className="space-y-4">
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1">Filter by Role</label>
+              <select
+                value={broadcastRole}
+                onChange={(e) => setBroadcastRole(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="">All users</option>
+                <option value="consultant">Consultants</option>
+                <option value="vendor">Vendors</option>
+                <option value="applicant">Applicants</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Channels</label>
+              <div className="flex gap-1.5">
+                {[
+                  { key: "email", label: "Email", emoji: "📧" },
+                  { key: "push", label: "Push", emoji: "🔔" },
+                  { key: "sms", label: "SMS", emoji: "📱" },
+                  { key: "in_app", label: "App", emoji: "📌" },
+                ].map((ch) => (
+                  <button
+                    key={ch.key}
+                    onClick={() => toggleChannel(ch.key)}
+                    title={ch.label}
+                    className={`px-2.5 py-1.5 rounded-lg text-sm border transition-colors ${
+                      broadcastChannels.includes(ch.key)
+                        ? "border-purple-300 bg-purple-50 text-purple-700"
+                        : "border-slate-200 text-slate-400 hover:border-slate-300"
+                    }`}
+                  >
+                    {ch.emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Subject</label>
+            <input
+              type="text"
+              value={broadcastSubject}
+              onChange={(e) => setBroadcastSubject(e.target.value)}
+              placeholder="Notification subject..."
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Message</label>
+            <textarea
+              value={broadcastMessage}
+              onChange={(e) => setBroadcastMessage(e.target.value)}
+              placeholder="Write your broadcast message..."
+              className="w-full px-3 py-2 border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
+              rows={5}
+            />
+          </div>
+
+          {broadcastResult && (
+            <p className={`text-sm ${broadcastResult.startsWith("Error") ? "text-red-600" : "text-green-600"}`}>
+              {broadcastResult}
+            </p>
+          )}
+
+          <button
+            onClick={handleBroadcast}
+            disabled={broadcastSending || !broadcastSubject.trim() || !broadcastMessage.trim() || broadcastChannels.length === 0}
+            className="w-full px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg font-medium hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 transition-all"
+          >
+            {broadcastSending ? "Sending Broadcast..." : "Send Broadcast"}
+          </button>
+        </div>
+      </div>
+
+      {/* Direct Email */}
       <div className="bg-white rounded-xl shadow-sm border p-6">
         <h2 className="text-lg font-semibold text-slate-900 mb-4">Send Email to User</h2>
 
@@ -720,7 +864,7 @@ function CommunicationsTab({
               onChange={(e) => setEmailMessage(e.target.value)}
               placeholder="Write your message (HTML supported)..."
               className="w-full px-3 py-2 border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
-              rows={8}
+              rows={6}
             />
           </div>
 
@@ -730,6 +874,55 @@ function CommunicationsTab({
             className="w-full px-4 py-2.5 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50 transition-colors"
           >
             {sending ? "Sending..." : "Send Email"}
+          </button>
+        </div>
+      </div>
+
+      {/* Direct SMS */}
+      <div className="bg-white rounded-xl shadow-sm border p-6">
+        <h2 className="text-lg font-semibold text-slate-900 mb-1">Send SMS to User</h2>
+        <p className="text-sm text-slate-500 mb-4">Send an SMS to a user with a verified phone number</p>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Recipient</label>
+            <select
+              value={emailUserId || ""}
+              onChange={(e) => setEmailUserId(e.target.value ? Number(e.target.value) : null)}
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="">Select a user...</option>
+              {users.filter((u) => u.phone).map((u) => (
+                <option key={u.id} value={u.id}>{u.email} — {u.phone} ({u.role})</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Message</label>
+            <textarea
+              value={smsMessage}
+              onChange={(e) => setSmsMessage(e.target.value)}
+              placeholder="Write your SMS message..."
+              className="w-full px-3 py-2 border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
+              rows={3}
+              maxLength={160}
+            />
+            <p className="text-xs text-slate-400 mt-1 text-right">{smsMessage.length}/160 characters</p>
+          </div>
+
+          {smsResult && (
+            <p className={`text-sm ${smsResult.startsWith("Error") ? "text-red-600" : "text-green-600"}`}>
+              {smsResult}
+            </p>
+          )}
+
+          <button
+            onClick={handleSendSMS}
+            disabled={smsSending || !emailUserId || !smsMessage.trim()}
+            className="w-full px-4 py-2.5 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50 transition-colors"
+          >
+            {smsSending ? "Sending..." : "Send SMS"}
           </button>
         </div>
       </div>

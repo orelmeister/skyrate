@@ -4,7 +4,7 @@ Handles user management, subscriptions oversight, analytics,
 support ticket management, FRN monitoring, and user communications
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from pydantic import BaseModel, EmailStr
@@ -12,6 +12,7 @@ from typing import Optional, List
 from datetime import datetime, timedelta
 
 from ...core.database import get_db
+from ...core.config import get_settings
 from ...core.security import get_current_user, require_role, hash_password
 from ...models.user import User, UserRole
 from ...models.subscription import Subscription, SubscriptionStatus
@@ -814,3 +815,144 @@ async def get_admin_dashboard(
             "generated_at": now.isoformat(),
         }
     }
+
+
+# ==================== BROADCAST / NOTIFICATIONS ====================
+
+settings = get_settings()
+
+class BroadcastRequest(BaseModel):
+    """Send a message to one or multiple users via multiple channels"""
+    user_ids: Optional[List[int]] = None  # None = all active users
+    channels: List[str] = ["email"]  # email, sms, push, in_app
+    subject: str
+    message: str
+    role_filter: Optional[str] = None  # consultant, vendor, applicant
+
+class SMSRequest(BaseModel):
+    message: str
+
+
+@router.post("/broadcast")
+async def admin_broadcast(
+    data: BroadcastRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db)
+):
+    """
+    Send a broadcast message to users via selected channels.
+    Channels: email, sms, push, in_app
+    """
+    from ...services.email_service import get_email_service
+    from ...services.sms_service import get_sms_service
+    from ...services.push_notification_service import PushNotificationService
+
+    query = db.query(User).filter(User.is_active == True)
+    if data.user_ids:
+        query = query.filter(User.id.in_(data.user_ids))
+    if data.role_filter:
+        query = query.filter(User.role == data.role_filter)
+    query = query.filter(User.role != "admin")
+    users = query.all()
+
+    if not users:
+        raise HTTPException(status_code=404, detail="No users found matching criteria")
+
+    email_svc = get_email_service()
+    sms_svc = get_sms_service()
+    push_svc = PushNotificationService(db)
+
+    results = {"email": 0, "sms": 0, "push": 0, "in_app": 0, "total_users": len(users)}
+
+    for user in users:
+        if "email" in data.channels:
+            html = f'''
+            <div style="font-family: sans-serif; padding: 20px; background: #f8fafc;">
+              <div style="max-width: 560px; margin: 0 auto; background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                <div style="text-align: center; margin-bottom: 16px;">
+                  <span style="font-size: 20px; font-weight: bold; color: #7c3aed;">SkyRate.AI</span>
+                </div>
+                <h2 style="color: #1e293b; margin: 0 0 12px 0;">{data.subject}</h2>
+                <div style="color: #475569; font-size: 14px; line-height: 1.7;">
+                  {data.message.replace(chr(10), "<br>")}
+                </div>
+                <div style="margin-top: 20px; text-align: center;">
+                  <a href="{settings.FRONTEND_URL}" style="display: inline-block; background: #7c3aed; color: white; padding: 10px 24px; border-radius: 8px; text-decoration: none;">Go to SkyRate AI</a>
+                </div>
+              </div>
+            </div>
+            '''
+            background_tasks.add_task(email_svc.send_email, user.email, data.subject, html, data.message, "alert")
+            results["email"] += 1
+
+        if "sms" in data.channels and user.phone and getattr(user, 'phone_verified', False):
+            background_tasks.add_task(sms_svc.send_admin_broadcast_sms, user.phone, f"{data.subject}: {data.message}")
+            results["sms"] += 1
+
+        if "push" in data.channels:
+            background_tasks.add_task(push_svc.send_push_to_user, user.id, data.subject, data.message[:200], settings.FRONTEND_URL)
+            results["push"] += 1
+
+        if "in_app" in data.channels:
+            alert = Alert(
+                user_id=user.id,
+                alert_type="admin_broadcast",
+                priority="MEDIUM",
+                title=data.subject,
+                message=data.message,
+            )
+            db.add(alert)
+            results["in_app"] += 1
+
+    if "in_app" in data.channels:
+        db.commit()
+
+    return {
+        "success": True,
+        "results": results,
+        "message": f"Broadcast sent to {len(users)} users"
+    }
+
+
+@router.post("/users/{user_id}/sms")
+async def send_sms_to_user(
+    user_id: int,
+    data: SMSRequest,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db)
+):
+    """Send an SMS to a specific user (must have verified phone)"""
+    from ...services.sms_service import get_sms_service
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not user.phone or not getattr(user, 'phone_verified', False):
+        raise HTTPException(status_code=400, detail=f"User {user.email} doesn't have a verified phone")
+
+    sms_svc = get_sms_service()
+    if not sms_svc.is_configured:
+        raise HTTPException(status_code=503, detail="SMS service not configured")
+
+    success = sms_svc.send_admin_broadcast_sms(user.phone, data.message)
+    return {"success": success, "message": f"SMS {'sent' if success else 'failed'} to {user.phone}"}
+
+
+@router.post("/users/{user_id}/push")
+async def send_push_to_user(
+    user_id: int,
+    data: SMSRequest,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db)
+):
+    """Send a push notification to a specific user"""
+    from ...services.push_notification_service import PushNotificationService
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    push_svc = PushNotificationService(db)
+    result = push_svc.send_push_to_user(user.id, "SkyRate.AI", data.message, settings.FRONTEND_URL)
+    return {"success": True, "message": f"Push notification sent to user {user.email}", "result": str(result)}
