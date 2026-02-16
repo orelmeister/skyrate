@@ -1857,20 +1857,6 @@ class ApiClient {
     return this.request('/api/v1/admin/stats');
   }
 
-  async getAdminUsers(filters: {
-    role?: string;
-    status?: string;
-    skip?: number;
-    limit?: number;
-  }): Promise<ApiResponse<{ users: any[] }>> {
-    const params = new URLSearchParams();
-    if (filters.role) params.set('role', filters.role);
-    if (filters.status) params.set('status', filters.status);
-    if (filters.skip) params.set('skip', String(filters.skip));
-    if (filters.limit) params.set('limit', String(filters.limit));
-    return this.request(`/api/v1/admin/users?${params.toString()}`);
-  }
-
   async updateUserStatus(userId: string, isActive: boolean): Promise<ApiResponse<any>> {
     return this.request(`/api/v1/admin/users/${userId}/status`, {
       method: 'PATCH',
