@@ -84,9 +84,19 @@ export default function PrivacyPage() {
 
           <h2>4. SMS/Text Messaging</h2>
           <p>
-            If you opt in to SMS notifications during onboarding or in your account settings, we will send
-            text messages to the phone number you provide. These messages include:
+            If you opt in to SMS notifications during onboarding or in your account settings, you consent
+            to receive text messages from SkyRate AI at the phone number you provide.
           </p>
+
+          <h3>4.1 Opt-In</h3>
+          <p>
+            You may opt in to SMS notifications by completing the phone verification step during
+            onboarding on our website, enabling SMS alerts in your account settings, or by texting the
+            keyword <strong>START</strong> to our messaging number. By opting in, you agree to receive the
+            message types described below.
+          </p>
+
+          <h3>4.2 Message Types</h3>
           <ul>
             <li>Phone number verification codes</li>
             <li>FRN status change alerts</li>
@@ -94,14 +104,39 @@ export default function PrivacyPage() {
             <li>Appeal deadline reminders</li>
             <li>Important account notifications</li>
           </ul>
+
+          <h3>4.3 Message Frequency &amp; Rates</h3>
           <p>
             <strong>Message frequency varies</strong> based on your alert preferences (real-time, every 6 hours, daily,
-            or weekly). Message and data rates may apply. You can opt out of SMS at any time by replying
-            STOP to any message, or by disabling SMS in your account settings. Reply HELP for assistance.
+            or weekly). Message and data rates may apply depending on your mobile carrier and plan.
+            SMS consent is not required as a condition of purchasing the Service.
           </p>
+
+          <h3>4.4 Opt-Out &amp; Help Keywords</h3>
+          <p>
+            You can manage SMS notifications with these keywords:
+          </p>
+          <ul>
+            <li><strong>STOP</strong> — Reply STOP to any message to unsubscribe from all SMS notifications</li>
+            <li><strong>START</strong> — Text START to re-subscribe to SMS notifications</li>
+            <li><strong>HELP</strong> — Reply HELP for assistance. You will receive a message with support contact information</li>
+          </ul>
+          <p>
+            You may also disable SMS in your <a href="https://skyrate.ai/settings">account settings</a> at
+            any time.
+          </p>
+
+          <h3>4.5 SMS Data Usage</h3>
           <p>
             We will not use your phone number for marketing purposes. SMS is used solely for account
-            verification and the alert notifications you have opted into.
+            verification and the alert notifications you have opted into. We do not share your phone number
+            with third parties for their marketing purposes.
+          </p>
+
+          <h3>4.6 Carrier Disclaimer</h3>
+          <p>
+            Supported carriers include but are not limited to AT&amp;T, T-Mobile, Verizon, and all major
+            US carriers. Carriers are not liable for delayed or undelivered messages.
           </p>
 
           <h2>5. Information Sharing</h2>
