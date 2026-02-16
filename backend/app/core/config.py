@@ -85,13 +85,21 @@ class Settings(BaseSettings):
     STRIPE_VENDOR_YEARLY_PRICE_ID: Optional[str] = None
     
     # Email / SMTP
-    GMAIL_USER: Optional[str] = None
-    GMAIL_APP_PASSWORD: Optional[str] = None
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
     SMTP_USER: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
-    EMAIL_FROM: Optional[str] = None
+    FROM_EMAIL: str = "alerts@skyrate.ai"
+    FROM_NAME: str = "SkyRate AI"
+    FRONTEND_URL: str = "https://skyrate.ai"
+    
+    # Email sender aliases (all route through SMTP_USER)
+    EMAIL_ALERTS: str = "alerts@skyrate.ai"
+    EMAIL_NOREPLY: str = "noreply@skyrate.ai"
+    EMAIL_BILLING: str = "billing@skyrate.ai"
+    EMAIL_WELCOME: str = "welcome@skyrate.ai"
+    EMAIL_SUPPORT: str = "support@skyrate.ai"
+    EMAIL_NEWS: str = "news@skyrate.ai"
     
     # Web Push (VAPID)
     VAPID_PRIVATE_KEY: Optional[str] = None

@@ -17,15 +17,28 @@ logger = logging.getLogger(__name__)
 
 
 class EmailService:
-    """Service for sending email notifications"""
+    """Service for sending email notifications via Google Workspace"""
+    
+    # Sender routing by email type
+    SENDER_MAP = {
+        'alert': ('alerts@skyrate.ai', 'SkyRate AI Alerts'),
+        'digest': ('alerts@skyrate.ai', 'SkyRate AI Alerts'),
+        'weekly': ('alerts@skyrate.ai', 'SkyRate AI Alerts'),
+        'deadline': ('alerts@skyrate.ai', 'SkyRate AI Alerts'),
+        'welcome': ('welcome@skyrate.ai', 'SkyRate AI'),
+        'billing': ('billing@skyrate.ai', 'SkyRate AI Billing'),
+        'noreply': ('noreply@skyrate.ai', 'SkyRate AI'),
+        'support': ('support@skyrate.ai', 'SkyRate AI Support'),
+        'news': ('news@skyrate.ai', 'SkyRate AI'),
+    }
     
     def __init__(self):
-        self.smtp_host = getattr(settings, 'SMTP_HOST', 'smtp.gmail.com')
-        self.smtp_port = getattr(settings, 'SMTP_PORT', 587)
-        self.smtp_user = getattr(settings, 'SMTP_USER', None)
-        self.smtp_password = getattr(settings, 'SMTP_PASSWORD', None)
-        self.from_email = getattr(settings, 'FROM_EMAIL', 'alerts@skyrate.io')
-        self.from_name = getattr(settings, 'FROM_NAME', 'Skyrate Alerts')
+        self.smtp_host = settings.SMTP_HOST
+        self.smtp_port = settings.SMTP_PORT
+        self.smtp_user = settings.SMTP_USER
+        self.smtp_password = settings.SMTP_PASSWORD
+        self.from_email = settings.FROM_EMAIL
+        self.from_name = settings.FROM_NAME
     
     def _get_smtp_connection(self):
         """Create SMTP connection"""
@@ -40,14 +53,20 @@ class EmailService:
         to_email: str,
         subject: str,
         html_content: str,
-        text_content: str = None
+        text_content: str = None,
+        email_type: str = 'alert'
     ) -> bool:
-        """Send an email"""
+        """Send an email using the appropriate sender alias"""
         try:
+            from_email, from_name = self.SENDER_MAP.get(
+                email_type, (self.from_email, self.from_name)
+            )
+            
             msg = MIMEMultipart('alternative')
             msg['Subject'] = subject
-            msg['From'] = f"{self.from_name} <{self.from_email}>"
+            msg['From'] = f"{from_name} <{from_email}>"
             msg['To'] = to_email
+            msg['Reply-To'] = f"SkyRate AI Support <support@skyrate.ai>"
             
             # Plain text version
             if text_content:
@@ -61,10 +80,10 @@ class EmailService:
             # Send
             if self.smtp_user:  # Only send if configured
                 with self._get_smtp_connection() as server:
-                    server.sendmail(self.from_email, to_email, msg.as_string())
-                logger.info(f"Email sent to {to_email}: {subject}")
+                    server.sendmail(from_email, to_email, msg.as_string())
+                logger.info(f"Email sent to {to_email} from {from_email}: {subject}")
             else:
-                logger.info(f"Email would be sent to {to_email}: {subject} (SMTP not configured)")
+                logger.info(f"Email would be sent to {to_email} from {from_email}: {subject} (SMTP not configured)")
             
             return True
             
@@ -102,7 +121,7 @@ class EmailService:
         <body>
             <div class="container">
                 <div class="header">
-                    <h1 style="margin: 0; font-size: 24px;">🔔 Skyrate Alert</h1>
+                    <h1 style="margin: 0; font-size: 24px;">\ud83d\udd14 SkyRate AI Alert</h1>
                 </div>
                 <div class="content">
                     <div class="alert-box">
@@ -121,7 +140,7 @@ class EmailService:
                 <div class="footer">
                     <p>You're receiving this because you have email notifications enabled.</p>
                     <p><a href="{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/settings/notifications">Manage notification preferences</a></p>
-                    <p>© {datetime.now().year} Skyrate. All rights reserved.</p>
+                    <p>\u00a9 {datetime.now().year} SkyRate AI. All rights reserved.</p>
                 </div>
             </div>
         </body>
@@ -129,7 +148,7 @@ class EmailService:
         """
         
         text_content = f"""
-Skyrate Alert
+SkyRate AI Alert
 
 {alert.title}
 
@@ -146,9 +165,10 @@ To manage your notification preferences, visit: {getattr(settings, 'FRONTEND_URL
         
         return self.send_email(
             to_email=to_email,
-            subject=f"[Skyrate] {alert.title}",
+            subject=f"[SkyRate AI] {alert.title}",
             html_content=html_content,
-            text_content=text_content
+            text_content=text_content,
+            email_type='alert'
         )
     
     def send_digest_email(
@@ -225,7 +245,7 @@ To manage your notification preferences, visit: {getattr(settings, 'FRONTEND_URL
                 <div class="footer">
                     <p>You're receiving this daily digest because you opted in.</p>
                     <p><a href="{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/settings/notifications">Manage notification preferences</a></p>
-                    <p>© {datetime.now().year} Skyrate. All rights reserved.</p>
+                    <p>\u00a9 {datetime.now().year} SkyRate AI. All rights reserved.</p>
                 </div>
             </div>
         </body>
@@ -249,9 +269,10 @@ View all in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000
         
         return self.send_email(
             to_email=to_email,
-            subject=f"[Skyrate] Daily Digest - {len(alerts)} alerts",
+            subject=f"[SkyRate AI] Daily Digest - {len(alerts)} alerts",
             html_content=html_content,
-            text_content=text_content
+            text_content=text_content,
+            email_type='digest'
         )
     
     def send_weekly_summary_email(
@@ -330,7 +351,7 @@ View all in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000
                 <div class="footer">
                     <p>You're receiving this weekly summary because you opted in.</p>
                     <p><a href="{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/settings/notifications">Manage notification preferences</a></p>
-                    <p>© {datetime.now().year} Skyrate. All rights reserved.</p>
+                    <p>\u00a9 {datetime.now().year} SkyRate AI. All rights reserved.</p>
                 </div>
             </div>
         </body>
@@ -354,9 +375,10 @@ View Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/das
         
         return self.send_email(
             to_email=to_email,
-            subject=f"[Skyrate] Weekly Summary - {summary.get('total_alerts', 0)} alerts this week",
+            subject=f"[SkyRate AI] Weekly Summary - {summary.get('total_alerts', 0)} alerts this week",
             html_content=html_content,
-            text_content=text_content
+            text_content=text_content,
+            email_type='weekly'
         )
     
     def send_appeal_deadline_reminder(
@@ -409,7 +431,7 @@ View Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/das
                     </a>
                 </div>
                 <div class="footer">
-                    <p>© {datetime.now().year} Skyrate. All rights reserved.</p>
+                    <p>\u00a9 {datetime.now().year} SkyRate AI. All rights reserved.</p>
                 </div>
             </div>
         </body>
@@ -418,9 +440,10 @@ View Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/das
         
         return self.send_email(
             to_email=to_email,
-            subject=f"⚠️ [Skyrate] Appeal Deadline: {days_remaining} days left for FRN {frn}",
+            subject=f"\u26a0\ufe0f [SkyRate AI] Appeal Deadline: {days_remaining} days left for FRN {frn}",
             html_content=html_content,
-            text_content=f"Appeal Deadline Reminder\n\nFRN {frn} ({school_name})\n\n{days_remaining} days remaining\n\nReview your appeal: {appeal_url}"
+            text_content=f"Appeal Deadline Reminder\n\nFRN {frn} ({school_name})\n\n{days_remaining} days remaining\n\nReview your appeal: {appeal_url}",
+            email_type='deadline'
         )
 
 
