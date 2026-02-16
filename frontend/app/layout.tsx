@@ -71,6 +71,40 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} ${montserrat.variable}`}>
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "SoftwareApplication",
+              "name": "SkyRate AI",
+              "applicationCategory": "BusinessApplication",
+              "operatingSystem": "Web",
+              "url": "https://skyrate.ai",
+              "description": "AI-powered E-Rate funding intelligence platform for consultants, vendors, and school applicants.",
+              "offers": {
+                "@type": "AggregateOffer",
+                "lowPrice": "199",
+                "highPrice": "300",
+                "priceCurrency": "USD",
+                "offerCount": "3"
+              },
+              "provider": {
+                "@type": "Organization",
+                "name": "SkyRate AI",
+                "url": "https://skyrate.ai",
+                "logo": "https://skyrate.ai/images/logos/logo-icon-transparent.png",
+                "contactPoint": {
+                  "@type": "ContactPoint",
+                  "email": "support@skyrate.ai",
+                  "contactType": "customer support"
+                }
+              }
+            }),
+          }}
+        />
+      </head>
       <body className={`${inter.className} antialiased bg-slate-50 text-slate-900`}>
         <ServiceWorkerRegistrar />
         {children}

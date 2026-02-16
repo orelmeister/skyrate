@@ -1,0 +1,16 @@
+# SkyRate AI - robots.txt
+# https://skyrate.ai
+
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /consultant
+Disallow: /vendor
+Disallow: /applicant
+Disallow: /onboarding
+Disallow: /settings/
+Disallow: /api/
+
+# Sitemap
+Sitemap: https://skyrate.ai/sitemap.xml
