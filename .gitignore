@@ -87,3 +87,6 @@ tmp/
 temp/
 *.tmp
 *.temp
+
+# Credentials / sensitive docs
+test-credentials.txt
