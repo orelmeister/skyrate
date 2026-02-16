@@ -183,3 +183,45 @@ export function detectPlatform(): 'ios' | 'android' | 'desktop' | 'unknown' {
   if (/Windows|Mac|Linux/.test(ua) && !/Mobile/.test(ua)) return 'desktop';
   return 'unknown';
 }
+
+/**
+ * Detect specific browser for accurate install instructions
+ */
+export type BrowserType = 'safari' | 'chrome' | 'firefox' | 'edge' | 'samsung' | 'opera' | 'unknown';
+
+export function detectBrowser(): BrowserType {
+  const ua = navigator.userAgent;
+
+  // Order matters — check more specific strings first
+  // Edge (Chromium-based) includes "Edg/" in UA
+  if (/Edg\//i.test(ua)) return 'edge';
+  // Opera includes "OPR/" or "Opera"
+  if (/OPR\//i.test(ua) || /Opera/i.test(ua)) return 'opera';
+  // Samsung Internet includes "SamsungBrowser"
+  if (/SamsungBrowser/i.test(ua)) return 'samsung';
+  // Firefox includes "Firefox" but NOT "Seamonkey"
+  if (/Firefox/i.test(ua) && !/Seamonkey/i.test(ua)) return 'firefox';
+  // Chrome includes "Chrome" but NOT Edge/Opera/Samsung (already filtered)
+  // On iOS, Chrome UA contains "CriOS"
+  if (/Chrome/i.test(ua) || /CriOS/i.test(ua)) return 'chrome';
+  // Safari: check for "Safari" but NOT Chrome/CriOS/Edge/Firefox (already filtered)
+  // On iOS, standalone Safari has "Safari" without other browser tokens
+  if (/Safari/i.test(ua)) return 'safari';
+
+  return 'unknown';
+}
+
+/**
+ * Detect the operating system
+ */
+export type OSType = 'ios' | 'android' | 'macos' | 'windows' | 'linux' | 'unknown';
+
+export function detectOS(): OSType {
+  const ua = navigator.userAgent;
+  if (/iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream) return 'ios';
+  if (/Android/.test(ua)) return 'android';
+  if (/Macintosh|Mac OS X/.test(ua)) return 'macos';
+  if (/Windows/.test(ua)) return 'windows';
+  if (/Linux/.test(ua)) return 'linux';
+  return 'unknown';
+}
