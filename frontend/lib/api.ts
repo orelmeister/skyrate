@@ -2261,6 +2261,26 @@ class ApiClient {
   }
 
   /**
+   * Send email verification code
+   */
+  async sendEmailVerification(): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/onboarding/email/send-code', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  }
+
+  /**
+   * Verify email code
+   */
+  async verifyEmailCode(code: string): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/onboarding/email/verify-code', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    });
+  }
+
+  /**
    * Complete onboarding
    */
   async completeOnboarding(): Promise<ApiResponse<any>> {

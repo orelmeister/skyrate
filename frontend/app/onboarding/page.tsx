@@ -19,7 +19,6 @@ import {
   DollarSign,
   FileText,
   Send,
-  Phone,
   Check,
   X,
 } from "lucide-react";
@@ -376,7 +375,7 @@ function AlertPreferencesStep({
         {prefs.sms_notifications && (
           <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
             <Smartphone className="w-3 h-3" />
-            You'll verify your phone number in the next step
+            SMS alerts will be available once your number is verified in settings
           </p>
         )}
       </div>
@@ -420,18 +419,16 @@ function AlertPreferencesStep({
   );
 }
 
-// ==================== STEP 3: PHONE VERIFICATION ====================
+// ==================== STEP 3: ACCOUNT VERIFICATION ====================
 
-function PhoneVerificationStep({
+function AccountVerificationStep({
   onComplete,
   onBack,
-  smsEnabled,
 }: {
   onComplete: () => void;
   onBack: () => void;
-  smsEnabled: boolean;
 }) {
-  const [phone, setPhone] = useState("");
+  const { user } = useAuthStore();
   const [code, setCode] = useState("");
   const [codeSent, setCodeSent] = useState(false);
   const [verified, setVerified] = useState(false);
@@ -439,6 +436,7 @@ function PhoneVerificationStep({
   const [verifying, setVerifying] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [error, setError] = useState("");
+  const [maskedEmail, setMaskedEmail] = useState("");
   const [resendTimer, setResendTimer] = useState(0);
 
   useEffect(() => {
@@ -449,22 +447,19 @@ function PhoneVerificationStep({
   }, [resendTimer]);
 
   const sendCode = async () => {
-    if (!phone.trim()) {
-      setError("Please enter your phone number");
-      return;
-    }
     setSending(true);
     setError("");
     try {
-      const res = await api.sendPhoneVerification(phone.trim());
+      const res = await api.sendEmailVerification();
       if (res.success) {
         setCodeSent(true);
         setResendTimer(60);
+        if (res.data?.email) setMaskedEmail(res.data.email);
       } else {
         setError(res.error || "Failed to send verification code");
       }
     } catch {
-      setError("Failed to send code. Please check the number and try again.");
+      setError("Failed to send code. Please try again.");
     } finally {
       setSending(false);
     }
@@ -478,11 +473,11 @@ function PhoneVerificationStep({
     setVerifying(true);
     setError("");
     try {
-      const res = await api.verifyPhoneCode(phone.trim(), code.trim());
+      const res = await api.verifyEmailCode(code.trim());
       if (res.success && res.data?.verified) {
         setVerified(true);
       } else {
-        setError(res.error || "Invalid verification code. Please try again.");
+        setError(res.error || res.data?.message || "Invalid verification code. Please try again.");
       }
     } catch {
       setError("Verification failed. Please try again.");
@@ -494,12 +489,8 @@ function PhoneVerificationStep({
   const handleComplete = async () => {
     setCompleting(true);
     try {
-      const res = await api.completeOnboarding();
-      if (res.success && res.data?.redirect_url) {
-        onComplete();
-      } else {
-        onComplete();
-      }
+      await api.completeOnboarding();
+      onComplete();
     } catch {
       onComplete();
     }
@@ -509,15 +500,11 @@ function PhoneVerificationStep({
     <div>
       <div className="text-center mb-6">
         <div className="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
-          <Smartphone className="w-7 h-7 text-purple-600" />
+          <Shield className="w-7 h-7 text-purple-600" />
         </div>
-        <h2 className="text-2xl font-bold text-slate-900">
-          {smsEnabled ? "Verify Your Phone" : "You're All Set!"}
-        </h2>
+        <h2 className="text-2xl font-bold text-slate-900">Verify Your Account</h2>
         <p className="text-slate-500 mt-1">
-          {smsEnabled
-            ? "Verify your phone number to receive SMS alerts"
-            : "Your account is configured and ready to go"}
+          We&apos;ll send a verification code to your email
         </p>
       </div>
 
@@ -528,34 +515,27 @@ function PhoneVerificationStep({
         </div>
       )}
 
-      {smsEnabled && !verified && (
+      {!verified && (
         <div className="space-y-4">
           {!codeSent ? (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Phone Number</label>
-              <div className="flex gap-2">
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+1 (555) 123-4567"
-                  className="flex-1 px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
-                <button
-                  onClick={sendCode}
-                  disabled={sending}
-                  className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
-                >
-                  {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  Send Code
-                </button>
-              </div>
-              <p className="text-xs text-slate-400 mt-1">Standard messaging rates may apply</p>
+            <div className="text-center">
+              <p className="text-sm text-slate-600 mb-4">
+                Click below to receive a 6-digit verification code at{" "}
+                <span className="font-medium text-slate-800">{user?.email || "your email"}</span>
+              </p>
+              <button
+                onClick={sendCode}
+                disabled={sending}
+                className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 mx-auto"
+              >
+                {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                Send Verification Code
+              </button>
             </div>
           ) : (
             <div>
               <p className="text-sm text-slate-600 mb-3">
-                A verification code was sent to <span className="font-medium">{phone}</span>
+                A verification code was sent to <span className="font-medium">{maskedEmail || user?.email}</span>
               </p>
               <label className="block text-sm font-medium text-slate-700 mb-1">Verification Code</label>
               <div className="flex gap-2">
@@ -576,17 +556,7 @@ function PhoneVerificationStep({
                   Verify
                 </button>
               </div>
-              <div className="flex items-center justify-between mt-2">
-                <button
-                  onClick={() => {
-                    setCodeSent(false);
-                    setCode("");
-                    setError("");
-                  }}
-                  className="text-xs text-slate-500 hover:text-slate-700"
-                >
-                  Change number
-                </button>
+              <div className="flex items-center justify-end mt-2">
                 <button
                   onClick={sendCode}
                   disabled={resendTimer > 0 || sending}
@@ -595,6 +565,7 @@ function PhoneVerificationStep({
                   {resendTimer > 0 ? `Resend in ${resendTimer}s` : "Resend code"}
                 </button>
               </div>
+              <p className="text-xs text-slate-400 mt-2">Check your spam folder if you don&apos;t see the email</p>
             </div>
           )}
         </div>
@@ -604,27 +575,8 @@ function PhoneVerificationStep({
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3 mb-4">
           <CheckCircle2 className="w-6 h-6 text-green-600 flex-shrink-0" />
           <div>
-            <p className="text-sm font-medium text-green-800">Phone verified successfully!</p>
-            <p className="text-xs text-green-600">You'll receive SMS alerts at {phone}</p>
-          </div>
-        </div>
-      )}
-
-      {!smsEnabled && (
-        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-4">
-          <div className="flex items-start gap-3">
-            <CheckCircle2 className="w-6 h-6 text-purple-600 flex-shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-purple-800">Your monitoring is set up</p>
-              <ul className="text-xs text-purple-600 mt-2 space-y-1">
-                <li className="flex items-center gap-1"><Check className="w-3 h-3" /> FRN tracking configured</li>
-                <li className="flex items-center gap-1"><Check className="w-3 h-3" /> Alert preferences saved</li>
-                <li className="flex items-center gap-1"><Check className="w-3 h-3" /> Notification channels selected</li>
-              </ul>
-              <p className="text-xs text-slate-500 mt-2">
-                You can enable SMS alerts anytime from your account settings.
-              </p>
-            </div>
+            <p className="text-sm font-medium text-green-800">Account verified successfully!</p>
+            <p className="text-xs text-green-600">Your E-Rate monitoring is ready to go</p>
           </div>
         </div>
       )}
@@ -634,12 +586,18 @@ function PhoneVerificationStep({
           <ChevronLeft className="w-4 h-4" /> Back
         </button>
         <button
-          onClick={handleComplete}
-          disabled={completing || (smsEnabled && !verified)}
-          className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-6 py-2.5 rounded-xl font-medium text-sm transition-all disabled:opacity-50 shadow-lg shadow-purple-200"
+          onClick={verified ? handleComplete : sendCode}
+          disabled={completing || (codeSent && !verified)}
+          className={`flex items-center gap-2 ${
+            verified
+              ? "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-lg shadow-purple-200"
+              : codeSent
+              ? "bg-slate-300 cursor-not-allowed"
+              : "bg-purple-600 hover:bg-purple-700"
+          } text-white px-6 py-2.5 rounded-xl font-medium text-sm transition-all disabled:opacity-50`}
         >
-          {completing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-          Go to Dashboard
+          {completing ? <Loader2 className="w-4 h-4 animate-spin" /> : verified ? <CheckCircle2 className="w-4 h-4" /> : null}
+          {verified ? "Go to Dashboard" : codeSent ? "Enter code above" : "Send Code"}
         </button>
       </div>
     </div>
@@ -652,7 +610,7 @@ export default function OnboardingPage() {
   const router = useRouter();
   const { isAuthenticated, user, isLoading } = useAuthStore();
   const [step, setStep] = useState(0);
-  const [smsEnabled, setSmsEnabled] = useState(false);
+
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -674,7 +632,7 @@ export default function OnboardingPage() {
   const steps = [
     { label: "FRN Discovery", icon: Search },
     { label: "Alerts", icon: Bell },
-    { label: "Verify Phone", icon: Smartphone },
+    { label: "Verify", icon: Shield },
   ];
 
   if (isLoading) {
@@ -749,10 +707,9 @@ export default function OnboardingPage() {
             />
           )}
           {step === 2 && (
-            <PhoneVerificationStep
+            <AccountVerificationStep
               onComplete={handleComplete}
               onBack={() => setStep(1)}
-              smsEnabled={smsEnabled}
             />
           )}
         </div>

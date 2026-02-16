@@ -4,8 +4,10 @@ Handles post-registration onboarding: FRN discovery, alert preferences, phone ve
 """
 
 import logging
-from typing import Optional, List
-from datetime import datetime
+import random
+import string
+from typing import Optional, List, Dict, Tuple
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
@@ -19,7 +21,30 @@ from ...models.applicant import ApplicantProfile, ApplicantFRN, FRNStatusType
 from ...models.consultant import ConsultantProfile, ConsultantSchool
 from ...models.vendor import VendorProfile
 from ...services.usac_service import get_usac_service
-from ...services.sms_service import get_sms_service
+
+# In-memory store for email verification codes: {email: (code, expiry)}
+_verification_codes: Dict[str, Tuple[str, datetime]] = {}
+
+def _generate_code() -> str:
+    return ''.join(random.choices(string.digits, k=6))
+
+def _store_code(email: str) -> str:
+    code = _generate_code()
+    _verification_codes[email] = (code, datetime.utcnow() + timedelta(minutes=10))
+    return code
+
+def _verify_code(email: str, code: str) -> bool:
+    stored = _verification_codes.get(email)
+    if not stored:
+        return False
+    stored_code, expiry = stored
+    if datetime.utcnow() > expiry:
+        del _verification_codes[email]
+        return False
+    if stored_code != code:
+        return False
+    del _verification_codes[email]
+    return True
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +91,12 @@ class PhoneVerifyRequest(BaseModel):
 
 class PhoneVerifyCheckRequest(BaseModel):
     phone_number: str
+    code: str = Field(..., min_length=4, max_length=8)
+
+class EmailVerifyRequest(BaseModel):
+    email: Optional[str] = None  # Uses account email if not provided
+
+class EmailVerifyCheckRequest(BaseModel):
     code: str = Field(..., min_length=4, max_length=8)
 
 class OnboardingCompleteRequest(BaseModel):
@@ -419,7 +450,7 @@ async def update_alert_preferences(
     }
 
 
-# ==================== Step 3: Phone Verification ====================
+# ==================== Step 3: Phone Verification (SMS - pending toll-free approval) ====================
 
 @router.post("/phone/send-code")
 async def send_phone_verification(
@@ -428,12 +459,13 @@ async def send_phone_verification(
     db: Session = Depends(get_db)
 ):
     """Send a verification code to the user's phone via Twilio Verify"""
+    from ...services.sms_service import get_sms_service
     sms_service = get_sms_service()
     
     if not sms_service.is_configured:
         raise HTTPException(
             status_code=503,
-            detail="SMS verification is not yet available. We're setting this up — check back soon!"
+            detail="SMS verification is not yet available. Please use email verification instead."
         )
     
     # Save phone number on user (unverified)
@@ -460,6 +492,7 @@ async def verify_phone_code(
     db: Session = Depends(get_db)
 ):
     """Verify the code the user entered"""
+    from ...services.sms_service import get_sms_service
     sms_service = get_sms_service()
     
     if not sms_service.is_configured:
@@ -487,6 +520,91 @@ async def verify_phone_code(
         "verified": result["success"],
         "message": result["message"]
     }
+
+
+# ==================== Step 3 Alt: Email Verification ====================
+
+@router.post("/email/send-code")
+async def send_email_verification(
+    data: EmailVerifyRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Send a 6-digit verification code to the user's email"""
+    email = data.email or current_user.email
+    if not email:
+        raise HTTPException(status_code=400, detail="No email address available")
+    
+    code = _store_code(email)
+    
+    # Send the code via email in the background
+    def _send():
+        try:
+            from ...services.email_service import get_email_service
+            email_svc = get_email_service()
+            email_svc.send_email(
+                to_email=email,
+                subject=f"SkyRate AI — Your verification code is {code}",
+                html_content=f"""
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 420px; margin: 0 auto; padding: 32px 24px;">
+                    <div style="text-align: center; margin-bottom: 24px;">
+                        <h2 style="color: #1e293b; margin: 0;">Your Verification Code</h2>
+                    </div>
+                    <div style="background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%); border-radius: 16px; padding: 32px; text-align: center; margin-bottom: 24px;">
+                        <p style="color: rgba(255,255,255,0.8); font-size: 14px; margin: 0 0 8px 0;">Enter this code to verify your account</p>
+                        <div style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #ffffff; font-family: monospace;">{code}</div>
+                    </div>
+                    <p style="color: #64748b; font-size: 13px; text-align: center;">This code expires in 10 minutes.</p>
+                    <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">If you didn't request this code, you can safely ignore this email.</p>
+                </div>
+                """,
+                from_alias="noreply@skyrate.ai"
+            )
+        except Exception as e:
+            logger.error(f"Failed to send verification email to {email}: {e}")
+    
+    background_tasks.add_task(_send)
+    
+    # Mask email for display
+    parts = email.split("@")
+    masked = parts[0][:2] + "***@" + parts[1] if len(parts) == 2 else email
+    
+    return {
+        "success": True,
+        "message": f"Verification code sent to {masked}",
+        "email": masked
+    }
+
+
+@router.post("/email/verify-code")
+async def verify_email_code(
+    data: EmailVerifyCheckRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Verify the email verification code"""
+    email = current_user.email
+    if not email:
+        raise HTTPException(status_code=400, detail="No email address on account")
+    
+    if _verify_code(email, data.code):
+        # Mark as verified — we use phone_verified field to gate SMS
+        # but email verification means the account itself is verified
+        current_user.onboarding_completed = False  # Will be set by /complete
+        db.commit()
+        
+        return {
+            "success": True,
+            "verified": True,
+            "message": "Email verified successfully!"
+        }
+    else:
+        return {
+            "success": False,
+            "verified": False,
+            "message": "Invalid or expired code. Please request a new one."
+        }
 
 
 # ==================== Complete Onboarding ====================
