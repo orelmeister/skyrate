@@ -1,0 +1,10 @@
+==================================================
+1. Testing production login...
+   Status: 200
+   Token: eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...
+   User: test_consultant@example.com
+   Role: consultant
+
+==================================================
+2. Testing SMTP email...
+   SUCCESS: Email sent to david@skyrate.ai

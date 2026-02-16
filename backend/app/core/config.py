@@ -108,7 +108,8 @@ class Settings(BaseSettings):
     
     # Twilio (SMS + Phone Verification)
     TWILIO_ACCOUNT_SID: Optional[str] = None
-    TWILIO_AUTH_TOKEN: Optional[str] = None
+    TWILIO_API_KEY_SID: Optional[str] = None
+    TWILIO_API_KEY_SECRET: Optional[str] = None
     TWILIO_VERIFY_SERVICE_SID: Optional[str] = None
     TWILIO_FROM_NUMBER: Optional[str] = None  # Twilio phone number for sending SMS
     

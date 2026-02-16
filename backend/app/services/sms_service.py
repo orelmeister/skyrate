@@ -16,24 +16,25 @@ class SMSService:
     
     def __init__(self):
         self.account_sid = settings.TWILIO_ACCOUNT_SID
-        self.auth_token = settings.TWILIO_AUTH_TOKEN
+        self.api_key_sid = settings.TWILIO_API_KEY_SID
+        self.api_key_secret = settings.TWILIO_API_KEY_SECRET
         self.verify_sid = settings.TWILIO_VERIFY_SERVICE_SID
         self.from_number = settings.TWILIO_FROM_NUMBER
         self._client = None
     
     @property
     def is_configured(self) -> bool:
-        return bool(self.account_sid and self.auth_token)
+        return bool(self.account_sid and self.api_key_sid and self.api_key_secret)
     
     @property
     def client(self):
-        """Lazy-load Twilio client"""
+        """Lazy-load Twilio client using API Key auth"""
         if self._client is None:
             if not self.is_configured:
                 return None
             try:
                 from twilio.rest import Client
-                self._client = Client(self.account_sid, self.auth_token)
+                self._client = Client(self.api_key_sid, self.api_key_secret, self.account_sid)
             except ImportError:
                 logger.error("twilio package not installed. Run: pip install twilio")
                 return None
