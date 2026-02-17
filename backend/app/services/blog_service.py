@@ -129,6 +129,7 @@ async def generate_blog_with_ai(
     
     Returns dict with: title, slug, content_html, meta_description, category, ai_model_used
     """
+    import os
     from utils.ai_models import AIModelManager
     
     manager = AIModelManager()
@@ -146,7 +147,7 @@ CATEGORY: [One of: Guide, Analysis, Strategy, Industry, News]
     content = ""
     model_used = ""
     
-    if preferred_model == "gemini" and manager.is_model_available(manager._models and True):
+    if preferred_model == "gemini" and os.environ.get('GEMINI_API_KEY'):
         try:
             import google.generativeai as genai
             import os

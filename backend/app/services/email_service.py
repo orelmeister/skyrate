@@ -80,8 +80,10 @@ class EmailService:
             # Send
             if self.smtp_user:  # Only send if configured
                 with self._get_smtp_connection() as server:
-                    server.sendmail(from_email, to_email, msg.as_string())
-                logger.info(f"Email sent to {to_email} from {from_email}: {subject}")
+                    # Use smtp_user as envelope sender (Google Workspace requires
+                    # the authenticated user as envelope sender, not an alias)
+                    server.sendmail(self.smtp_user, to_email, msg.as_string())
+                logger.info(f"Email sent to {to_email} from {from_email} (envelope: {self.smtp_user}): {subject}")
             else:
                 logger.info(f"Email would be sent to {to_email} from {from_email}: {subject} (SMTP not configured)")
             

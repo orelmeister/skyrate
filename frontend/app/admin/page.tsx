@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/auth-store";
 import { api } from "@/lib/api";
+import { requestNotificationPermission, subscribeToPush, isPushSupported, getNotificationPermission } from "@/lib/notifications";
 
 // ==================== TYPES ====================
 
@@ -689,10 +690,44 @@ function CommunicationsTab({
   const [smsMessage, setSmsMessage] = useState("");
   const [smsSending, setSmsSending] = useState(false);
   const [smsResult, setSmsResult] = useState<string>("");
+  const [pushStatus, setPushStatus] = useState<string>("checking...");
+  const [pushSubscribing, setPushSubscribing] = useState(false);
 
   useEffect(() => {
     if (users.length === 0) loadUsers();
+    // Check push notification status
+    if (isPushSupported()) {
+      const perm = getNotificationPermission();
+      setPushStatus(perm === 'granted' ? 'enabled' : perm === 'denied' ? 'blocked' : 'not-enabled');
+    } else {
+      setPushStatus('not-supported');
+    }
   }, []);
+
+  async function handleEnablePush() {
+    setPushSubscribing(true);
+    try {
+      const permission = await requestNotificationPermission();
+      if (permission === 'granted') {
+        const token = useAuthStore.getState().token;
+        if (token) {
+          const success = await subscribeToPush(token);
+          setPushStatus(success ? 'enabled' : 'error');
+        } else {
+          setPushStatus('error');
+        }
+      } else if (permission === 'denied') {
+        setPushStatus('blocked');
+        alert('Notifications are blocked. Please enable them in your browser settings.');
+      } else {
+        setPushStatus('dismissed');
+      }
+    } catch (e) {
+      console.error('Push subscribe error:', e);
+      setPushStatus('error');
+    }
+    setPushSubscribing(false);
+  }
 
   const toggleChannel = (ch: string) => {
     setBroadcastChannels((prev) =>
@@ -745,6 +780,38 @@ function CommunicationsTab({
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      {/* Push Notifications Status */}
+      <div className="bg-white rounded-xl shadow-sm border p-6">
+        <h2 className="text-lg font-semibold text-slate-900 mb-1">Push Notifications</h2>
+        <p className="text-sm text-slate-500 mb-4">Enable desktop push notifications on this device to receive admin alerts</p>
+        <div className="flex items-center gap-3">
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium ${
+            pushStatus === 'enabled' ? 'bg-green-100 text-green-700' :
+            pushStatus === 'blocked' ? 'bg-red-100 text-red-700' :
+            pushStatus === 'not-supported' ? 'bg-slate-100 text-slate-500' :
+            'bg-yellow-100 text-yellow-700'
+          }`}>
+            {pushStatus === 'enabled' ? '🔔 Enabled' :
+             pushStatus === 'blocked' ? '🚫 Blocked in browser' :
+             pushStatus === 'not-supported' ? '❌ Not supported' :
+             pushStatus === 'error' ? '⚠️ Error' :
+             '🔕 Not enabled'}
+          </span>
+          {pushStatus !== 'enabled' && pushStatus !== 'blocked' && pushStatus !== 'not-supported' && (
+            <button
+              onClick={handleEnablePush}
+              disabled={pushSubscribing}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50 transition-colors"
+            >
+              {pushSubscribing ? 'Enabling...' : 'Enable Push Notifications'}
+            </button>
+          )}
+          {pushStatus === 'blocked' && (
+            <span className="text-xs text-slate-500">Go to browser settings → Site permissions → Notifications → Allow for this site</span>
+          )}
+        </div>
+      </div>
+
       {/* Broadcast Section */}
       <div className="bg-white rounded-xl shadow-sm border p-6">
         <h2 className="text-lg font-semibold text-slate-900 mb-1">Broadcast Notification</h2>
@@ -1061,9 +1128,11 @@ function BlogManagerTab() {
         setGenKeyword("");
         setGenInstructions("");
         loadPosts();
+      } else {
+        alert("Generation failed: " + (res.data?.error || res.error || "No post returned. Check backend logs."));
       }
     } catch (e: any) {
-      alert("Generation failed: " + (e.message || "Unknown error"));
+      alert("Generation failed: " + (e.response?.data?.detail || e.message || "Unknown error"));
     }
     setGenerating(false);
   }

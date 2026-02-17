@@ -78,7 +78,7 @@ export async function subscribeToPush(token: string): Promise<boolean> {
     }
 
     // Send subscription to backend
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
     const response = await fetch(`${API_URL}/api/v1/notifications/push/subscribe`, {
       method: 'POST',
       headers: {
@@ -116,7 +116,7 @@ export async function unsubscribeFromPush(token: string): Promise<boolean> {
       await subscription.unsubscribe();
 
       // Notify backend
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       await fetch(`${API_URL}/api/v1/notifications/push/unsubscribe`, {
         method: 'POST',
         headers: {
