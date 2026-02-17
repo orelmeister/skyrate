@@ -347,16 +347,20 @@ async def lifespan(app: FastAPI):
     from app.models.push_subscription import PushSubscription
     from app.models.support_ticket import SupportTicket, TicketMessage
     
-    # Create database tables (new tables only — does NOT add columns to existing tables)
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables created")
-    
-    # Run lightweight schema migrations for MySQL (add missing columns)
-    _run_schema_migrations(engine)
-    
-    # Seed demo accounts for testing
-    seed_demo_accounts()
-    logger.info("Demo accounts seeded")
+    # Database initialization (non-blocking — health checks can pass even if DB is slow)
+    try:
+        # Create database tables (new tables only — does NOT add columns to existing tables)
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables created")
+        
+        # Run lightweight schema migrations for MySQL (add missing columns)
+        _run_schema_migrations(engine)
+        
+        # Seed demo accounts for testing
+        seed_demo_accounts()
+        logger.info("Demo accounts seeded")
+    except Exception as e:
+        logger.error(f"Database initialization error (will retry on first request): {e}")
     
     # Initialize background scheduler for alerts/digests
     from app.services.scheduler_service import init_scheduler, shutdown_scheduler

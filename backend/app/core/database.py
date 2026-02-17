@@ -30,6 +30,7 @@ elif is_mysql:
         pool_size=5,
         max_overflow=10,
         pool_recycle=3600,  # Recycle connections after 1 hour (important for MySQL)
+        connect_args={"connect_timeout": 10},  # 10s connection timeout
         echo=settings.DEBUG
     )
 else:
