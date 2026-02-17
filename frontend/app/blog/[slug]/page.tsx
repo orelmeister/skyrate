@@ -21,6 +21,8 @@ export default function DynamicBlogPost() {
   const [loading, setLoading] = useState(true);
   const [notFoundState, setNotFoundState] = useState(false);
 
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+
   useEffect(() => {
     if (!slug) return;
     loadPost();
@@ -140,6 +142,17 @@ export default function DynamicBlogPost() {
           </div>
         </div>
 
+        {/* Hero Image */}
+        {post.has_hero_image && (
+          <div className="rounded-xl overflow-hidden mb-10 shadow-lg">
+            <img
+              src={`${apiBaseUrl}/api/v1/blog/posts/${slug}/hero-image`}
+              alt={post.title}
+              className="w-full h-64 sm:h-80 lg:h-96 object-cover"
+            />
+          </div>
+        )}
+
         {/* Content */}
         <div
           className="prose prose-lg prose-slate max-w-none
@@ -153,6 +166,19 @@ export default function DynamicBlogPost() {
             prose-strong:text-slate-900"
           dangerouslySetInnerHTML={{ __html: post.content_html }}
         />
+
+        {/* Mid-Article Image */}
+        {post.has_mid_image && (
+          <div className="my-10 flex justify-center">
+            <div className="rounded-xl overflow-hidden shadow-md max-w-2xl w-full">
+              <img
+                src={`${apiBaseUrl}/api/v1/blog/posts/${slug}/mid-image`}
+                alt={`Illustration for ${post.title}`}
+                className="w-full h-48 sm:h-56 object-cover"
+              />
+            </div>
+          </div>
+        )}
       </article>
 
       {/* CTA Section */}

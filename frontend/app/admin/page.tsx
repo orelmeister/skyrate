@@ -1018,6 +1018,12 @@ function BlogManagerTab() {
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Image generation state
+  const [generatingHero, setGeneratingHero] = useState(false);
+  const [generatingMid, setGeneratingMid] = useState(false);
+  const [heroImageKey, setHeroImageKey] = useState(0);
+  const [midImageKey, setMidImageKey] = useState(0);
+
   useEffect(() => {
     loadPosts();
   }, [statusFilter]);
@@ -1129,6 +1135,47 @@ function BlogManagerTab() {
     }
   }
 
+  async function handleGenerateImage(imageType: "hero" | "mid") {
+    if (!editingPost) return;
+    if (imageType === "hero") setGeneratingHero(true);
+    else setGeneratingMid(true);
+    try {
+      const res = await api.generateBlogImage(editingPost.id, imageType);
+      if (res.data?.success) {
+        // Force image reload by changing key
+        if (imageType === "hero") {
+          setHeroImageKey((k) => k + 1);
+          setEditingPost({ ...editingPost, has_hero_image: true, hero_image_prompt: res.data.prompt_used });
+        } else {
+          setMidImageKey((k) => k + 1);
+          setEditingPost({ ...editingPost, has_mid_image: true, mid_image_prompt: res.data.prompt_used });
+        }
+      }
+    } catch (e: any) {
+      alert(`Image generation failed: ${e.message || "Unknown error"}`);
+    }
+    if (imageType === "hero") setGeneratingHero(false);
+    else setGeneratingMid(false);
+  }
+
+  async function handleDeleteImage(imageType: "hero" | "mid") {
+    if (!editingPost) return;
+    if (!confirm(`Remove the ${imageType} image?`)) return;
+    try {
+      if (imageType === "hero") {
+        await api.deleteBlogHeroImage(editingPost.id);
+        setEditingPost({ ...editingPost, has_hero_image: false, hero_image_prompt: null });
+      } else {
+        await api.deleteBlogMidImage(editingPost.id);
+        setEditingPost({ ...editingPost, has_mid_image: false, mid_image_prompt: null });
+      }
+    } catch (e) {
+      console.error("Delete image failed", e);
+    }
+  }
+
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+
   // ---- Editor View ----
   if (editingPost) {
     return (
@@ -1186,6 +1233,106 @@ function BlogManagerTab() {
               </select>
             </div>
           </div>
+
+          {/* Image Generation Section */}
+          <div className="border-t pt-4">
+            <h4 className="text-sm font-semibold text-slate-700 mb-3">🖼️ Blog Images</h4>
+            
+            {/* Hero Image */}
+            <div className="bg-slate-50 rounded-lg p-4 mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-medium text-slate-600">Hero Image (Featured)</label>
+                <div className="flex items-center gap-2">
+                  {editingPost.has_hero_image && (
+                    <button onClick={() => handleDeleteImage("hero")} className="text-xs text-red-500 hover:underline">
+                      Remove
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleGenerateImage("hero")}
+                    disabled={generatingHero}
+                    className="text-xs bg-purple-600 text-white px-3 py-1 rounded hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1"
+                  >
+                    {generatingHero ? (
+                      <><span className="animate-spin inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full" /> Generating...</>
+                    ) : editingPost.has_hero_image ? (
+                      "🔄 Regenerate"
+                    ) : (
+                      "✨ Generate"
+                    )}
+                  </button>
+                </div>
+              </div>
+              {editingPost.has_hero_image ? (
+                <div className="rounded-lg overflow-hidden border">
+                  <img
+                    key={heroImageKey}
+                    src={`${apiBaseUrl}/api/v1/blog/admin/posts/${editingPost.id}/hero-image?t=${heroImageKey}`}
+                    alt="Hero"
+                    className="w-full h-48 object-cover"
+                  />
+                </div>
+              ) : (
+                <div className="border-2 border-dashed border-slate-300 rounded-lg h-32 flex items-center justify-center text-slate-400 text-sm">
+                  No hero image — click Generate to create one
+                </div>
+              )}
+              {generatingHero && (
+                <p className="text-xs text-purple-600 mt-2 flex items-center gap-1">
+                  <span className="animate-spin inline-block w-3 h-3 border-2 border-purple-600 border-t-transparent rounded-full" />
+                  AI is generating your hero image... this may take 15-30 seconds.
+                </p>
+              )}
+            </div>
+
+            {/* Mid-Article Image */}
+            <div className="bg-slate-50 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-medium text-slate-600">Mid-Article Image</label>
+                <div className="flex items-center gap-2">
+                  {editingPost.has_mid_image && (
+                    <button onClick={() => handleDeleteImage("mid")} className="text-xs text-red-500 hover:underline">
+                      Remove
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleGenerateImage("mid")}
+                    disabled={generatingMid}
+                    className="text-xs bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1"
+                  >
+                    {generatingMid ? (
+                      <><span className="animate-spin inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full" /> Generating...</>
+                    ) : editingPost.has_mid_image ? (
+                      "🔄 Regenerate"
+                    ) : (
+                      "✨ Generate"
+                    )}
+                  </button>
+                </div>
+              </div>
+              {editingPost.has_mid_image ? (
+                <div className="rounded-lg overflow-hidden border max-w-md">
+                  <img
+                    key={midImageKey}
+                    src={`${apiBaseUrl}/api/v1/blog/admin/posts/${editingPost.id}/mid-image?t=${midImageKey}`}
+                    alt="Mid-article"
+                    className="w-full h-36 object-cover"
+                  />
+                </div>
+              ) : (
+                <div className="border-2 border-dashed border-slate-300 rounded-lg h-24 flex items-center justify-center text-slate-400 text-sm max-w-md">
+                  No mid-article image — click Generate to create one
+                </div>
+              )}
+              {generatingMid && (
+                <p className="text-xs text-indigo-600 mt-2 flex items-center gap-1">
+                  <span className="animate-spin inline-block w-3 h-3 border-2 border-indigo-600 border-t-transparent rounded-full" />
+                  AI is generating your mid-article image... this may take 15-30 seconds.
+                </p>
+              )}
+            </div>
+          </div>
+
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">Content (HTML)</label>
             <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} className="w-full border rounded px-3 py-2 text-sm font-mono" rows={20} />
@@ -1308,7 +1455,14 @@ function BlogManagerTab() {
                     <button onClick={() => loadPostForEdit(post.id)} className="text-purple-600 hover:underline font-medium text-left">
                       {post.title}
                     </button>
-                    <div className="text-xs text-slate-400 mt-0.5">/blog/{post.slug}</div>
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      /blog/{post.slug}
+                      {(post.has_hero_image || post.has_mid_image) && (
+                        <span className="ml-2 text-purple-400" title={`${post.has_hero_image ? "Hero" : ""}${post.has_hero_image && post.has_mid_image ? " + " : ""}${post.has_mid_image ? "Mid" : ""} image`}>
+                          🖼️ {post.has_hero_image && post.has_mid_image ? "2" : "1"}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{post.category}</span>

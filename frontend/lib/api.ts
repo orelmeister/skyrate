@@ -2440,6 +2440,34 @@ class ApiClient {
       body: JSON.stringify(data),
     });
   }
+
+  /**
+   * Generate hero or mid image for a blog post (admin)
+   */
+  async generateBlogImage(postId: number, imageType: 'hero' | 'mid', customPrompt?: string): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/blog/admin/posts/${postId}/generate-image`, {
+      method: 'POST',
+      body: JSON.stringify({ image_type: imageType, custom_prompt: customPrompt || null }),
+    });
+  }
+
+  /**
+   * Delete hero image from a blog post (admin)
+   */
+  async deleteBlogHeroImage(postId: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/blog/admin/posts/${postId}/hero-image`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Delete mid image from a blog post (admin)
+   */
+  async deleteBlogMidImage(postId: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/blog/admin/posts/${postId}/mid-image`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 // Singleton instance

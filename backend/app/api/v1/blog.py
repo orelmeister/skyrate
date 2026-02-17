@@ -5,6 +5,7 @@ Admin: CRUD, AI generation, publish/unpublish
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from pydantic import BaseModel
@@ -357,3 +358,173 @@ async def admin_generate_blog(
         "post": post.to_dict(),
         "message": f"Blog post generated as draft. Review and publish when ready.",
     }
+
+
+# ==================== IMAGE ENDPOINTS ====================
+
+class ImageGenerateRequest(BaseModel):
+    image_type: str = "hero"  # "hero" or "mid"
+    custom_prompt: Optional[str] = None
+
+
+@router.get("/posts/{slug}/hero-image")
+def get_hero_image(slug: str, db: Session = Depends(get_db)):
+    """Serve the hero image for a published blog post (public)"""
+    post = db.query(BlogPost).filter(
+        BlogPost.slug == slug,
+        BlogPost.status == BlogStatus.PUBLISHED.value,
+    ).first()
+    
+    if not post or not post.hero_image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    return Response(
+        content=post.hero_image,
+        media_type=post.hero_image_mime or "image/png",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+@router.get("/posts/{slug}/mid-image")
+def get_mid_image(slug: str, db: Session = Depends(get_db)):
+    """Serve the mid-article image for a published blog post (public)"""
+    post = db.query(BlogPost).filter(
+        BlogPost.slug == slug,
+        BlogPost.status == BlogStatus.PUBLISHED.value,
+    ).first()
+    
+    if not post or not post.mid_image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    return Response(
+        content=post.mid_image,
+        media_type=post.mid_image_mime or "image/png",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+@router.get("/admin/posts/{post_id}/hero-image")
+def admin_get_hero_image(
+    post_id: int,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    """Serve the hero image for any blog post (admin preview)"""
+    post = db.query(BlogPost).filter(BlogPost.id == post_id).first()
+    if not post or not post.hero_image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    return Response(
+        content=post.hero_image,
+        media_type=post.hero_image_mime or "image/png",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@router.get("/admin/posts/{post_id}/mid-image")
+def admin_get_mid_image(
+    post_id: int,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    """Serve the mid-article image for any blog post (admin preview)"""
+    post = db.query(BlogPost).filter(BlogPost.id == post_id).first()
+    if not post or not post.mid_image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    return Response(
+        content=post.mid_image,
+        media_type=post.mid_image_mime or "image/png",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@router.post("/admin/posts/{post_id}/generate-image")
+async def admin_generate_image(
+    post_id: int,
+    data: ImageGenerateRequest,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    """Generate a hero or mid-article image for a blog post using AI (admin)"""
+    from ...services.blog_image_service import generate_hero_image, generate_mid_image
+    
+    post = db.query(BlogPost).filter(BlogPost.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Blog post not found")
+    
+    try:
+        if data.image_type == "hero":
+            image_bytes, mime_type, prompt = generate_hero_image(
+                title=post.title,
+                category=post.category or "Guide",
+                meta_description=post.meta_description or "",
+            )
+            post.hero_image = image_bytes
+            post.hero_image_mime = mime_type
+            post.hero_image_prompt = data.custom_prompt or prompt
+        elif data.image_type == "mid":
+            image_bytes, mime_type, prompt = generate_mid_image(
+                title=post.title,
+                content_html=post.content_html or "",
+                category=post.category or "Guide",
+            )
+            post.mid_image = image_bytes
+            post.mid_image_mime = mime_type
+            post.mid_image_prompt = data.custom_prompt or prompt
+        else:
+            raise HTTPException(status_code=400, detail="image_type must be 'hero' or 'mid'")
+        
+        db.commit()
+        db.refresh(post)
+        
+        return {
+            "success": True,
+            "image_type": data.image_type,
+            "size_bytes": len(image_bytes),
+            "mime_type": mime_type,
+            "prompt_used": data.custom_prompt or prompt,
+            "message": f"{data.image_type.title()} image generated successfully",
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Image generation failed: {str(e)}")
+
+
+@router.delete("/admin/posts/{post_id}/hero-image")
+def admin_delete_hero_image(
+    post_id: int,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    """Remove the hero image from a blog post (admin)"""
+    post = db.query(BlogPost).filter(BlogPost.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Blog post not found")
+    
+    post.hero_image = None
+    post.hero_image_mime = None
+    post.hero_image_prompt = None
+    db.commit()
+    
+    return {"success": True, "message": "Hero image removed"}
+
+
+@router.delete("/admin/posts/{post_id}/mid-image")
+def admin_delete_mid_image(
+    post_id: int,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    """Remove the mid-article image from a blog post (admin)"""
+    post = db.query(BlogPost).filter(BlogPost.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Blog post not found")
+    
+    post.mid_image = None
+    post.mid_image_mime = None
+    post.mid_image_prompt = None
+    db.commit()
+    
+    return {"success": True, "message": "Mid-article image removed"}

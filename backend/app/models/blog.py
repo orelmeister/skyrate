@@ -3,7 +3,7 @@ Blog Post Model
 Stores AI-generated and manually-created blog content
 """
 
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Text, LargeBinary, Boolean, DateTime, Enum
 from datetime import datetime
 import enum
 
@@ -40,6 +40,14 @@ class BlogPost(Base):
     # Status
     status = Column(String(50), default=BlogStatus.DRAFT.value, index=True)
     
+    # Images (stored as binary, served via API)
+    hero_image = Column(LargeBinary, nullable=True)
+    hero_image_mime = Column(String(50), default="image/png")
+    hero_image_prompt = Column(Text, nullable=True)
+    mid_image = Column(LargeBinary, nullable=True)
+    mid_image_mime = Column(String(50), default="image/png")
+    mid_image_prompt = Column(Text, nullable=True)
+    
     # AI generation metadata
     ai_model_used = Column(String(100), nullable=True)
     ai_prompt_used = Column(Text, nullable=True)
@@ -64,6 +72,10 @@ class BlogPost(Base):
             "read_time_minutes": self.read_time_minutes,
             "status": self.status,
             "ai_model_used": self.ai_model_used,
+            "has_hero_image": self.hero_image is not None,
+            "hero_image_prompt": self.hero_image_prompt,
+            "has_mid_image": self.mid_image is not None,
+            "mid_image_prompt": self.mid_image_prompt,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "published_at": self.published_at.isoformat() if self.published_at else None,
@@ -80,6 +92,8 @@ class BlogPost(Base):
             "author_name": self.author_name,
             "read_time_minutes": self.read_time_minutes,
             "status": self.status,
+            "has_hero_image": self.hero_image is not None,
+            "has_mid_image": self.mid_image is not None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "published_at": self.published_at.isoformat() if self.published_at else None,
         }
