@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import type { Metadata } from "next";
+import { SafeEmail } from "@/components/SafeEmail";
 
 export const metadata: Metadata = {
   title: "SkyRate AI - AI-Powered E-Rate Intelligence Platform | Maximize Your E-Rate Funding",
@@ -739,12 +740,12 @@ export default function HomePage() {
             >
               Start Your 14-Day Free Trial
             </Link>
-            <a
-              href="mailto:support@skyrate.ai"
+            <SafeEmail
               className="w-full sm:w-auto px-6 sm:px-8 py-3.5 sm:py-4 border-2 border-white/30 text-white rounded-xl font-semibold hover:bg-white/10 transition text-base sm:text-lg"
+              fallback="Contact Sales"
             >
               Contact Sales
-            </a>
+            </SafeEmail>
           </div>
           <p className="text-purple-200 text-xs sm:text-sm mt-4 sm:mt-6">
             No credit card required • Full access • Cancel anytime

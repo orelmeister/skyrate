@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import Link from "next/link";
+import { SafeEmail } from "@/components/SafeEmail";
 import { ArrowRight, ArrowLeft, FileText, AlertTriangle, Search, Clock, CheckCircle, Sparkles, BookOpen, Shield, XCircle, Ban, Calendar, DollarSign } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -350,7 +351,7 @@ export default function TopErateDenialReasonsPage() {
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 my-10">
               <p className="text-slate-900 font-semibold mb-2">Not sure where to start? We&apos;re here to help.</p>
               <p className="text-slate-600 text-sm mb-3">
-                E-Rate can be complex, and every situation is different. If you&apos;re unsure about your next step or want expert guidance, our team is ready to assist. Reach out to us at <a href="mailto:support@skyrate.ai" className="text-purple-600 underline font-medium">support@skyrate.ai</a> or let our AI platform analyze your case automatically.
+                E-Rate can be complex, and every situation is different. If you&apos;re unsure about your next step or want expert guidance, our team is ready to assist. Reach out to us at <SafeEmail className="text-purple-600 underline font-medium" /> or let our AI platform analyze your case automatically.
               </p>
               <Link href="/contact" className="text-purple-600 font-medium text-sm hover:underline">Contact our team →</Link>
             </div>

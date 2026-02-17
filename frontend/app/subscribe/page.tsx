@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
 import { api } from "@/lib/api";
+import { SafeEmail } from "@/components/SafeEmail";
 
 type PlanType = "monthly" | "yearly";
 
@@ -432,9 +433,9 @@ export default function SubscribePage() {
             <div className="mt-8 text-center">
               <p className="text-white/60 text-sm">
                 Questions?{" "}
-                <a href="mailto:support@skyrate.ai" className="text-indigo-400 hover:text-indigo-300 underline">
+                <SafeEmail className="text-indigo-400 hover:text-indigo-300 underline">
                   Contact our team
-                </a>
+                </SafeEmail>
               </p>
             </div>
           </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SafeEmail } from "@/components/SafeEmail";
 
 export default function TermsPage() {
   return (
@@ -95,7 +96,7 @@ export default function TermsPage() {
           <h3>4.4 Refunds</h3>
           <p>
             Refunds are available within 14 days of initial payment if you are not satisfied with the
-            Service. To request a refund, contact <a href="mailto:support@skyrate.ai">support@skyrate.ai</a>.
+            Service. To request a refund, contact <SafeEmail className="text-purple-600 hover:text-purple-700" />.
             Refunds are not available for partial billing periods after the 14-day window.
           </p>
 
@@ -111,7 +112,7 @@ export default function TermsPage() {
             <li>Message and data rates may apply depending on your mobile carrier</li>
             <li>SMS consent is not required as a condition of purchasing the Service</li>
             <li>You can opt out at any time by replying <strong>STOP</strong> to any message</li>
-            <li>Reply <strong>HELP</strong> for assistance or contact <a href="mailto:support@skyrate.ai">support@skyrate.ai</a></li>
+            <li>Reply <strong>HELP</strong> for assistance or contact <SafeEmail className="text-purple-600 hover:text-purple-700" /></li>
           </ul>
           <p>
             Supported carriers include but are not limited to AT&amp;T, T-Mobile, Verizon, Sprint, and all
@@ -220,7 +221,7 @@ export default function TermsPage() {
           <h2>16. Contact Us</h2>
           <p>For questions about these Terms, contact us at:</p>
           <ul>
-            <li>Email: <a href="mailto:support@skyrate.ai">support@skyrate.ai</a></li>
+            <li>Email: <SafeEmail className="text-purple-600 hover:text-purple-700" /></li>
             <li>Website: <a href="https://skyrate.ai">https://skyrate.ai</a></li>
           </ul>
         </div>

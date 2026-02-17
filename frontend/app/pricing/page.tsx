@@ -34,7 +34,7 @@ const faqs = [
   },
   {
     q: "Do you offer discounts for multiple users?",
-    a: "We offer custom enterprise pricing for organizations that need multiple seats. Contact us at support@skyrate.ai to discuss volume pricing for your team.",
+    a: "We offer custom enterprise pricing for organizations that need multiple seats. Contact us to discuss volume pricing for your team.",
   },
   {
     q: "What payment methods do you accept?",

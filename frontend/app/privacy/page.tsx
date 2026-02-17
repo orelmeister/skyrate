@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SafeEmail } from "@/components/SafeEmail";
 
 export default function PrivacyPage() {
   return (
@@ -187,7 +188,7 @@ export default function PrivacyPage() {
           </ul>
           <p>
             To exercise these rights, contact us at{" "}
-            <a href="mailto:support@skyrate.ai">support@skyrate.ai</a>.
+            <SafeEmail className="text-purple-600 hover:text-purple-700" />.
           </p>
 
           <h2>9. Cookies</h2>
@@ -209,7 +210,7 @@ export default function PrivacyPage() {
             California residents have additional rights under the CCPA, including the right to know what
             personal information is collected, request deletion, and opt out of the sale of personal
             information. We do not sell personal information. To exercise your CCPA rights, contact us
-            at <a href="mailto:support@skyrate.ai">support@skyrate.ai</a>.
+            at <SafeEmail className="text-purple-600 hover:text-purple-700" />.
           </p>
 
           <h2>12. Changes to This Policy</h2>
@@ -222,7 +223,7 @@ export default function PrivacyPage() {
           <h2>13. Contact Us</h2>
           <p>If you have questions about this Privacy Policy or our data practices, contact us at:</p>
           <ul>
-            <li>Email: <a href="mailto:support@skyrate.ai">support@skyrate.ai</a></li>
+            <li>Email: <SafeEmail className="text-purple-600 hover:text-purple-700" /></li>
             <li>Website: <a href="https://skyrate.ai">https://skyrate.ai</a></li>
           </ul>
         </div>

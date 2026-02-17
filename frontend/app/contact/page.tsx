@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import Link from "next/link";
+import { SafeEmail } from "@/components/SafeEmail";
 import {
   ArrowRight,
   Mail,
@@ -158,12 +159,9 @@ export default function ContactPage() {
               <p className="text-slate-600 mb-4">
                 For general inquiries, account help, or technical support.
               </p>
-              <a
-                href="mailto:support@skyrate.ai"
+              <SafeEmail
                 className="text-purple-600 font-semibold hover:text-purple-700 transition-colors"
-              >
-                support@skyrate.ai
-              </a>
+              />
             </div>
 
             {/* Phone */}
