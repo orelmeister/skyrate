@@ -107,12 +107,16 @@ export default function RootLayout({
         />
       </head>
       <body className={`${inter.className} antialiased bg-slate-50 text-slate-900`}>
+        {/* Disable Cloudflare Email Address Obfuscation for entire body */}
+        {/* CF replaces emails with <span> elements which breaks React hydration */}
+        <div dangerouslySetInnerHTML={{ __html: '<!--email_off-->' }} style={{ display: 'none' }} />
         <ErrorBoundary>
           <ServiceWorkerRegistrar />
           {children}
           <ChatWidget />
           <InstallPrompt />
         </ErrorBoundary>
+        <div dangerouslySetInnerHTML={{ __html: '<!--/email_off-->' }} style={{ display: 'none' }} />
       </body>
     </html>
   );
