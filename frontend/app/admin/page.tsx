@@ -36,7 +36,7 @@ export default function AdminDashboard() {
   const router = useRouter();
   const { user, isAuthenticated } = useAuthStore();
 
-  const [activeTab, setActiveTab] = useState<"overview" | "users" | "tickets" | "frn" | "communications">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "users" | "tickets" | "frn" | "communications" | "blog">("overview");
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [users, setUsers] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
@@ -223,6 +223,7 @@ export default function AdminDashboard() {
             { key: "tickets", label: "Support Tickets", icon: "🎫" },
             { key: "frn", label: "FRN Monitor", icon: "📡" },
             { key: "communications", label: "Communications", icon: "📧" },
+            { key: "blog", label: "Blog Manager", icon: "📝" },
           ].map((tab) => (
             <button
               key={tab.key}
@@ -293,6 +294,7 @@ export default function AdminDashboard() {
                 loadUsers={loadUsers}
               />
             )}
+            {activeTab === "blog" && <BlogManagerTab />}
           </>
         )}
       </main>
@@ -987,5 +989,368 @@ function PriorityBadge({ priority }: { priority: string }) {
     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${styles[priority] || styles.medium}`}>
       {priority}
     </span>
+  );
+}
+
+
+// ==================== BLOG MANAGER TAB ====================
+
+function BlogManagerTab() {
+  const [posts, setPosts] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState("");
+
+  // Generator state
+  const [showGenerator, setShowGenerator] = useState(false);
+  const [genTopic, setGenTopic] = useState("");
+  const [genKeyword, setGenKeyword] = useState("");
+  const [genInstructions, setGenInstructions] = useState("");
+  const [genModel, setGenModel] = useState("gemini");
+  const [generating, setGenerating] = useState(false);
+
+  // Editor state
+  const [editingPost, setEditingPost] = useState<any>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editSlug, setEditSlug] = useState("");
+  const [editMeta, setEditMeta] = useState("");
+  const [editCategory, setEditCategory] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    loadPosts();
+  }, [statusFilter]);
+
+  async function loadPosts() {
+    setLoading(true);
+    try {
+      const res = await api.getAdminBlogPosts({
+        limit: 100,
+        status_filter: statusFilter || undefined,
+      });
+      setPosts(res.data?.posts || []);
+      setTotal(res.data?.total || 0);
+    } catch (e) {
+      console.error("Failed to load blog posts", e);
+    }
+    setLoading(false);
+  }
+
+  async function handleGenerate() {
+    if (!genTopic.trim() || !genKeyword.trim()) return;
+    setGenerating(true);
+    try {
+      const res = await api.generateBlogPost({
+        topic: genTopic,
+        target_keyword: genKeyword,
+        additional_instructions: genInstructions,
+        preferred_model: genModel,
+      });
+      if (res.data?.post) {
+        // Open the generated post in editor
+        openEditor(res.data.post);
+        setShowGenerator(false);
+        setGenTopic("");
+        setGenKeyword("");
+        setGenInstructions("");
+        loadPosts();
+      }
+    } catch (e: any) {
+      alert("Generation failed: " + (e.message || "Unknown error"));
+    }
+    setGenerating(false);
+  }
+
+  function openEditor(post: any) {
+    setEditingPost(post);
+    setEditTitle(post.title || "");
+    setEditSlug(post.slug || "");
+    setEditMeta(post.meta_description || "");
+    setEditCategory(post.category || "Guide");
+    setEditContent(post.content_html || "");
+  }
+
+  async function loadPostForEdit(postId: number) {
+    try {
+      const res = await api.getAdminBlogPost(postId);
+      if (res.data?.post) openEditor(res.data.post);
+    } catch (e) {
+      console.error("Failed to load post", e);
+    }
+  }
+
+  async function handleSave() {
+    if (!editingPost) return;
+    setSaving(true);
+    try {
+      await api.updateBlogPost(editingPost.id, {
+        title: editTitle,
+        slug: editSlug,
+        meta_description: editMeta,
+        category: editCategory,
+        content_html: editContent,
+      });
+      setEditingPost(null);
+      loadPosts();
+    } catch (e: any) {
+      alert("Save failed: " + (e.message || "Unknown error"));
+    }
+    setSaving(false);
+  }
+
+  async function handlePublish(postId: number) {
+    try {
+      await api.publishBlogPost(postId);
+      loadPosts();
+      if (editingPost?.id === postId) setEditingPost(null);
+    } catch (e) {
+      console.error("Publish failed", e);
+    }
+  }
+
+  async function handleUnpublish(postId: number) {
+    try {
+      await api.unpublishBlogPost(postId);
+      loadPosts();
+    } catch (e) {
+      console.error("Unpublish failed", e);
+    }
+  }
+
+  async function handleDelete(postId: number) {
+    if (!confirm("Delete this blog post permanently?")) return;
+    try {
+      await api.deleteBlogPost(postId);
+      loadPosts();
+      if (editingPost?.id === postId) setEditingPost(null);
+    } catch (e) {
+      console.error("Delete failed", e);
+    }
+  }
+
+  // ---- Editor View ----
+  if (editingPost) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <button onClick={() => setEditingPost(null)} className="text-sm text-purple-600 hover:underline">
+            ← Back to Posts
+          </button>
+          <div className="flex items-center gap-2">
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+              editingPost.status === "published" ? "bg-green-100 text-green-700" :
+              editingPost.status === "archived" ? "bg-slate-100 text-slate-600" :
+              "bg-yellow-100 text-yellow-700"
+            }`}>
+              {editingPost.status}
+            </span>
+            {editingPost.status !== "published" && (
+              <button onClick={() => handlePublish(editingPost.id)} className="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700">
+                Publish
+              </button>
+            )}
+            {editingPost.status === "published" && (
+              <button onClick={() => handleUnpublish(editingPost.id)} className="text-xs bg-yellow-600 text-white px-3 py-1 rounded hover:bg-yellow-700">
+                Unpublish
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white border rounded-lg p-4 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Title</label>
+              <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="w-full border rounded px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Slug</label>
+              <input value={editSlug} onChange={(e) => setEditSlug(e.target.value)} className="w-full border rounded px-3 py-2 text-sm" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Meta Description</label>
+              <input value={editMeta} onChange={(e) => setEditMeta(e.target.value)} className="w-full border rounded px-3 py-2 text-sm" maxLength={500} />
+              <span className="text-xs text-slate-400">{editMeta.length}/160 chars</span>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Category</label>
+              <select value={editCategory} onChange={(e) => setEditCategory(e.target.value)} className="w-full border rounded px-3 py-2 text-sm">
+                <option value="Guide">Guide</option>
+                <option value="Analysis">Analysis</option>
+                <option value="Strategy">Strategy</option>
+                <option value="Industry">Industry</option>
+                <option value="News">News</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Content (HTML)</label>
+            <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} className="w-full border rounded px-3 py-2 text-sm font-mono" rows={20} />
+          </div>
+
+          {/* Preview */}
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Preview</label>
+            <div className="border rounded-lg p-6 bg-slate-50 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: editContent }} />
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setEditingPost(null)} className="text-sm text-slate-500 hover:text-slate-700 px-4 py-2">
+              Cancel
+            </button>
+            <button onClick={handleSave} disabled={saving} className="text-sm bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50">
+              {saving ? "Saving..." : "Save Changes"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Main List View ----
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900">Blog Manager</h2>
+          <p className="text-sm text-slate-500">{total} total posts</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border rounded px-3 py-2 text-sm">
+            <option value="">All Status</option>
+            <option value="draft">Draft</option>
+            <option value="published">Published</option>
+            <option value="archived">Archived</option>
+          </select>
+          <button onClick={() => setShowGenerator(!showGenerator)} className="bg-purple-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-purple-700">
+            ✨ AI Generate
+          </button>
+        </div>
+      </div>
+
+      {/* AI Generator Panel */}
+      {showGenerator && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-6 space-y-4">
+          <h3 className="font-semibold text-purple-900">AI Blog Generator</h3>
+          <p className="text-sm text-purple-700">
+            Enter a topic and target keyword. The AI will generate a draft blog post following SkyRate&apos;s content rules
+            (informational tone, no DIY advice, drives signups, includes disclaimers).
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-purple-800 mb-1">Topic *</label>
+              <input value={genTopic} onChange={(e) => setGenTopic(e.target.value)} placeholder="e.g., How to Track E-Rate FRN Status Changes" className="w-full border border-purple-300 rounded px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-purple-800 mb-1">Target SEO Keyword *</label>
+              <input value={genKeyword} onChange={(e) => setGenKeyword(e.target.value)} placeholder="e.g., E-Rate FRN status tracking" className="w-full border border-purple-300 rounded px-3 py-2 text-sm" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-purple-800 mb-1">Additional Instructions (optional)</label>
+            <textarea value={genInstructions} onChange={(e) => setGenInstructions(e.target.value)} placeholder="Any specific angles, links, or points to cover..." className="w-full border border-purple-300 rounded px-3 py-2 text-sm" rows={2} />
+          </div>
+          <div className="flex items-center gap-4">
+            <div>
+              <label className="block text-xs font-medium text-purple-800 mb-1">AI Model</label>
+              <select value={genModel} onChange={(e) => setGenModel(e.target.value)} className="border border-purple-300 rounded px-3 py-2 text-sm">
+                <option value="gemini">Gemini (Fast)</option>
+                <option value="deepseek">DeepSeek (Deep)</option>
+              </select>
+            </div>
+            <div className="flex-1" />
+            <button onClick={() => setShowGenerator(false)} className="text-sm text-purple-600 hover:underline">
+              Cancel
+            </button>
+            <button onClick={handleGenerate} disabled={generating || !genTopic.trim() || !genKeyword.trim()} className="bg-purple-600 text-white text-sm font-medium px-6 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50">
+              {generating ? "Generating..." : "Generate Draft"}
+            </button>
+          </div>
+          {generating && (
+            <div className="flex items-center gap-2 text-sm text-purple-600">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600" />
+              AI is writing your blog post... this may take 15-30 seconds.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Posts Table */}
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600" />
+        </div>
+      ) : posts.length === 0 ? (
+        <div className="text-center py-12 text-slate-500">
+          <p className="text-lg mb-2">No blog posts yet</p>
+          <p className="text-sm">Use the AI Generator to create your first post.</p>
+        </div>
+      ) : (
+        <div className="bg-white border rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b">
+              <tr>
+                <th className="text-left px-4 py-3 font-medium text-slate-600">Title</th>
+                <th className="text-left px-4 py-3 font-medium text-slate-600">Category</th>
+                <th className="text-left px-4 py-3 font-medium text-slate-600">Status</th>
+                <th className="text-left px-4 py-3 font-medium text-slate-600">Created</th>
+                <th className="text-right px-4 py-3 font-medium text-slate-600">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {posts.map((post) => (
+                <tr key={post.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3">
+                    <button onClick={() => loadPostForEdit(post.id)} className="text-purple-600 hover:underline font-medium text-left">
+                      {post.title}
+                    </button>
+                    <div className="text-xs text-slate-400 mt-0.5">/blog/{post.slug}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{post.category}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                      post.status === "published" ? "bg-green-100 text-green-700" :
+                      post.status === "archived" ? "bg-slate-100 text-slate-600" :
+                      "bg-yellow-100 text-yellow-700"
+                    }`}>
+                      {post.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-slate-500">
+                    {post.created_at ? new Date(post.created_at).toLocaleDateString() : "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-2">
+                      <button onClick={() => loadPostForEdit(post.id)} className="text-xs text-slate-500 hover:text-purple-600">
+                        Edit
+                      </button>
+                      {post.status === "draft" && (
+                        <button onClick={() => handlePublish(post.id)} className="text-xs text-green-600 hover:underline">
+                          Publish
+                        </button>
+                      )}
+                      {post.status === "published" && (
+                        <button onClick={() => handleUnpublish(post.id)} className="text-xs text-yellow-600 hover:underline">
+                          Unpublish
+                        </button>
+                      )}
+                      <button onClick={() => handleDelete(post.id)} className="text-xs text-red-500 hover:underline">
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }

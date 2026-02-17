@@ -2331,6 +2331,115 @@ class ApiClient {
       body: JSON.stringify({ message }),
     });
   }
+
+  // ==================== BLOG MANAGEMENT ====================
+
+  /**
+   * List published blog posts (public)
+   */
+  async getBlogPosts(params?: { limit?: number; offset?: number; category?: string }): Promise<ApiResponse<any>> {
+    const searchParams = new URLSearchParams();
+    if (params?.limit) searchParams.set('limit', String(params.limit));
+    if (params?.offset) searchParams.set('offset', String(params.offset));
+    if (params?.category) searchParams.set('category', params.category);
+    const qs = searchParams.toString();
+    return this.request(`/api/v1/blog/posts${qs ? '?' + qs : ''}`);
+  }
+
+  /**
+   * Get a single published blog post by slug (public)
+   */
+  async getBlogPost(slug: string): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/blog/posts/${slug}`);
+  }
+
+  /**
+   * List all blog posts for admin (includes drafts)
+   */
+  async getAdminBlogPosts(params?: { limit?: number; offset?: number; status_filter?: string }): Promise<ApiResponse<any>> {
+    const searchParams = new URLSearchParams();
+    if (params?.limit) searchParams.set('limit', String(params.limit));
+    if (params?.offset) searchParams.set('offset', String(params.offset));
+    if (params?.status_filter) searchParams.set('status_filter', params.status_filter);
+    const qs = searchParams.toString();
+    return this.request(`/api/v1/blog/admin/posts${qs ? '?' + qs : ''}`);
+  }
+
+  /**
+   * Get a single blog post by ID for admin
+   */
+  async getAdminBlogPost(postId: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/blog/admin/posts/${postId}`);
+  }
+
+  /**
+   * Create a blog post manually (admin)
+   */
+  async createBlogPost(data: {
+    title: string;
+    slug: string;
+    content_html: string;
+    meta_description?: string;
+    category?: string;
+    status?: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/blog/admin/posts', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * Update a blog post (admin)
+   */
+  async updateBlogPost(postId: number, data: Record<string, any>): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/blog/admin/posts/${postId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * Delete a blog post (admin)
+   */
+  async deleteBlogPost(postId: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/blog/admin/posts/${postId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Publish a blog post (admin)
+   */
+  async publishBlogPost(postId: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/blog/admin/posts/${postId}/publish`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Unpublish a blog post (admin)
+   */
+  async unpublishBlogPost(postId: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/blog/admin/posts/${postId}/unpublish`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Generate a blog post using AI (admin)
+   */
+  async generateBlogPost(data: {
+    topic: string;
+    target_keyword: string;
+    additional_instructions?: string;
+    preferred_model?: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/blog/admin/generate', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
 }
 
 // Singleton instance

@@ -108,6 +108,13 @@ export default function TopErateDenialReasonsPage() {
 
           {/* Article Body */}
           <div className="prose prose-slate prose-lg max-w-none">
+            {/* Disclaimer */}
+            <div className="bg-purple-50 border border-purple-200 rounded-xl p-5 mb-10">
+              <p className="text-purple-900 text-sm leading-relaxed">
+                <strong>Disclaimer:</strong> This article is for informational purposes only and does not constitute legal, regulatory, or compliance advice. E-Rate rules are complex and change frequently. For specific guidance on your situation, <Link href="/contact" className="text-purple-600 underline font-medium">contact our team</Link> or <Link href="/sign-up" className="text-purple-600 underline font-medium">try SkyRate AI</Link> for personalized analysis.
+              </p>
+            </div>
+
             <section className="mb-12">
               <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">The E-Rate Denial Landscape</h2>
               <p className="text-slate-700 leading-relaxed mb-6">
@@ -210,6 +217,22 @@ export default function TopErateDenialReasonsPage() {
                 <p className="text-sm text-slate-700"><strong>How to prevent it:</strong> Monitor your EPC account regularly for PIA inquiries. Designate a specific person responsible for responding to USAC communications. Keep all E-Rate records organized and readily accessible throughout the review period.</p>
               </div>
             </section>
+
+            {/* Mid-Article CTA */}
+            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-6 my-10">
+              <p className="text-slate-900 font-semibold mb-2">Feeling overwhelmed? You don&apos;t have to do this alone.</p>
+              <p className="text-slate-600 text-sm mb-4">
+                SkyRate AI automates the complex parts of E-Rate management so you can focus on what matters. Our platform handles denial analysis, appeal generation, FRN monitoring, and more.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <Link href="/sign-up" className="inline-flex items-center gap-1 bg-purple-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
+                  Start Free Trial <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+                <Link href="/contact" className="inline-flex items-center gap-1 border border-purple-300 text-purple-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-purple-50 transition-colors">
+                  Contact Us for Help
+                </Link>
+              </div>
+            </div>
 
             {/* Denial Reason 6 */}
             <section className="mb-10">
@@ -322,6 +345,15 @@ export default function TopErateDenialReasonsPage() {
                 Prevention is always better than cure. By understanding these ten common denial reasons and implementing the preventive measures for each, you can dramatically reduce your denial rate and protect your E-Rate funding. Whether you manage a single school&apos;s E-Rate applications or oversee a large portfolio as a <Link href="/features/consultants" className="text-purple-600 hover:text-purple-800 font-medium underline decoration-purple-300">consultant</Link>, systematic quality checks and proactive compliance monitoring are your best defense against denials.
               </p>
             </section>
+
+            {/* Need Help? */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 my-10">
+              <p className="text-slate-900 font-semibold mb-2">Not sure where to start? We&apos;re here to help.</p>
+              <p className="text-slate-600 text-sm mb-3">
+                E-Rate can be complex, and every situation is different. If you&apos;re unsure about your next step or want expert guidance, our team is ready to assist. Reach out to us at <a href="mailto:support@skyrate.ai" className="text-purple-600 underline font-medium">support@skyrate.ai</a> or let our AI platform analyze your case automatically.
+              </p>
+              <Link href="/contact" className="text-purple-600 font-medium text-sm hover:underline">Contact our team →</Link>
+            </div>
           </div>
         </div>
       </article>

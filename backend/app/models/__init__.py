@@ -16,6 +16,7 @@ from .applicant import (
     FRNStatusType,
     BENSubscriptionStatus
 )
+from .blog import BlogPost, BlogStatus
 
 __all__ = [
     "User",
@@ -52,4 +53,7 @@ __all__ = [
     "DataSyncStatus",
     "FRNStatusType",
     "BENSubscriptionStatus",
+    # Blog models
+    "BlogPost",
+    "BlogStatus",
 ]

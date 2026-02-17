@@ -108,6 +108,13 @@ export default function ErateConsultantSoftwareGuidePage() {
 
           {/* Article Body */}
           <div className="prose prose-slate prose-lg max-w-none">
+            {/* Disclaimer */}
+            <div className="bg-purple-50 border border-purple-200 rounded-xl p-5 mb-10">
+              <p className="text-purple-900 text-sm leading-relaxed">
+                <strong>Disclaimer:</strong> This article is for informational purposes only and does not constitute legal, regulatory, or compliance advice. E-Rate rules are complex and change frequently. For specific guidance on your situation, <Link href="/contact" className="text-purple-600 underline font-medium">contact our team</Link> or <Link href="/sign-up" className="text-purple-600 underline font-medium">try SkyRate AI</Link> for personalized analysis.
+              </p>
+            </div>
+
             <section className="mb-12">
               <p className="text-slate-700 leading-relaxed mb-6">
                 E-Rate consulting is a specialized, high-stakes profession. The consultants who help schools and libraries navigate the federal E-Rate program are responsible for millions of dollars in funding decisions every year. They manage competitive bidding, file complex applications, track FRN statuses across multiple funding years, respond to Program Integrity Assurance (PIA) reviews, and — when things go wrong — build appeals to recover denied funding.
@@ -264,6 +271,22 @@ export default function ErateConsultantSoftwareGuidePage() {
               </p>
             </section>
 
+            {/* Mid-Article CTA */}
+            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-6 my-10">
+              <p className="text-slate-900 font-semibold mb-2">Feeling overwhelmed? You don&apos;t have to do this alone.</p>
+              <p className="text-slate-600 text-sm mb-4">
+                SkyRate AI automates the complex parts of E-Rate management so you can focus on what matters. Our platform handles denial analysis, appeal generation, FRN monitoring, and more.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <Link href="/sign-up" className="inline-flex items-center gap-1 bg-purple-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
+                  Start Free Trial <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+                <Link href="/contact" className="inline-flex items-center gap-1 border border-purple-300 text-purple-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-purple-50 transition-colors">
+                  Contact Us for Help
+                </Link>
+              </div>
+            </div>
+
             <section className="mb-12">
               <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">What Makes SkyRate AI Different</h2>
               <p className="text-slate-700 leading-relaxed mb-6">
@@ -338,6 +361,15 @@ export default function ErateConsultantSoftwareGuidePage() {
                 For most consultants, the software pays for itself within the first month through time savings alone. The additional revenue from being able to serve more clients and recover more denied funding makes it a clear investment. Check our <Link href="/pricing" className="text-purple-600 hover:text-purple-800 font-medium underline decoration-purple-300">pricing page</Link> for current plans.
               </p>
             </section>
+
+            {/* Need Help? */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 my-10">
+              <p className="text-slate-900 font-semibold mb-2">Not sure where to start? We&apos;re here to help.</p>
+              <p className="text-slate-600 text-sm mb-3">
+                E-Rate can be complex, and every situation is different. If you&apos;re unsure about your next step or want expert guidance, our team is ready to assist. Reach out to us at <a href="mailto:support@skyrate.ai" className="text-purple-600 underline font-medium">support@skyrate.ai</a> or let our AI platform analyze your case automatically.
+              </p>
+              <Link href="/contact" className="text-purple-600 font-medium text-sm hover:underline">Contact our team →</Link>
+            </div>
           </div>
         </div>
       </article>
