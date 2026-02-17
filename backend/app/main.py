@@ -301,6 +301,36 @@ def seed_demo_accounts():
         db.close()
 
 
+def _run_schema_migrations(engine):
+    """
+    Add missing columns to existing tables in MySQL.
+    SQLAlchemy's create_all() only creates NEW tables — it won't add columns
+    to tables that already exist. This function handles that.
+    """
+    from sqlalchemy import text, inspect
+    
+    migrations = [
+        # (table, column, SQL type, default)
+        ("users", "phone_verified", "TINYINT(1) DEFAULT 0", None),
+        ("users", "onboarding_completed", "TINYINT(1) DEFAULT 0", None),
+        ("users", "auth_provider", "VARCHAR(50) DEFAULT 'local'", None),
+        ("users", "full_name", "VARCHAR(255) DEFAULT NULL", None),
+    ]
+    
+    try:
+        inspector = inspect(engine)
+        for table, column, col_type, _ in migrations:
+            if not inspector.has_table(table):
+                continue
+            existing_cols = [c["name"] for c in inspector.get_columns(table)]
+            if column not in existing_cols:
+                with engine.begin() as conn:
+                    conn.execute(text(f"ALTER TABLE `{table}` ADD COLUMN `{column}` {col_type}"))
+                logger.info(f"Migration: Added column {table}.{column}")
+    except Exception as e:
+        logger.error(f"Schema migration error (non-fatal): {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
@@ -317,9 +347,12 @@ async def lifespan(app: FastAPI):
     from app.models.push_subscription import PushSubscription
     from app.models.support_ticket import SupportTicket, TicketMessage
     
-    # Create database tables
+    # Create database tables (new tables only — does NOT add columns to existing tables)
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables created")
+    
+    # Run lightweight schema migrations for MySQL (add missing columns)
+    _run_schema_migrations(engine)
     
     # Seed demo accounts for testing
     seed_demo_accounts()
