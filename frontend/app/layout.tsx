@@ -4,6 +4,7 @@ import "./globals.css";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import InstallPrompt from "@/components/InstallPrompt";
 import ChatWidget from "@/components/ChatWidget";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const inter = Inter({ 
   subsets: ["latin"],
@@ -106,10 +107,12 @@ export default function RootLayout({
         />
       </head>
       <body className={`${inter.className} antialiased bg-slate-50 text-slate-900`}>
-        <ServiceWorkerRegistrar />
-        {children}
-        <ChatWidget />
-        <InstallPrompt />
+        <ErrorBoundary>
+          <ServiceWorkerRegistrar />
+          {children}
+          <ChatWidget />
+          <InstallPrompt />
+        </ErrorBoundary>
       </body>
     </html>
   );
