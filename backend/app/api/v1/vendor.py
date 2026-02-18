@@ -149,6 +149,7 @@ async def get_serviced_entities(
     year: Optional[int] = None,
     limit: int = 500,
     profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
 ):
     """
     Get all schools/entities that your company services based on your SPIN.
@@ -162,11 +163,18 @@ async def get_serviced_entities(
     
     try:
         from utils.usac_client import USACDataClient
+        from app.services.cache_service import get_cached, set_cached, make_cache_key
+        
+        # Check cache first
+        cache_key = make_cache_key("vendor_entities", spin=profile.spin, year=year)
+        cached = get_cached(db, cache_key)
+        if cached:
+            return cached
         
         client = USACDataClient()
         summary = client.get_serviced_entities_summary(profile.spin, year)
         
-        return {
+        result = {
             "success": True,
             "spin": profile.spin,
             "service_provider_name": summary.get('service_provider_name'),
@@ -175,6 +183,11 @@ async def get_serviced_entities(
             "funding_years": summary.get('funding_years', []),
             "entities": summary.get('entities', [])
         }
+        
+        # Cache for 6 hours
+        set_cached(db, cache_key, result)
+        
+        return result
         
     except Exception as e:
         raise HTTPException(
@@ -378,6 +391,7 @@ async def get_frn_status(
     pending_reason: Optional[str] = None,
     limit: int = 500,
     profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
 ):
     """
     Get FRN status for all your contracts (filtered by your SPIN).
@@ -402,9 +416,19 @@ async def get_frn_status(
     
     try:
         from utils.usac_client import USACDataClient
+        from app.services.cache_service import get_cached, set_cached, make_cache_key
+        
+        # Check cache first
+        cache_key = make_cache_key("vendor_frn", spin=profile.spin, year=year, status=status, pending_reason=pending_reason)
+        cached = get_cached(db, cache_key)
+        if cached:
+            return cached
         
         client = USACDataClient()
         result = client.get_frn_status_by_spin(profile.spin, year, status, pending_reason, limit)
+        
+        # Cache for 6 hours
+        set_cached(db, cache_key, result)
         
         return result
         

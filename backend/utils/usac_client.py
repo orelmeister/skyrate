@@ -2506,3 +2506,113 @@ class USACDataClient:
                 'error': str(e),
                 'ben': ben
             }
+
+    def get_disbursements_batch(
+        self,
+        bens: list,
+        year: Optional[int] = None,
+        limit: int = 50000
+    ) -> Dict[str, Any]:
+        """
+        Get disbursement data for multiple BENs in a single USAC API call.
+        Uses SoQL WHERE ben IN (...) instead of N sequential calls.
+        
+        Args:
+            bens: List of Billed Entity Numbers
+            year: Optional funding year filter
+            limit: Maximum records to return
+            
+        Returns:
+            Dictionary with disbursement data grouped by BEN
+        """
+        if not bens:
+            return {'success': True, 'results': {}}
+        
+        try:
+            url = USAC_ENDPOINTS['invoice_disbursements']
+            
+            # Build IN clause for batch query
+            ben_list = ", ".join(f"'{b}'" for b in bens)
+            where_conditions = [f"ben IN ({ben_list})"]
+            
+            if year:
+                where_conditions.append(f"funding_year = '{year}'")
+            
+            params = {
+                '$where': ' AND '.join(where_conditions),
+                '$limit': limit,
+                '$order': 'ben ASC, funding_year DESC'
+            }
+            
+            logger.info(f"Batch fetching disbursements for {len(bens)} BENs in single query")
+            response = self.session.get(url, params=params, timeout=120)
+            response.raise_for_status()
+            data = response.json()
+            
+            # Group results by BEN
+            ben_groups: Dict[str, list] = {}
+            for record in data:
+                ben = record.get('ben', '')
+                if ben not in ben_groups:
+                    ben_groups[ben] = []
+                ben_groups[ben].append(record)
+            
+            # Process each BEN group (same logic as get_disbursements_by_ben)
+            results = {}
+            for ben, records in ben_groups.items():
+                total_disbursed = 0
+                total_authorized = 0
+                processed = []
+                
+                for record in records:
+                    disbursed = float(record.get('total_authorized_disbursement', 0) or 0)
+                    authorized = float(record.get('total_authorized_amount', 0) or 0)
+                    total_disbursed += disbursed
+                    total_authorized += authorized
+                    
+                    processed.append({
+                        'funding_request_number': record.get('funding_request_number', ''),
+                        'funding_year': record.get('funding_year', ''),
+                        'service_provider_name': record.get('service_provider_name', ''),
+                        'service_type': record.get('service_type', ''),
+                        'total_authorized_amount': authorized,
+                        'total_authorized_disbursement': disbursed,
+                        'remaining': authorized - disbursed,
+                        'last_date_to_invoice': record.get('last_date_to_invoice', ''),
+                        'frn_status': record.get('frn_status', ''),
+                        'applicant_name': record.get('applicant_name', record.get('ros_entity_name', '')),
+                    })
+                
+                entity_name = records[0].get('applicant_name', records[0].get('ros_entity_name', '')) if records else ''
+                
+                results[ben] = {
+                    'success': True,
+                    'ben': ben,
+                    'entity_name': entity_name,
+                    'total_records': len(processed),
+                    'total_disbursed': total_disbursed,
+                    'total_authorized': total_authorized,
+                    'disbursement_rate': round((total_disbursed / total_authorized * 100), 1) if total_authorized > 0 else 0,
+                    'disbursements': processed
+                }
+            
+            # Include BENs with no data
+            for ben in bens:
+                if ben not in results:
+                    results[ben] = {
+                        'success': True,
+                        'ben': ben,
+                        'entity_name': '',
+                        'total_records': 0,
+                        'total_disbursed': 0,
+                        'total_authorized': 0,
+                        'disbursement_rate': 0,
+                        'disbursements': []
+                    }
+            
+            logger.info(f"Batch disbursements: {len(data)} records across {len(ben_groups)} BENs")
+            return {'success': True, 'results': results}
+            
+        except Exception as e:
+            logger.error(f"Error batch fetching disbursements for {len(bens)} BENs: {e}")
+            return {'success': False, 'error': str(e), 'results': {}}

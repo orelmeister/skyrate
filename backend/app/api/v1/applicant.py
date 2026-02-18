@@ -1531,36 +1531,54 @@ async def get_disbursements(
     
     try:
         from utils.usac_client import USACDataClient
+        from app.services.cache_service import get_cached, set_cached, make_cache_key
         client = USACDataClient()
         
-        all_bens = []
+        all_ben_ids = [ben_record.ben for ben_record in bens]
+        
+        # Check cache first
+        cache_key = make_cache_key("disbursements", bens=all_ben_ids, year=year)
+        cached = get_cached(db, cache_key)
+        if cached:
+            return cached
+        
+        # Batch fetch all BENs in a single USAC API call
+        batch_result = client.get_disbursements_batch(all_ben_ids, year=year)
+        
+        all_bens_data = []
         grand_total_disbursed = 0
         grand_total_authorized = 0
         
-        for ben_record in bens:
-            result = client.get_disbursements_by_ben(ben_record.ben, year=year)
-            
-            if result.get('success'):
-                grand_total_disbursed += result.get('total_disbursed', 0)
-                grand_total_authorized += result.get('total_authorized', 0)
-                all_bens.append({
-                    "ben": ben_record.ben,
-                    "entity_name": result.get('entity_name', ben_record.entity_name or 'Unknown'),
-                    "total_records": result.get('total_records', 0),
-                    "total_disbursed": result.get('total_disbursed', 0),
-                    "total_authorized": result.get('total_authorized', 0),
-                    "disbursement_rate": result.get('disbursement_rate', 0),
-                    "disbursements": result.get('disbursements', [])[:20]
-                })
+        if batch_result.get('success'):
+            ben_name_map = {ben_record.ben: ben_record.entity_name for ben_record in bens}
+            for ben_id in all_ben_ids:
+                result = batch_result.get('results', {}).get(ben_id, {})
+                if result.get('success', False) or result.get('total_records', 0) > 0:
+                    grand_total_disbursed += result.get('total_disbursed', 0)
+                    grand_total_authorized += result.get('total_authorized', 0)
+                    all_bens_data.append({
+                        "ben": ben_id,
+                        "entity_name": result.get('entity_name') or ben_name_map.get(ben_id, 'Unknown'),
+                        "total_records": result.get('total_records', 0),
+                        "total_disbursed": result.get('total_disbursed', 0),
+                        "total_authorized": result.get('total_authorized', 0),
+                        "disbursement_rate": result.get('disbursement_rate', 0),
+                        "disbursements": result.get('disbursements', [])[:20]
+                    })
         
-        return {
+        response_data = {
             "success": True,
             "total_disbursed": grand_total_disbursed,
             "total_authorized": grand_total_authorized,
             "disbursement_rate": round((grand_total_disbursed / grand_total_authorized * 100), 1) if grand_total_authorized > 0 else 0,
-            "total_bens": len(all_bens),
-            "bens": all_bens
+            "total_bens": len(all_bens_data),
+            "bens": all_bens_data
         }
+        
+        # Cache for 6 hours
+        set_cached(db, cache_key, response_data)
+        
+        return response_data
     
     except Exception as e:
         raise HTTPException(

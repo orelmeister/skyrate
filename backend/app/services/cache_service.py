@@ -81,6 +81,21 @@ def make_frn_cache_key(bens: list, year: Optional[int], status_filter: Optional[
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+def make_cache_key(prefix: str, **kwargs) -> str:
+    """
+    Generic cache key generator.
+    Usage: make_cache_key("dashboard_stats", bens=["123","456"], year=2025)
+    """
+    import hashlib
+    parts = [prefix]
+    for k, v in sorted(kwargs.items()):
+        if isinstance(v, list):
+            v = ",".join(sorted(str(x) for x in v))
+        parts.append(f"{k}={v}")
+    raw = ":".join(parts)
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
 def cleanup_expired(db: Session, max_delete: int = 100):
     """Delete expired cache entries (call periodically)."""
     try:

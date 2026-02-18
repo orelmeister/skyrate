@@ -651,6 +651,15 @@ async def get_dashboard_stats(
     
     all_bens = [school.ben for school in schools]
     
+    # Check cache first (dashboard stats are expensive — 2 USAC API calls)
+    from app.services.cache_service import get_cached, set_cached, make_cache_key
+    cache_key = make_cache_key("dashboard_stats", bens=all_bens)
+    cached = get_cached(db, cache_key)
+    if cached:
+        # Update total_schools from DB (may have changed)
+        cached["total_schools"] = len(schools)
+        return cached
+    
     total_c2_funding = 0
     total_c1_funding = 0
     total_applications = 0
@@ -736,7 +745,7 @@ async def get_dashboard_stats(
     except Exception as e:
         print(f"Error fetching Form 471 data: {e}")
     
-    return {
+    result = {
         "success": True,
         "total_schools": len(schools),
         "total_c2_funding": total_c2_funding,
@@ -748,6 +757,11 @@ async def get_dashboard_stats(
         "pending_count": pending_count,
         "schools_with_denials": len(bens_with_denials)
     }
+    
+    # Cache for 6 hours
+    set_cached(db, cache_key, result)
+    
+    return result
 
 
 @router.get("/denied-applications")
@@ -776,6 +790,14 @@ async def get_denied_applications(
     
     all_bens = [school.ben for school in schools]
     ben_to_school = {school.ben: school for school in schools}
+    
+    # Check cache first
+    from app.services.cache_service import get_cached, set_cached, make_cache_key
+    funding_year = year or 2025
+    cache_key = make_cache_key("denied_apps", bens=all_bens, year=funding_year)
+    cached = get_cached(db, cache_key)
+    if cached:
+        return cached
     
     # For now, we don't track appeals by FRN since AppealRecord links to Application
     # which is not populated from USAC data. Will show has_appeal=False for all.
@@ -898,13 +920,18 @@ async def get_denied_applications(
         )
     )
     
-    return {
+    result = {
         "success": True,
         "denied_applications": denied_applications,
         "total_denied": len(denied_applications),
         "total_denied_amount": total_denied_amount,
         "year": funding_year
     }
+    
+    # Cache for 6 hours
+    set_cached(db, cache_key, result)
+    
+    return result
 
 
 @router.get("/schools")
@@ -1821,10 +1848,12 @@ async def get_school_frn_status(
 async def get_portfolio_frn_summary(
     year: Optional[int] = None,
     profile: ConsultantProfile = Depends(get_consultant_profile),
+    db: Session = Depends(get_db),
 ):
     """
     Get a quick summary of FRN status across all portfolio schools.
     Returns aggregate counts without individual FRN details.
+    OPTIMIZED: Uses batch query (1 API call) + DB cache instead of N sequential calls.
     
     Args:
         year: Optional funding year filter (defaults to all years)
@@ -1844,10 +1873,20 @@ async def get_portfolio_frn_summary(
             }
         }
     
+    # Check cache first
+    from app.services.cache_service import get_cached, set_cached, make_cache_key
+    cache_key = make_cache_key("frn_summary", bens=school_bens, year=year)
+    cached = get_cached(db, cache_key)
+    if cached:
+        return cached
+    
     try:
         from utils.usac_client import USACDataClient
         
         client = USACDataClient()
+        
+        # OPTIMIZED: Single batch call instead of N sequential calls
+        batch_result = client.get_frn_status_batch(school_bens, year=year)
         
         total_frns = 0
         status_counts = {
@@ -1856,32 +1895,36 @@ async def get_portfolio_frn_summary(
             "pending": {"count": 0, "amount": 0}
         }
         
-        for ben in school_bens:
-            result = client.get_frn_status_by_ben(ben, year)
-            
-            if result.get('success') and result.get('frns'):
-                for frn in result.get('frns', []):
-                    total_frns += 1
-                    frn_status = (frn.get('status') or '').lower()
-                    amount = float(frn.get('total_authorized_amount') or frn.get('amount') or 0)
-                    
-                    if 'funded' in frn_status or 'committed' in frn_status:
-                        status_counts["funded"]["count"] += 1
-                        status_counts["funded"]["amount"] += amount
-                    elif 'denied' in frn_status:
-                        status_counts["denied"]["count"] += 1
-                        status_counts["denied"]["amount"] += amount
-                    else:
-                        status_counts["pending"]["count"] += 1
-                        status_counts["pending"]["amount"] += amount
+        if batch_result.get('success'):
+            for ben, ben_data in batch_result.get('results', {}).items():
+                if isinstance(ben_data, dict) and ben_data.get('frns'):
+                    for frn in ben_data.get('frns', []):
+                        total_frns += 1
+                        frn_status = (frn.get('status') or '').lower()
+                        amount = float(frn.get('total_authorized_amount') or frn.get('amount') or 0)
+                        
+                        if 'funded' in frn_status or 'committed' in frn_status:
+                            status_counts["funded"]["count"] += 1
+                            status_counts["funded"]["amount"] += amount
+                        elif 'denied' in frn_status:
+                            status_counts["denied"]["count"] += 1
+                            status_counts["denied"]["amount"] += amount
+                        else:
+                            status_counts["pending"]["count"] += 1
+                            status_counts["pending"]["amount"] += amount
         
-        return {
+        result = {
             "success": True,
             "total_schools": len(school_bens),
             "total_frns": total_frns,
             "summary": status_counts,
             "year_filter": year
         }
+        
+        # Cache for 6 hours
+        set_cached(db, cache_key, result)
+        
+        return result
         
     except Exception as e:
         raise HTTPException(
