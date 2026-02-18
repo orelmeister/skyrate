@@ -33,9 +33,6 @@ export default function ChatWidget() {
   const [replyText, setReplyText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Don't render for admin users
-  if (user?.role === "admin") return null;
-
   // Determine source based on current path
   const getSource = () => {
     if (typeof window === "undefined") return "chat_widget";
@@ -113,6 +110,9 @@ export default function ChatWidget() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [selectedTicket?.messages]);
+
+  // Don't render for admin users (must be after all hooks)
+  if (user?.role === "admin") return null;
 
   return (
     <>
