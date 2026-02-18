@@ -35,14 +35,21 @@ export default function NotificationSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Wait for Zustand hydration before checking auth
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
 
   useEffect(() => {
+    if (!hydrated) return;
     if (!isAuthenticated) {
       router.push('/sign-in');
       return;
     }
     fetchConfig();
-  }, [isAuthenticated, router]);
+  }, [hydrated, isAuthenticated, router]);
 
   const fetchConfig = async () => {
     try {
@@ -97,7 +104,7 @@ export default function NotificationSettingsPage() {
     }
   };
 
-  if (loading) {
+  if (!hydrated || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />

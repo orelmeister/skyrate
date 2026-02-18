@@ -163,6 +163,8 @@ export default function ConsultantPortalPage() {
   const [portfolioFrnYear, setPortfolioFrnYear] = useState<number | undefined>(undefined);
   const [portfolioFrnStatusFilter, setPortfolioFrnStatusFilter] = useState<string>("");
   const [portfolioFrnPendingReason, setPortfolioFrnPendingReason] = useState<string>("");
+  const [expandedSchools, setExpandedSchools] = useState<Set<string>>(new Set());
+  const [frnSortBy, setFrnSortBy] = useState<string>("name");
   
   // Query state
   const [queryInput, setQueryInput] = useState("");
@@ -189,6 +191,44 @@ export default function ConsultantPortalPage() {
     { value: "pending", label: "🟡 Pending" },
     { value: "unknown", label: "⚪ Unknown" },
   ];
+
+  // Smart amount formatter
+  const formatAmount = (amount: number) => {
+    if (!amount || amount === 0) return '$0';
+    if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
+    if (amount >= 1_000) return `$${Math.round(amount / 1_000).toLocaleString()}K`;
+    return `$${amount.toLocaleString()}`;
+  };
+
+  // Sorted portfolio schools
+  const sortedPortfolioSchools = useMemo(() => {
+    if (!portfolioFrnData?.schools) return [];
+    return [...portfolioFrnData.schools].sort((a: any, b: any) => {
+      if (frnSortBy === "name") return (a.entity_name || a.ben || '').localeCompare(b.entity_name || b.ben || '');
+      if (frnSortBy === "frns") return (b.total_frns || 0) - (a.total_frns || 0);
+      if (frnSortBy === "amount") return (b.total_amount || 0) - (a.total_amount || 0);
+      return 0;
+    });
+  }, [portfolioFrnData?.schools, frnSortBy]);
+
+  // Toggle school expand/collapse
+  const toggleSchoolExpand = (ben: string) => {
+    setExpandedSchools(prev => {
+      const next = new Set(prev);
+      if (next.has(ben)) next.delete(ben);
+      else next.add(ben);
+      return next;
+    });
+  };
+
+  // Expand/collapse all schools
+  const toggleAllSchools = () => {
+    if (expandedSchools.size === sortedPortfolioSchools.length) {
+      setExpandedSchools(new Set());
+    } else {
+      setExpandedSchools(new Set(sortedPortfolioSchools.map((s: any) => s.ben)));
+    }
+  };
 
   // Filtered schools based on search and status filter
   const filteredSchools = useMemo(() => {
@@ -984,12 +1024,15 @@ export default function ConsultantPortalPage() {
                     </div>
                     <span className="text-sm font-medium text-slate-700">Export Report</span>
                   </button>
-                  <button className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-purple-300 hover:bg-purple-50 transition-all text-center group">
-                    <div className="w-10 h-10 rounded-lg bg-purple-100 group-hover:bg-purple-200 flex items-center justify-center mx-auto mb-2 transition-colors">
-                      <span className="text-xl">📋</span>
+                  <Link
+                    href="/settings/notifications"
+                    className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-rose-300 hover:bg-rose-50 transition-all text-center group block"
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-rose-100 group-hover:bg-rose-200 flex items-center justify-center mx-auto mb-2 transition-colors">
+                      <span className="text-xl">🔔</span>
                     </div>
-                    <span className="text-sm font-medium text-slate-700">New Appeal</span>
-                  </button>
+                    <span className="text-sm font-medium text-slate-700">Notifications</span>
+                  </Link>
                 </div>
               </div>
 
@@ -1720,80 +1763,132 @@ export default function ConsultantPortalPage() {
                 </div>
               </div>
 
-              {/* Summary Cards */}
+              {/* Summary Cards — Clickable to filter */}
               {portfolioFrnData && (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                  <button
+                    onClick={() => { setPortfolioFrnStatusFilter(""); loadPortfolioFRNStatus(portfolioFrnYear, "", portfolioFrnPendingReason); }}
+                    className={`bg-white rounded-2xl border p-6 shadow-sm text-left transition-all hover:shadow-md ${
+                      portfolioFrnStatusFilter === "" ? "border-slate-400 ring-2 ring-slate-200" : "border-slate-200"
+                    }`}
+                  >
                     <div className="text-sm text-slate-600 mb-1">Total FRNs</div>
                     <div className="text-3xl font-bold text-slate-900">{portfolioFrnData.total_frns}</div>
                     <div className="text-xs text-slate-500 mt-1">Across {portfolioFrnData.total_schools} schools</div>
-                  </div>
-                  <div className="bg-white rounded-2xl border border-green-200 p-6 shadow-sm">
+                  </button>
+                  <button
+                    onClick={() => { setPortfolioFrnStatusFilter("Funded"); loadPortfolioFRNStatus(portfolioFrnYear, "Funded", portfolioFrnPendingReason); }}
+                    className={`bg-white rounded-2xl border p-6 shadow-sm text-left transition-all hover:shadow-md ${
+                      portfolioFrnStatusFilter === "Funded" ? "border-green-500 ring-2 ring-green-200" : "border-green-200"
+                    }`}
+                  >
                     <div className="text-sm text-green-600 mb-1">Funded</div>
                     <div className="text-3xl font-bold text-green-700">{portfolioFrnData.summary?.funded?.count || 0}</div>
-                    <div className="text-xs text-green-600 mt-1">${((portfolioFrnData.summary?.funded?.amount || 0) / 1000000).toFixed(1)}M</div>
-                  </div>
-                  <div className="bg-white rounded-2xl border border-amber-200 p-6 shadow-sm">
+                    <div className="text-xs text-green-600 mt-1" title={`$${(portfolioFrnData.summary?.funded?.amount || 0).toLocaleString()}`}>
+                      {formatAmount(portfolioFrnData.summary?.funded?.amount || 0)}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => { setPortfolioFrnStatusFilter("Pending"); loadPortfolioFRNStatus(portfolioFrnYear, "Pending", portfolioFrnPendingReason); }}
+                    className={`bg-white rounded-2xl border p-6 shadow-sm text-left transition-all hover:shadow-md ${
+                      portfolioFrnStatusFilter === "Pending" ? "border-amber-500 ring-2 ring-amber-200" : "border-amber-200"
+                    }`}
+                  >
                     <div className="text-sm text-amber-600 mb-1">Pending</div>
                     <div className="text-3xl font-bold text-amber-700">{portfolioFrnData.summary?.pending?.count || 0}</div>
-                    <div className="text-xs text-amber-600 mt-1">${((portfolioFrnData.summary?.pending?.amount || 0) / 1000000).toFixed(1)}M</div>
-                  </div>
-                  <div className="bg-white rounded-2xl border border-red-200 p-6 shadow-sm">
+                    <div className="text-xs text-amber-600 mt-1" title={`$${(portfolioFrnData.summary?.pending?.amount || 0).toLocaleString()}`}>
+                      {formatAmount(portfolioFrnData.summary?.pending?.amount || 0)}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => { setPortfolioFrnStatusFilter("Denied"); loadPortfolioFRNStatus(portfolioFrnYear, "Denied", portfolioFrnPendingReason); }}
+                    className={`bg-white rounded-2xl border p-6 shadow-sm text-left transition-all hover:shadow-md ${
+                      portfolioFrnStatusFilter === "Denied" ? "border-red-500 ring-2 ring-red-200" : "border-red-200"
+                    }`}
+                  >
                     <div className="text-sm text-red-600 mb-1">Denied</div>
                     <div className="text-3xl font-bold text-red-700">{portfolioFrnData.summary?.denied?.count || 0}</div>
-                    <div className="text-xs text-red-600 mt-1">${((portfolioFrnData.summary?.denied?.amount || 0) / 1000000).toFixed(1)}M</div>
-                  </div>
+                    <div className="text-xs text-red-600 mt-1" title={`$${(portfolioFrnData.summary?.denied?.amount || 0).toLocaleString()}`}>
+                      {formatAmount(portfolioFrnData.summary?.denied?.amount || 0)}
+                    </div>
+                  </button>
                 </div>
               )}
 
-              {/* Schools Breakdown */}
+              {/* Schools Breakdown — Collapsible with sorting */}
               {portfolioFrnData?.schools && portfolioFrnData.schools.length > 0 && (
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="px-6 py-4 border-b border-slate-200">
-                    <h3 className="font-semibold text-slate-900">Schools ({portfolioFrnData.schools.length})</h3>
+                  <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+                    <h3 className="font-semibold text-slate-900">Schools ({sortedPortfolioSchools.length})</h3>
+                    <div className="flex items-center gap-3">
+                      <label className="text-xs text-slate-500">Sort by:</label>
+                      <select
+                        value={frnSortBy}
+                        onChange={(e) => setFrnSortBy(e.target.value)}
+                        className="text-xs px-2 py-1 border border-slate-200 rounded-lg bg-white"
+                      >
+                        <option value="name">School Name</option>
+                        <option value="frns">FRN Count</option>
+                        <option value="amount">Total Amount</option>
+                      </select>
+                      <button
+                        onClick={toggleAllSchools}
+                        className="text-xs px-3 py-1 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                      >
+                        {expandedSchools.size === sortedPortfolioSchools.length ? "Collapse All" : "Expand All"}
+                      </button>
+                    </div>
                   </div>
                   <div className="divide-y divide-slate-100">
-                    {portfolioFrnData.schools.map((school: any) => (
-                      <div key={school.ben} className="px-6 py-4 hover:bg-slate-50 transition-colors">
-                        <div className="flex items-center justify-between mb-2">
-                          <div>
-                            <span className="font-medium text-slate-900">{school.entity_name || school.ben}</span>
-                            <span className="ml-2 text-xs text-slate-500 font-mono">BEN: {school.ben}</span>
-                          </div>
-                          <span className="text-sm text-slate-500">{school.total_frns} FRNs</span>
-                        </div>
-                        <div className="flex gap-4 text-xs">
-                          <span className="px-2 py-1 bg-green-50 text-green-700 rounded-full">{school.funded} Funded</span>
-                          <span className="px-2 py-1 bg-amber-50 text-amber-700 rounded-full">{school.pending} Pending</span>
-                          <span className="px-2 py-1 bg-red-50 text-red-700 rounded-full">{school.denied} Denied</span>
-                          <span className="text-slate-500">${(school.total_amount || 0).toLocaleString()}</span>
-                        </div>
-                        {/* Show first few FRNs */}
-                        {school.frns && school.frns.length > 0 && (
-                          <div className="mt-3 space-y-1">
-                            {school.frns.slice(0, 5).map((frn: any, i: number) => (
-                              <div key={i} className="flex items-center justify-between text-xs text-slate-600 bg-slate-50 rounded px-3 py-1.5">
-                                <span className="font-mono">FRN: {frn.funding_request_number || frn.frn}</span>
-                                <span className={`px-2 py-0.5 rounded-full ${
-                                  (frn.frn_status || frn.status || '').toLowerCase().includes('funded') ? 'bg-green-100 text-green-700' :
-                                  (frn.frn_status || frn.status || '').toLowerCase().includes('denied') ? 'bg-red-100 text-red-700' :
-                                  'bg-amber-100 text-amber-700'
-                                }`}>
-                                  {frn.frn_status || frn.status || 'Unknown'}
-                                </span>
-                                {frn.pending_reason && (
-                                  <span className="text-amber-600 truncate max-w-[200px]">{frn.pending_reason}</span>
-                                )}
-                                <span className="text-slate-400">${parseFloat(frn.total_authorized_amount || frn.amount || 0).toLocaleString()}</span>
+                    {sortedPortfolioSchools.map((school: any) => {
+                      const isExpanded = expandedSchools.has(school.ben);
+                      return (
+                        <div key={school.ben} className="hover:bg-slate-50/50 transition-colors">
+                          <button
+                            onClick={() => toggleSchoolExpand(school.ben)}
+                            className="w-full px-6 py-4 text-left"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className={`text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
+                                <span className="font-medium text-slate-900">{school.entity_name || school.ben}</span>
+                                <span className="text-xs text-slate-500 font-mono">BEN: {school.ben}</span>
                               </div>
-                            ))}
-                            {school.frns.length > 5 && (
-                              <div className="text-xs text-slate-400 pl-3">+ {school.frns.length - 5} more FRNs</div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                              <div className="flex items-center gap-3">
+                                <span className="text-sm text-slate-500">{school.total_frns} FRNs</span>
+                                <span className="text-sm font-medium text-slate-700">{formatAmount(school.total_amount || 0)}</span>
+                              </div>
+                            </div>
+                            <div className="flex gap-3 text-xs mt-2 ml-6">
+                              <span className="px-2 py-1 bg-green-50 text-green-700 rounded-full">{school.funded} Funded</span>
+                              <span className="px-2 py-1 bg-amber-50 text-amber-700 rounded-full">{school.pending} Pending</span>
+                              <span className="px-2 py-1 bg-red-50 text-red-700 rounded-full">{school.denied} Denied</span>
+                            </div>
+                          </button>
+                          {/* FRN details — visible only when expanded */}
+                          {isExpanded && school.frns && school.frns.length > 0 && (
+                            <div className="px-6 pb-4 space-y-1 ml-6">
+                              {school.frns.map((frn: any, i: number) => (
+                                <div key={i} className="flex items-center justify-between text-xs text-slate-600 bg-slate-50 rounded px-3 py-1.5">
+                                  <span className="font-mono">FRN: {frn.funding_request_number || frn.frn}</span>
+                                  <span className={`px-2 py-0.5 rounded-full ${
+                                    (frn.frn_status || frn.status || '').toLowerCase().includes('funded') ? 'bg-green-100 text-green-700' :
+                                    (frn.frn_status || frn.status || '').toLowerCase().includes('denied') ? 'bg-red-100 text-red-700' :
+                                    'bg-amber-100 text-amber-700'
+                                  }`}>
+                                    {frn.frn_status || frn.status || 'Unknown'}
+                                  </span>
+                                  {frn.pending_reason && (
+                                    <span className="text-amber-600 truncate max-w-[200px]">{frn.pending_reason}</span>
+                                  )}
+                                  <span className="text-slate-400">${parseFloat(frn.total_authorized_amount || frn.amount || 0).toLocaleString()}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1897,12 +1992,12 @@ export default function ConsultantPortalPage() {
                     <p className="text-sm text-slate-500">Alerts for FRN status changes, denials, long-pending items, and deadlines</p>
                   </div>
                 </div>
-                <a
+                <Link
                   href="/settings/notifications"
                   className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl hover:bg-indigo-100 font-medium text-sm transition"
                 >
                   🔔 Manage Notification Settings →
-                </a>
+                </Link>
               </div>
 
               <div className="bg-white rounded-2xl border border-slate-200 p-6">
