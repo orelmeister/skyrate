@@ -111,10 +111,14 @@ export default function ChatWidget() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [selectedTicket?.messages]);
 
-  // Don't render for admin users (must be after all hooks)
-  if (user?.role === "admin") return null;
+  // Don't render chat widget for admin users.
+  // IMPORTANT: Do NOT use an early `return null` here. The SWC/Terser minifier
+  // hoists the useEffect calls above into the `return` comma expression, which
+  // places them AFTER an early return — breaking React's hooks rule and causing
+  // error #300 ("Rendered fewer hooks than expected") in production builds.
+  const isAdmin = user?.role === "admin";
 
-  return (
+  return isAdmin ? null : (
     <>
       {/* Floating Button */}
       <button
