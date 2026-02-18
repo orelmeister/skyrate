@@ -1078,6 +1078,7 @@ class USACDataClient:
         spin: str,
         year: Optional[int] = None,
         status_filter: Optional[str] = None,
+        pending_reason_filter: Optional[str] = None,
         limit: int = 2000
     ) -> Dict[str, Any]:
         """
@@ -1088,6 +1089,7 @@ class USACDataClient:
             spin: Service Provider Identification Number
             year: Optional funding year filter
             status_filter: Optional status filter ('Funded', 'Denied', 'Pending')
+            pending_reason_filter: Optional pending reason filter (partial match)
             limit: Maximum records to return
             
         Returns:
@@ -1115,6 +1117,9 @@ class USACDataClient:
             
             if status_filter:
                 where_conditions.append(f"form_471_frn_status_name = '{status_filter}'")
+            
+            if pending_reason_filter:
+                where_conditions.append(f"UPPER(pending_reason) LIKE UPPER('%{pending_reason_filter}%')")
             
             params = {
                 '$where': ' AND '.join(where_conditions),
@@ -1224,18 +1229,22 @@ class USACDataClient:
         self,
         ben: str,
         year: Optional[int] = None,
+        status_filter: Optional[str] = None,
+        limit: int = 500,
         spin: Optional[str] = None,
-        limit: int = 500
+        pending_reason_filter: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Get FRN status for a specific entity (BEN), optionally filtered by SPIN.
+        Get FRN status for a specific entity (BEN), optionally filtered by SPIN/status/pending reason.
         This shows the detailed status of each FRN for a specific school.
         
         Args:
             ben: Billed Entity Number
             year: Optional funding year filter
-            spin: Optional SPIN to filter (show only your FRNs at this entity)
+            status_filter: Optional status filter ('Funded', 'Denied', 'Pending')
             limit: Maximum records to return
+            spin: Optional SPIN to filter (show only your FRNs at this entity)
+            pending_reason_filter: Optional pending reason text filter
             
         Returns:
             Dictionary with FRN status details for the entity
@@ -1248,6 +1257,12 @@ class USACDataClient:
             
             if year:
                 where_conditions.append(f"funding_year = '{year}'")
+            
+            if status_filter:
+                where_conditions.append(f"UPPER(frn_status) LIKE UPPER('%{status_filter}%')")
+            
+            if pending_reason_filter:
+                where_conditions.append(f"UPPER(pending_reason) LIKE UPPER('%{pending_reason_filter}%')")
             
             if spin:
                 # Get spin_name for filtering
@@ -1442,7 +1457,13 @@ class USACDataClient:
         category: Optional[str] = None,
         service_type: Optional[str] = None,
         manufacturer: Optional[str] = None,
-        limit: int = 500
+        equipment_type: Optional[str] = None,
+        service_function: Optional[str] = None,
+        min_speed: Optional[str] = None,
+        max_speed: Optional[str] = None,
+        sort_by: Optional[str] = None,
+        limit: int = 2000,
+        offset: int = 0
     ) -> Dict[str, Any]:
         """
         Get Form 470 postings for lead generation.
@@ -1456,7 +1477,13 @@ class USACDataClient:
             category: Optional category filter ('1' for Cat1, '2' for Cat2)
             service_type: Optional service type filter
             manufacturer: Optional manufacturer name filter (partial match)
-            limit: Maximum records to return
+            equipment_type: Optional equipment/function type filter (e.g., 'Switches', 'Routers')
+            service_function: Optional service function filter (e.g., 'Managed Internal Broadband Services')
+            min_speed: Optional minimum speed/capacity filter
+            max_speed: Optional maximum speed/capacity filter
+            sort_by: Sort order - 'entity_name' for ABC, 'posting_date' (default) for newest first
+            limit: Maximum records to return (default 2000)
+            offset: Pagination offset
             
         Returns:
             Dictionary with 470 leads including entity info and services requested
@@ -1484,54 +1511,100 @@ class USACDataClient:
             if manufacturer:
                 where_conditions.append(f"UPPER(manufacturer) LIKE UPPER('%{manufacturer}%')")
             
-            # Fetch services data
-            services_url = USAC_ENDPOINTS['470_services']
-            params = {
-                '$where': ' AND '.join(where_conditions),
-                '$limit': limit * 2,  # Fetch more since we'll group
-                '$order': 'funding_year DESC'
-            }
+            # NEW: Equipment type / function filter (Items 6, 7)
+            if equipment_type:
+                where_conditions.append(f"UPPER(function) LIKE UPPER('%{equipment_type}%')")
             
-            logger.info(f"Fetching 470 services with: {params}")
-            response = self.session.get(services_url, params=params, timeout=60)
-            response.raise_for_status()
-            services_data = response.json()
+            if service_function:
+                where_conditions.append(f"UPPER(function) LIKE UPPER('%{service_function}%')")
+            
+            # NEW: Speed/capacity range filter (Item 8)
+            if min_speed:
+                where_conditions.append(f"minimum_capacity >= '{min_speed}'")
+            
+            if max_speed:
+                where_conditions.append(f"maximum_capacity <= '{max_speed}'")
+            
+            # Fetch services data — use large limit to get ALL matching records
+            services_url = USAC_ENDPOINTS['470_services']
+            all_services_data = []
+            fetch_offset = 0
+            fetch_limit = 5000  # USAC max per request
+            
+            while True:
+                params = {
+                    '$where': ' AND '.join(where_conditions),
+                    '$limit': fetch_limit,
+                    '$offset': fetch_offset,
+                    '$order': 'funding_year DESC'
+                }
+                
+                logger.info(f"Fetching 470 services batch at offset {fetch_offset}: {params.get('$where', '')[:200]}")
+                response = self.session.get(services_url, params=params, timeout=60)
+                response.raise_for_status()
+                batch = response.json()
+                
+                if not batch:
+                    break
+                    
+                all_services_data.extend(batch)
+                
+                # If we got fewer than the limit, we've fetched everything
+                if len(batch) < fetch_limit:
+                    break
+                    
+                fetch_offset += fetch_limit
+                
+                # Safety cap to avoid infinite loops
+                if fetch_offset > 50000:
+                    logger.warning("Hit 50k service records safety cap")
+                    break
+            
+            services_data = all_services_data
             
             if not services_data:
                 return {
                     'success': True,
                     'total_leads': 0,
                     'leads': [],
+                    'has_more': False,
                     'filters_applied': {
                         'year': year,
                         'state': state,
                         'category': category,
                         'service_type': service_type,
-                        'manufacturer': manufacturer
+                        'manufacturer': manufacturer,
+                        'equipment_type': equipment_type,
+                        'service_function': service_function,
+                        'min_speed': min_speed,
+                        'max_speed': max_speed,
                     }
                 }
             
             # Get unique application numbers to fetch basic info
             app_numbers = list(set(s.get('application_number') for s in services_data if s.get('application_number')))
             
-            # Fetch basic info for these applications (entity details, contacts)
+            # Fetch basic info in batches of 200 (no more [:100] cap!)
             basic_url = USAC_ENDPOINTS['470_basic']
+            basic_data = []
+            batch_size = 200
             
-            # Build state filter for basic info - join app numbers with proper quoting
-            quoted_app_nums = ','.join(f"'{an}'" for an in app_numbers[:100])
-            basic_where = f"application_number IN ({quoted_app_nums})"
-            if state:
-                basic_where += f" AND billed_entity_state = '{state.upper()}'"
-            
-            basic_params = {
-                '$where': basic_where,
-                '$limit': 500
-            }
-            
-            logger.info(f"Fetching 470 basic info for {len(app_numbers)} applications")
-            basic_response = self.session.get(basic_url, params=basic_params, timeout=60)
-            basic_response.raise_for_status()
-            basic_data = basic_response.json()
+            for i in range(0, len(app_numbers), batch_size):
+                batch_apps = app_numbers[i:i + batch_size]
+                quoted_app_nums = ','.join(f"'{an}'" for an in batch_apps)
+                basic_where = f"application_number IN ({quoted_app_nums})"
+                if state:
+                    basic_where += f" AND billed_entity_state = '{state.upper()}'"
+                
+                basic_params = {
+                    '$where': basic_where,
+                    '$limit': 5000
+                }
+                
+                logger.info(f"Fetching 470 basic info batch {i // batch_size + 1} ({len(batch_apps)} apps)")
+                basic_response = self.session.get(basic_url, params=basic_params, timeout=60)
+                basic_response.raise_for_status()
+                basic_data.extend(basic_response.json())
             
             # Create lookup for basic info by application_number
             basic_lookup = {b.get('application_number'): b for b in basic_data}
@@ -1606,19 +1679,33 @@ class USACDataClient:
                 lead['categories'] = list(lead['categories'])
                 leads.append(lead)
             
-            # Sort by posting date (newest first)
-            leads.sort(key=lambda x: x.get('posting_date') or '', reverse=True)
+            # Sort based on sort_by parameter (Item 10: ABC sorting)
+            if sort_by == 'entity_name':
+                leads.sort(key=lambda x: (x.get('entity_name') or '').lower())
+            else:
+                # Default: Sort by posting date (newest first)
+                leads.sort(key=lambda x: x.get('posting_date') or '', reverse=True)
+            
+            # Apply pagination
+            total_leads = len(leads)
+            paginated_leads = leads[offset:offset + limit]
             
             return {
                 'success': True,
-                'total_leads': len(leads),
-                'leads': leads[:limit],
+                'total_leads': total_leads,
+                'leads': paginated_leads,
+                'has_more': (offset + limit) < total_leads,
                 'filters_applied': {
                     'year': year,
                     'state': state,
                     'category': category,
                     'service_type': service_type,
-                    'manufacturer': manufacturer
+                    'manufacturer': manufacturer,
+                    'equipment_type': equipment_type,
+                    'service_function': service_function,
+                    'min_speed': min_speed,
+                    'max_speed': max_speed,
+                    'sort_by': sort_by,
                 }
             }
             
@@ -2159,6 +2246,95 @@ class USACDataClient:
             
         except Exception as e:
             logger.error(f"Error enriching entity {ben}: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'ben': ben
+            }
+
+    def get_disbursements_by_ben(
+        self,
+        ben: str,
+        year: Optional[int] = None,
+        limit: int = 500
+    ) -> Dict[str, Any]:
+        """
+        Get invoice/disbursement data for a BEN from USAC Open Data.
+        Uses the Invoice Disbursements dataset (jpiu-tj8h).
+        
+        Args:
+            ben: Billed Entity Number
+            year: Optional funding year filter
+            limit: Maximum records to return
+            
+        Returns:
+            Dictionary with disbursement records and summary
+        """
+        try:
+            url = USAC_ENDPOINTS['invoice_disbursements']
+            
+            where_conditions = [f"ben = '{ben}'"]
+            if year:
+                where_conditions.append(f"funding_year = '{year}'")
+            
+            params = {
+                '$where': ' AND '.join(where_conditions),
+                '$limit': limit,
+                '$order': 'funding_year DESC'
+            }
+            
+            logger.info(f"Fetching disbursements for BEN {ben}")
+            response = self.session.get(url, params=params, timeout=60)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if not data:
+                return {
+                    'success': True,
+                    'ben': ben,
+                    'total_records': 0,
+                    'total_disbursed': 0,
+                    'total_authorized': 0,
+                    'disbursements': []
+                }
+            
+            total_disbursed = 0
+            total_authorized = 0
+            records = []
+            
+            for record in data:
+                disbursed = float(record.get('total_authorized_disbursement', 0) or 0)
+                authorized = float(record.get('total_authorized_amount', 0) or 0)
+                total_disbursed += disbursed
+                total_authorized += authorized
+                
+                records.append({
+                    'funding_request_number': record.get('funding_request_number', ''),
+                    'funding_year': record.get('funding_year', ''),
+                    'service_provider_name': record.get('service_provider_name', ''),
+                    'service_type': record.get('service_type', ''),
+                    'total_authorized_amount': authorized,
+                    'total_authorized_disbursement': disbursed,
+                    'remaining': authorized - disbursed,
+                    'last_date_to_invoice': record.get('last_date_to_invoice', ''),
+                    'frn_status': record.get('frn_status', ''),
+                    'applicant_name': record.get('applicant_name', record.get('ros_entity_name', '')),
+                })
+            
+            return {
+                'success': True,
+                'ben': ben,
+                'entity_name': data[0].get('applicant_name', data[0].get('ros_entity_name', '')) if data else '',
+                'total_records': len(records),
+                'total_disbursed': total_disbursed,
+                'total_authorized': total_authorized,
+                'disbursement_rate': round((total_disbursed / total_authorized * 100), 1) if total_authorized > 0 else 0,
+                'disbursements': records
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching disbursements for BEN {ben}: {e}")
             return {
                 'success': False,
                 'error': str(e),

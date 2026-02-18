@@ -115,6 +115,7 @@ class AlertService:
             AlertType.FUNDING_APPROVED: config.alert_on_funding_approved,
             AlertType.FORM_470_MATCH: config.alert_on_form_470,
             AlertType.COMPETITOR_ACTIVITY: config.alert_on_competitor,
+            AlertType.PENDING_TOO_LONG: config.alert_on_status_change,
         }
         
         alert_type_enum = alert_type if isinstance(alert_type, AlertType) else AlertType(alert_type)
@@ -314,6 +315,47 @@ class AlertService:
             metadata={
                 "old_status": old_status,
                 "new_status": new_status,
+                "amount": amount,
+            }
+        )
+    
+    def alert_on_pending_too_long(
+        self,
+        user_id: int,
+        frn: str,
+        school_name: str,
+        pending_reason: str,
+        days_pending: int,
+        amount: float = 0
+    ) -> Optional[Alert]:
+        """
+        Create alert when an FRN has been pending for more than 15 days.
+        Helps users follow up with USAC on stalled applications.
+        """
+        if days_pending >= 30:
+            priority = AlertPriority.HIGH
+            emoji = "🔴"
+        elif days_pending >= 21:
+            priority = AlertPriority.MEDIUM
+            emoji = "🟠"
+        else:
+            priority = AlertPriority.LOW
+            emoji = "🟡"
+        
+        return self.create_alert(
+            user_id=user_id,
+            alert_type=AlertType.PENDING_TOO_LONG,
+            priority=priority,
+            title=f"{emoji} FRN Pending {days_pending}+ Days: {school_name}",
+            message=f"FRN {frn} has been pending for {days_pending} days. "
+                    f"Reason: {pending_reason or 'Not specified'}. "
+                    f"Amount: ${amount:,.2f}. Consider following up with USAC.",
+            entity_type="frn",
+            entity_id=frn,
+            entity_name=school_name,
+            metadata={
+                "pending_reason": pending_reason,
+                "days_pending": days_pending,
                 "amount": amount,
             }
         )

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
+import { api } from "@/lib/api";
 
 /**
  * Applicant Dashboard
@@ -133,11 +134,23 @@ export default function ApplicantDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedTab, setSelectedTab] = useState<'overview' | 'frns' | 'appeals' | 'changes'>('overview');
+  const [selectedTab, setSelectedTab] = useState<'overview' | 'frns' | 'appeals' | 'changes' | 'frn-status' | 'disbursements'>('overview');
   const [selectedAppeal, setSelectedAppeal] = useState<Appeal | null>(null);
   const [selectedFrnId, setSelectedFrnId] = useState<number | null>(null);
   const [frnDetail, setFrnDetail] = useState<any | null>(null);
   const [loadingFrnDetail, setLoadingFrnDetail] = useState(false);
+  
+  // Live FRN Status state
+  const [liveFrnData, setLiveFrnData] = useState<any>(null);
+  const [liveFrnLoading, setLiveFrnLoading] = useState(false);
+  const [liveFrnYear, setLiveFrnYear] = useState<number | undefined>(undefined);
+  const [liveFrnStatusFilter, setLiveFrnStatusFilter] = useState<string>("");
+  const [liveFrnPendingReason, setLiveFrnPendingReason] = useState<string>("");
+  
+  // Disbursement state
+  const [disbursementData, setDisbursementData] = useState<any>(null);
+  const [disbursementLoading, setDisbursementLoading] = useState(false);
+  const [disbursementYear, setDisbursementYear] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     // Check authentication and role
@@ -153,6 +166,16 @@ export default function ApplicantDashboard() {
     }
     fetchDashboard();
   }, [isAuthenticated, token, user, router]);
+
+  // Auto-load data when switching to live tabs
+  useEffect(() => {
+    if (selectedTab === 'frn-status' && !liveFrnData && !liveFrnLoading) {
+      loadLiveFrnStatus();
+    }
+    if (selectedTab === 'disbursements' && !disbursementData && !disbursementLoading) {
+      loadDisbursements();
+    }
+  }, [selectedTab]);
 
   const fetchDashboard = async () => {
     if (!token) {
@@ -235,6 +258,36 @@ export default function ApplicantDashboard() {
     }
   };
 
+  // Live FRN Status from USAC
+  const loadLiveFrnStatus = async (year?: number, statusFilter?: string, pendingReason?: string) => {
+    setLiveFrnLoading(true);
+    try {
+      const response = await api.getApplicantLiveFRNStatus(year, statusFilter || undefined, pendingReason || undefined);
+      if (response.success && response.data) {
+        setLiveFrnData(response.data);
+      }
+    } catch (error) {
+      console.error("Failed to load live FRN status:", error);
+    } finally {
+      setLiveFrnLoading(false);
+    }
+  };
+
+  // Disbursement Data
+  const loadDisbursements = async (year?: number) => {
+    setDisbursementLoading(true);
+    try {
+      const response = await api.getApplicantDisbursements(year);
+      if (response.success && response.data) {
+        setDisbursementData(response.data);
+      }
+    } catch (error) {
+      console.error("Failed to load disbursements:", error);
+    } finally {
+      setDisbursementLoading(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -293,6 +346,13 @@ export default function ApplicantDashboard() {
                 title="Manage BEN Numbers"
               >
                 ⚙️ Settings
+              </Link>
+              <Link
+                href="/settings/notifications"
+                className="text-sm text-slate-600 hover:text-emerald-600 flex items-center gap-1"
+                title="Notification Preferences"
+              >
+                🔔 Alerts
               </Link>
               {summary.sync_status === 'syncing' ? (
                 <div className="flex items-center gap-2 text-sm text-emerald-600">
@@ -395,6 +455,8 @@ export default function ApplicantDashboard() {
           {[
             { id: 'overview', label: 'Overview', icon: '📊' },
             { id: 'frns', label: 'All FRNs', icon: '📋', count: frns.length },
+            { id: 'frn-status', label: 'Live Status', icon: '📈' },
+            { id: 'disbursements', label: 'Disbursements', icon: '💰' },
             { id: 'appeals', label: 'Appeals', icon: '⚖️', count: appeals.length },
             { id: 'changes', label: 'Updates', icon: '🔔', count: summary.unread_changes },
           ].map((tab) => (
@@ -972,6 +1034,285 @@ export default function ApplicantDashboard() {
                 <p className="text-slate-600">
                   All your funding requests are in good standing. Great work!
                 </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {selectedTab === 'frn-status' && (
+          <div className="space-y-6">
+            {/* Filters */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+              <div className="flex flex-wrap items-end gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Year</label>
+                  <select
+                    value={liveFrnYear || ''}
+                    onChange={(e) => setLiveFrnYear(e.target.value ? parseInt(e.target.value) : undefined)}
+                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">All Years</option>
+                    {Array.from({ length: 10 }, (_, i) => 2025 - i).map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
+                  <select
+                    value={liveFrnStatusFilter}
+                    onChange={(e) => setLiveFrnStatusFilter(e.target.value)}
+                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="Funded">Funded</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Denied">Denied</option>
+                    <option value="Committed">Committed</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Pending Reason</label>
+                  <input
+                    type="text"
+                    value={liveFrnPendingReason}
+                    onChange={(e) => setLiveFrnPendingReason(e.target.value)}
+                    placeholder="Filter by reason..."
+                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <button
+                  onClick={() => loadLiveFrnStatus(liveFrnYear, liveFrnStatusFilter, liveFrnPendingReason)}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium"
+                >
+                  Apply Filters
+                </button>
+              </div>
+            </div>
+
+            {liveFrnLoading ? (
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center">
+                <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                <p className="text-slate-500">Loading live FRN status from USAC...</p>
+              </div>
+            ) : liveFrnData ? (
+              <>
+                {/* Summary Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+                    <div className="text-sm text-slate-500">Total FRNs</div>
+                    <div className="text-2xl font-bold text-slate-900">{liveFrnData.summary?.total_frns || 0}</div>
+                    <div className="text-xs text-slate-400 mt-1">${(liveFrnData.summary?.total_amount || 0).toLocaleString()}</div>
+                  </div>
+                  <div className="bg-white rounded-xl border border-emerald-200 shadow-sm p-4">
+                    <div className="text-sm text-emerald-600">Funded</div>
+                    <div className="text-2xl font-bold text-emerald-700">{liveFrnData.summary?.funded || 0}</div>
+                    <div className="text-xs text-emerald-500 mt-1">${(liveFrnData.summary?.funded_amount || 0).toLocaleString()}</div>
+                  </div>
+                  <div className="bg-white rounded-xl border border-yellow-200 shadow-sm p-4">
+                    <div className="text-sm text-yellow-600">Pending</div>
+                    <div className="text-2xl font-bold text-yellow-700">{liveFrnData.summary?.pending || 0}</div>
+                    <div className="text-xs text-yellow-500 mt-1">${(liveFrnData.summary?.pending_amount || 0).toLocaleString()}</div>
+                  </div>
+                  <div className="bg-white rounded-xl border border-red-200 shadow-sm p-4">
+                    <div className="text-sm text-red-600">Denied</div>
+                    <div className="text-2xl font-bold text-red-700">{liveFrnData.summary?.denied || 0}</div>
+                    <div className="text-xs text-red-500 mt-1">${(liveFrnData.summary?.denied_amount || 0).toLocaleString()}</div>
+                  </div>
+                </div>
+
+                {/* Per-BEN Breakdown */}
+                {liveFrnData.schools && liveFrnData.schools.length > 0 ? (
+                  <div className="space-y-4">
+                    {liveFrnData.schools.map((school: any, idx: number) => (
+                      <div key={idx} className="bg-white rounded-xl border border-slate-200 shadow-sm">
+                        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                          <div>
+                            <div className="font-semibold text-slate-900">{school.entity_name || `BEN ${school.ben}`}</div>
+                            <div className="text-sm text-slate-500">BEN: {school.ben} • {school.frn_count || 0} FRNs</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-medium text-slate-900">${(school.total_amount || 0).toLocaleString()}</div>
+                          </div>
+                        </div>
+                        <div className="divide-y divide-slate-50">
+                          {(school.frns || []).map((frn: any, fIdx: number) => (
+                            <div key={fIdx} className="px-4 py-3 flex items-center justify-between">
+                              <div>
+                                <span className="font-mono text-sm text-slate-700">FRN {frn.frn}</span>
+                                <span className="text-sm text-slate-500 ml-2">— {frn.narrative || 'No description'}</span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                  frn.frn_status === 'Funded' ? 'bg-emerald-100 text-emerald-700' :
+                                  frn.frn_status === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
+                                  frn.frn_status === 'Denied' ? 'bg-red-100 text-red-700' :
+                                  frn.frn_status === 'Committed' ? 'bg-blue-100 text-blue-700' :
+                                  'bg-slate-100 text-slate-700'
+                                }`}>
+                                  {frn.frn_status || 'Unknown'}
+                                </span>
+                                <span className="text-sm font-medium text-slate-700">${(frn.funded_amount || frn.original_amount || 0).toLocaleString()}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center">
+                    <div className="text-4xl mb-3">📋</div>
+                    <p className="text-slate-500">No FRN data found for your registered BENs.</p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center">
+                <div className="text-4xl mb-3">📈</div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">Live FRN Status</h3>
+                <p className="text-slate-500 mb-4">Query USAC directly for real-time FRN status across your BENs.</p>
+                <button
+                  onClick={() => loadLiveFrnStatus(liveFrnYear, liveFrnStatusFilter, liveFrnPendingReason)}
+                  className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium"
+                >
+                  Load Live Status
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {selectedTab === 'disbursements' && (
+          <div className="space-y-6">
+            {/* Filters */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+              <div className="flex items-end gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Funding Year</label>
+                  <select
+                    value={disbursementYear || ''}
+                    onChange={(e) => setDisbursementYear(e.target.value ? parseInt(e.target.value) : undefined)}
+                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="">All Years</option>
+                    {Array.from({ length: 10 }, (_, i) => 2025 - i).map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={() => loadDisbursements(disbursementYear)}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium"
+                >
+                  Load Disbursements
+                </button>
+              </div>
+            </div>
+
+            {disbursementLoading ? (
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center">
+                <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                <p className="text-slate-500">Loading disbursement data...</p>
+              </div>
+            ) : disbursementData ? (
+              <>
+                {/* Grand Totals */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                    <div className="text-sm text-slate-500">Total Authorized</div>
+                    <div className="text-2xl font-bold text-slate-900">${(disbursementData.grand_total?.total_authorized || 0).toLocaleString()}</div>
+                  </div>
+                  <div className="bg-white rounded-xl border border-emerald-200 shadow-sm p-6">
+                    <div className="text-sm text-emerald-600">Total Disbursed</div>
+                    <div className="text-2xl font-bold text-emerald-700">${(disbursementData.grand_total?.total_disbursed || 0).toLocaleString()}</div>
+                  </div>
+                  <div className="bg-white rounded-xl border border-blue-200 shadow-sm p-6">
+                    <div className="text-sm text-blue-600">Disbursement Rate</div>
+                    <div className="text-2xl font-bold text-blue-700">{(disbursementData.grand_total?.disbursement_rate || 0).toFixed(1)}%</div>
+                    <div className="mt-2 w-full bg-slate-200 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all"
+                        style={{ width: `${Math.min(disbursementData.grand_total?.disbursement_rate || 0, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Per-BEN Disbursements */}
+                {disbursementData.bens && disbursementData.bens.length > 0 ? (
+                  <div className="space-y-4">
+                    {disbursementData.bens.map((ben: any, idx: number) => (
+                      <div key={idx} className="bg-white rounded-xl border border-slate-200 shadow-sm">
+                        <div className="p-4 border-b border-slate-100">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="font-semibold text-slate-900">{ben.entity_name || `BEN ${ben.ben}`}</div>
+                              <div className="text-sm text-slate-500">BEN: {ben.ben}</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm font-medium text-emerald-600">
+                                ${(ben.summary?.total_disbursed || 0).toLocaleString()} disbursed
+                              </div>
+                              <div className="text-xs text-slate-400">
+                                of ${(ben.summary?.total_authorized || 0).toLocaleString()} authorized
+                                ({(ben.summary?.disbursement_rate || 0).toFixed(1)}%)
+                              </div>
+                            </div>
+                          </div>
+                          <div className="mt-2 w-full bg-slate-200 rounded-full h-1.5">
+                            <div
+                              className="bg-emerald-500 h-1.5 rounded-full transition-all"
+                              style={{ width: `${Math.min(ben.summary?.disbursement_rate || 0, 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                        <div className="divide-y divide-slate-50">
+                          {(ben.records || []).slice(0, 10).map((rec: any, rIdx: number) => (
+                            <div key={rIdx} className="px-4 py-3 flex items-center justify-between text-sm">
+                              <div>
+                                <span className="font-mono text-slate-700">FRN {rec.frn}</span>
+                                <span className="text-slate-400 ml-2">• {rec.service_type || 'N/A'}</span>
+                              </div>
+                              <div className="flex items-center gap-4 text-right">
+                                <div>
+                                  <div className="text-slate-500">Authorized</div>
+                                  <div className="font-medium">${(rec.total_authorized_disbursement || 0).toLocaleString()}</div>
+                                </div>
+                                <div>
+                                  <div className="text-emerald-500">Disbursed</div>
+                                  <div className="font-medium text-emerald-700">${(rec.total_disbursed || 0).toLocaleString()}</div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          {(ben.records || []).length > 10 && (
+                            <div className="px-4 py-2 text-center text-xs text-slate-400">
+                              + {(ben.records || []).length - 10} more records
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center">
+                    <div className="text-4xl mb-3">📋</div>
+                    <p className="text-slate-500">No disbursement data found for your registered BENs.</p>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center">
+                <div className="text-4xl mb-3">💰</div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">Disbursement Tracking</h3>
+                <p className="text-slate-500 mb-4">View disbursement data from USAC for your registered BENs.</p>
+                <button
+                  onClick={() => loadDisbursements(disbursementYear)}
+                  className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium"
+                >
+                  Load Disbursements
+                </button>
               </div>
             )}
           </div>

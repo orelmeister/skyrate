@@ -1646,6 +1646,7 @@ async def list_appeals(
 async def get_portfolio_frn_status(
     year: Optional[int] = None,
     status_filter: Optional[str] = None,
+    pending_reason: Optional[str] = None,
     limit: int = 500,
     profile: ConsultantProfile = Depends(get_consultant_profile),
 ):
@@ -1691,7 +1692,7 @@ async def get_portfolio_frn_status(
         }
         
         for ben in school_bens:
-            result = client.get_frn_status_by_ben(ben, year, status_filter, limit)
+            result = client.get_frn_status_by_ben(ben, year=year, status_filter=status_filter, limit=limit, pending_reason_filter=pending_reason)
             
             if result.get('success') and result.get('frns'):
                 school_frns = result.get('frns', [])

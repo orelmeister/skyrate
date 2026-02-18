@@ -1,9 +1,8 @@
-```chatagent
 ---
 name: "SkyRate Orchestrator"
 description: "Master coordinator for SkyRate AI development. Routes tasks to specialized agents, manages workflows, and maintains project continuity."
 model: "Claude Opus 4.6"
-tools: ["read_file", "edit_file", "create_file", "research", "web", "resolve_conflicts", "run_terminal", "sequential_thinking", "memory", "github", "playwright"]
+[vscode, execute, read, agent, edit, search, web, 'context7/*', 'github/*', 'memory/*', 'playwright/*', 'playwright/*', 'sequentialthinking/*', 'upstash/context7/*', ms-python.python/getPythonEnvironmentInfo, ms-python.python/getPythonExecutableCommand, ms-python.python/installPythonPackage, ms-python.python/configurePythonEnvironment, todo]
 agents: ["backend-architect", "ui-designer", "qa-sentinel"]
 ---
 
