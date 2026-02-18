@@ -21,6 +21,7 @@ class AlertType(str, enum.Enum):
     COMPETITOR_ACTIVITY = "competitor_activity"  # Competitor activity at serviced entity
     FUNDING_APPROVED = "funding_approved"  # FRN approved/committed
     APPEAL_DEADLINE = "appeal_deadline"  # Appeal deadline approaching
+    PENDING_TOO_LONG = "pending_too_long"  # FRN pending for more than 15 days
 
 
 class AlertPriority(str, enum.Enum):

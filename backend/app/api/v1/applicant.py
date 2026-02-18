@@ -1353,3 +1353,188 @@ async def activate_ben_subscription(
         "message": "BEN subscription activated",
         "ben": ben.to_dict()
     }
+
+
+@router.get("/frn-status-live")
+async def get_live_frn_status(
+    year: Optional[int] = None,
+    status_filter: Optional[str] = None,
+    pending_reason: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get live FRN status from USAC for all applicant BENs.
+    Fetches directly from USAC Open Data API.
+    """
+    if current_user.role != UserRole.APPLICANT.value:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
+    
+    profile = db.query(ApplicantProfile).filter(
+        ApplicantProfile.user_id == current_user.id
+    ).first()
+    
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+    
+    # Get all BENs for applicant
+    from ...models.applicant import ApplicantBEN
+    bens = db.query(ApplicantBEN).filter(
+        ApplicantBEN.applicant_profile_id == profile.id
+    ).all()
+    
+    if not bens:
+        return {
+            "success": True,
+            "total_frns": 0,
+            "total_bens": 0,
+            "summary": {},
+            "bens": [],
+            "message": "No BENs registered. Add a BEN to track FRN status."
+        }
+    
+    try:
+        from utils.usac_client import USACDataClient
+        client = USACDataClient()
+        
+        all_data = []
+        status_counts = {
+            "funded": {"count": 0, "amount": 0},
+            "denied": {"count": 0, "amount": 0},
+            "pending": {"count": 0, "amount": 0},
+            "other": {"count": 0, "amount": 0}
+        }
+        total_frns = 0
+        
+        for ben_record in bens:
+            result = client.get_frn_status_by_ben(
+                ben_record.ben, year=year, status_filter=status_filter,
+                pending_reason_filter=pending_reason
+            )
+            
+            if result.get('success') and result.get('frns'):
+                frns = result.get('frns', [])
+                total_frns += len(frns)
+                
+                ben_summary = {
+                    "ben": ben_record.ben,
+                    "entity_name": result.get('entity_name', ben_record.entity_name or 'Unknown'),
+                    "total_frns": len(frns),
+                    "funded": 0,
+                    "denied": 0,
+                    "pending": 0,
+                    "total_amount": 0,
+                    "frns": frns[:20]
+                }
+                
+                for frn in frns:
+                    frn_status = (frn.get('frn_status') or frn.get('status') or '').lower()
+                    amount = float(frn.get('total_authorized_amount') or frn.get('amount') or 0)
+                    ben_summary["total_amount"] += amount
+                    
+                    if 'funded' in frn_status or 'committed' in frn_status:
+                        ben_summary["funded"] += 1
+                        status_counts["funded"]["count"] += 1
+                        status_counts["funded"]["amount"] += amount
+                    elif 'denied' in frn_status:
+                        ben_summary["denied"] += 1
+                        status_counts["denied"]["count"] += 1
+                        status_counts["denied"]["amount"] += amount
+                    elif any(s in frn_status for s in ['pending', 'review', 'submitted', 'certified']):
+                        ben_summary["pending"] += 1
+                        status_counts["pending"]["count"] += 1
+                        status_counts["pending"]["amount"] += amount
+                    else:
+                        status_counts["other"]["count"] += 1
+                        status_counts["other"]["amount"] += amount
+                
+                all_data.append(ben_summary)
+        
+        return {
+            "success": True,
+            "total_frns": total_frns,
+            "total_bens": len(all_data),
+            "summary": status_counts,
+            "bens": all_data
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch live FRN status: {str(e)}"
+        )
+
+
+@router.get("/disbursements")
+async def get_disbursements(
+    year: Optional[int] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get disbursement/invoice data for all applicant BENs.
+    Shows how much funding has actually been disbursed vs authorized.
+    """
+    if current_user.role != UserRole.APPLICANT.value:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
+    
+    profile = db.query(ApplicantProfile).filter(
+        ApplicantProfile.user_id == current_user.id
+    ).first()
+    
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+    
+    from ...models.applicant import ApplicantBEN
+    bens = db.query(ApplicantBEN).filter(
+        ApplicantBEN.applicant_profile_id == profile.id
+    ).all()
+    
+    if not bens:
+        return {
+            "success": True,
+            "total_disbursed": 0,
+            "total_authorized": 0,
+            "disbursement_rate": 0,
+            "bens": [],
+            "message": "No BENs registered."
+        }
+    
+    try:
+        from utils.usac_client import USACDataClient
+        client = USACDataClient()
+        
+        all_bens = []
+        grand_total_disbursed = 0
+        grand_total_authorized = 0
+        
+        for ben_record in bens:
+            result = client.get_disbursements_by_ben(ben_record.ben, year=year)
+            
+            if result.get('success'):
+                grand_total_disbursed += result.get('total_disbursed', 0)
+                grand_total_authorized += result.get('total_authorized', 0)
+                all_bens.append({
+                    "ben": ben_record.ben,
+                    "entity_name": result.get('entity_name', ben_record.entity_name or 'Unknown'),
+                    "total_records": result.get('total_records', 0),
+                    "total_disbursed": result.get('total_disbursed', 0),
+                    "total_authorized": result.get('total_authorized', 0),
+                    "disbursement_rate": result.get('disbursement_rate', 0),
+                    "disbursements": result.get('disbursements', [])[:20]
+                })
+        
+        return {
+            "success": True,
+            "total_disbursed": grand_total_disbursed,
+            "total_authorized": grand_total_authorized,
+            "disbursement_rate": round((grand_total_disbursed / grand_total_authorized * 100), 1) if grand_total_authorized > 0 else 0,
+            "total_bens": len(all_bens),
+            "bens": all_bens
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch disbursement data: {str(e)}"
+        )

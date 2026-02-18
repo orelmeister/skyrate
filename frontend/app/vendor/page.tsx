@@ -67,6 +67,7 @@ export default function VendorPortalPage() {
   
   // Form 471 Competitive Analysis state
   const [form471BenInput, setForm471BenInput] = useState("");
+  const [form471Year, setForm471Year] = useState<number | undefined>(undefined);
   const [form471Loading, setForm471Loading] = useState(false);
   const [form471Data, setForm471Data] = useState<Form471ByEntityResponse | null>(null);
   const [form471Error, setForm471Error] = useState<string | null>(null);
@@ -78,6 +79,7 @@ export default function VendorPortalPage() {
   const [frnStatusLoading, setFrnStatusLoading] = useState(false);
   const [frnStatusYear, setFrnStatusYear] = useState<number | undefined>(undefined);
   const [frnStatusFilter, setFrnStatusFilter] = useState<string>("");
+  const [frnPendingReason, setFrnPendingReason] = useState<string>("");
   const [selectedFRN, setSelectedFRN] = useState<FRNStatusRecord | null>(null);
   const [showFRNDetailModal, setShowFRNDetailModal] = useState(false);
   
@@ -91,6 +93,11 @@ export default function VendorPortalPage() {
     category?: string;
     service_type?: string;
     manufacturer?: string;
+    equipment_type?: string;
+    service_function?: string;
+    min_speed?: string;
+    max_speed?: string;
+    sort_by?: string;
   }>({});
   const [form470TotalLeads, setForm470TotalLeads] = useState(0);
   const [form470Detail, setForm470Detail] = useState<Form470DetailResponse | null>(null);
@@ -286,7 +293,7 @@ export default function VendorPortalPage() {
     setForm471Data(null);
     
     try {
-      const response = await api.get471ByEntity(form471BenInput.trim());
+      const response = await api.get471ByEntity(form471BenInput.trim(), form471Year);
       if (response.success && response.data) {
         if (response.data.success) {
           setForm471Data(response.data);
@@ -323,14 +330,14 @@ export default function VendorPortalPage() {
   };
 
   // FRN Status Monitoring functions (Sprint 2)
-  const loadFRNStatus = async (year?: number, status?: string) => {
+  const loadFRNStatus = async (year?: number, status?: string, pendingReason?: string) => {
     if (!profile?.spin) {
       return;
     }
     
     setFrnStatusLoading(true);
     try {
-      const response = await api.getFRNStatus(year, status || undefined);
+      const response = await api.getFRNStatus(year, status || undefined, pendingReason || undefined);
       if (response.success && response.data) {
         setFrnStatusData(response.data);
       }
@@ -348,6 +355,11 @@ export default function VendorPortalPage() {
     category?: string;
     service_type?: string;
     manufacturer?: string;
+    equipment_type?: string;
+    service_function?: string;
+    min_speed?: string;
+    max_speed?: string;
+    sort_by?: string;
   }) => {
     setForm470Loading(true);
     setForm470Error(null);
@@ -356,7 +368,7 @@ export default function VendorPortalPage() {
       const searchFilters = filters || form470Filters;
       const response = await api.get470Leads({
         ...searchFilters,
-        limit: 200
+        limit: 2000
       });
       
       if (response.success && response.data) {
@@ -1170,7 +1182,7 @@ export default function VendorPortalPage() {
                   </div>
                 </div>
                 <button
-                  onClick={() => loadFRNStatus(frnStatusYear, frnStatusFilter)}
+                  onClick={() => loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason)}
                   disabled={frnStatusLoading || !profile?.spin}
                   className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
                 >
@@ -1218,7 +1230,7 @@ export default function VendorPortalPage() {
                         onChange={(e) => {
                           const year = e.target.value ? parseInt(e.target.value) : undefined;
                           setFrnStatusYear(year);
-                          loadFRNStatus(year, frnStatusFilter);
+                          loadFRNStatus(year, frnStatusFilter, frnPendingReason);
                         }}
                         className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm"
                       >
@@ -1234,7 +1246,7 @@ export default function VendorPortalPage() {
                         value={frnStatusFilter}
                         onChange={(e) => {
                           setFrnStatusFilter(e.target.value);
-                          loadFRNStatus(frnStatusYear, e.target.value);
+                          loadFRNStatus(frnStatusYear, e.target.value, frnPendingReason);
                         }}
                         className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm"
                       >
@@ -1244,8 +1256,18 @@ export default function VendorPortalPage() {
                         <option value="Pending">Pending</option>
                       </select>
                     </div>
+                    <div>
+                      <label className="text-sm text-slate-600 mb-1 block">Pending Reason</label>
+                      <input
+                        type="text"
+                        value={frnPendingReason}
+                        onChange={(e) => setFrnPendingReason(e.target.value)}
+                        placeholder="e.g., PIA Review, Selective Review"
+                        className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-56"
+                      />
+                    </div>
                     <button
-                      onClick={() => loadFRNStatus(frnStatusYear, frnStatusFilter)}
+                      onClick={() => loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason)}
                       disabled={frnStatusLoading}
                       className="mt-5 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium flex items-center gap-2"
                     >
@@ -1448,7 +1470,7 @@ export default function VendorPortalPage() {
             {/* Search Filters */}
             <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-900 mb-4">Search Filters</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Year Filter */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">Funding Year</label>
@@ -1507,26 +1529,95 @@ export default function VendorPortalPage() {
                   />
                 </div>
 
-                {/* Search Button */}
-                <div className="flex items-end">
-                  <button
-                    onClick={() => load470Leads(form470Filters)}
-                    disabled={form470Loading}
-                    className="w-full px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-lg font-medium hover:from-orange-600 hover:to-amber-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {form470Loading ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                        Searching...
-                      </>
-                    ) : (
-                      <>
-                        <span>🔍</span>
-                        Search 470s
-                      </>
-                    )}
-                  </button>
+                {/* Equipment Type Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Equipment Type</label>
+                  <input
+                    type="text"
+                    value={form470Filters.equipment_type || ""}
+                    onChange={(e) => setForm470Filters({ ...form470Filters, equipment_type: e.target.value || undefined })}
+                    placeholder="e.g., Switches, Routers, Cabling"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  />
                 </div>
+
+                {/* Service Function Filter (MIBS/BMIC) */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Service Function</label>
+                  <select
+                    value={form470Filters.service_function || ""}
+                    onChange={(e) => setForm470Filters({ ...form470Filters, service_function: e.target.value || undefined })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    <option value="">All Functions</option>
+                    <option value="Managed Internal Broadband Services">MIBS (Managed Internal Broadband)</option>
+                    <option value="Basic Maintenance of Internal Connections">BMIC (Basic Maintenance)</option>
+                    <option value="Internal Connections">Internal Connections</option>
+                    <option value="Internet Access">Internet Access</option>
+                    <option value="Data Transmission and/or Internet Access">Data Transmission / Internet</option>
+                    <option value="Voice">Voice Services</option>
+                  </select>
+                </div>
+
+                {/* Speed Range Filters */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Min Speed (Mbps)</label>
+                  <input
+                    type="number"
+                    value={form470Filters.min_speed || ""}
+                    onChange={(e) => setForm470Filters({ ...form470Filters, min_speed: e.target.value || undefined })}
+                    placeholder="e.g., 100"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Max Speed (Mbps)</label>
+                  <input
+                    type="number"
+                    value={form470Filters.max_speed || ""}
+                    onChange={(e) => setForm470Filters({ ...form470Filters, max_speed: e.target.value || undefined })}
+                    placeholder="e.g., 10000"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
+              </div>
+
+              {/* Sort + Search Row */}
+              <div className="flex flex-wrap items-end gap-4 mt-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Sort By</label>
+                  <select
+                    value={form470Filters.sort_by || ""}
+                    onChange={(e) => setForm470Filters({ ...form470Filters, sort_by: e.target.value || undefined })}
+                    className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    <option value="">Newest First</option>
+                    <option value="entity_name">Applicant Name (A→Z)</option>
+                  </select>
+                </div>
+                <button
+                  onClick={() => load470Leads(form470Filters)}
+                  disabled={form470Loading}
+                  className="px-6 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-lg font-medium hover:from-orange-600 hover:to-amber-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {form470Loading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      Searching...
+                    </>
+                  ) : (
+                    <>
+                      <span>🔍</span>
+                      Search 470s
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => { setForm470Filters({}); load470Leads({}); }}
+                  className="px-4 py-2 text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors text-sm"
+                >
+                  Clear Filters
+                </button>
               </div>
 
               {/* Quick Manufacturer Buttons */}
@@ -1752,15 +1843,25 @@ export default function VendorPortalPage() {
                 Enter a Billed Entity Number (BEN) to see all Form 471 applications and which vendors won contracts.
               </p>
               
-              <div className="flex gap-3 mb-4">
+              <div className="flex flex-wrap gap-3 mb-4">
                 <input
                   type="text"
                   value={form471BenInput}
                   onChange={(e) => setForm471BenInput(e.target.value)}
                   placeholder="Enter BEN (e.g., 232950)"
-                  className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="flex-1 min-w-[200px] px-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                   onKeyDown={(e) => e.key === 'Enter' && search471ByBen()}
                 />
+                <select
+                  value={form471Year || ""}
+                  onChange={(e) => setForm471Year(e.target.value ? parseInt(e.target.value) : undefined)}
+                  className="px-3 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                >
+                  <option value="">All Years</option>
+                  {[2026, 2025, 2024, 2023, 2022, 2021, 2020].map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
                 <button
                   onClick={search471ByBen}
                   disabled={form471Loading}
@@ -2888,6 +2989,28 @@ export default function VendorPortalPage() {
               <button className="mt-6 px-6 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:shadow-lg hover:shadow-purple-200 transition-all font-medium">
                 Save Changes
               </button>
+            </div>
+
+            {/* Notification Preferences */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
+                  <span className="text-xl">🔔</span>
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Notification Preferences</h2>
+                  <p className="text-sm text-slate-500">Configure alerts for status changes, Form 470 matches, and more</p>
+                </div>
+              </div>
+              <p className="text-sm text-slate-600 mb-4">
+                Get alerted when FRNs are pending more than 15 days, when new Form 470s match your services, and more.
+              </p>
+              <a
+                href="/settings/notifications"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl hover:bg-indigo-100 font-medium text-sm transition"
+              >
+                🔔 Manage Notification Settings →
+              </a>
             </div>
 
             {/* Subscription */}

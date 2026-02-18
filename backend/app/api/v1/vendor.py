@@ -375,6 +375,7 @@ async def search_471(
 async def get_frn_status(
     year: Optional[int] = None,
     status: Optional[str] = None,
+    pending_reason: Optional[str] = None,
     limit: int = 500,
     profile: VendorProfile = Depends(get_vendor_profile),
 ):
@@ -390,6 +391,7 @@ async def get_frn_status(
     Args:
         year: Optional funding year filter
         status: Optional status filter ('Funded', 'Denied', 'Pending')
+        pending_reason: Optional pending reason filter (partial match)
         limit: Maximum records (default 500)
     """
     if not profile.spin:
@@ -402,7 +404,7 @@ async def get_frn_status(
         from utils.usac_client import USACDataClient
         
         client = USACDataClient()
-        result = client.get_frn_status_by_spin(profile.spin, year, status, limit)
+        result = client.get_frn_status_by_spin(profile.spin, year, status, pending_reason, limit)
         
         return result
         
@@ -551,7 +553,13 @@ async def get_470_leads(
     category: Optional[str] = None,
     service_type: Optional[str] = None,
     manufacturer: Optional[str] = None,
-    limit: int = 500,
+    equipment_type: Optional[str] = None,
+    service_function: Optional[str] = None,
+    min_speed: Optional[str] = None,
+    max_speed: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    limit: int = 2000,
+    offset: int = 0,
     current_user: User = Depends(require_role("admin", "vendor")),
 ):
     """
@@ -566,7 +574,13 @@ async def get_470_leads(
         category: Optional category filter ('1' for Cat1, '2' for Cat2)
         service_type: Optional service type filter
         manufacturer: Optional manufacturer name (partial match - e.g., 'Cisco', 'Meraki')
-        limit: Maximum records (default 500)
+        equipment_type: Optional equipment/function type (e.g., 'Switches', 'Routers')
+        service_function: Optional service function filter (e.g., 'Managed Internal Broadband Services')
+        min_speed: Optional minimum speed/capacity filter
+        max_speed: Optional maximum speed/capacity filter
+        sort_by: Sort order ('entity_name' for ABC, default is posting_date)
+        limit: Maximum records (default 2000)
+        offset: Pagination offset (default 0)
     """
     try:
         from utils.usac_client import USACDataClient
@@ -578,7 +592,13 @@ async def get_470_leads(
             category=category,
             service_type=service_type,
             manufacturer=manufacturer,
-            limit=limit
+            equipment_type=equipment_type,
+            service_function=service_function,
+            min_speed=min_speed,
+            max_speed=max_speed,
+            sort_by=sort_by,
+            limit=limit,
+            offset=offset
         )
         
         return result

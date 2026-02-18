@@ -157,6 +157,13 @@ export default function ConsultantPortalPage() {
   const [isLoadingDenied, setIsLoadingDenied] = useState(false);
   const [deniedStats, setDeniedStats] = useState<{ total: number; amount: number } | null>(null);
   
+  // FRN Status Monitoring state
+  const [portfolioFrnData, setPortfolioFrnData] = useState<any>(null);
+  const [portfolioFrnLoading, setPortfolioFrnLoading] = useState(false);
+  const [portfolioFrnYear, setPortfolioFrnYear] = useState<number | undefined>(undefined);
+  const [portfolioFrnStatusFilter, setPortfolioFrnStatusFilter] = useState<string>("");
+  const [portfolioFrnPendingReason, setPortfolioFrnPendingReason] = useState<string>("");
+  
   // Query state
   const [queryInput, setQueryInput] = useState("");
   const [queryResults, setQueryResults] = useState<any>(null);
@@ -351,12 +358,30 @@ export default function ConsultantPortalPage() {
     }
   };
 
+  // Load Portfolio FRN Status
+  const loadPortfolioFRNStatus = async (year?: number, statusFilter?: string, pendingReason?: string) => {
+    setPortfolioFrnLoading(true);
+    try {
+      const response = await api.getConsultantFRNStatus(year, statusFilter || undefined, 500, pendingReason || undefined);
+      if (response.success && response.data) {
+        setPortfolioFrnData(response.data);
+      }
+    } catch (error) {
+      console.error("Failed to load portfolio FRN status:", error);
+    } finally {
+      setPortfolioFrnLoading(false);
+    }
+  };
+
   // Load appeals and denied applications when switching to appeals tab
   useEffect(() => {
     if (activeTab === "appeals") {
       // Always load both when switching to appeals tab
       loadAppeals();
       loadDeniedApplications();
+    }
+    if (activeTab === "frn-status" && !portfolioFrnData) {
+      loadPortfolioFRNStatus();
     }
   }, [activeTab]);
 
@@ -739,6 +764,7 @@ export default function ConsultantPortalPage() {
     { id: "dashboard", label: "Dashboard", icon: "📊" },
     { id: "schools", label: "My Schools", icon: "🏫" },
     { id: "funding", label: "Funding Data", icon: "💰" },
+    { id: "frn-status", label: "FRN Status", icon: "📈" },
     { id: "appeals", label: "Appeals", icon: "📋" },
     { id: "settings", label: "Settings", icon: "⚙️" },
   ];
@@ -1605,6 +1631,192 @@ export default function ConsultantPortalPage() {
             </div>
           )}
 
+          {/* FRN Status Monitoring Tab */}
+          {activeTab === "frn-status" && (
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 rounded-2xl p-6 text-white shadow-lg">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
+                      <span className="text-3xl">📈</span>
+                    </div>
+                    <div>
+                      <h1 className="text-2xl font-bold">Portfolio FRN Status</h1>
+                      <p className="text-teal-100 mt-1">Track FRN status across all your schools</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => loadPortfolioFRNStatus(portfolioFrnYear, portfolioFrnStatusFilter, portfolioFrnPendingReason)}
+                    disabled={portfolioFrnLoading}
+                    className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {portfolioFrnLoading ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : null}
+                    Refresh Data
+                  </button>
+                </div>
+              </div>
+
+              {/* Filters */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div>
+                    <label className="text-sm text-slate-600 mb-1 block">Funding Year</label>
+                    <select
+                      value={portfolioFrnYear || ""}
+                      onChange={(e) => {
+                        const year = e.target.value ? parseInt(e.target.value) : undefined;
+                        setPortfolioFrnYear(year);
+                        loadPortfolioFRNStatus(year, portfolioFrnStatusFilter, portfolioFrnPendingReason);
+                      }}
+                      className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm"
+                    >
+                      <option value="">All Years</option>
+                      {[2026, 2025, 2024, 2023, 2022, 2021, 2020].map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm text-slate-600 mb-1 block">Status</label>
+                    <select
+                      value={portfolioFrnStatusFilter}
+                      onChange={(e) => {
+                        setPortfolioFrnStatusFilter(e.target.value);
+                        loadPortfolioFRNStatus(portfolioFrnYear, e.target.value, portfolioFrnPendingReason);
+                      }}
+                      className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm"
+                    >
+                      <option value="">All Statuses</option>
+                      <option value="Funded">Funded</option>
+                      <option value="Denied">Denied</option>
+                      <option value="Pending">Pending</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm text-slate-600 mb-1 block">Pending Reason</label>
+                    <input
+                      type="text"
+                      value={portfolioFrnPendingReason}
+                      onChange={(e) => setPortfolioFrnPendingReason(e.target.value)}
+                      placeholder="e.g., PIA Review"
+                      className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-48"
+                    />
+                  </div>
+                  <button
+                    onClick={() => loadPortfolioFRNStatus(portfolioFrnYear, portfolioFrnStatusFilter, portfolioFrnPendingReason)}
+                    disabled={portfolioFrnLoading}
+                    className="mt-5 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium flex items-center gap-2"
+                  >
+                    {portfolioFrnLoading ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <span>🔍</span>
+                    )}
+                    Apply Filters
+                  </button>
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              {portfolioFrnData && (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                    <div className="text-sm text-slate-600 mb-1">Total FRNs</div>
+                    <div className="text-3xl font-bold text-slate-900">{portfolioFrnData.total_frns}</div>
+                    <div className="text-xs text-slate-500 mt-1">Across {portfolioFrnData.total_schools} schools</div>
+                  </div>
+                  <div className="bg-white rounded-2xl border border-green-200 p-6 shadow-sm">
+                    <div className="text-sm text-green-600 mb-1">Funded</div>
+                    <div className="text-3xl font-bold text-green-700">{portfolioFrnData.summary?.funded?.count || 0}</div>
+                    <div className="text-xs text-green-600 mt-1">${((portfolioFrnData.summary?.funded?.amount || 0) / 1000000).toFixed(1)}M</div>
+                  </div>
+                  <div className="bg-white rounded-2xl border border-amber-200 p-6 shadow-sm">
+                    <div className="text-sm text-amber-600 mb-1">Pending</div>
+                    <div className="text-3xl font-bold text-amber-700">{portfolioFrnData.summary?.pending?.count || 0}</div>
+                    <div className="text-xs text-amber-600 mt-1">${((portfolioFrnData.summary?.pending?.amount || 0) / 1000000).toFixed(1)}M</div>
+                  </div>
+                  <div className="bg-white rounded-2xl border border-red-200 p-6 shadow-sm">
+                    <div className="text-sm text-red-600 mb-1">Denied</div>
+                    <div className="text-3xl font-bold text-red-700">{portfolioFrnData.summary?.denied?.count || 0}</div>
+                    <div className="text-xs text-red-600 mt-1">${((portfolioFrnData.summary?.denied?.amount || 0) / 1000000).toFixed(1)}M</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Schools Breakdown */}
+              {portfolioFrnData?.schools && portfolioFrnData.schools.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="px-6 py-4 border-b border-slate-200">
+                    <h3 className="font-semibold text-slate-900">Schools ({portfolioFrnData.schools.length})</h3>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {portfolioFrnData.schools.map((school: any) => (
+                      <div key={school.ben} className="px-6 py-4 hover:bg-slate-50 transition-colors">
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <span className="font-medium text-slate-900">{school.entity_name || school.ben}</span>
+                            <span className="ml-2 text-xs text-slate-500 font-mono">BEN: {school.ben}</span>
+                          </div>
+                          <span className="text-sm text-slate-500">{school.total_frns} FRNs</span>
+                        </div>
+                        <div className="flex gap-4 text-xs">
+                          <span className="px-2 py-1 bg-green-50 text-green-700 rounded-full">{school.funded} Funded</span>
+                          <span className="px-2 py-1 bg-amber-50 text-amber-700 rounded-full">{school.pending} Pending</span>
+                          <span className="px-2 py-1 bg-red-50 text-red-700 rounded-full">{school.denied} Denied</span>
+                          <span className="text-slate-500">${(school.total_amount || 0).toLocaleString()}</span>
+                        </div>
+                        {/* Show first few FRNs */}
+                        {school.frns && school.frns.length > 0 && (
+                          <div className="mt-3 space-y-1">
+                            {school.frns.slice(0, 5).map((frn: any, i: number) => (
+                              <div key={i} className="flex items-center justify-between text-xs text-slate-600 bg-slate-50 rounded px-3 py-1.5">
+                                <span className="font-mono">FRN: {frn.funding_request_number || frn.frn}</span>
+                                <span className={`px-2 py-0.5 rounded-full ${
+                                  (frn.frn_status || frn.status || '').toLowerCase().includes('funded') ? 'bg-green-100 text-green-700' :
+                                  (frn.frn_status || frn.status || '').toLowerCase().includes('denied') ? 'bg-red-100 text-red-700' :
+                                  'bg-amber-100 text-amber-700'
+                                }`}>
+                                  {frn.frn_status || frn.status || 'Unknown'}
+                                </span>
+                                {frn.pending_reason && (
+                                  <span className="text-amber-600 truncate max-w-[200px]">{frn.pending_reason}</span>
+                                )}
+                                <span className="text-slate-400">${parseFloat(frn.total_authorized_amount || frn.amount || 0).toLocaleString()}</span>
+                              </div>
+                            ))}
+                            {school.frns.length > 5 && (
+                              <div className="text-xs text-slate-400 pl-3">+ {school.frns.length - 5} more FRNs</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Empty State */}
+              {!portfolioFrnLoading && !portfolioFrnData && (
+                <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+                  <span className="text-4xl mb-4 block">📈</span>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">No FRN Status Data</h3>
+                  <p className="text-sm text-slate-500">Add schools to your portfolio and click &quot;Refresh Data&quot; to see their FRN status.</p>
+                </div>
+              )}
+
+              {/* Loading State */}
+              {portfolioFrnLoading && (
+                <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+                  <div className="w-8 h-8 border-3 border-teal-200 border-t-teal-600 rounded-full animate-spin mx-auto mb-4"></div>
+                  <p className="text-sm text-slate-500">Loading FRN status across your portfolio...</p>
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === "settings" && (
             <div className="max-w-2xl mx-auto space-y-6">
               <div className="bg-white rounded-2xl border border-slate-200 p-6">
@@ -1675,6 +1887,22 @@ export default function ConsultantPortalPage() {
                   </div>
                 </div>
                 <button className="mt-6 px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl">Save Changes</button>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-xl">🔔</span>
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900">Notification Preferences</h2>
+                    <p className="text-sm text-slate-500">Alerts for FRN status changes, denials, long-pending items, and deadlines</p>
+                  </div>
+                </div>
+                <a
+                  href="/settings/notifications"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl hover:bg-indigo-100 font-medium text-sm transition"
+                >
+                  🔔 Manage Notification Settings →
+                </a>
               </div>
 
               <div className="bg-white rounded-2xl border border-slate-200 p-6">

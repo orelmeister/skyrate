@@ -1212,7 +1212,7 @@ class ApiClient {
   /**
    * Get FRN status for all schools in consultant's portfolio
    */
-  async getConsultantFRNStatus(year?: number, status?: string, limit: number = 500): Promise<ApiResponse<{
+  async getConsultantFRNStatus(year?: number, status?: string, limit: number = 500, pendingReason?: string): Promise<ApiResponse<{
     success: boolean;
     total_frns: number;
     total_schools: number;
@@ -1238,6 +1238,7 @@ class ApiClient {
     if (year) params.set('year', String(year));
     if (status) params.set('status_filter', status);
     if (limit) params.set('limit', String(limit));
+    if (pendingReason) params.set('pending_reason', pendingReason);
     const queryString = params.toString() ? `?${params.toString()}` : '';
     return this.request(`/api/v1/consultant/frn-status${queryString}`);
   }
@@ -1575,10 +1576,11 @@ class ApiClient {
   /**
    * Get FRN status for all your contracts (filtered by your SPIN)
    */
-  async getFRNStatus(year?: number, status?: string, limit: number = 500): Promise<ApiResponse<FRNStatusResponse>> {
+  async getFRNStatus(year?: number, status?: string, pendingReason?: string, limit: number = 500): Promise<ApiResponse<FRNStatusResponse>> {
     const params = new URLSearchParams();
     if (year) params.set('year', String(year));
     if (status) params.set('status', status);
+    if (pendingReason) params.set('pending_reason', pendingReason);
     if (limit) params.set('limit', String(limit));
     const queryString = params.toString() ? `?${params.toString()}` : '';
     return this.request(`/api/v1/vendor/frn-status${queryString}`);
@@ -1612,7 +1614,13 @@ class ApiClient {
     category?: string;
     service_type?: string;
     manufacturer?: string;
+    equipment_type?: string;
+    service_function?: string;
+    min_speed?: string;
+    max_speed?: string;
+    sort_by?: string;
     limit?: number;
+    offset?: number;
   }): Promise<ApiResponse<Form470LeadsResponse>> {
     const params = new URLSearchParams();
     if (filters.year) params.append('year', filters.year.toString());
@@ -1620,7 +1628,13 @@ class ApiClient {
     if (filters.category) params.append('category', filters.category);
     if (filters.service_type) params.append('service_type', filters.service_type);
     if (filters.manufacturer) params.append('manufacturer', filters.manufacturer);
+    if (filters.equipment_type) params.append('equipment_type', filters.equipment_type);
+    if (filters.service_function) params.append('service_function', filters.service_function);
+    if (filters.min_speed) params.append('min_speed', filters.min_speed);
+    if (filters.max_speed) params.append('max_speed', filters.max_speed);
+    if (filters.sort_by) params.append('sort_by', filters.sort_by);
     if (filters.limit) params.append('limit', filters.limit.toString());
+    if (filters.offset) params.append('offset', filters.offset.toString());
     const queryString = params.toString();
     return this.request(`/api/v1/vendor/470/leads${queryString ? '?' + queryString : ''}`);
   }
@@ -2485,6 +2499,27 @@ class ApiClient {
     } catch {
       return null;
     }
+  }
+  // ==================== APPLICANT ENDPOINTS ====================
+
+  /**
+   * Get live FRN status for applicant BENs from USAC
+   */
+  async getApplicantLiveFRNStatus(year?: number, status?: string, pendingReason?: string): Promise<ApiResponse<any>> {
+    const params = new URLSearchParams();
+    if (year) params.set('year', String(year));
+    if (status) params.set('status_filter', status);
+    if (pendingReason) params.set('pending_reason', pendingReason);
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/api/v1/applicant/frn-status-live${queryString}`);
+  }
+
+  /**
+   * Get disbursement data for applicant BENs
+   */
+  async getApplicantDisbursements(year?: number): Promise<ApiResponse<any>> {
+    const params = year ? `?year=${year}` : '';
+    return this.request(`/api/v1/applicant/disbursements${params}`);
   }
 }
 

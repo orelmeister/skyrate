@@ -255,6 +255,78 @@ def sync_frn_statuses():
         db.close()
 
 
+def check_long_pending_frns():
+    """
+    Check for FRNs that have been pending for more than 15 days.
+    Creates alerts for users whose FRNs are stalled.
+    Runs every 12 hours.
+    """
+    logger.info("Running long-pending FRN check job...")
+    
+    db = SessionLocal()
+    try:
+        from ..models.alert import AlertType
+        alert_service = AlertService(db)
+        
+        # Get all applicant FRNs that are pending
+        pending_frns = db.query(ApplicantFRN).filter(
+            ApplicantFRN.status.ilike('%pending%')
+        ).all()
+        
+        alert_count = 0
+        threshold_days = 15
+        
+        for frn_record in pending_frns:
+            try:
+                # Calculate how long it's been pending
+                # Use last_checked or created_at as baseline
+                pending_since = frn_record.last_checked or frn_record.created_at or datetime.utcnow()
+                days_pending = (datetime.utcnow() - pending_since).days
+                
+                if days_pending < threshold_days:
+                    continue
+                
+                # Get user for this FRN
+                profile = db.query(ApplicantProfile).filter(
+                    ApplicantProfile.id == frn_record.applicant_profile_id
+                ).first()
+                
+                if not profile:
+                    continue
+                
+                # Check if we already alerted for this FRN recently (within 7 days)
+                from ..models.alert import Alert
+                recent_alert = db.query(Alert).filter(
+                    Alert.user_id == profile.user_id,
+                    Alert.entity_id == frn_record.frn,
+                    Alert.alert_type == AlertType.PENDING_TOO_LONG.value,
+                    Alert.created_at >= datetime.utcnow() - timedelta(days=7)
+                ).first()
+                
+                if recent_alert:
+                    continue  # Don't spam — only alert once per 7 days per FRN
+                
+                alert_service.alert_on_pending_too_long(
+                    user_id=profile.user_id,
+                    frn=frn_record.frn,
+                    school_name=profile.organization_name or f"BEN {frn_record.ben}",
+                    pending_reason=getattr(frn_record, 'pending_reason', '') or 'Not specified',
+                    days_pending=days_pending,
+                    amount=float(frn_record.amount_requested or 0)
+                )
+                alert_count += 1
+                
+            except Exception as e:
+                logger.error(f"Error checking pending FRN {frn_record.frn}: {e}")
+        
+        logger.info(f"Long-pending check complete. Created {alert_count} alerts.")
+        
+    except Exception as e:
+        logger.error(f"Long-pending FRN check job failed: {e}")
+    finally:
+        db.close()
+
+
 def _notify_admins_of_denial(
     db: Session,
     alert_service: AlertService,
@@ -368,6 +440,15 @@ def init_scheduler():
         trigger=IntervalTrigger(hours=1),
         id='sync_frn_statuses',
         name='Sync FRN statuses from USAC',
+        replace_existing=True
+    )
+    
+    # Long-pending FRN check - every 12 hours
+    scheduler.add_job(
+        check_long_pending_frns,
+        trigger=IntervalTrigger(hours=12),
+        id='check_long_pending',
+        name='Check FRNs pending > 15 days',
         replace_existing=True
     )
     
