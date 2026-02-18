@@ -832,14 +832,14 @@ export default function ConsultantPortalPage() {
               onClick={() => setActiveTab(item.id)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${
                 activeTab === item.id
-                  ? "bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-700 font-medium shadow-sm"
+                  ? "bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700 font-medium shadow-sm"
                   : "text-slate-600 hover:bg-slate-50"
               }`}
             >
               <span className="text-xl">{item.icon}</span>
               <span>{item.label}</span>
               {activeTab === item.id && (
-                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-600"></span>
+                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-purple-600"></span>
               )}
             </button>
           ))}
@@ -847,7 +847,7 @@ export default function ConsultantPortalPage() {
 
         {/* Subscription Card */}
         <div className="absolute bottom-20 left-4 right-4">
-          <div className="bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl p-4 text-white">
+          <div className="bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl p-4 text-white">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium opacity-90">Pro Plan</span>
               <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs">Active</span>
@@ -860,7 +860,7 @@ export default function ConsultantPortalPage() {
         {/* User Profile */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200 bg-white">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center text-indigo-700 font-semibold">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center text-purple-700 font-semibold">
               {user?.first_name?.[0] || user?.email?.[0]?.toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
@@ -920,11 +920,64 @@ export default function ConsultantPortalPage() {
         <div className="p-6">
           {activeTab === "dashboard" && (
             <div className="space-y-6">
+              {/* Hero Banner */}
+              <div className="bg-gradient-to-r from-purple-600 via-purple-700 to-pink-600 rounded-2xl p-6 text-white shadow-lg">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
+                      <span className="text-3xl">📋</span>
+                    </div>
+                    <div>
+                      <h1 className="text-2xl font-bold">{profile?.company_name || 'My Consulting Firm'}</h1>
+                      <div className="flex items-center gap-3 mt-1 text-purple-100">
+                        {profile?.crn && (
+                          <span className="font-mono bg-white/20 px-2 py-0.5 rounded text-sm">CRN: {profile.crn}</span>
+                        )}
+                        <span className="flex items-center gap-1 text-sm">
+                          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                          E-Rate Consultant
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab("schools")}
+                    className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
+                  >
+                    View All Schools →
+                  </button>
+                </div>
+                <div className="grid grid-cols-4 gap-6 mt-6 pt-6 border-t border-white/20">
+                  <div>
+                    <div className="text-3xl font-bold">{schools.length}</div>
+                    <div className="text-sm text-purple-200 mt-1">Total Schools</div>
+                  </div>
+                  <div>
+                    <div className="text-3xl font-bold">
+                      {isLoadingStats ? '...' : dashboardStats ? `$${(dashboardStats.total_c2_funding / 1000000).toFixed(1)}M` : '$0'}
+                    </div>
+                    <div className="text-sm text-purple-200 mt-1">C2 Funding</div>
+                  </div>
+                  <div>
+                    <div className="text-3xl font-bold">
+                      {isLoadingStats ? '...' : (dashboardStats?.total_applications || 0)}
+                    </div>
+                    <div className="text-sm text-purple-200 mt-1">Total Applications</div>
+                  </div>
+                  <div>
+                    <div className="text-3xl font-bold">
+                      {isLoadingStats ? '...' : `${dashboardStats?.funded_count || 0}`}
+                    </div>
+                    <div className="text-sm text-purple-200 mt-1">Funded Apps</div>
+                  </div>
+                </div>
+              </div>
+
               {/* Stats Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
                   <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
                       <span className="text-2xl">🏫</span>
                     </div>
                     <span className="text-xs text-green-600 font-medium px-2 py-1 bg-green-50 rounded-full">{schools.length} total</span>
@@ -1002,9 +1055,9 @@ export default function ConsultantPortalPage() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <button
                     onClick={() => setShowAddSchool(true)}
-                    className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all text-center group"
+                    className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-purple-300 hover:bg-purple-50 transition-all text-center group"
                   >
-                    <div className="w-10 h-10 rounded-lg bg-indigo-100 group-hover:bg-indigo-200 flex items-center justify-center mx-auto mb-2 transition-colors">
+                    <div className="w-10 h-10 rounded-lg bg-purple-100 group-hover:bg-purple-200 flex items-center justify-center mx-auto mb-2 transition-colors">
                       <span className="text-xl">➕</span>
                     </div>
                     <span className="text-sm font-medium text-slate-700">Add School</span>
@@ -1036,15 +1089,18 @@ export default function ConsultantPortalPage() {
                 </div>
               </div>
 
-              {/* Recent Schools */}
-              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                <div className="p-6 border-b border-slate-200 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-slate-900">Recent Schools</h2>
-                  <button onClick={() => setActiveTab("schools")} className="text-sm text-indigo-600 hover:text-indigo-700 font-medium">View All →</button>
+              {/* Top Schools by Funding */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900">Top Schools by E-Rate Funding</h2>
+                    <p className="text-sm text-slate-500">Your highest-value school relationships</p>
+                  </div>
+                  <button onClick={() => setActiveTab("schools")} className="text-sm text-purple-600 hover:underline font-medium">View All →</button>
                 </div>
                 {schools.length > 0 ? (
                   <div className="divide-y divide-slate-100">
-                    {schools.slice(0, 5).map((school) => {
+                    {schools.slice(0, 5).map((school, idx) => {
                       const statusColors: Record<string, string> = {
                         'Funded': 'bg-green-100 text-green-700',
                         'Has Denials': 'bg-red-100 text-red-700',
@@ -1053,11 +1109,17 @@ export default function ConsultantPortalPage() {
                       };
                       const statusColor = statusColors[school.status || ''] || 'bg-slate-100 text-slate-600';
                       return (
-                        <div key={school.id} className="p-4 hover:bg-slate-50 transition-colors flex items-center gap-4 cursor-pointer" onClick={() => openSchoolDetail(school)}>
-                          <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">🏫</div>
+                        <div key={school.id} className="p-4 flex items-center gap-4 hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => openSchoolDetail(school)}>
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center font-bold text-purple-600">
+                            {idx + 1}
+                          </div>
                           <div className="flex-1 min-w-0">
                             <div className="font-medium text-slate-900 truncate">{school.school_name || school.name || `BEN ${school.ben}`}</div>
-                            <div className="text-sm text-slate-500">{school.state || 'Unknown'} • {school.entity_type || 'School'}</div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-xs text-slate-500">{school.state || 'Unknown'}</span>
+                              <span className="text-slate-300">•</span>
+                              <span className="text-xs text-slate-500">{school.entity_type || 'School'}</span>
+                            </div>
                           </div>
                           <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusColor}`}>{school.status || 'Unknown'}</span>
                         </div>
@@ -1069,7 +1131,7 @@ export default function ConsultantPortalPage() {
                     <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">🏫</div>
                     <h3 className="font-medium text-slate-900 mb-1">No schools yet</h3>
                     <p className="text-sm text-slate-500 mb-4">Add your first school to get started</p>
-                    <button onClick={() => setShowAddSchool(true)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Add School</button>
+                    <button onClick={() => setShowAddSchool(true)} className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">Add School</button>
                   </div>
                 )}
               </div>

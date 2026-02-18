@@ -135,6 +135,7 @@ export default function ApplicantDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedTab, setSelectedTab] = useState<'overview' | 'frns' | 'appeals' | 'changes' | 'frn-status' | 'disbursements'>('overview');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedAppeal, setSelectedAppeal] = useState<Appeal | null>(null);
   const [selectedFrnId, setSelectedFrnId] = useState<number | null>(null);
   const [frnDetail, setFrnDetail] = useState<any | null>(null);
@@ -292,7 +293,7 @@ export default function ApplicantDashboard() {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-slate-600">Loading your E-Rate dashboard...</p>
         </div>
       </div>
@@ -308,7 +309,7 @@ export default function ApplicantDashboard() {
           <p className="text-slate-600 mb-4">{error}</p>
           <button
             onClick={fetchDashboard}
-            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
           >
             Try Again
           </button>
@@ -321,176 +322,350 @@ export default function ApplicantDashboard() {
 
   const { profile, frns, appeals, recent_changes, summary } = data;
 
+  const navItems = [
+    { id: 'overview', label: 'Dashboard', icon: '📊' },
+    { id: 'frns', label: 'All FRNs', icon: '📋', count: frns.length },
+    { id: 'frn-status', label: 'Live Status', icon: '📈' },
+    { id: 'disbursements', label: 'Disbursements', icon: '💰' },
+    { id: 'appeals', label: 'Appeals', icon: '⚖️', count: appeals.length },
+    { id: 'changes', label: 'Updates', icon: '🔔', count: summary.unread_changes },
+  ];
+
+  const activeTabLabel = navItems.find(item => item.id === selectedTab)?.label || 'Dashboard';
+
+  const handleLogout = () => {
+    logout();
+    router.push('/sign-in');
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-4">
-              <Link href="/" className="flex items-center gap-2">
-                <img src="/images/logos/logo-icon-transparent.png" alt="SkyRate AI" width={40} height={40} className="rounded-lg" />
-                <span className="text-xl font-bold text-slate-900 hidden sm:block">SkyRate AI</span>
-              </Link>
-              <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
-              <div className="hidden sm:block">
-                <div className="text-sm font-medium text-slate-900">{profile.organization_name}</div>
-                <div className="text-xs text-slate-500">BEN: {profile.ben}</div>
-              </div>
+      {/* Sidebar */}
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transform transition-transform duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+        <div className="h-16 flex items-center gap-3 px-6 border-b border-slate-200">
+          <Link href="/" className="flex items-center gap-3">
+            <img src="/images/logos/logo-icon-transparent.png" alt="SkyRate AI" width={36} height={36} className="rounded-lg" />
+            <div>
+              <span className="font-bold text-slate-900">SkyRate AI</span>
+              <span className="block text-xs text-slate-500">Applicant Portal</span>
             </div>
-            <div className="flex items-center gap-3">
-              {/* Settings link */}
-              <Link
-                href="/settings/bens"
-                className="text-sm text-slate-600 hover:text-emerald-600 flex items-center gap-1"
-                title="Manage BEN Numbers"
-              >
-                ⚙️ Settings
-              </Link>
-              <Link
-                href="/settings/notifications"
-                className="text-sm text-slate-600 hover:text-emerald-600 flex items-center gap-1"
-                title="Notification Preferences"
-              >
-                🔔 Alerts
-              </Link>
-              {summary.sync_status === 'syncing' ? (
-                <div className="flex items-center gap-2 text-sm text-emerald-600">
-                  <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-                  Syncing...
-                </div>
-              ) : (
-                <button
-                  onClick={triggerSync}
-                  className="text-sm text-slate-600 hover:text-emerald-600 flex items-center gap-1"
-                >
-                  🔄 Refresh Data
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  logout();
-                  router.push('/sign-in');
-                }}
-                className="text-sm text-slate-600 hover:text-red-600"
-              >
-                Sign Out
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Overview */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-            <div className="text-sm text-slate-500 mb-1">Total Funded</div>
-            <div className="text-2xl font-bold text-green-600">{formatCurrency(summary.total_funded_amount)}</div>
-            <div className="text-xs text-slate-400">{summary.funded_count} FRNs</div>
-          </div>
-          <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-            <div className="text-sm text-slate-500 mb-1">Pending</div>
-            <div className="text-2xl font-bold text-yellow-600">{formatCurrency(summary.total_pending_amount)}</div>
-            <div className="text-xs text-slate-400">{summary.pending_count} FRNs</div>
-          </div>
-          <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-            <div className="text-sm text-slate-500 mb-1">Denied</div>
-            <div className="text-2xl font-bold text-red-600">{formatCurrency(summary.total_denied_amount)}</div>
-            <div className="text-xs text-slate-400">{summary.denied_count} FRNs</div>
-          </div>
-          <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-            <div className="text-sm text-slate-500 mb-1">Appeals Ready</div>
-            <div className="text-2xl font-bold text-emerald-600">{summary.appeals_ready}</div>
-            <div className="text-xs text-slate-400">{summary.urgent_deadlines} urgent</div>
-          </div>
+          </Link>
         </div>
 
-        {/* Alerts */}
-        {(summary.urgent_deadlines > 0 || summary.unread_changes > 0) && (
-          <div className="mb-8">
-            {summary.urgent_deadlines > 0 && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-3 flex items-center gap-3">
-                <span className="text-2xl">⏰</span>
-                <div>
-                  <div className="font-semibold text-red-800">
-                    {summary.urgent_deadlines} appeal deadline{summary.urgent_deadlines > 1 ? 's' : ''} approaching!
-                  </div>
-                  <div className="text-sm text-red-600">
-                    Review and submit your appeals before the deadline passes.
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSelectedTab('appeals')}
-                  className="ml-auto px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
-                >
-                  View Appeals
-                </button>
-              </div>
-            )}
-            {summary.unread_changes > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3">
-                <span className="text-2xl">🔔</span>
-                <div>
-                  <div className="font-semibold text-blue-800">
-                    {summary.unread_changes} new update{summary.unread_changes > 1 ? 's' : ''} since your last visit
-                  </div>
-                  <div className="text-sm text-blue-600">
-                    Check what changed with your applications.
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSelectedTab('changes')}
-                  className="ml-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
-                >
-                  View Updates
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Tabs */}
-        <div className="flex gap-1 bg-slate-200 rounded-lg p-1 mb-6 overflow-x-auto">
-          {[
-            { id: 'overview', label: 'Overview', icon: '📊' },
-            { id: 'frns', label: 'All FRNs', icon: '📋', count: frns.length },
-            { id: 'frn-status', label: 'Live Status', icon: '📈' },
-            { id: 'disbursements', label: 'Disbursements', icon: '💰' },
-            { id: 'appeals', label: 'Appeals', icon: '⚖️', count: appeals.length },
-            { id: 'changes', label: 'Updates', icon: '🔔', count: summary.unread_changes },
-          ].map((tab) => (
+        <nav className="p-4 space-y-1">
+          {navItems.map((item) => (
             <button
-              key={tab.id}
-              onClick={() => setSelectedTab(tab.id as any)}
-              className={`flex-1 min-w-fit px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-                selectedTab === tab.id
-                  ? 'bg-white text-emerald-700 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+              key={item.id}
+              onClick={() => { setSelectedTab(item.id as any); setSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${
+                selectedTab === item.id
+                  ? "bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700 font-medium shadow-sm"
+                  : "text-slate-600 hover:bg-slate-50"
               }`}
             >
-              <span>{tab.icon}</span>
-              {tab.label}
-              {tab.count !== undefined && tab.count > 0 && (
-                <span className={`px-2 py-0.5 rounded-full text-xs ${
-                  selectedTab === tab.id ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-300 text-slate-700'
+              <span className="text-xl">{item.icon}</span>
+              <span>{item.label}</span>
+              {item.count !== undefined && item.count > 0 && (
+                <span className={`ml-auto px-2 py-0.5 rounded-full text-xs font-medium ${
+                  selectedTab === item.id ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'
                 }`}>
-                  {tab.count}
+                  {item.count}
                 </span>
+              )}
+              {selectedTab === item.id && !item.count && (
+                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-purple-600"></span>
               )}
             </button>
           ))}
+        </nav>
+
+        {/* Subscription Card */}
+        <div className="absolute bottom-20 left-4 right-4">
+          <div className="bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl p-4 text-white">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium opacity-90">Pro Plan</span>
+              <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs">Active</span>
+            </div>
+            <div className="text-2xl font-bold">{frns.length} FRNs</div>
+            <div className="text-sm opacity-75 mt-1">Tracked applications</div>
+          </div>
         </div>
 
-        {/* Content */}
+        {/* User Profile */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200 bg-white">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center text-purple-700 font-semibold">
+              {user?.first_name?.[0] || user?.email?.[0]?.toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-slate-900 truncate">{user?.full_name || user?.email}</div>
+              <div className="text-xs text-slate-500 truncate">{profile.organization_name}</div>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+              title="Sign Out"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
+      {/* Main Content */}
+      <main className="lg:ml-64">
+        {/* Top Bar */}
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 sticky top-0 z-40">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="lg:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <h1 className="text-xl font-semibold text-slate-900">{activeTabLabel}</h1>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/settings/notifications"
+              className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg relative"
+              title="Notifications"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              {summary.unread_changes > 0 && (
+                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+              )}
+            </Link>
+            {summary.sync_status === 'syncing' ? (
+              <div className="flex items-center gap-2 text-sm text-purple-600">
+                <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                Syncing...
+              </div>
+            ) : (
+              <button
+                onClick={triggerSync}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-sm"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </button>
+            )}
+          </div>
+        </header>
+
+        {/* Page Content */}
+        <div className="p-6">
+        {/* Overview / Dashboard */}
         {selectedTab === 'overview' && (
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="space-y-6">
+            {/* Hero Banner */}
+            <div className="bg-gradient-to-r from-purple-600 via-purple-700 to-pink-600 rounded-2xl p-6 text-white shadow-lg">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
+                    <span className="text-3xl">🏫</span>
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold">{profile.organization_name}</h1>
+                    <div className="flex items-center gap-3 mt-1 text-purple-100">
+                      <span className="font-mono bg-white/20 px-2 py-0.5 rounded text-sm">BEN: {profile.ben}</span>
+                      <span className="flex items-center gap-1 text-sm">
+                        <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                        {profile.state} • E-Rate Applicant
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <Link
+                  href="/settings/bens"
+                  className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
+                >
+                  Manage BENs →
+                </Link>
+              </div>
+              <div className="grid grid-cols-4 gap-6 mt-6 pt-6 border-t border-white/20">
+                <div>
+                  <div className="text-3xl font-bold">{formatCurrency(summary.total_funded_amount)}</div>
+                  <div className="text-sm text-purple-200 mt-1">Total Funded</div>
+                </div>
+                <div>
+                  <div className="text-3xl font-bold">{summary.total_frns}</div>
+                  <div className="text-sm text-purple-200 mt-1">Total FRNs</div>
+                </div>
+                <div>
+                  <div className="text-3xl font-bold">{summary.funded_count}</div>
+                  <div className="text-sm text-purple-200 mt-1">Funded</div>
+                </div>
+                <div>
+                  <div className="text-3xl font-bold">{summary.pending_count}</div>
+                  <div className="text-sm text-purple-200 mt-1">Pending</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Stat Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
+                    <span className="text-2xl">💰</span>
+                  </div>
+                  <span className="text-xs text-green-600 font-medium px-2 py-1 bg-green-50 rounded-full">{summary.funded_count} FRNs</span>
+                </div>
+                <div className="text-3xl font-bold text-slate-900">{formatCurrency(summary.total_funded_amount)}</div>
+                <div className="text-sm text-slate-500 mt-1">Total Funded</div>
+              </div>
+              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
+                    <span className="text-2xl">⏳</span>
+                  </div>
+                  <span className="text-xs text-amber-600 font-medium px-2 py-1 bg-amber-50 rounded-full">{summary.pending_count} FRNs</span>
+                </div>
+                <div className="text-3xl font-bold text-slate-900">{formatCurrency(summary.total_pending_amount)}</div>
+                <div className="text-sm text-slate-500 mt-1">Pending Review</div>
+              </div>
+              <div 
+                className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer hover:border-red-300"
+                onClick={() => setSelectedTab('appeals')}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center">
+                    <span className="text-2xl">⚠️</span>
+                  </div>
+                  {summary.denied_count > 0 ? (
+                    <span className="text-xs text-red-600 font-medium px-2 py-1 bg-red-50 rounded-full">Action needed</span>
+                  ) : (
+                    <span className="text-xs text-green-600 font-medium px-2 py-1 bg-green-50 rounded-full">All clear</span>
+                  )}
+                </div>
+                <div className="text-3xl font-bold text-slate-900">{formatCurrency(summary.total_denied_amount)}</div>
+                <div className="text-sm text-slate-500 mt-1">Denied ({summary.denied_count} FRNs)</div>
+              </div>
+              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
+                    <span className="text-2xl">⚖️</span>
+                  </div>
+                  {summary.urgent_deadlines > 0 ? (
+                    <span className="text-xs text-red-600 font-medium px-2 py-1 bg-red-50 rounded-full">{summary.urgent_deadlines} urgent</span>
+                  ) : (
+                    <span className="text-xs text-purple-600 font-medium px-2 py-1 bg-purple-50 rounded-full">Ready</span>
+                  )}
+                </div>
+                <div className="text-3xl font-bold text-slate-900">{summary.appeals_ready}</div>
+                <div className="text-sm text-slate-500 mt-1">Appeals Ready</div>
+              </div>
+            </div>
+
+            {/* Alerts */}
+            {summary.urgent_deadlines > 0 && (
+              <div className="bg-gradient-to-r from-red-50 to-orange-50 rounded-2xl border border-red-200 p-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center">
+                    <span className="text-2xl">⏰</span>
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-lg font-semibold text-slate-900">
+                      {summary.urgent_deadlines} appeal deadline{summary.urgent_deadlines > 1 ? 's' : ''} approaching!
+                    </h2>
+                    <p className="text-sm text-slate-600 mt-1">Review and submit your appeals before the deadline passes.</p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedTab('appeals')}
+                    className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors text-sm font-medium"
+                  >
+                    View Appeals →
+                  </button>
+                </div>
+              </div>
+            )}
+            {summary.unread_changes > 0 && (
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-200 p-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
+                    <span className="text-2xl">🔔</span>
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-lg font-semibold text-slate-900">
+                      {summary.unread_changes} new update{summary.unread_changes > 1 ? 's' : ''} since your last visit
+                    </h2>
+                    <p className="text-sm text-slate-600 mt-1">Check what changed with your applications.</p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedTab('changes')}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors text-sm font-medium"
+                  >
+                    View Updates →
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Quick Actions */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6">
+              <h2 className="text-lg font-semibold text-slate-900 mb-4">Quick Actions</h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <button
+                  onClick={() => setSelectedTab('frns')}
+                  className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-purple-300 hover:bg-purple-50 transition-all text-center group"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-purple-100 group-hover:bg-purple-200 flex items-center justify-center mx-auto mb-2 transition-colors">
+                    <span className="text-xl">📋</span>
+                  </div>
+                  <span className="text-sm font-medium text-slate-700">View All FRNs</span>
+                </button>
+                <button
+                  onClick={() => setSelectedTab('frn-status')}
+                  className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-green-300 hover:bg-green-50 transition-all text-center group"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-green-100 group-hover:bg-green-200 flex items-center justify-center mx-auto mb-2 transition-colors">
+                    <span className="text-xl">📈</span>
+                  </div>
+                  <span className="text-sm font-medium text-slate-700">Live Status</span>
+                </button>
+                <button
+                  onClick={() => setSelectedTab('disbursements')}
+                  className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-amber-300 hover:bg-amber-50 transition-all text-center group"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-amber-100 group-hover:bg-amber-200 flex items-center justify-center mx-auto mb-2 transition-colors">
+                    <span className="text-xl">💰</span>
+                  </div>
+                  <span className="text-sm font-medium text-slate-700">Disbursements</span>
+                </button>
+                <Link
+                  href="/settings/notifications"
+                  className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-rose-300 hover:bg-rose-50 transition-all text-center group block"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-rose-100 group-hover:bg-rose-200 flex items-center justify-center mx-auto mb-2 transition-colors">
+                    <span className="text-xl">🔔</span>
+                  </div>
+                  <span className="text-sm font-medium text-slate-700">Notifications</span>
+                </Link>
+              </div>
+            </div>
+
+            {/* Two-column: Appeals + Updates */}
+            <div className="grid md:grid-cols-2 gap-6">
             {/* Recent Denials with Appeals */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="p-4 border-b border-slate-200">
                 <h3 className="font-semibold text-slate-900 flex items-center gap-2">
                   ⚖️ Auto-Generated Appeals
-                  <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">
+                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
                     AI Ready
                   </span>
                 </h3>
@@ -550,7 +725,7 @@ export default function ApplicantDashboard() {
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
                         change.change_type === 'status_change' ? 'bg-yellow-100' :
                         change.change_type === 'new_denial' ? 'bg-red-100' :
-                        change.change_type === 'appeal_generated' ? 'bg-emerald-100' :
+                        change.change_type === 'appeal_generated' ? 'bg-purple-100' :
                         'bg-slate-100'
                       }`}>
                         {change.change_type === 'status_change' ? '🔄' :
@@ -579,6 +754,7 @@ export default function ApplicantDashboard() {
                 )}
               </div>
             </div>
+          </div>
           </div>
         )}
 
@@ -638,7 +814,7 @@ export default function ApplicantDashboard() {
                               const appeal = appeals.find(a => a.frn === frn.frn);
                               if (appeal) setSelectedAppeal(appeal);
                             }}
-                            className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium hover:bg-emerald-200 transition-colors"
+                            className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium hover:bg-purple-200 transition-colors"
                           >
                             View Appeal
                           </button>
@@ -917,19 +1093,19 @@ export default function ApplicantDashboard() {
 
                                 {/* Appeal Info (if exists) */}
                                 {frnDetail.appeal && (
-                                  <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
-                                    <h4 className="font-medium text-emerald-800 mb-2 text-sm flex items-center gap-2">📄 Auto-Generated Appeal Ready</h4>
+                                  <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                                    <h4 className="font-medium text-purple-800 mb-2 text-sm flex items-center gap-2">📄 Auto-Generated Appeal Ready</h4>
                                     <div className="flex items-center gap-3 text-sm mb-2">
                                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                                        frnDetail.appeal.status === 'ready' ? 'bg-emerald-100 text-emerald-700' :
+                                        frnDetail.appeal.status === 'ready' ? 'bg-purple-100 text-purple-700' :
                                         frnDetail.appeal.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
                                         'bg-slate-100 text-slate-600'
                                       }`}>{frnDetail.appeal.status?.toUpperCase()}</span>
                                       {frnDetail.appeal.success_probability != null && (
-                                        <span className="text-emerald-700 font-medium">✓ {frnDetail.appeal.success_probability}% Success Rate</span>
+                                        <span className="text-purple-700 font-medium">✓ {frnDetail.appeal.success_probability}% Success Rate</span>
                                       )}
                                     </div>
-                                    <p className="text-xs text-emerald-600 line-clamp-2">{frnDetail.appeal.appeal_letter?.substring(0, 200)}...</p>
+                                    <p className="text-xs text-purple-600 line-clamp-2">{frnDetail.appeal.appeal_letter?.substring(0, 200)}...</p>
                                   </div>
                                 )}
                               </div>
@@ -963,7 +1139,7 @@ export default function ApplicantDashboard() {
                         FY {appeal.funding_year}
                       </span>
                       <span className={`px-2 py-1 rounded text-xs ${
-                        appeal.status === 'ready' ? 'bg-emerald-100 text-emerald-700' :
+                        appeal.status === 'ready' ? 'bg-purple-100 text-purple-700' :
                         appeal.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
                         appeal.status === 'won' ? 'bg-green-100 text-green-700' :
                         appeal.status === 'lost' ? 'bg-red-100 text-red-700' :
@@ -1017,7 +1193,7 @@ export default function ApplicantDashboard() {
                 <div className="flex gap-3">
                   <button
                     onClick={() => setSelectedAppeal(appeal)}
-                    className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium"
+                    className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
                   >
                     View & Edit Appeal Letter
                   </button>
@@ -1049,7 +1225,7 @@ export default function ApplicantDashboard() {
                   <select
                     value={liveFrnYear || ''}
                     onChange={(e) => setLiveFrnYear(e.target.value ? parseInt(e.target.value) : undefined)}
-                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
                   >
                     <option value="">All Years</option>
                     {Array.from({ length: 10 }, (_, i) => 2025 - i).map(y => (
@@ -1062,7 +1238,7 @@ export default function ApplicantDashboard() {
                   <select
                     value={liveFrnStatusFilter}
                     onChange={(e) => setLiveFrnStatusFilter(e.target.value)}
-                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
                   >
                     <option value="">All Statuses</option>
                     <option value="Funded">Funded</option>
@@ -1078,12 +1254,12 @@ export default function ApplicantDashboard() {
                     value={liveFrnPendingReason}
                     onChange={(e) => setLiveFrnPendingReason(e.target.value)}
                     placeholder="Filter by reason..."
-                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
                   />
                 </div>
                 <button
                   onClick={() => loadLiveFrnStatus(liveFrnYear, liveFrnStatusFilter, liveFrnPendingReason)}
-                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium"
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium"
                 >
                   Apply Filters
                 </button>
@@ -1092,7 +1268,7 @@ export default function ApplicantDashboard() {
 
             {liveFrnLoading ? (
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center">
-                <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                <div className="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
                 <p className="text-slate-500">Loading live FRN status from USAC...</p>
               </div>
             ) : liveFrnData ? (
@@ -1104,10 +1280,10 @@ export default function ApplicantDashboard() {
                     <div className="text-2xl font-bold text-slate-900">{liveFrnData.summary?.total_frns || 0}</div>
                     <div className="text-xs text-slate-400 mt-1">${(liveFrnData.summary?.total_amount || 0).toLocaleString()}</div>
                   </div>
-                  <div className="bg-white rounded-xl border border-emerald-200 shadow-sm p-4">
-                    <div className="text-sm text-emerald-600">Funded</div>
-                    <div className="text-2xl font-bold text-emerald-700">{liveFrnData.summary?.funded || 0}</div>
-                    <div className="text-xs text-emerald-500 mt-1">${(liveFrnData.summary?.funded_amount || 0).toLocaleString()}</div>
+                  <div className="bg-white rounded-xl border border-green-200 shadow-sm p-4">
+                    <div className="text-sm text-green-600">Funded</div>
+                    <div className="text-2xl font-bold text-green-700">{liveFrnData.summary?.funded || 0}</div>
+                    <div className="text-xs text-green-500 mt-1">${(liveFrnData.summary?.funded_amount || 0).toLocaleString()}</div>
                   </div>
                   <div className="bg-white rounded-xl border border-yellow-200 shadow-sm p-4">
                     <div className="text-sm text-yellow-600">Pending</div>
@@ -1144,7 +1320,7 @@ export default function ApplicantDashboard() {
                               </div>
                               <div className="flex items-center gap-3">
                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                  frn.frn_status === 'Funded' ? 'bg-emerald-100 text-emerald-700' :
+                                  frn.frn_status === 'Funded' ? 'bg-green-100 text-green-700' :
                                   frn.frn_status === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
                                   frn.frn_status === 'Denied' ? 'bg-red-100 text-red-700' :
                                   frn.frn_status === 'Committed' ? 'bg-blue-100 text-blue-700' :
@@ -1174,7 +1350,7 @@ export default function ApplicantDashboard() {
                 <p className="text-slate-500 mb-4">Query USAC directly for real-time FRN status across your BENs.</p>
                 <button
                   onClick={() => loadLiveFrnStatus(liveFrnYear, liveFrnStatusFilter, liveFrnPendingReason)}
-                  className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium"
+                  className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
                 >
                   Load Live Status
                 </button>
@@ -1193,7 +1369,7 @@ export default function ApplicantDashboard() {
                   <select
                     value={disbursementYear || ''}
                     onChange={(e) => setDisbursementYear(e.target.value ? parseInt(e.target.value) : undefined)}
-                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500"
+                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
                   >
                     <option value="">All Years</option>
                     {Array.from({ length: 10 }, (_, i) => 2025 - i).map(y => (
@@ -1203,7 +1379,7 @@ export default function ApplicantDashboard() {
                 </div>
                 <button
                   onClick={() => loadDisbursements(disbursementYear)}
-                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium"
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium"
                 >
                   Load Disbursements
                 </button>
@@ -1212,7 +1388,7 @@ export default function ApplicantDashboard() {
 
             {disbursementLoading ? (
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center">
-                <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                <div className="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
                 <p className="text-slate-500">Loading disbursement data...</p>
               </div>
             ) : disbursementData ? (
@@ -1223,9 +1399,9 @@ export default function ApplicantDashboard() {
                     <div className="text-sm text-slate-500">Total Authorized</div>
                     <div className="text-2xl font-bold text-slate-900">${(disbursementData.grand_total?.total_authorized || 0).toLocaleString()}</div>
                   </div>
-                  <div className="bg-white rounded-xl border border-emerald-200 shadow-sm p-6">
-                    <div className="text-sm text-emerald-600">Total Disbursed</div>
-                    <div className="text-2xl font-bold text-emerald-700">${(disbursementData.grand_total?.total_disbursed || 0).toLocaleString()}</div>
+                  <div className="bg-white rounded-xl border border-green-200 shadow-sm p-6">
+                    <div className="text-sm text-green-600">Total Disbursed</div>
+                    <div className="text-2xl font-bold text-green-700">${(disbursementData.grand_total?.total_disbursed || 0).toLocaleString()}</div>
                   </div>
                   <div className="bg-white rounded-xl border border-blue-200 shadow-sm p-6">
                     <div className="text-sm text-blue-600">Disbursement Rate</div>
@@ -1251,7 +1427,7 @@ export default function ApplicantDashboard() {
                               <div className="text-sm text-slate-500">BEN: {ben.ben}</div>
                             </div>
                             <div className="text-right">
-                              <div className="text-sm font-medium text-emerald-600">
+                              <div className="text-sm font-medium text-green-600">
                                 ${(ben.summary?.total_disbursed || 0).toLocaleString()} disbursed
                               </div>
                               <div className="text-xs text-slate-400">
@@ -1262,7 +1438,7 @@ export default function ApplicantDashboard() {
                           </div>
                           <div className="mt-2 w-full bg-slate-200 rounded-full h-1.5">
                             <div
-                              className="bg-emerald-500 h-1.5 rounded-full transition-all"
+                              className="bg-green-500 h-1.5 rounded-full transition-all"
                               style={{ width: `${Math.min(ben.summary?.disbursement_rate || 0, 100)}%` }}
                             />
                           </div>
@@ -1280,8 +1456,8 @@ export default function ApplicantDashboard() {
                                   <div className="font-medium">${(rec.total_authorized_disbursement || 0).toLocaleString()}</div>
                                 </div>
                                 <div>
-                                  <div className="text-emerald-500">Disbursed</div>
-                                  <div className="font-medium text-emerald-700">${(rec.total_disbursed || 0).toLocaleString()}</div>
+                                  <div className="text-green-500">Disbursed</div>
+                                  <div className="font-medium text-green-700">${(rec.total_disbursed || 0).toLocaleString()}</div>
                                 </div>
                               </div>
                             </div>
@@ -1309,7 +1485,7 @@ export default function ApplicantDashboard() {
                 <p className="text-slate-500 mb-4">View disbursement data from USAC for your registered BENs.</p>
                 <button
                   onClick={() => loadDisbursements(disbursementYear)}
-                  className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium"
+                  className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
                 >
                   Load Disbursements
                 </button>
@@ -1330,7 +1506,7 @@ export default function ApplicantDashboard() {
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
                       change.change_type === 'status_change' ? 'bg-yellow-100' :
                       change.change_type === 'new_denial' ? 'bg-red-100' :
-                      change.change_type === 'appeal_generated' ? 'bg-emerald-100' :
+                      change.change_type === 'appeal_generated' ? 'bg-purple-100' :
                       'bg-slate-100'
                     }`}>
                       {change.change_type === 'status_change' ? '🔄' :
@@ -1375,6 +1551,7 @@ export default function ApplicantDashboard() {
             </div>
           </div>
         )}
+        </div>
       </main>
 
       {/* Appeal Modal */}
@@ -1419,13 +1596,13 @@ export default function ApplicantDashboard() {
                   Review and edit before submitting to USAC
                 </div>
                 <textarea
-                  className="w-full h-96 p-4 border border-slate-200 rounded-lg text-sm font-mono resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full h-96 p-4 border border-slate-200 rounded-lg text-sm font-mono resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
                   defaultValue={selectedAppeal.appeal_letter}
                 />
               </div>
             </div>
             <div className="p-6 border-t border-slate-200 flex gap-3">
-              <button className="flex-1 px-4 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">
+              <button className="flex-1 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium">
                 Save Changes
               </button>
               <button className="px-4 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50">
