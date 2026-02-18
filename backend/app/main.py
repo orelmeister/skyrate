@@ -2,39 +2,29 @@
 SkyRate AI Production Backend
 Main FastAPI Application with all routers
 """
-import sys, os, traceback
-print(f"[DIAG] Python {sys.version}", flush=True)
-print(f"[DIAG] CWD: {os.getcwd()}", flush=True)
-print(f"[DIAG] Starting imports...", flush=True)
 
-try:
-    from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Request
-    from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import JSONResponse
-    from pydantic import BaseModel
-    from typing import Optional, List, Dict, Any
-    from contextlib import asynccontextmanager
-    import logging
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from typing import Optional, List, Dict, Any
+from contextlib import asynccontextmanager
+import logging
+import sys
+import os
 
-    from slowapi import Limiter, _rate_limit_exceeded_handler
-    from slowapi.util import get_remote_address
-    from slowapi.errors import RateLimitExceeded
-    from starlette.middleware.base import BaseHTTPMiddleware
-    from starlette.responses import Response
-    print("[DIAG] Core imports OK", flush=True)
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
-    # Import core modules
-    from app.core.config import settings
-    from app.core.database import engine, Base
-    print("[DIAG] Config + DB OK", flush=True)
+# Import core modules
+from app.core.config import settings
+from app.core.database import engine, Base
 
-    # Import API routers - services are imported lazily within these
-    from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals, alerts, applicant, notifications, support, onboarding, blog
-    print("[DIAG] All routers imported OK", flush=True)
-except Exception as _diag_e:
-    print(f"[DIAG] IMPORT FAILED: {_diag_e}", flush=True)
-    traceback.print_exc()
-    raise
+# Import API routers - services are imported lazily within these
+from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals, alerts, applicant, notifications, support, onboarding, blog
 
 # Configure logging
 logging.basicConfig(
@@ -352,7 +342,6 @@ def _run_schema_migrations(engine):
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
     # Startup
-    print("[DIAG] lifespan() entered", flush=True)
     logger.info("Starting SkyRate AI Backend...")
     
     # Import all models to register them
@@ -364,40 +353,30 @@ async def lifespan(app: FastAPI):
     )
     from app.models.push_subscription import PushSubscription
     from app.models.support_ticket import SupportTicket, TicketMessage
-    print("[DIAG] Models imported", flush=True)
     
     # Database initialization (non-blocking — health checks can pass even if DB is slow)
     try:
         # Create database tables (new tables only — does NOT add columns to existing tables)
-        print("[DIAG] Creating DB tables...", flush=True)
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables created")
-        print("[DIAG] DB tables OK", flush=True)
         
         # Run lightweight schema migrations for MySQL (add missing columns)
         _run_schema_migrations(engine)
-        print("[DIAG] Schema migrations OK", flush=True)
         
         # Seed demo accounts for testing
         seed_demo_accounts()
         logger.info("Demo accounts seeded")
-        print("[DIAG] Demo seeding OK", flush=True)
     except Exception as e:
-        print(f"[DIAG] DB init error: {e}", flush=True)
         logger.error(f"Database initialization error (will retry on first request): {e}")
     
     # Initialize background scheduler for alerts/digests
     from app.services.scheduler_service import init_scheduler, shutdown_scheduler
     try:
-        print("[DIAG] Starting scheduler...", flush=True)
         init_scheduler()
         logger.info("Background scheduler initialized")
-        print("[DIAG] Scheduler OK", flush=True)
     except Exception as e:
-        print(f"[DIAG] Scheduler error: {e}", flush=True)
         logger.error(f"Failed to initialize scheduler: {e}")
     
-    print("[DIAG] lifespan() yielding — app should be ready", flush=True)
     yield
     
     # Shutdown
