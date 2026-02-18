@@ -53,7 +53,7 @@
 - **Auto-deploy**: Enabled — pushes to `main` trigger automatic builds
 - **Backend**: Python service, `apps-s-2vcpu-4gb`, port 8000, route `/api`
 - **Frontend**: Node.js service, `apps-s-2vcpu-4gb`, port 3000, route `/`
-- **Frontend env**: `NEXT_PUBLIC_API_URL=https://skyrate-unox7.ondigitalocean.app/api`
+- **Frontend env**: `NEXT_PUBLIC_API_URL=https://skyrate.ai`
 - **Database (prod)**: MySQL on Bluehost (credentials in DigitalOcean dashboard environment variables)
 
 ### Key Config

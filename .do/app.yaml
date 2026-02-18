@@ -89,7 +89,7 @@ services:
     envs:
       - key: NEXT_PUBLIC_API_URL
         scope: BUILD_TIME
-        value: https://skyrate.ai/api
+        value: https://skyrate.ai
       - key: NEXT_PUBLIC_VAPID_KEY
         scope: BUILD_TIME
         value: BOQ_1ePgEdPmLcqMCOwM1XGJakthkvFnt3AuCJaGZMs-gm71tz7QorrUdZzBwK-6XWX_SwaRlnO02jyZZNzM-8I
