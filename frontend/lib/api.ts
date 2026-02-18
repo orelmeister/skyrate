@@ -2468,6 +2468,24 @@ class ApiClient {
       method: 'DELETE',
     });
   }
+
+  /**
+   * Fetch a blog image as a blob URL (admin) — needed because <img> tags can't send auth headers
+   */
+  async fetchBlogImageUrl(postId: number, imageType: 'hero' | 'mid'): Promise<string | null> {
+    const url = `${API_BASE_URL}/api/v1/blog/admin/posts/${postId}/${imageType}-image`;
+    const accessToken = this.getAccessToken();
+    try {
+      const response = await fetch(url, {
+        headers: accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {},
+      });
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    } catch {
+      return null;
+    }
+  }
 }
 
 // Singleton instance

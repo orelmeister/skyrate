@@ -1091,9 +1091,37 @@ function BlogManagerTab() {
   const [heroImageKey, setHeroImageKey] = useState(0);
   const [midImageKey, setMidImageKey] = useState(0);
 
+  // Blob URLs for authenticated image loading
+  const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
+  const [midImageUrl, setMidImageUrl] = useState<string | null>(null);
+
   useEffect(() => {
     loadPosts();
   }, [statusFilter]);
+
+  // Fetch blog images as blob URLs (img tags can't send auth headers)
+  useEffect(() => {
+    if (!editingPost) {
+      // Revoke old blob URLs when leaving editor
+      if (heroImageUrl) URL.revokeObjectURL(heroImageUrl);
+      if (midImageUrl) URL.revokeObjectURL(midImageUrl);
+      setHeroImageUrl(null);
+      setMidImageUrl(null);
+      return;
+    }
+    if (editingPost.has_hero_image) {
+      api.fetchBlogImageUrl(editingPost.id, 'hero').then(url => setHeroImageUrl(url));
+    } else {
+      if (heroImageUrl) URL.revokeObjectURL(heroImageUrl);
+      setHeroImageUrl(null);
+    }
+    if (editingPost.has_mid_image) {
+      api.fetchBlogImageUrl(editingPost.id, 'mid').then(url => setMidImageUrl(url));
+    } else {
+      if (midImageUrl) URL.revokeObjectURL(midImageUrl);
+      setMidImageUrl(null);
+    }
+  }, [editingPost?.id, editingPost?.has_hero_image, editingPost?.has_mid_image, heroImageKey, midImageKey]);
 
   async function loadPosts() {
     setLoading(true);
@@ -1243,8 +1271,6 @@ function BlogManagerTab() {
     }
   }
 
-  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
-
   // ---- Editor View ----
   if (editingPost) {
     return (
@@ -1334,12 +1360,18 @@ function BlogManagerTab() {
               </div>
               {editingPost.has_hero_image ? (
                 <div className="rounded-lg overflow-hidden border">
-                  <img
-                    key={heroImageKey}
-                    src={`${apiBaseUrl}/api/v1/blog/admin/posts/${editingPost.id}/hero-image?t=${heroImageKey}`}
-                    alt="Hero"
-                    className="w-full h-48 object-cover"
-                  />
+                  {heroImageUrl ? (
+                    <img
+                      key={heroImageKey}
+                      src={heroImageUrl}
+                      alt="Hero"
+                      className="w-full h-48 object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-48 flex items-center justify-center bg-slate-100 text-slate-400 text-sm">
+                      <span className="animate-spin inline-block w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full mr-2" /> Loading image...
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="border-2 border-dashed border-slate-300 rounded-lg h-32 flex items-center justify-center text-slate-400 text-sm">
@@ -1381,12 +1413,18 @@ function BlogManagerTab() {
               </div>
               {editingPost.has_mid_image ? (
                 <div className="rounded-lg overflow-hidden border max-w-md">
-                  <img
-                    key={midImageKey}
-                    src={`${apiBaseUrl}/api/v1/blog/admin/posts/${editingPost.id}/mid-image?t=${midImageKey}`}
-                    alt="Mid-article"
-                    className="w-full h-36 object-cover"
-                  />
+                  {midImageUrl ? (
+                    <img
+                      key={midImageKey}
+                      src={midImageUrl}
+                      alt="Mid-article"
+                      className="w-full h-36 object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-36 flex items-center justify-center bg-slate-100 text-slate-400 text-sm">
+                      <span className="animate-spin inline-block w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full mr-2" /> Loading image...
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="border-2 border-dashed border-slate-300 rounded-lg h-24 flex items-center justify-center text-slate-400 text-sm max-w-md">
