@@ -27,6 +27,19 @@ interface DashboardData {
     denied: number;
     recent_denials_7d: number;
   };
+  portfolio: {
+    consultant_schools: number;
+    applicant_bens: number;
+    vendor_spins: number;
+    live: {
+      total_bens_tracked: number;
+      funded_amount: number;
+      pending_amount: number;
+      denied_count: number;
+      funded_count: number;
+      pending_count: number;
+    };
+  };
   recent_alerts: any[];
   generated_at: string;
 }
@@ -306,6 +319,8 @@ export default function AdminDashboard() {
 // ==================== OVERVIEW TAB ====================
 
 function OverviewTab({ dashboard, setActiveTab }: { dashboard: DashboardData; setActiveTab: (t: any) => void }) {
+  const portfolio = dashboard.portfolio;
+  const live = portfolio?.live;
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
@@ -315,6 +330,50 @@ function OverviewTab({ dashboard, setActiveTab }: { dashboard: DashboardData; se
         <StatCard label="Open Tickets" value={dashboard.tickets.open} sub={`${dashboard.tickets.total} total`} color="amber" onClick={() => setActiveTab("tickets")} />
         <StatCard label="FRN Denials (7d)" value={dashboard.frn_monitoring.recent_denials_7d} sub={`${dashboard.frn_monitoring.denied} total denied`} color="red" onClick={() => setActiveTab("frn")} />
       </div>
+
+      {/* Portfolio Overview */}
+      {portfolio && (
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <h3 className="font-semibold text-slate-900 mb-4">Platform Portfolio</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+            <div className="bg-purple-50 rounded-lg p-4">
+              <div className="text-2xl font-bold text-purple-700">{portfolio.consultant_schools}</div>
+              <div className="text-sm text-purple-600">Consultant Schools</div>
+            </div>
+            <div className="bg-green-50 rounded-lg p-4">
+              <div className="text-2xl font-bold text-green-700">{portfolio.applicant_bens}</div>
+              <div className="text-sm text-green-600">Applicant BENs</div>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-4">
+              <div className="text-2xl font-bold text-blue-700">{portfolio.vendor_spins}</div>
+              <div className="text-sm text-blue-600">Vendor SPINs</div>
+            </div>
+          </div>
+          {live && live.total_bens_tracked > 0 && (
+            <div className="border-t pt-4 mt-2">
+              <h4 className="text-sm font-medium text-slate-700 mb-3">Live USAC FRN Summary</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="text-center">
+                  <div className="text-lg font-bold text-slate-900">{live.total_bens_tracked}</div>
+                  <div className="text-xs text-slate-500">BENs Tracked</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-green-600">{live.funded_count}</div>
+                  <div className="text-xs text-slate-500">Funded ({live.funded_amount > 0 ? `$${(live.funded_amount / 1000000).toFixed(1)}M` : "$0"})</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-amber-600">{live.pending_count}</div>
+                  <div className="text-xs text-slate-500">Pending ({live.pending_amount > 0 ? `$${(live.pending_amount / 1000000).toFixed(1)}M` : "$0"})</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-red-600">{live.denied_count}</div>
+                  <div className="text-xs text-slate-500">Denied</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* User Distribution */}
       <div className="grid md:grid-cols-2 gap-6">
@@ -353,6 +412,9 @@ function OverviewTab({ dashboard, setActiveTab }: { dashboard: DashboardData; se
               <span className="text-sm text-slate-600">Recent Denials (7 days)</span>
               <span className="font-semibold text-red-600">{dashboard.frn_monitoring.recent_denials_7d}</span>
             </div>
+            <button onClick={() => setActiveTab("frn")} className="w-full mt-2 text-sm text-purple-600 hover:text-purple-800 hover:underline text-center py-2 rounded-lg bg-purple-50">
+              View Full FRN Monitor →
+            </button>
           </div>
         </div>
       </div>
@@ -447,6 +509,7 @@ function UsersTab({
               <th className="text-left px-4 py-3 font-medium text-slate-600">Name</th>
               <th className="text-left px-4 py-3 font-medium text-slate-600">Role</th>
               <th className="text-left px-4 py-3 font-medium text-slate-600">Company</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600">Portfolio</th>
               <th className="text-left px-4 py-3 font-medium text-slate-600">Status</th>
               <th className="text-left px-4 py-3 font-medium text-slate-600">Joined</th>
               <th className="text-left px-4 py-3 font-medium text-slate-600">Actions</th>
@@ -466,6 +529,23 @@ function UsersTab({
                   }`}>{u.role}</span>
                 </td>
                 <td className="px-4 py-3 text-slate-600">{u.company_name || "—"}</td>
+                <td className="px-4 py-3 text-xs text-slate-600">
+                  {u.portfolio ? (
+                    u.role === "consultant" ? (
+                      <span title={u.portfolio.crn ? `CRN: ${u.portfolio.crn}` : ""}>
+                        {u.portfolio.schools_count} school{u.portfolio.schools_count !== 1 ? "s" : ""}
+                        {u.portfolio.crn && <span className="ml-1 text-slate-400">({u.portfolio.crn})</span>}
+                      </span>
+                    ) : u.role === "vendor" ? (
+                      <span>SPIN: {u.portfolio.spin || "—"}</span>
+                    ) : u.role === "applicant" ? (
+                      <span>
+                        {u.portfolio.ben_count} BEN{u.portfolio.ben_count !== 1 ? "s" : ""}
+                        {u.portfolio.organization && <span className="ml-1 text-slate-400">({u.portfolio.organization})</span>}
+                      </span>
+                    ) : "—"
+                  ) : "—"}
+                </td>
                 <td className="px-4 py-3">
                   <span className={`text-xs ${u.is_active ? "text-green-600" : "text-red-500"}`}>
                     {u.is_active ? "Active" : "Inactive"}
@@ -636,15 +716,15 @@ function FRNMonitorTab({ frns, summary }: { frns: any[]; summary: any }) {
               <th className="text-left px-4 py-3 font-medium text-slate-600">FRN</th>
               <th className="text-left px-4 py-3 font-medium text-slate-600">Organization</th>
               <th className="text-left px-4 py-3 font-medium text-slate-600">Status</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600">Source</th>
               <th className="text-left px-4 py-3 font-medium text-slate-600">Year</th>
               <th className="text-left px-4 py-3 font-medium text-slate-600">Amount</th>
               <th className="text-left px-4 py-3 font-medium text-slate-600">User</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Last Checked</th>
             </tr>
           </thead>
           <tbody>
             {frns.length === 0 ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">No FRNs being tracked</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">No FRNs being tracked. Add schools, BENs, or SPINs to user portfolios to see live USAC data.</td></tr>
             ) : frns.map((f, i) => (
               <tr key={i} className="border-b last:border-0 hover:bg-slate-50">
                 <td className="px-4 py-3 font-mono text-slate-900">{f.frn}</td>
@@ -657,10 +737,17 @@ function FRNMonitorTab({ frns, summary }: { frns: any[]; summary: any }) {
                     "bg-slate-100 text-slate-700"
                   }`}>{f.status || "Unknown"}</span>
                 </td>
+                <td className="px-4 py-3">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    f.source === "consultant" ? "bg-purple-100 text-purple-700" :
+                    f.source === "vendor" ? "bg-blue-100 text-blue-700" :
+                    f.source === "applicant" ? "bg-green-100 text-green-700" :
+                    "bg-slate-100 text-slate-700"
+                  }`}>{f.source || "—"}</span>
+                </td>
                 <td className="px-4 py-3 text-slate-600">{f.funding_year || "—"}</td>
                 <td className="px-4 py-3 text-slate-700">{f.amount_requested ? `$${Number(f.amount_requested).toLocaleString()}` : "—"}</td>
                 <td className="px-4 py-3 text-slate-500 text-xs">{f.user_email || "—"}</td>
-                <td className="px-4 py-3 text-slate-400 text-xs">{f.last_checked ? new Date(f.last_checked).toLocaleDateString() : "Never"}</td>
               </tr>
             ))}
           </tbody>
