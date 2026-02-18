@@ -315,6 +315,13 @@ def _run_schema_migrations(engine):
         ("users", "onboarding_completed", "TINYINT(1) DEFAULT 0", None),
         ("users", "auth_provider", "VARCHAR(50) DEFAULT 'local'", None),
         ("users", "full_name", "VARCHAR(255) DEFAULT NULL", None),
+        # Blog post image columns (added after initial table creation)
+        ("blog_posts", "hero_image", "LONGBLOB DEFAULT NULL", None),
+        ("blog_posts", "hero_image_mime", "VARCHAR(50) DEFAULT 'image/png'", None),
+        ("blog_posts", "hero_image_prompt", "TEXT DEFAULT NULL", None),
+        ("blog_posts", "mid_image", "LONGBLOB DEFAULT NULL", None),
+        ("blog_posts", "mid_image_mime", "VARCHAR(50) DEFAULT 'image/png'", None),
+        ("blog_posts", "mid_image_prompt", "TEXT DEFAULT NULL", None),
     ]
     
     try:

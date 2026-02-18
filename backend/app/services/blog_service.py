@@ -147,15 +147,20 @@ CATEGORY: [One of: Guide, Analysis, Strategy, Industry, News]
     content = ""
     model_used = ""
     
+    # Run synchronous AI calls in a thread to avoid blocking the event loop
+    import asyncio
+    loop = asyncio.get_event_loop()
+    
     if preferred_model == "gemini" and os.environ.get('GEMINI_API_KEY'):
         try:
             import google.generativeai as genai
-            import os
             genai.configure(api_key=os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY'))
             model = genai.GenerativeModel('gemini-2.0-flash')
-            response = model.generate_content(
-                f"{BLOG_SYSTEM_PROMPT}\n\n{full_prompt}"
-            )
+            
+            def _call_gemini():
+                return model.generate_content(f"{BLOG_SYSTEM_PROMPT}\n\n{full_prompt}")
+            
+            response = await loop.run_in_executor(None, _call_gemini)
             content = response.text
             model_used = "gemini-2.0-flash"
         except Exception as e:
@@ -163,10 +168,12 @@ CATEGORY: [One of: Guide, Analysis, Strategy, Industry, News]
     
     if not content and preferred_model == "deepseek":
         try:
-            content = manager.call_deepseek([
-                {"role": "system", "content": BLOG_SYSTEM_PROMPT},
-                {"role": "user", "content": full_prompt}
-            ])
+            def _call_deepseek():
+                return manager.call_deepseek([
+                    {"role": "system", "content": BLOG_SYSTEM_PROMPT},
+                    {"role": "user", "content": full_prompt}
+                ])
+            content = await loop.run_in_executor(None, _call_deepseek)
             model_used = "deepseek-chat"
         except Exception as e:
             logger.error(f"DeepSeek blog generation failed: {e}")
@@ -181,7 +188,7 @@ CATEGORY: [One of: Guide, Analysis, Strategy, Industry, News]
             ])),
         ]:
             try:
-                content = call_fn()
+                content = await loop.run_in_executor(None, call_fn)
                 model_used = model_name
                 if content and not content.startswith("[AI"):
                     break
