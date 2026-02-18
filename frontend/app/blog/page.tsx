@@ -1,4 +1,6 @@
-import { Metadata } from "next";
+"use client";
+
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -12,25 +14,33 @@ import {
   Bell,
   Sparkles,
   Search,
+  Calendar,
+  Loader2,
 } from "lucide-react";
+import { api } from "@/lib/api";
 
-export const metadata: Metadata = {
-  title: "E-Rate Blog: News, Tips & Guides | SkyRate AI",
-  description:
-    "Stay informed about E-Rate funding with expert tips, guides, and industry news. Learn how to maximize your school's E-Rate funding with SkyRate AI.",
-  robots: { index: true, follow: true },
-  alternates: { canonical: "https://skyrate.ai/blog" },
-  openGraph: {
-    title: "E-Rate Blog: News, Tips & Guides | SkyRate AI",
-    description:
-      "Expert E-Rate tips, guides, and industry news from SkyRate AI.",
-    url: "https://skyrate.ai/blog",
-    siteName: "SkyRate AI",
-    type: "website",
-  },
+interface DynamicPost {
+  id: number;
+  title: string;
+  slug: string;
+  meta_description: string | null;
+  category: string;
+  author_name: string;
+  read_time_minutes: number;
+  has_hero_image: boolean;
+  has_mid_image: boolean;
+  published_at: string | null;
+}
+
+const categoryColorMap: Record<string, string> = {
+  Guide: "bg-purple-100 text-purple-700",
+  Analysis: "bg-indigo-100 text-indigo-700",
+  Strategy: "bg-violet-100 text-violet-700",
+  Industry: "bg-blue-100 text-blue-700",
+  News: "bg-green-100 text-green-700",
 };
 
-const articles = [
+const staticArticles = [
   {
     title: "How to Appeal an E-Rate Denial: Step-by-Step Guide",
     teaser:
@@ -106,6 +116,27 @@ const colorMap: Record<string, { bg: string; text: string; badge: string }> = {
 };
 
 export default function BlogPage() {
+  const [dynamicPosts, setDynamicPosts] = useState<DynamicPost[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+  useEffect(() => {
+    loadDynamicPosts();
+  }, []);
+
+  async function loadDynamicPosts() {
+    try {
+      const res = await api.getBlogPosts({ limit: 20 });
+      if (res.data?.posts) {
+        setDynamicPosts(res.data.posts);
+      }
+    } catch (e) {
+      console.error("Failed to load dynamic blog posts:", e);
+    }
+    setLoading(false);
+  }
+
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
@@ -176,14 +207,108 @@ export default function BlogPage() {
         </div>
       </section>
 
-      {/* Articles Grid */}
-      <section className="bg-white py-20 sm:py-24">
+      {/* Dynamic Posts Section — Latest Articles from CMS */}
+      {(loading || dynamicPosts.length > 0) && (
+        <section className="bg-white py-20 sm:py-24 border-b border-slate-100">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-16">
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
+                Latest{" "}
+                <span className="bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+                  Articles
+                </span>
+              </h2>
+              <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+                Fresh content powered by AI — the newest E-Rate insights, hot off the press.
+              </p>
+            </div>
+
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 text-purple-600 animate-spin" />
+                <span className="ml-3 text-slate-500">Loading latest articles...</span>
+              </div>
+            ) : (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {dynamicPosts.map((post) => {
+                  const badgeColor = categoryColorMap[post.category] || "bg-slate-100 text-slate-700";
+                  return (
+                    <Link
+                      key={post.id}
+                      href={`/blog/${post.slug}`}
+                      className="group bg-white border border-slate-200 rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col"
+                    >
+                      {/* Hero Image */}
+                      {post.has_hero_image ? (
+                        <div className="relative h-48 bg-slate-100 overflow-hidden">
+                          <img
+                            src={`${apiBaseUrl}/api/v1/blog/posts/${post.slug}/hero-image`}
+                            alt={post.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                            loading="lazy"
+                          />
+                        </div>
+                      ) : (
+                        <div className="relative h-48 bg-gradient-to-br from-purple-100 to-indigo-100 flex items-center justify-center">
+                          <Sparkles className="w-12 h-12 text-purple-300" />
+                        </div>
+                      )}
+
+                      {/* Card Body */}
+                      <div className="p-6 flex-1 flex flex-col">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${badgeColor}`}>
+                            {post.category}
+                          </span>
+                          <div className="flex items-center gap-1 text-slate-400 text-xs">
+                            <Clock className="w-3 h-3" />
+                            {post.read_time_minutes || 8} min
+                          </div>
+                        </div>
+
+                        <h3 className="text-lg font-bold text-slate-900 group-hover:text-purple-600 transition-colors leading-snug mb-3">
+                          {post.title}
+                        </h3>
+
+                        {post.meta_description && (
+                          <p className="text-slate-600 text-sm leading-relaxed flex-1 mb-4 line-clamp-3">
+                            {post.meta_description}
+                          </p>
+                        )}
+
+                        <div className="flex items-center justify-between mt-auto pt-4 border-t border-slate-100">
+                          <div className="flex items-center gap-1.5 text-slate-400 text-xs">
+                            <Calendar className="w-3 h-3" />
+                            {post.published_at
+                              ? new Date(post.published_at).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })
+                              : "Recently"}
+                          </div>
+                          <div className="flex items-center gap-1 text-purple-600 font-medium text-sm group-hover:gap-2 transition-all">
+                            Read <ArrowRight className="w-3.5 h-3.5" />
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Static Featured Guides Grid */}
+      <section className="bg-slate-50 py-20 sm:py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
-              Latest{" "}
+              Featured{" "}
               <span className="bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
-                Articles
+                Guides
               </span>
             </h2>
             <p className="text-lg text-slate-600 max-w-2xl mx-auto">
@@ -193,7 +318,7 @@ export default function BlogPage() {
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {articles.map((article, i) => {
+            {staticArticles.map((article, i) => {
               const colors = colorMap[article.color];
               const Icon = article.icon;
               return (
@@ -203,7 +328,7 @@ export default function BlogPage() {
                   className="group bg-white border border-slate-200 rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col"
                 >
                   {/* Card Header */}
-                  <div className="bg-slate-50 px-6 pt-6 pb-4 border-b border-slate-100">
+                  <div className="bg-white px-6 pt-6 pb-4 border-b border-slate-100">
                     <div className="flex items-center justify-between mb-4">
                       <div
                         className={`w-10 h-10 ${colors.bg} rounded-lg flex items-center justify-center`}
