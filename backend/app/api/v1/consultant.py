@@ -1649,10 +1649,11 @@ async def get_portfolio_frn_status(
     pending_reason: Optional[str] = None,
     limit: int = 500,
     profile: ConsultantProfile = Depends(get_consultant_profile),
+    db: Session = Depends(get_db),
 ):
     """
     Get FRN status for all schools in consultant's portfolio.
-    This aggregates status across all BENs the consultant manages.
+    Uses batch USAC API call (1 call for all BENs) with DB caching (6hr TTL).
     
     Useful for consultants to:
     - Track which FRNs are funded/denied/pending across all clients
@@ -1676,12 +1677,33 @@ async def get_portfolio_frn_status(
             "schools": []
         }
     
+    # Check DB cache first
+    try:
+        from app.services.cache_service import get_cached, set_cached, make_frn_cache_key
+        cache_key = make_frn_cache_key(school_bens, year, status_filter, pending_reason)
+        cached_result = get_cached(db, cache_key)
+        if cached_result:
+            return cached_result
+    except Exception:
+        cache_key = None  # Cache unavailable, proceed without it
+    
     try:
         from utils.usac_client import USACDataClient
         
         client = USACDataClient()
         
-        # Fetch FRN status for all portfolio BENs
+        # Batch fetch FRN status for ALL portfolio BENs in a single USAC API call
+        # Instead of N sequential calls (one per BEN), this uses WHERE ben IN (...)
+        batch_result = client.get_frn_status_batch(
+            bens=school_bens,
+            year=year,
+            status_filter=status_filter,
+            pending_reason_filter=pending_reason
+        )
+        
+        if not batch_result.get('success'):
+            raise Exception(batch_result.get('error', 'Batch FRN query failed'))
+        
         all_frns = []
         schools_data = []
         status_counts = {
@@ -1692,7 +1714,7 @@ async def get_portfolio_frn_status(
         }
         
         for ben in school_bens:
-            result = client.get_frn_status_by_ben(ben, year=year, status_filter=status_filter, limit=limit, pending_reason_filter=pending_reason)
+            result = batch_result['results'].get(ben, {})
             
             if result.get('success') and result.get('frns'):
                 school_frns = result.get('frns', [])
@@ -1712,7 +1734,7 @@ async def get_portfolio_frn_status(
                 
                 for frn in school_frns:
                     frn_status = (frn.get('status') or '').lower()
-                    amount = float(frn.get('total_authorized_amount') or frn.get('amount') or 0)
+                    amount = float(frn.get('commitment_amount') or frn.get('total_authorized_amount') or frn.get('amount') or 0)
                     school_summary["total_amount"] += amount
                     
                     if 'funded' in frn_status or 'committed' in frn_status:
@@ -1733,7 +1755,7 @@ async def get_portfolio_frn_status(
                 
                 schools_data.append(school_summary)
         
-        return {
+        result = {
             "success": True,
             "total_frns": len(all_frns),
             "total_schools": len(schools_data),
@@ -1741,6 +1763,16 @@ async def get_portfolio_frn_status(
             "year_filter": year,
             "schools": schools_data
         }
+        
+        # Cache the result for 6 hours
+        try:
+            if cache_key:
+                from app.services.cache_service import set_cached
+                set_cached(db, cache_key, result, ttl_hours=6)
+        except Exception:
+            pass  # Cache write failure is non-fatal
+        
+        return result
         
     except Exception as e:
         raise HTTPException(

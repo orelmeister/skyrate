@@ -420,9 +420,8 @@ export default function ConsultantPortalPage() {
       loadAppeals();
       loadDeniedApplications();
     }
-    if (activeTab === "frn-status" && !portfolioFrnData) {
-      loadPortfolioFRNStatus();
-    }
+    // FRN status is NOT auto-loaded — user must click "Search" to prevent
+    // slow loading (87+ sequential USAC API calls for large portfolios)
   }, [activeTab]);
 
   const refreshSchoolsWithUsac = async () => {
@@ -1955,12 +1954,22 @@ export default function ConsultantPortalPage() {
                 </div>
               )}
 
-              {/* Empty State */}
+              {/* Empty State — Prompt user to search */}
               {!portfolioFrnLoading && !portfolioFrnData && (
                 <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
                   <span className="text-4xl mb-4 block">📈</span>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">No FRN Status Data</h3>
-                  <p className="text-sm text-slate-500">Add schools to your portfolio and click &quot;Refresh Data&quot; to see their FRN status.</p>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">Portfolio FRN Status</h3>
+                  <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
+                    Select optional filters above (year, status, pending reason) and click the button below to load FRN data across your portfolio.
+                  </p>
+                  <button
+                    onClick={() => loadPortfolioFRNStatus(portfolioFrnYear, portfolioFrnStatusFilter, portfolioFrnPendingReason)}
+                    disabled={portfolioFrnLoading}
+                    className="px-6 py-3 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-colors font-medium inline-flex items-center gap-2"
+                  >
+                    <span>🔍</span>
+                    Search FRN Status
+                  </button>
                 </div>
               )}
 

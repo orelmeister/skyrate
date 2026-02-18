@@ -1393,9 +1393,31 @@ async def get_live_frn_status(
             "message": "No BENs registered. Add a BEN to track FRN status."
         }
     
+    # Check DB cache first
+    ben_numbers = [ben_record.ben for ben_record in bens]
+    try:
+        from app.services.cache_service import get_cached, set_cached, make_frn_cache_key
+        cache_key = make_frn_cache_key(ben_numbers, year, status_filter, pending_reason)
+        cached_result = get_cached(db, cache_key)
+        if cached_result:
+            return cached_result
+    except Exception:
+        cache_key = None
+    
     try:
         from utils.usac_client import USACDataClient
         client = USACDataClient()
+        
+        # Batch fetch FRN status for ALL applicant BENs in a single USAC API call
+        batch_result = client.get_frn_status_batch(
+            bens=ben_numbers,
+            year=year,
+            status_filter=status_filter,
+            pending_reason_filter=pending_reason
+        )
+        
+        if not batch_result.get('success'):
+            raise Exception(batch_result.get('error', 'Batch FRN query failed'))
         
         all_data = []
         status_counts = {
@@ -1407,10 +1429,7 @@ async def get_live_frn_status(
         total_frns = 0
         
         for ben_record in bens:
-            result = client.get_frn_status_by_ben(
-                ben_record.ben, year=year, status_filter=status_filter,
-                pending_reason_filter=pending_reason
-            )
+            result = batch_result['results'].get(ben_record.ben, {})
             
             if result.get('success') and result.get('frns'):
                 frns = result.get('frns', [])
@@ -1450,13 +1469,23 @@ async def get_live_frn_status(
                 
                 all_data.append(ben_summary)
         
-        return {
+        result = {
             "success": True,
             "total_frns": total_frns,
             "total_bens": len(all_data),
             "summary": status_counts,
             "bens": all_data
         }
+        
+        # Cache the result for 6 hours
+        try:
+            if cache_key:
+                from app.services.cache_service import set_cached
+                set_cached(db, cache_key, result, ttl_hours=6)
+        except Exception:
+            pass  # Cache write failure is non-fatal
+        
+        return result
     
     except Exception as e:
         raise HTTPException(

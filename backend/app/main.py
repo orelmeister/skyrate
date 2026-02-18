@@ -363,7 +363,7 @@ async def lifespan(app: FastAPI):
         User, Subscription, ConsultantProfile, ConsultantSchool,
         VendorProfile, VendorSearch, SchoolSnapshot, Application,
         AppealRecord, QueryHistory, ApplicantProfile, ApplicantFRN,
-        ApplicantAutoAppeal, ApplicantStatusHistory
+        ApplicantAutoAppeal, ApplicantStatusHistory, USACCache
     )
     from app.models.push_subscription import PushSubscription
     from app.models.support_ticket import SupportTicket, TicketMessage

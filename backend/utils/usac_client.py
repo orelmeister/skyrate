@@ -1379,6 +1379,172 @@ class USACDataClient:
                 'error': f'Failed to fetch FRN status: {str(e)}'
             }
     
+    def get_frn_status_batch(
+        self,
+        bens: list,
+        year: Optional[int] = None,
+        status_filter: Optional[str] = None,
+        limit: int = 50000,
+        pending_reason_filter: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Get FRN status for multiple BENs in a single USAC API call.
+        Uses SoQL WHERE ben IN (...) syntax instead of N sequential calls.
+        
+        For a consultant with 87 schools, this reduces 87 API calls to 1.
+        
+        Args:
+            bens: List of Billed Entity Numbers
+            year: Optional funding year filter
+            status_filter: Optional status filter ('Funded', 'Denied', 'Pending')
+            limit: Maximum records to return (default 50000 for batch)
+            pending_reason_filter: Optional pending reason text filter
+            
+        Returns:
+            Dictionary with FRN data grouped by BEN
+        """
+        if not bens:
+            return {'success': True, 'results': {}}
+        
+        try:
+            url = USAC_ENDPOINTS['frn_status']
+            
+            # Build IN clause for batch query
+            ben_list = ", ".join(f"'{b}'" for b in bens)
+            where_conditions = [f"ben IN ({ben_list})"]
+            
+            if year:
+                where_conditions.append(f"funding_year = '{year}'")
+            
+            if status_filter:
+                where_conditions.append(f"UPPER(frn_status) LIKE UPPER('%{status_filter}%')")
+            
+            if pending_reason_filter:
+                where_conditions.append(f"UPPER(pending_reason) LIKE UPPER('%{pending_reason_filter}%')")
+            
+            params = {
+                '$where': ' AND '.join(where_conditions),
+                '$limit': limit,
+                '$order': 'ben ASC, funding_year DESC, funding_request_number ASC'
+            }
+            
+            logger.info(f"Batch fetching FRN status for {len(bens)} BENs in single query")
+            response = self.session.get(url, params=params, timeout=120)
+            response.raise_for_status()
+            data = response.json()
+            
+            # Group results by BEN
+            ben_groups: Dict[str, list] = {}
+            for record in data:
+                ben = record.get('ben', '')
+                if ben not in ben_groups:
+                    ben_groups[ben] = []
+                ben_groups[ben].append(record)
+            
+            # Process each BEN group (same logic as get_frn_status_by_ben)
+            results = {}
+            for ben, records in ben_groups.items():
+                first_record = records[0]
+                entity_name = first_record.get('organization_name', 'Unknown')
+                entity_state = first_record.get('state', '')
+                
+                frns = []
+                years = set()
+                funded_count = funded_amount = 0
+                denied_count = denied_amount = 0
+                pending_count = pending_amount = 0
+                
+                for record in records:
+                    frn_status = record.get('form_471_frn_status_name', 'Unknown')
+                    commitment_amount = float(record.get('funding_commitment_request', 0) or 0)
+                    disbursed_amount = float(record.get('total_authorized_disbursement', 0) or 0)
+                    year_val = record.get('funding_year', '')
+                    
+                    if year_val:
+                        years.add(year_val)
+                    
+                    status_lower = frn_status.lower()
+                    if 'funded' in status_lower or 'committed' in status_lower:
+                        funded_count += 1
+                        funded_amount += commitment_amount
+                    elif 'denied' in status_lower:
+                        denied_count += 1
+                        denied_amount += commitment_amount
+                    else:
+                        pending_count += 1
+                        pending_amount += commitment_amount
+                    
+                    frns.append({
+                        'frn': record.get('funding_request_number', ''),
+                        'application_number': record.get('application_number', ''),
+                        'funding_year': year_val,
+                        'spin_name': record.get('spin_name', ''),
+                        'service_type': record.get('form_471_service_type_name', ''),
+                        'status': frn_status,
+                        'pending_reason': record.get('pending_reason', ''),
+                        'commitment_amount': commitment_amount,
+                        'disbursed_amount': disbursed_amount,
+                        'discount_rate': float(record.get('dis_pct', 0) or 0) * 100,
+                        'award_date': record.get('award_date', ''),
+                        'fcdl_date': record.get('fcdl_letter_date', ''),
+                        'last_invoice_date': record.get('last_date_to_invoice', ''),
+                        'service_start': record.get('service_start_date', ''),
+                        'service_end': record.get('service_delivery_deadline', ''),
+                        'invoicing_mode': record.get('invoicing_mode', ''),
+                        'invoicing_ready': record.get('invoicing_ready', ''),
+                        'f486_status': record.get('f486_case_status', ''),
+                        'wave_number': record.get('wave_sequence_number', ''),
+                        'fcdl_comment': record.get('fcdl_comment_frn', '')
+                    })
+                
+                results[ben] = {
+                    'success': True,
+                    'ben': ben,
+                    'entity_name': entity_name,
+                    'entity_state': entity_state,
+                    'total_frns': len(frns),
+                    'years': sorted(list(years), reverse=True),
+                    'summary': {
+                        'funded': {'count': funded_count, 'amount': funded_amount},
+                        'denied': {'count': denied_count, 'amount': denied_amount},
+                        'pending': {'count': pending_count, 'amount': pending_amount}
+                    },
+                    'frns': frns
+                }
+            
+            # Add empty entries for BENs with no data
+            for ben in bens:
+                if ben not in results:
+                    results[ben] = {
+                        'success': True,
+                        'ben': ben,
+                        'entity_name': None,
+                        'total_frns': 0,
+                        'frns': [],
+                        'years': [],
+                        'summary': {
+                            'funded': {'count': 0, 'amount': 0},
+                            'denied': {'count': 0, 'amount': 0},
+                            'pending': {'count': 0, 'amount': 0}
+                        }
+                    }
+            
+            logger.info(f"Batch FRN query returned {len(data)} records for {len(ben_groups)}/{len(bens)} BENs")
+            return {
+                'success': True,
+                'total_bens': len(bens),
+                'bens_with_data': len(ben_groups),
+                'total_records': len(data),
+                'results': results
+            }
+        
+        except Exception as e:
+            logger.error(f"Error batch fetching FRN status for {len(bens)} BENs: {e}")
+            return {
+                'success': False,
+                'error': f'Failed to batch fetch FRN status: {str(e)}'
+            }
+    
     def get_entity_frn_summary(
         self,
         spin: str,

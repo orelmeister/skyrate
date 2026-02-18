@@ -170,9 +170,8 @@ export default function ApplicantDashboard() {
 
   // Auto-load data when switching to live tabs
   useEffect(() => {
-    if (selectedTab === 'frn-status' && !liveFrnData && !liveFrnLoading) {
-      loadLiveFrnStatus();
-    }
+    // FRN status is NOT auto-loaded — user must click "Load Live Status"
+    // to prevent slow loading (N sequential USAC API calls for each BEN)
     if (selectedTab === 'disbursements' && !disbursementData && !disbursementLoading) {
       loadDisbursements();
     }

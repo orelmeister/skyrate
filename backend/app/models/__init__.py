@@ -17,6 +17,7 @@ from .applicant import (
     BENSubscriptionStatus
 )
 from .blog import BlogPost, BlogStatus
+from .usac_cache import USACCache
 
 __all__ = [
     "User",
@@ -56,4 +57,6 @@ __all__ = [
     # Blog models
     "BlogPost",
     "BlogStatus",
+    # USAC Cache
+    "USACCache",
 ]
