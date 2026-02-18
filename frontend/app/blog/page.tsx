@@ -128,14 +128,22 @@ export default function BlogPage() {
   async function loadDynamicPosts() {
     try {
       const res = await api.getBlogPosts({ limit: 20 });
-      if (res.data?.posts) {
-        setDynamicPosts(res.data.posts);
+      // Defensive: ensure we always set an array
+      const posts = res?.data?.posts;
+      if (Array.isArray(posts) && posts.length > 0) {
+        setDynamicPosts(posts);
+      } else {
+        setDynamicPosts([]);
       }
     } catch (e) {
       console.error("Failed to load dynamic blog posts:", e);
+      setDynamicPosts([]);
     }
     setLoading(false);
   }
+
+  // Defensive: ensure dynamicPosts is always an array
+  const safePosts = Array.isArray(dynamicPosts) ? dynamicPosts : [];
 
   return (
     <div className="min-h-screen bg-white">
@@ -208,7 +216,7 @@ export default function BlogPage() {
       </section>
 
       {/* Dynamic Posts Section — Latest Articles from CMS */}
-      {(loading || dynamicPosts.length > 0) && (
+      {(loading || safePosts.length > 0) && (
         <section className="bg-white py-20 sm:py-24 border-b border-slate-100">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-16">
@@ -230,7 +238,7 @@ export default function BlogPage() {
               </div>
             ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {dynamicPosts.map((post) => {
+                {safePosts.map((post) => {
                   const badgeColor = categoryColorMap[post.category] || "bg-slate-100 text-slate-700";
                   return (
                     <Link
