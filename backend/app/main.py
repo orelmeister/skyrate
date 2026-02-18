@@ -322,6 +322,20 @@ def _run_schema_migrations(engine):
         ("blog_posts", "mid_image", "LONGBLOB DEFAULT NULL", None),
         ("blog_posts", "mid_image_mime", "VARCHAR(50) DEFAULT 'image/png'", None),
         ("blog_posts", "mid_image_prompt", "TEXT DEFAULT NULL", None),
+        # Alert config columns (added after initial table creation)
+        ("alert_configs", "push_notifications", "TINYINT(1) DEFAULT 1", None),
+        ("alert_configs", "sms_notifications", "TINYINT(1) DEFAULT 0", None),
+        ("alert_configs", "daily_digest", "TINYINT(1) DEFAULT 0", None),
+        ("alert_configs", "notification_frequency", "VARCHAR(20) DEFAULT 'realtime'", None),
+        ("alert_configs", "notification_email", "VARCHAR(255) DEFAULT NULL", None),
+        ("alert_configs", "notification_phone", "VARCHAR(50) DEFAULT NULL", None),
+        ("alert_configs", "alert_filters", "JSON DEFAULT NULL", None),
+        ("alert_configs", "alert_on_disbursement", "TINYINT(1) DEFAULT 1", None),
+        ("alert_configs", "alert_on_funding_approved", "TINYINT(1) DEFAULT 1", None),
+        ("alert_configs", "alert_on_form_470", "TINYINT(1) DEFAULT 1", None),
+        ("alert_configs", "alert_on_competitor", "TINYINT(1) DEFAULT 0", None),
+        ("alert_configs", "deadline_warning_days", "INT DEFAULT 14", None),
+        ("alert_configs", "min_alert_amount", "FLOAT DEFAULT 0", None),
     ]
     
     try:
