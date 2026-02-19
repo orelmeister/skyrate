@@ -621,10 +621,10 @@ async def get_frn_monitor(
     and vendor SPINs, using cache for performance.
     Returns FRNs from ALL funding years (no year restriction).
     """
-    from ...utils.usac_client import USACClient
+    from utils.usac_client import USACDataClient
     
     # Build cache key (no year filter — show ALL years)
-    cache_key = make_cache_key("admin_frn_monitor_all")
+    cache_key = make_cache_key("admin_frn_monitor_v2")
     cached = get_cached(db, cache_key)
     
     if cached:
@@ -679,7 +679,7 @@ async def get_frn_monitor(
         # Batch fetch FRN data for all BENs (no year filter = all years)
         if all_bens:
             try:
-                client = USACClient()
+                client = USACDataClient()
                 batch_result = client.get_frn_status_batch(all_bens)
                 if batch_result.get('success'):
                     for ben, ben_data in batch_result.get('results', {}).items():
@@ -708,7 +708,7 @@ async def get_frn_monitor(
         # Also fetch FRN data for vendor SPINs (no year filter)
         for vp in vendor_profiles:
             try:
-                client = USACClient()
+                client = USACDataClient()
                 spin_result = client.get_frn_status_by_spin(vp.spin)
                 if spin_result.get('success'):
                     user = db.query(User).filter(User.id == vp.user_id).first()
@@ -893,7 +893,7 @@ async def get_admin_dashboard(
     ).count()
 
     # Collect all tracked BENs for live USAC summary (cached)
-    cache_key = make_cache_key("admin_dashboard_portfolio")
+    cache_key = make_cache_key("admin_dashboard_portfolio_v2")
     cached = get_cached(db, cache_key)
     if cached:
         portfolio_live = cached
@@ -916,9 +916,9 @@ async def get_admin_dashboard(
         
         if all_bens:
             try:
-                from ...utils.usac_client import USACClient
+                from utils.usac_client import USACDataClient
                 from datetime import date
-                client = USACClient()
+                client = USACDataClient()
                 # No year filter — fetch ALL funding years
                 batch_result = client.get_frn_status_batch(all_bens)
                 
