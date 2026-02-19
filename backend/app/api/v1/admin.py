@@ -22,6 +22,7 @@ from ...models.application import QueryHistory
 from ...models.support_ticket import SupportTicket, TicketMessage, TicketStatus
 from ...models.applicant import ApplicantProfile, ApplicantFRN, ApplicantBEN
 from ...models.alert import Alert
+from ...models.admin_frn_snapshot import AdminFRNSnapshot
 from ...services.cache_service import get_cached, set_cached, make_cache_key
 
 router = APIRouter(prefix="/admin", tags=["Admin Portal"])
@@ -610,168 +611,118 @@ async def get_frn_monitor(
     status_filter: Optional[str] = None,
     funding_year: Optional[int] = None,
     search: Optional[str] = None,
-    limit: int = 100,
-    offset: int = 0,
+    background_tasks: BackgroundTasks = None,
     current_user: User = AdminUser,
     db: Session = Depends(get_db)
 ):
     """
     Get aggregated FRN status across ALL users.
-    Pulls live USAC data for all tracked BENs (consultant schools + applicant BENs)
-    and vendor SPINs, using cache for performance.
-    Returns FRNs from ALL funding years (no year restriction).
+    Reads from the admin_frn_snapshots DB table (instant).
+    A background scheduler job refreshes this table every 6 hours.
+    If the table is empty, triggers an immediate background refresh.
+    Returns ALL FRNs — no pagination limit.
     """
-    from utils.usac_client import USACDataClient
-    
-    # Build cache key (no year filter — show ALL years)
-    cache_key = make_cache_key("admin_frn_monitor_v2")
-    cached = get_cached(db, cache_key)
-    
-    if cached:
-        all_frn_records = cached
+    import logging
+    log = logging.getLogger(__name__)
+
+    # Check how many snapshot rows exist
+    snap_count = db.query(func.count(AdminFRNSnapshot.id)).scalar() or 0
+
+    if snap_count == 0:
+        # Table is empty — trigger immediate refresh and fall back to old cache/live
+        log.info("Admin FRN snapshot table empty, triggering background refresh")
+        if background_tasks:
+            from app.services.scheduler_service import refresh_admin_frn_snapshot
+            background_tasks.add_task(refresh_admin_frn_snapshot)
+        # Fall back to existing cache so user gets *something* on first call
+        cache_key = make_cache_key("admin_frn_monitor_v2")
+        cached = get_cached(db, cache_key)
+        if cached:
+            all_rows = cached
+        else:
+            all_rows = []
     else:
-        # Collect ALL BENs from consultant schools + applicant BENs
-        consultant_schools = db.query(
-            ConsultantSchool.ben, ConsultantSchool.school_name,
-            ConsultantSchool.consultant_profile_id
-        ).filter(ConsultantSchool.ben.isnot(None)).all()
-        
-        applicant_bens_db = db.query(
-            ApplicantBEN.ben, ApplicantBEN.organization_name,
-            ApplicantBEN.applicant_profile_id
-        ).filter(ApplicantBEN.ben.isnot(None)).all()
-        
-        vendor_profiles = db.query(
-            VendorProfile.spin, VendorProfile.company_name, VendorProfile.user_id
-        ).filter(VendorProfile.spin.isnot(None), VendorProfile.spin != "").all()
-        
-        # Map BEN -> user info for attribution
-        ben_to_user = {}
-        for s in consultant_schools:
-            profile = db.query(ConsultantProfile).filter(ConsultantProfile.id == s.consultant_profile_id).first()
-            if profile:
-                user = db.query(User).filter(User.id == profile.user_id).first()
-                ben_to_user[s.ben] = {
-                    "org": s.school_name, 
-                    "user_email": user.email if user else None,
-                    "user_id": user.id if user else None,
-                    "source": "consultant"
-                }
-        
-        for b in applicant_bens_db:
-            profile = db.query(ApplicantProfile).filter(ApplicantProfile.id == b.applicant_profile_id).first()
-            if profile:
-                user = db.query(User).filter(User.id == profile.user_id).first()
-                ben_to_user[b.ben] = {
-                    "org": b.organization_name or (profile.organization_name if profile else None),
-                    "user_email": user.email if user else None,
-                    "user_id": user.id if user else None,
-                    "source": "applicant"
-                }
-        
-        all_bens = list(set(
-            [s.ben for s in consultant_schools if s.ben] + 
-            [b.ben for b in applicant_bens_db if b.ben]
-        ))
-        
-        all_frn_records = []
-        
-        # Batch fetch FRN data for all BENs (no year filter = all years)
-        if all_bens:
-            try:
-                client = USACDataClient()
-                batch_result = client.get_frn_status_batch(all_bens)
-                if batch_result.get('success'):
-                    for ben, ben_data in batch_result.get('results', {}).items():
-                        user_info = ben_to_user.get(str(ben), {})
-                        entity_name = ben_data.get('entity_name') or user_info.get('org') or ''
-                        for frn in ben_data.get('frns', []):
-                            all_frn_records.append({
-                                "frn": frn.get("frn", ""),
-                                "status": frn.get("status", "Unknown"),
-                                "funding_year": frn.get("funding_year", ""),
-                                "amount_requested": frn.get("commitment_amount", 0),
-                                "amount_committed": frn.get("disbursed_amount", 0),
-                                "service_type": frn.get("service_type", ""),
-                                "organization_name": entity_name,
-                                "ben": str(ben),
-                                "user_id": user_info.get("user_id"),
-                                "user_email": user_info.get("user_email"),
-                                "source": user_info.get("source", "unknown"),
-                                "fcdl_date": frn.get("fcdl_date", ""),
-                                "last_checked": datetime.utcnow().isoformat(),
-                            })
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).warning(f"Admin FRN monitor USAC batch fetch failed: {e}")
-        
-        # Also fetch FRN data for vendor SPINs (no year filter)
-        for vp in vendor_profiles:
-            try:
-                client = USACDataClient()
-                spin_result = client.get_frn_status_by_spin(vp.spin)
-                if spin_result.get('success'):
-                    user = db.query(User).filter(User.id == vp.user_id).first()
-                    for frn in spin_result.get('frns', []):
-                        all_frn_records.append({
-                            "frn": frn.get("frn", ""),
-                            "status": frn.get("status", "Unknown"),
-                            "funding_year": frn.get("funding_year", ""),
-                            "amount_requested": frn.get("commitment_amount", 0),
-                            "amount_committed": frn.get("disbursed_amount", 0),
-                            "service_type": frn.get("service_type", ""),
-                            "organization_name": frn.get("entity_name") or vp.company_name or "",
-                            "ben": frn.get("ben", ""),
-                            "user_id": user.id if user else None,
-                            "user_email": user.email if user else None,
-                            "source": "vendor",
-                            "fcdl_date": frn.get("fcdl_date", ""),
-                            "last_checked": datetime.utcnow().isoformat(),
-                        })
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).warning(f"Admin FRN monitor SPIN fetch failed for {vp.spin}: {e}")
-        
-        # Cache the combined results for 6 hours
-        if all_frn_records:
-            set_cached(db, cache_key, all_frn_records, ttl_hours=6)
-    
-    # Apply filters on the combined dataset
-    result = all_frn_records
-    
-    if funding_year:
-        result = [f for f in result if str(f.get("funding_year", "")) == str(funding_year)]
-    if status_filter:
-        result = [f for f in result if status_filter.lower() in (f.get("status") or "").lower()]
-    if search:
-        term = search.lower()
-        result = [f for f in result if 
-            term in (f.get("frn") or "").lower() or
-            term in (f.get("organization_name") or "").lower() or
-            term in (f.get("ben") or "").lower() or
-            term in (f.get("user_email") or "").lower()
+        # Read all rows from snapshot table (fast DB read)
+        query = db.query(AdminFRNSnapshot)
+
+        if funding_year:
+            query = query.filter(AdminFRNSnapshot.funding_year == str(funding_year))
+        if status_filter:
+            query = query.filter(AdminFRNSnapshot.status.ilike(f"%{status_filter}%"))
+        if search:
+            term = f"%{search}%"
+            query = query.filter(or_(
+                AdminFRNSnapshot.frn.ilike(term),
+                AdminFRNSnapshot.organization_name.ilike(term),
+                AdminFRNSnapshot.ben.ilike(term),
+                AdminFRNSnapshot.user_email.ilike(term),
+            ))
+
+        rows = query.all()
+        all_rows = [
+            {
+                "frn": r.frn,
+                "status": r.status,
+                "funding_year": r.funding_year,
+                "amount_requested": r.amount_requested,
+                "amount_committed": r.amount_committed,
+                "service_type": r.service_type,
+                "organization_name": r.organization_name,
+                "ben": r.ben,
+                "user_id": r.user_id,
+                "user_email": r.user_email,
+                "source": r.source,
+                "fcdl_date": r.fcdl_date,
+                "last_checked": r.last_refreshed.isoformat() if r.last_refreshed else None,
+            }
+            for r in rows
         ]
-    
-    # Summary stats
-    total_tracked = len(all_frn_records)
-    denied_frns = len([f for f in all_frn_records if "denied" in (f.get("status") or "").lower()])
-    pending_frns = len([f for f in all_frn_records if "pending" in (f.get("status") or "").lower() or "review" in (f.get("status") or "").lower()])
-    funded_frns = len([f for f in all_frn_records if "funded" in (f.get("status") or "").lower() or "committed" in (f.get("status") or "").lower()])
-    
-    total_filtered = len(result)
-    paginated = result[offset:offset + limit]
+
+    # Summary stats (always from full table, ignoring filters for accurate totals)
+    if snap_count > 0:
+        total_tracked = snap_count
+        denied_frns = db.query(func.count(AdminFRNSnapshot.id)).filter(
+            AdminFRNSnapshot.status.ilike("%denied%")
+        ).scalar() or 0
+        pending_frns = db.query(func.count(AdminFRNSnapshot.id)).filter(
+            or_(AdminFRNSnapshot.status.ilike("%pending%"), AdminFRNSnapshot.status.ilike("%review%"))
+        ).scalar() or 0
+        funded_frns = db.query(func.count(AdminFRNSnapshot.id)).filter(
+            or_(AdminFRNSnapshot.status.ilike("%funded%"), AdminFRNSnapshot.status.ilike("%committed%"))
+        ).scalar() or 0
+        # Get last refresh time
+        last_refresh = db.query(func.max(AdminFRNSnapshot.last_refreshed)).scalar()
+    else:
+        total_tracked = len(all_rows)
+        denied_frns = len([f for f in all_rows if "denied" in (f.get("status") or "").lower()])
+        pending_frns = len([f for f in all_rows if "pending" in (f.get("status") or "").lower()])
+        funded_frns = len([f for f in all_rows if "funded" in (f.get("status") or "").lower() or "committed" in (f.get("status") or "").lower()])
+        last_refresh = None
 
     return {
         "success": True,
-        "total": total_filtered,
+        "total": len(all_rows),
         "summary": {
             "total_tracked": total_tracked,
             "denied": denied_frns,
             "pending": pending_frns,
             "funded": funded_frns,
+            "last_refreshed": last_refresh.isoformat() if last_refresh else None,
         },
-        "frns": paginated
+        "frns": all_rows,
     }
+
+
+@router.post("/frn-monitor/refresh")
+async def trigger_frn_refresh(
+    background_tasks: BackgroundTasks,
+    current_user: User = AdminUser,
+    db: Session = Depends(get_db)
+):
+    """Manually trigger a background refresh of the FRN snapshot."""
+    from app.services.scheduler_service import refresh_admin_frn_snapshot
+    background_tasks.add_task(refresh_admin_frn_snapshot)
+    return {"success": True, "message": "FRN snapshot refresh started in background. Reload in a few minutes."}
 
 
 @router.get("/frn-monitor/denials")

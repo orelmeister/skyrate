@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/auth-store";
 import { api } from "@/lib/api";
@@ -145,7 +145,7 @@ export default function AdminDashboard() {
 
   async function loadFRNs() {
     try {
-      const res = await api.getAdminFRNMonitor({ limit: 100 });
+      const res = await api.getAdminFRNMonitor({});
       const data = res.data?.frns || [];
       setFrns(data);
       setFrnSummary(res.data?.summary || null);
@@ -294,7 +294,14 @@ export default function AdminDashboard() {
               />
             )}
             {activeTab === "frn" && (
-              <FRNMonitorTab frns={frns} summary={frnSummary} />
+              <FRNMonitorTab frns={frns} summary={frnSummary} onRefresh={async () => {
+                try {
+                  await api.refreshAdminFRNSnapshot();
+                  alert("FRN refresh started in background. Reload in 2-3 minutes.");
+                } catch (e) {
+                  alert("Failed to trigger refresh");
+                }
+              }} />
             )}
             {activeTab === "communications" && (
               <CommunicationsTab
@@ -699,59 +706,424 @@ function TicketsTab({
 
 // ==================== FRN MONITOR TAB ====================
 
-function FRNMonitorTab({ frns, summary }: { frns: any[]; summary: any }) {
+function FRNMonitorTab({ frns, summary, onRefresh }: { frns: any[]; summary: any; onRefresh?: () => void }) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [sortField, setSortField] = useState<string>("org");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(new Set());
+
+  // USAC open data link for an FRN
+  const getUSACLink = (frn: string) =>
+    `https://opendata.usac.org/E-Rate/FCC-Form-471-FRN-Status/qdmp-ygft/explore?q=${encodeURIComponent(frn)}`;
+
+  // Filter FRNs by search query and status
+  const filteredFRNs = useMemo(() => {
+    return frns.filter((f) => {
+      const q = searchQuery.toLowerCase();
+      const matchesSearch =
+        !q ||
+        f.organization_name?.toLowerCase().includes(q) ||
+        f.frn?.toString().includes(q) ||
+        f.ben?.toString().includes(q) ||
+        f.user_email?.toLowerCase().includes(q);
+
+      const s = f.status?.toLowerCase() || "";
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "denied" && s.includes("denied")) ||
+        (statusFilter === "funded" && (s.includes("funded") || s.includes("committed"))) ||
+        (statusFilter === "pending" && s.includes("pending"));
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [frns, searchQuery, statusFilter]);
+
+  // Group filtered FRNs by organization
+  const orgGroups = useMemo(() => {
+    const groups: Record<
+      string,
+      {
+        name: string;
+        ben: string;
+        frns: any[];
+        totalFRNs: number;
+        denied: number;
+        funded: number;
+        pending: number;
+        totalAmount: number;
+        sources: Set<string>;
+        years: Set<string>;
+      }
+    > = {};
+
+    filteredFRNs.forEach((f) => {
+      const key = f.organization_name || f.ben || "Unknown";
+      if (!groups[key]) {
+        groups[key] = {
+          name: key,
+          ben: f.ben || "",
+          frns: [],
+          totalFRNs: 0,
+          denied: 0,
+          funded: 0,
+          pending: 0,
+          totalAmount: 0,
+          sources: new Set(),
+          years: new Set(),
+        };
+      }
+      const g = groups[key];
+      g.frns.push(f);
+      g.totalFRNs++;
+      const st = f.status?.toLowerCase() || "";
+      if (st.includes("denied")) g.denied++;
+      if (st.includes("funded") || st.includes("committed")) g.funded++;
+      if (st.includes("pending")) g.pending++;
+      if (f.amount_requested) g.totalAmount += Number(f.amount_requested);
+      if (f.source) g.sources.add(f.source);
+      if (f.funding_year) g.years.add(String(f.funding_year));
+    });
+
+    return Object.values(groups);
+  }, [filteredFRNs]);
+
+  // Sort groups
+  const sortedGroups = useMemo(() => {
+    return [...orgGroups].sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case "org":
+          cmp = a.name.localeCompare(b.name);
+          break;
+        case "frns":
+          cmp = a.totalFRNs - b.totalFRNs;
+          break;
+        case "denied":
+          cmp = a.denied - b.denied;
+          break;
+        case "amount":
+          cmp = a.totalAmount - b.totalAmount;
+          break;
+        case "year":
+          cmp = [...a.years].sort().join(",").localeCompare([...b.years].sort().join(","));
+          break;
+        default:
+          cmp = a.name.localeCompare(b.name);
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [orgGroups, sortField, sortDir]);
+
+  const toggleOrg = (name: string) => {
+    setExpandedOrgs((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
+
+  const SortIcon = ({ field }: { field: string }) => (
+    <span className="ml-1 text-xs opacity-60">
+      {sortField === field ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
+    </span>
+  );
+
+  const expandAll = () => setExpandedOrgs(new Set(sortedGroups.map((g) => g.name)));
+  const collapseAll = () => setExpandedOrgs(new Set());
+
   return (
     <div className="space-y-4">
+      {/* Summary cards */}
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard label="Total Tracked" value={summary.total_tracked} color="purple" />
-          <StatCard label="Funded" value={summary.funded} color="green" />
-          <StatCard label="Pending" value={summary.pending} color="amber" />
-          <StatCard label="Denied" value={summary.denied} color="red" />
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatCard label="Total Tracked" value={summary.total_tracked} color="purple" />
+            <StatCard label="Funded" value={summary.funded} color="green" />
+            <StatCard label="Pending" value={summary.pending} color="amber" />
+            <StatCard label="Denied" value={summary.denied} color="red" />
+          </div>
+          {summary.last_refreshed && (
+            <div className="flex items-center justify-end gap-3">
+              <p className="text-xs text-slate-400">
+                Last refreshed: {new Date(summary.last_refreshed).toLocaleString()}
+              </p>
+              {onRefresh && (
+                <button
+                  onClick={onRefresh}
+                  className="text-xs text-purple-600 hover:text-purple-800 hover:underline"
+                >
+                  ↻ Refresh Now
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
+      {/* Search bar + status filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <input
+            type="text"
+            placeholder="Search by organization, FRN, BEN, or email..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+          />
+          <svg
+            className="absolute left-3 top-3 w-4 h-4 text-slate-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
+          </svg>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {(["all", "funded", "pending", "denied"] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={`px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
+                statusFilter === s
+                  ? s === "funded"
+                    ? "bg-green-600 text-white"
+                    : s === "pending"
+                    ? "bg-amber-500 text-white"
+                    : s === "denied"
+                    ? "bg-red-600 text-white"
+                    : "bg-purple-600 text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              {s.charAt(0).toUpperCase() + s.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Results count + expand/collapse */}
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-slate-500">
+          {sortedGroups.length} organization{sortedGroups.length !== 1 ? "s" : ""} ·{" "}
+          {filteredFRNs.length} FRN{filteredFRNs.length !== 1 ? "s" : ""}
+          {searchQuery && ` matching "${searchQuery}"`}
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={expandAll}
+            className="text-xs text-purple-600 hover:text-purple-800 hover:underline"
+          >
+            Expand All
+          </button>
+          <span className="text-slate-300">|</span>
+          <button
+            onClick={collapseAll}
+            className="text-xs text-purple-600 hover:text-purple-800 hover:underline"
+          >
+            Collapse All
+          </button>
+        </div>
+      </div>
+
+      {/* Organization-grouped table */}
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 border-b">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">FRN</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Organization</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Status</th>
+              <th className="w-8 px-3 py-3"></th>
+              <th
+                className="text-left px-4 py-3 font-medium text-slate-600 cursor-pointer select-none hover:text-purple-700"
+                onClick={() => handleSort("org")}
+              >
+                Organization
+                <SortIcon field="org" />
+              </th>
+              <th
+                className="text-left px-4 py-3 font-medium text-slate-600 cursor-pointer select-none hover:text-purple-700"
+                onClick={() => handleSort("frns")}
+              >
+                FRNs
+                <SortIcon field="frns" />
+              </th>
+              <th
+                className="text-left px-4 py-3 font-medium text-slate-600 cursor-pointer select-none hover:text-purple-700"
+                onClick={() => handleSort("denied")}
+              >
+                Denied
+                <SortIcon field="denied" />
+              </th>
               <th className="text-left px-4 py-3 font-medium text-slate-600">Source</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Year</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Amount</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">User</th>
+              <th
+                className="text-left px-4 py-3 font-medium text-slate-600 cursor-pointer select-none hover:text-purple-700"
+                onClick={() => handleSort("year")}
+              >
+                Year
+                <SortIcon field="year" />
+              </th>
+              <th
+                className="text-left px-4 py-3 font-medium text-slate-600 cursor-pointer select-none hover:text-purple-700"
+                onClick={() => handleSort("amount")}
+              >
+                Total Amount
+                <SortIcon field="amount" />
+              </th>
             </tr>
           </thead>
           <tbody>
-            {frns.length === 0 ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">No FRNs being tracked. Add schools, BENs, or SPINs to user portfolios to see live USAC data.</td></tr>
-            ) : frns.map((f, i) => (
-              <tr key={i} className="border-b last:border-0 hover:bg-slate-50">
-                <td className="px-4 py-3 font-mono text-slate-900">{f.frn}</td>
-                <td className="px-4 py-3">{f.organization_name || f.ben || "—"}</td>
-                <td className="px-4 py-3">
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    f.status?.toLowerCase().includes("denied") ? "bg-red-100 text-red-700" :
-                    f.status?.toLowerCase().includes("funded") || f.status?.toLowerCase().includes("committed") ? "bg-green-100 text-green-700" :
-                    f.status?.toLowerCase().includes("pending") ? "bg-yellow-100 text-yellow-700" :
-                    "bg-slate-100 text-slate-700"
-                  }`}>{f.status || "Unknown"}</span>
+            {sortedGroups.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                  {searchQuery
+                    ? "No organizations match your search."
+                    : "No FRNs being tracked."}
                 </td>
-                <td className="px-4 py-3">
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    f.source === "consultant" ? "bg-purple-100 text-purple-700" :
-                    f.source === "vendor" ? "bg-blue-100 text-blue-700" :
-                    f.source === "applicant" ? "bg-green-100 text-green-700" :
-                    "bg-slate-100 text-slate-700"
-                  }`}>{f.source || "—"}</span>
-                </td>
-                <td className="px-4 py-3 text-slate-600">{f.funding_year || "—"}</td>
-                <td className="px-4 py-3 text-slate-700">{f.amount_requested ? `$${Number(f.amount_requested).toLocaleString()}` : "—"}</td>
-                <td className="px-4 py-3 text-slate-500 text-xs">{f.user_email || "—"}</td>
               </tr>
-            ))}
+            ) : (
+              sortedGroups.map((org) => (
+                <React.Fragment key={org.name}>
+                  {/* Organization summary row */}
+                  <tr
+                    className="border-b hover:bg-purple-50/50 cursor-pointer transition-colors"
+                    onClick={() => toggleOrg(org.name)}
+                  >
+                    <td className="px-3 py-3 text-slate-400">
+                      <span
+                        className="text-xs transition-transform duration-200 inline-block"
+                        style={{
+                          transform: expandedOrgs.has(org.name)
+                            ? "rotate(90deg)"
+                            : "rotate(0deg)",
+                        }}
+                      >
+                        ▶
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-slate-900">{org.name}</div>
+                      {org.ben && (
+                        <div className="text-xs text-slate-400">BEN: {org.ben}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="font-semibold text-slate-800">{org.totalFRNs}</span>
+                      <div className="text-xs text-slate-400">
+                        {org.funded > 0 && (
+                          <span className="text-green-600">{org.funded} funded</span>
+                        )}
+                        {org.funded > 0 && org.pending > 0 && " · "}
+                        {org.pending > 0 && (
+                          <span className="text-amber-600">{org.pending} pending</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {org.denied > 0 ? (
+                        <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                          {org.denied}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">0</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {[...org.sources].map((s) => (
+                        <span
+                          key={s}
+                          className={`text-xs px-2 py-0.5 rounded-full font-medium mr-1 ${
+                            s === "consultant"
+                              ? "bg-purple-100 text-purple-700"
+                              : s === "vendor"
+                              ? "bg-blue-100 text-blue-700"
+                              : "bg-green-100 text-green-700"
+                          }`}
+                        >
+                          {s}
+                        </span>
+                      ))}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 text-xs">
+                      {[...org.years].sort().join(", ")}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-slate-800">
+                      ${org.totalAmount.toLocaleString()}
+                    </td>
+                  </tr>
+
+                  {/* Expanded individual FRN rows */}
+                  {expandedOrgs.has(org.name) &&
+                    org.frns.map((f: any, idx: number) => (
+                      <tr
+                        key={`${org.name}-${idx}`}
+                        className="bg-slate-50/70 border-b last:border-b-0"
+                      >
+                        <td className="px-3 py-2"></td>
+                        <td className="px-4 py-2 pl-8">
+                          <a
+                            href={getUSACLink(f.frn)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-mono text-purple-600 hover:text-purple-800 hover:underline"
+                          >
+                            {f.frn} ↗
+                          </a>
+                          {f.service_type && (
+                            <span className="ml-2 text-xs text-slate-400">
+                              {f.service_type}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2">
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                              f.status?.toLowerCase().includes("denied")
+                                ? "bg-red-100 text-red-700"
+                                : f.status?.toLowerCase().includes("funded") ||
+                                  f.status?.toLowerCase().includes("committed")
+                                ? "bg-green-100 text-green-700"
+                                : f.status?.toLowerCase().includes("pending")
+                                ? "bg-yellow-100 text-yellow-700"
+                                : "bg-slate-100 text-slate-700"
+                            }`}
+                          >
+                            {f.status || "Unknown"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-xs text-slate-500">
+                          {f.fcdl_date || "—"}
+                        </td>
+                        <td className="px-4 py-2 text-xs text-slate-500">
+                          {f.user_email || "—"}
+                        </td>
+                        <td className="px-4 py-2 text-xs text-slate-500">
+                          {f.funding_year || "—"}
+                        </td>
+                        <td className="px-4 py-2 text-slate-700">
+                          {f.amount_requested
+                            ? `$${Number(f.amount_requested).toLocaleString()}`
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                </React.Fragment>
+              ))
+            )}
           </tbody>
         </table>
       </div>

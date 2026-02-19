@@ -18,6 +18,7 @@ from .applicant import (
 )
 from .blog import BlogPost, BlogStatus
 from .usac_cache import USACCache
+from .admin_frn_snapshot import AdminFRNSnapshot
 
 __all__ = [
     "User",
@@ -59,4 +60,6 @@ __all__ = [
     "BlogStatus",
     # USAC Cache
     "USACCache",
+    # Admin FRN Snapshot
+    "AdminFRNSnapshot",
 ]

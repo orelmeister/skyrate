@@ -365,6 +365,7 @@ async def lifespan(app: FastAPI):
         AppealRecord, QueryHistory, ApplicantProfile, ApplicantFRN,
         ApplicantAutoAppeal, ApplicantStatusHistory, USACCache
     )
+    from app.models.admin_frn_snapshot import AdminFRNSnapshot
     from app.models.push_subscription import PushSubscription
     from app.models.support_ticket import SupportTicket, TicketMessage
     
@@ -384,12 +385,25 @@ async def lifespan(app: FastAPI):
         logger.error(f"Database initialization error (will retry on first request): {e}")
     
     # Initialize background scheduler for alerts/digests
-    from app.services.scheduler_service import init_scheduler, shutdown_scheduler
+    from app.services.scheduler_service import init_scheduler, shutdown_scheduler, refresh_admin_frn_snapshot
     try:
         init_scheduler()
         logger.info("Background scheduler initialized")
     except Exception as e:
         logger.error(f"Failed to initialize scheduler: {e}")
+
+    # Populate admin FRN snapshot if table is empty (first deploy / after migration)
+    try:
+        from app.models.admin_frn_snapshot import AdminFRNSnapshot as _AFS
+        _db = SessionLocal()
+        _snap_count = _db.query(_AFS).count()
+        _db.close()
+        if _snap_count == 0:
+            import threading
+            threading.Thread(target=refresh_admin_frn_snapshot, daemon=True).start()
+            logger.info("Admin FRN snapshot empty — background refresh started")
+    except Exception as e:
+        logger.warning(f"Admin FRN snapshot startup check skipped: {e}")
     
     yield
     

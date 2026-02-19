@@ -2155,6 +2155,13 @@ class ApiClient {
   }
 
   /**
+   * Trigger manual FRN snapshot refresh (admin)
+   */
+  async refreshAdminFRNSnapshot(): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/admin/frn-monitor/refresh', { method: 'POST' });
+  }
+
+  /**
    * Send email to a specific user (admin)
    */
   async emailUser(userId: number, subject: string, message: string): Promise<ApiResponse<any>> {

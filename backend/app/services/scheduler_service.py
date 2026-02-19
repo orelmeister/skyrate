@@ -397,6 +397,142 @@ def _notify_admins_of_denial(
         logger.error(f"Failed to notify admins of denial: {e}")
 
 
+def refresh_admin_frn_snapshot():
+    """
+    Refresh the admin FRN snapshot table with ALL FRN data from USAC.
+    This runs every 6 hours so the admin FRN monitor loads instantly from DB.
+    """
+    logger.info("Running admin FRN snapshot refresh...")
+
+    db = SessionLocal()
+    try:
+        from utils.usac_client import USACDataClient
+        from ..models.admin_frn_snapshot import AdminFRNSnapshot
+        from ..models.consultant import ConsultantProfile, ConsultantSchool
+        from ..models.vendor import VendorProfile
+        from ..models.applicant import ApplicantProfile as ApProfile, ApplicantBEN
+
+        # Collect ALL BENs from consultants + applicants
+        consultant_schools = db.query(
+            ConsultantSchool.ben, ConsultantSchool.school_name,
+            ConsultantSchool.consultant_profile_id
+        ).filter(ConsultantSchool.ben.isnot(None)).all()
+
+        applicant_bens_db = db.query(
+            ApplicantBEN.ben, ApplicantBEN.organization_name,
+            ApplicantBEN.applicant_profile_id
+        ).filter(ApplicantBEN.ben.isnot(None)).all()
+
+        vendor_profiles = db.query(
+            VendorProfile.spin, VendorProfile.company_name, VendorProfile.user_id
+        ).filter(VendorProfile.spin.isnot(None), VendorProfile.spin != "").all()
+
+        # Build BEN -> user info map
+        ben_to_user = {}
+        for s in consultant_schools:
+            profile = db.query(ConsultantProfile).filter(ConsultantProfile.id == s.consultant_profile_id).first()
+            if profile:
+                user = db.query(User).filter(User.id == profile.user_id).first()
+                ben_to_user[s.ben] = {
+                    "org": s.school_name,
+                    "user_email": user.email if user else None,
+                    "user_id": user.id if user else None,
+                    "source": "consultant",
+                }
+
+        for b in applicant_bens_db:
+            profile = db.query(ApProfile).filter(ApProfile.id == b.applicant_profile_id).first()
+            if profile:
+                user = db.query(User).filter(User.id == profile.user_id).first()
+                ben_to_user[b.ben] = {
+                    "org": b.organization_name or (profile.organization_name if profile else None),
+                    "user_email": user.email if user else None,
+                    "user_id": user.id if user else None,
+                    "source": "applicant",
+                }
+
+        all_bens = list(set(
+            [s.ben for s in consultant_schools if s.ben] +
+            [b.ben for b in applicant_bens_db if b.ben]
+        ))
+
+        all_frn_records = []
+        now = datetime.utcnow()
+
+        # Batch fetch from USAC for all BENs (all years)
+        if all_bens:
+            try:
+                client = USACDataClient()
+                batch_result = client.get_frn_status_batch(all_bens)
+                if batch_result.get("success"):
+                    for ben, ben_data in batch_result.get("results", {}).items():
+                        user_info = ben_to_user.get(str(ben), {})
+                        entity_name = ben_data.get("entity_name") or user_info.get("org") or ""
+                        for frn in ben_data.get("frns", []):
+                            all_frn_records.append({
+                                "frn": frn.get("frn", ""),
+                                "status": frn.get("status", "Unknown"),
+                                "funding_year": str(frn.get("funding_year", "")),
+                                "amount_requested": float(frn.get("commitment_amount", 0) or 0),
+                                "amount_committed": float(frn.get("disbursed_amount", 0) or 0),
+                                "service_type": frn.get("service_type", ""),
+                                "organization_name": entity_name,
+                                "ben": str(ben),
+                                "user_id": user_info.get("user_id"),
+                                "user_email": user_info.get("user_email"),
+                                "source": user_info.get("source", "unknown"),
+                                "fcdl_date": frn.get("fcdl_date", ""),
+                                "last_refreshed": now,
+                            })
+            except Exception as e:
+                logger.warning(f"Admin FRN snapshot BEN batch fetch failed: {e}")
+
+        # Fetch vendor SPIN FRNs
+        for vp in vendor_profiles:
+            try:
+                client = USACDataClient()
+                spin_result = client.get_frn_status_by_spin(vp.spin)
+                if spin_result.get("success"):
+                    user = db.query(User).filter(User.id == vp.user_id).first()
+                    for frn in spin_result.get("frns", []):
+                        all_frn_records.append({
+                            "frn": frn.get("frn", ""),
+                            "status": frn.get("status", "Unknown"),
+                            "funding_year": str(frn.get("funding_year", "")),
+                            "amount_requested": float(frn.get("commitment_amount", 0) or 0),
+                            "amount_committed": float(frn.get("disbursed_amount", 0) or 0),
+                            "service_type": frn.get("service_type", ""),
+                            "organization_name": frn.get("entity_name") or vp.company_name or "",
+                            "ben": frn.get("ben", ""),
+                            "user_id": user.id if user else None,
+                            "user_email": user.email if user else None,
+                            "source": "vendor",
+                            "fcdl_date": frn.get("fcdl_date", ""),
+                            "last_refreshed": now,
+                        })
+            except Exception as e:
+                logger.warning(f"Admin FRN snapshot SPIN fetch failed for {vp.spin}: {e}")
+
+        # Replace all rows in snapshot table atomically
+        if all_frn_records:
+            db.query(AdminFRNSnapshot).delete()
+            for rec in all_frn_records:
+                db.add(AdminFRNSnapshot(**rec))
+            db.commit()
+            logger.info(f"Admin FRN snapshot refreshed: {len(all_frn_records)} FRNs stored")
+        else:
+            logger.info("Admin FRN snapshot: No FRN records found to store")
+
+    except Exception as e:
+        logger.error(f"Admin FRN snapshot refresh failed: {e}")
+        try:
+            db.rollback()
+        except:
+            pass
+    finally:
+        db.close()
+
+
 def init_scheduler():
     """Initialize the background scheduler with all jobs"""
     global scheduler
@@ -449,6 +585,15 @@ def init_scheduler():
         trigger=IntervalTrigger(hours=12),
         id='check_long_pending',
         name='Check FRNs pending > 15 days',
+        replace_existing=True
+    )
+    
+    # Admin FRN snapshot refresh - every 6 hours
+    scheduler.add_job(
+        refresh_admin_frn_snapshot,
+        trigger=IntervalTrigger(hours=6),
+        id='refresh_admin_frn_snapshot',
+        name='Refresh admin FRN snapshot from USAC',
         replace_existing=True
     )
     
