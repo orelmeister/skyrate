@@ -25,7 +25,7 @@ interface DashboardData {
   frn_monitoring: {
     total_tracked: number;
     denied: number;
-    recent_denials_7d: number;
+    denied_current_prev_fy: number;
   };
   portfolio: {
     consultant_schools: number;
@@ -36,6 +36,8 @@ interface DashboardData {
       funded_amount: number;
       pending_amount: number;
       denied_count: number;
+      denied_current_prev_fy: number;
+      total_frns: number;
       funded_count: number;
       pending_count: number;
     };
@@ -328,7 +330,7 @@ function OverviewTab({ dashboard, setActiveTab }: { dashboard: DashboardData; se
         <StatCard label="Total Users" value={dashboard.users.total} sub={`+${dashboard.users.new_7d} this week`} color="purple" />
         <StatCard label="Active Subscriptions" value={dashboard.subscriptions.active} color="green" />
         <StatCard label="Open Tickets" value={dashboard.tickets.open} sub={`${dashboard.tickets.total} total`} color="amber" onClick={() => setActiveTab("tickets")} />
-        <StatCard label="FRN Denials (7d)" value={dashboard.frn_monitoring.recent_denials_7d} sub={`${dashboard.frn_monitoring.denied} total denied`} color="red" onClick={() => setActiveTab("frn")} />
+        <StatCard label="FRN Denials" value={dashboard.frn_monitoring.denied_current_prev_fy} sub={`${dashboard.frn_monitoring.denied} total denied (all years)`} color="red" onClick={() => setActiveTab("frn")} />
       </div>
 
       {/* Portfolio Overview */}
@@ -405,12 +407,12 @@ function OverviewTab({ dashboard, setActiveTab }: { dashboard: DashboardData; se
               <span className="font-semibold">{dashboard.frn_monitoring.total_tracked}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-sm text-slate-600">Denied</span>
-              <span className="font-semibold text-red-600">{dashboard.frn_monitoring.denied}</span>
+              <span className="text-sm text-slate-600">Denied (Current + Prev FY)</span>
+              <span className="font-semibold text-red-600">{dashboard.frn_monitoring.denied_current_prev_fy}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-sm text-slate-600">Recent Denials (7 days)</span>
-              <span className="font-semibold text-red-600">{dashboard.frn_monitoring.recent_denials_7d}</span>
+              <span className="text-sm text-slate-600">Denied (All Years)</span>
+              <span className="font-semibold text-red-600">{dashboard.frn_monitoring.denied}</span>
             </div>
             <button onClick={() => setActiveTab("frn")} className="w-full mt-2 text-sm text-purple-600 hover:text-purple-800 hover:underline text-center py-2 rounded-lg bg-purple-50">
               View Full FRN Monitor →

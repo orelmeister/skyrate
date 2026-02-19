@@ -619,14 +619,12 @@ async def get_frn_monitor(
     Get aggregated FRN status across ALL users.
     Pulls live USAC data for all tracked BENs (consultant schools + applicant BENs)
     and vendor SPINs, using cache for performance.
+    Returns FRNs from ALL funding years (no year restriction).
     """
-    from datetime import date
     from ...utils.usac_client import USACClient
     
-    current_yr = funding_year or date.today().year
-    
-    # Build cache key based on filters
-    cache_key = make_cache_key("admin_frn_monitor", year=current_yr)
+    # Build cache key (no year filter — show ALL years)
+    cache_key = make_cache_key("admin_frn_monitor_all")
     cached = get_cached(db, cache_key)
     
     if cached:
@@ -678,53 +676,58 @@ async def get_frn_monitor(
         
         all_frn_records = []
         
-        # Batch fetch FRN data for all BENs
+        # Batch fetch FRN data for all BENs (no year filter = all years)
         if all_bens:
             try:
                 client = USACClient()
-                frn_data = client.get_frn_status_batch(all_bens, current_yr)
-                for frn in frn_data:
-                    ben = frn.get("ben") or frn.get("billed_entity_number") or ""
-                    user_info = ben_to_user.get(str(ben), {})
-                    all_frn_records.append({
-                        "frn": frn.get("frn") or frn.get("funding_request_number") or "",
-                        "status": frn.get("frn_status__c") or frn.get("fiber_sub_type") or "Unknown",
-                        "funding_year": int(frn.get("funding_year") or current_yr),
-                        "amount_requested": float(frn.get("f471_funds_requested") or frn.get("original_request") or 0),
-                        "amount_committed": float(frn.get("f471_funds_committed") or frn.get("committed_request") or 0),
-                        "service_type": frn.get("fiber_type") or frn.get("service_type") or "",
-                        "organization_name": frn.get("organization_name") or user_info.get("org") or "",
-                        "ben": str(ben),
-                        "user_id": user_info.get("user_id"),
-                        "user_email": user_info.get("user_email"),
-                        "source": user_info.get("source", "unknown"),
-                        "last_checked": datetime.utcnow().isoformat(),
-                    })
+                batch_result = client.get_frn_status_batch(all_bens)
+                if batch_result.get('success'):
+                    for ben, ben_data in batch_result.get('results', {}).items():
+                        user_info = ben_to_user.get(str(ben), {})
+                        entity_name = ben_data.get('entity_name') or user_info.get('org') or ''
+                        for frn in ben_data.get('frns', []):
+                            all_frn_records.append({
+                                "frn": frn.get("frn", ""),
+                                "status": frn.get("status", "Unknown"),
+                                "funding_year": frn.get("funding_year", ""),
+                                "amount_requested": frn.get("commitment_amount", 0),
+                                "amount_committed": frn.get("disbursed_amount", 0),
+                                "service_type": frn.get("service_type", ""),
+                                "organization_name": entity_name,
+                                "ben": str(ben),
+                                "user_id": user_info.get("user_id"),
+                                "user_email": user_info.get("user_email"),
+                                "source": user_info.get("source", "unknown"),
+                                "fcdl_date": frn.get("fcdl_date", ""),
+                                "last_checked": datetime.utcnow().isoformat(),
+                            })
             except Exception as e:
                 import logging
                 logging.getLogger(__name__).warning(f"Admin FRN monitor USAC batch fetch failed: {e}")
         
-        # Also fetch FRN data for vendor SPINs
+        # Also fetch FRN data for vendor SPINs (no year filter)
         for vp in vendor_profiles:
             try:
                 client = USACClient()
-                spin_frns = client.get_frn_status_by_spin(vp.spin, current_yr)
-                user = db.query(User).filter(User.id == vp.user_id).first()
-                for frn in spin_frns:
-                    all_frn_records.append({
-                        "frn": frn.get("frn") or frn.get("funding_request_number") or "",
-                        "status": frn.get("frn_status__c") or frn.get("fiber_sub_type") or "Unknown",
-                        "funding_year": int(frn.get("funding_year") or current_yr),
-                        "amount_requested": float(frn.get("f471_funds_requested") or frn.get("original_request") or 0),
-                        "amount_committed": float(frn.get("f471_funds_committed") or frn.get("committed_request") or 0),
-                        "service_type": frn.get("fiber_type") or frn.get("service_type") or "",
-                        "organization_name": frn.get("organization_name") or vp.company_name or "",
-                        "ben": frn.get("ben") or frn.get("billed_entity_number") or "",
-                        "user_id": user.id if user else None,
-                        "user_email": user.email if user else None,
-                        "source": "vendor",
-                        "last_checked": datetime.utcnow().isoformat(),
-                    })
+                spin_result = client.get_frn_status_by_spin(vp.spin)
+                if spin_result.get('success'):
+                    user = db.query(User).filter(User.id == vp.user_id).first()
+                    for frn in spin_result.get('frns', []):
+                        all_frn_records.append({
+                            "frn": frn.get("frn", ""),
+                            "status": frn.get("status", "Unknown"),
+                            "funding_year": frn.get("funding_year", ""),
+                            "amount_requested": frn.get("commitment_amount", 0),
+                            "amount_committed": frn.get("disbursed_amount", 0),
+                            "service_type": frn.get("service_type", ""),
+                            "organization_name": frn.get("entity_name") or vp.company_name or "",
+                            "ben": frn.get("ben", ""),
+                            "user_id": user.id if user else None,
+                            "user_email": user.email if user else None,
+                            "source": "vendor",
+                            "fcdl_date": frn.get("fcdl_date", ""),
+                            "last_checked": datetime.utcnow().isoformat(),
+                        })
             except Exception as e:
                 import logging
                 logging.getLogger(__name__).warning(f"Admin FRN monitor SPIN fetch failed for {vp.spin}: {e}")
@@ -736,6 +739,8 @@ async def get_frn_monitor(
     # Apply filters on the combined dataset
     result = all_frn_records
     
+    if funding_year:
+        result = [f for f in result if str(f.get("funding_year", "")) == str(funding_year)]
     if status_filter:
         result = [f for f in result if status_filter.lower() in (f.get("status") or "").lower()]
     if search:
@@ -880,16 +885,6 @@ async def get_admin_dashboard(
         SupportTicket.created_at.desc()
     ).limit(5).all()
 
-    # FRN stats
-    total_frns = db.query(ApplicantFRN).count()
-    denied_frns = db.query(ApplicantFRN).filter(
-        ApplicantFRN.status.ilike("%denied%")
-    ).count()
-    recent_denials = db.query(Alert).filter(
-        Alert.alert_type == "new_denial",
-        Alert.created_at >= seven_days_ago
-    ).count()
-
     # Portfolio stats (cross-portal overview)
     total_consultant_schools = db.query(ConsultantSchool).count()
     total_applicant_bens = db.query(ApplicantBEN).count()
@@ -911,32 +906,50 @@ async def get_admin_dashboard(
             "total_bens_tracked": len(all_bens),
             "funded_amount": 0,
             "pending_amount": 0,
+            "denied_amount": 0,
             "denied_count": 0,
+            "denied_current_prev_fy": 0,
             "funded_count": 0,
             "pending_count": 0,
+            "total_frns": 0,
         }
         
         if all_bens:
             try:
                 from ...utils.usac_client import USACClient
-                client = USACClient()
                 from datetime import date
-                current_year = date.today().year
-                frn_data = client.get_frn_status_batch(all_bens, current_year)
+                client = USACClient()
+                # No year filter — fetch ALL funding years
+                batch_result = client.get_frn_status_batch(all_bens)
                 
-                for frn in frn_data:
-                    frn_status = (frn.get("frn_status__c") or frn.get("fiber_sub_type") or "").lower()
-                    amount = float(frn.get("f471_funds_requested") or frn.get("original_request") or 0)
-                    committed = float(frn.get("f471_funds_committed") or frn.get("committed_request") or 0)
-                    
-                    if "denied" in frn_status:
-                        portfolio_live["denied_count"] += 1
-                    elif "funded" in frn_status or "committed" in frn_status:
-                        portfolio_live["funded_count"] += 1
-                        portfolio_live["funded_amount"] += committed or amount
-                    elif "pending" in frn_status or "review" in frn_status:
-                        portfolio_live["pending_count"] += 1
-                        portfolio_live["pending_amount"] += amount
+                current_fy = date.today().year
+                prev_fy = current_fy - 1
+                
+                if batch_result.get('success'):
+                    for ben_key, ben_data in batch_result.get('results', {}).items():
+                        summary = ben_data.get('summary', {})
+                        portfolio_live["funded_count"] += summary.get('funded', {}).get('count', 0)
+                        portfolio_live["funded_amount"] += summary.get('funded', {}).get('amount', 0)
+                        portfolio_live["denied_count"] += summary.get('denied', {}).get('count', 0)
+                        portfolio_live["denied_amount"] += summary.get('denied', {}).get('amount', 0)
+                        portfolio_live["pending_count"] += summary.get('pending', {}).get('count', 0)
+                        portfolio_live["pending_amount"] += summary.get('pending', {}).get('amount', 0)
+                        
+                        # Count total FRNs
+                        frns_list = ben_data.get('frns', [])
+                        portfolio_live["total_frns"] += len(frns_list)
+                        
+                        # Count denials for current + previous FY only
+                        for frn in frns_list:
+                            fy = frn.get('funding_year')
+                            status = (frn.get('status') or '').lower()
+                            if 'denied' in status:
+                                try:
+                                    fy_int = int(fy) if fy else 0
+                                except (ValueError, TypeError):
+                                    fy_int = 0
+                                if fy_int in (current_fy, prev_fy, current_fy + 1):
+                                    portfolio_live["denied_current_prev_fy"] += 1
                 
                 set_cached(db, cache_key, portfolio_live, ttl_hours=6)
             except Exception as e:
@@ -967,9 +980,9 @@ async def get_admin_dashboard(
                 "recent": [t.to_dict() for t in recent_tickets],
             },
             "frn_monitoring": {
-                "total_tracked": total_frns,
-                "denied": denied_frns,
-                "recent_denials_7d": recent_denials,
+                "total_tracked": portfolio_live.get("total_frns", 0),
+                "denied": portfolio_live.get("denied_count", 0),
+                "denied_current_prev_fy": portfolio_live.get("denied_current_prev_fy", 0),
             },
             "portfolio": {
                 "consultant_schools": total_consultant_schools,
