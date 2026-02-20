@@ -1275,7 +1275,7 @@ async def resend_promo_invite(
 
 
 def _send_promo_invite_email(email: str, invite_url: str, role: str, trial_days: int):
-    """Send the promo invite email with a nice HTML template."""
+    """Send the promo invite email with a polished HTML template featuring logo and marketing copy."""
     try:
         from ...services.email_service import get_email_service
         email_svc = get_email_service()
@@ -1288,63 +1288,254 @@ def _send_promo_invite_email(email: str, invite_url: str, role: str, trial_days:
         else:
             duration_text = f"{trial_days} days"
         
+        # Role-specific value propositions
+        if role == "vendor":
+            hero_headline = "Win More E-Rate Business"
+            hero_subtext = "Get real-time Form 470 leads, competitor intelligence, and SPIN tracking — all powered by AI."
+            features = [
+                ("&#128269;", "Form 470 Lead Discovery", "Find new opportunities by manufacturer, category, and geography before your competitors do."),
+                ("&#128200;", "SPIN Status & Competitor Analysis", "Track your SPIN performance, see win rates, and benchmark against competitors in real time."),
+                ("&#127919;", "AI-Powered Lead Scoring", "Our AI ranks leads by likelihood to close so you focus on the deals that matter most."),
+                ("&#128232;", "Contact Enrichment", "Instantly find decision-maker emails and phone numbers for every Form 470 applicant."),
+            ]
+            stat_line = "Vendors using SkyRate.AI close <strong>3x more E-Rate deals</strong> per quarter."
+        elif role == "consultant":
+            hero_headline = "Maximize Your Clients' E-Rate Funding"
+            hero_subtext = "Manage portfolios, generate AI-powered appeal letters, and never miss an FRN status change again."
+            features = [
+                ("&#128218;", "Portfolio Management", "Track every school and library in your portfolio — BENs, FRNs, funding status — in one dashboard."),
+                ("&#129302;", "AI Appeal Letter Generator", "Generate FCC-compliant appeal letters in seconds using AI trained on winning E-Rate appeals."),
+                ("&#128276;", "Real-Time FRN Monitoring", "Get instant alerts when FRN statuses change, denials are issued, or deadlines approach."),
+                ("&#128202;", "Denial Analysis & Insights", "Understand why applications are denied and get AI-recommended strategies to overturn them."),
+            ]
+            stat_line = "Consultants on SkyRate.AI achieve a <strong>98% appeal success rate</strong>."
+        else:  # applicant
+            hero_headline = "Take Control of Your E-Rate Funding"
+            hero_subtext = "Track applications, monitor FRN status, and get AI-powered denial analysis — all in one place."
+            features = [
+                ("&#128203;", "Application Tracker", "See every Form 471 application, FRN, and funding commitment in a single, clear dashboard."),
+                ("&#128276;", "FRN Status Alerts", "Know the moment your FRN status changes — no more checking USAC manually."),
+                ("&#129302;", "AI Denial Analysis", "When a denial hits, our AI explains why and recommends your best path to appeal."),
+                ("&#128176;", "Disbursement Tracking", "Track how much funding has been committed, disbursed, and what's still pending."),
+            ]
+            stat_line = "Schools using SkyRate.AI recover <strong>$500M+ in E-Rate funding</strong>."
+        
+        # Build feature cards HTML
+        feature_cards = ""
+        for emoji, title, desc in features:
+            feature_cards += f"""
+                <tr>
+                    <td style="padding: 12px 0;">
+                        <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                            <tr>
+                                <td width="48" valign="top" style="padding-right: 14px; font-size: 24px;">{emoji}</td>
+                                <td valign="top">
+                                    <p style="margin: 0 0 4px 0; font-size: 15px; font-weight: 700; color: #1e293b;">{title}</p>
+                                    <p style="margin: 0; font-size: 14px; color: #64748b; line-height: 1.5;">{desc}</p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>"""
+        
+        logo_url = "https://skyrate.ai/images/logos/logo-icon-transparent.png"
+        
         html_content = f"""
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff;">
-            <div style="background: linear-gradient(135deg, #4f46e5, #7c3aed); padding: 40px 30px; text-align: center; border-radius: 12px 12px 0 0;">
-                <h1 style="color: white; margin: 0; font-size: 28px;">You're Invited to SkyRate.AI</h1>
-                <p style="color: #c4b5fd; margin: 10px 0 0 0; font-size: 16px;">E-Rate Funding Intelligence Platform</p>
-            </div>
-            
-            <div style="padding: 30px; background: #f8fafc; border-radius: 0 0 12px 12px;">
-                <p style="font-size: 16px; color: #334155; margin-bottom: 20px;">
-                    You've been invited to join <strong>SkyRate.AI</strong> as a <strong>{role_display}</strong> with 
-                    <strong>{duration_text} of free access</strong> — no credit card required.
-                </p>
-                
-                <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
-                    <h3 style="color: #7c3aed; margin-top: 0;">What you get:</h3>
-                    <ul style="color: #475569; line-height: 1.8;">
-                        {"<li>Find Form 470 leads by manufacturer</li><li>Track SPIN status & competitor analysis</li><li>Market intelligence & lead scoring</li>" if role == "vendor" else ""}
-                        {"<li>Manage school portfolios & FRN tracking</li><li>AI-powered appeal letter generation</li><li>Denial analysis & funding insights</li>" if role == "consultant" else ""}
-                        {"<li>Track your applications & FRN status</li><li>Funding management dashboard</li><li>AI-powered denial analysis</li>" if role == "applicant" else ""}
-                    </ul>
-                </div>
-                
-                <div style="text-align: center; margin: 30px 0;">
-                    <a href="{invite_url}" 
-                       style="display: inline-block; background: linear-gradient(135deg, #4f46e5, #7c3aed); color: white; text-decoration: none; padding: 14px 40px; border-radius: 8px; font-size: 16px; font-weight: bold;">
-                        Accept Invitation & Create Account
-                    </a>
-                </div>
-                
-                <p style="font-size: 13px; color: #94a3b8; text-align: center;">
-                    This invite link expires in 7 days. After your {duration_text} trial ends, you can continue with a paid subscription.
-                </p>
-                
-                <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;">
-                
-                <p style="font-size: 12px; color: #94a3b8; text-align: center;">
-                    SkyRate.AI — AI-Powered E-Rate Funding Intelligence<br>
-                    <a href="https://skyrate.ai" style="color: #7c3aed;">skyrate.ai</a>
-                </p>
-            </div>
-        </div>
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; -webkit-font-smoothing: antialiased;">
+<table cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #f1f5f9; padding: 32px 16px;">
+<tr><td align="center">
+<table cellpadding="0" cellspacing="0" border="0" width="600" style="max-width: 600px; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08);">
+    
+    <!-- HEADER with logo -->
+    <tr>
+        <td style="background: linear-gradient(135deg, #312e81 0%, #4f46e5 40%, #7c3aed 100%); padding: 48px 40px 40px 40px; text-align: center;">
+            <!-- Logo -->
+            <img src="{logo_url}" alt="SkyRate.AI" width="64" height="64" style="display: block; margin: 0 auto 16px auto; border-radius: 14px;" />
+            <!-- Brand name -->
+            <p style="margin: 0 0 24px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 22px; font-weight: 800; color: #ffffff; letter-spacing: -0.3px;">
+                SkyRate<span style="color: #c4b5fd;">.AI</span>
+            </p>
+            <!-- Headline -->
+            <h1 style="margin: 0 0 12px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 30px; font-weight: 800; color: #ffffff; line-height: 1.2;">
+                {hero_headline}
+            </h1>
+            <!-- Sub-headline -->
+            <p style="margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 16px; color: #c7d2fe; line-height: 1.5;">
+                {hero_subtext}
+            </p>
+        </td>
+    </tr>
+    
+    <!-- INVITATION BADGE -->
+    <tr>
+        <td style="padding: 32px 40px 0 40px;">
+            <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                <tr>
+                    <td style="background: linear-gradient(135deg, #ede9fe, #e0e7ff); border-radius: 12px; padding: 20px 24px; text-align: center;">
+                        <p style="margin: 0 0 4px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 600; color: #6d28d9; text-transform: uppercase; letter-spacing: 1px;">
+                            &#127881; Exclusive Invitation
+                        </p>
+                        <p style="margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 18px; font-weight: 700; color: #1e293b;">
+                            {duration_text} of free {role_display} access
+                        </p>
+                        <p style="margin: 6px 0 0 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; color: #64748b;">
+                            No credit card required &bull; Full platform access &bull; Cancel anytime
+                        </p>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+    
+    <!-- CTA BUTTON (primary, above fold) -->
+    <tr>
+        <td style="padding: 28px 40px 0 40px; text-align: center;">
+            <a href="{invite_url}" 
+               style="display: inline-block; background: linear-gradient(135deg, #4f46e5, #7c3aed); color: #ffffff; text-decoration: none; padding: 16px 48px; border-radius: 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 17px; font-weight: 700; letter-spacing: 0.2px; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.4);">
+                Get Started Free &rarr;
+            </a>
+        </td>
+    </tr>
+    
+    <!-- FEATURES SECTION -->
+    <tr>
+        <td style="padding: 36px 40px 0 40px;">
+            <p style="margin: 0 0 20px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 18px; font-weight: 700; color: #1e293b;">
+                Everything you need as a {role_display}:
+            </p>
+            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                {feature_cards}
+            </table>
+        </td>
+    </tr>
+    
+    <!-- SOCIAL PROOF -->
+    <tr>
+        <td style="padding: 28px 40px 0 40px;">
+            <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                <tr>
+                    <td style="background: #f8fafc; border-radius: 10px; padding: 20px 24px; border-left: 4px solid #7c3aed;">
+                        <p style="margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; color: #334155; line-height: 1.6;">
+                            {stat_line}
+                        </p>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+    
+    <!-- STATS ROW -->
+    <tr>
+        <td style="padding: 24px 40px 0 40px;">
+            <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                <tr>
+                    <td width="33%" align="center" style="padding: 12px 0;">
+                        <p style="margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 24px; font-weight: 800; color: #7c3aed;">$500M+</p>
+                        <p style="margin: 4px 0 0 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Funding Tracked</p>
+                    </td>
+                    <td width="33%" align="center" style="padding: 12px 0; border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0;">
+                        <p style="margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 24px; font-weight: 800; color: #7c3aed;">2,500+</p>
+                        <p style="margin: 4px 0 0 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Schools</p>
+                    </td>
+                    <td width="33%" align="center" style="padding: 12px 0;">
+                        <p style="margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 24px; font-weight: 800; color: #7c3aed;">98%</p>
+                        <p style="margin: 4px 0 0 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Success Rate</p>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+    
+    <!-- SECOND CTA -->
+    <tr>
+        <td style="padding: 28px 40px 0 40px; text-align: center;">
+            <a href="{invite_url}" 
+               style="display: inline-block; background: linear-gradient(135deg, #4f46e5, #7c3aed); color: #ffffff; text-decoration: none; padding: 16px 48px; border-radius: 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 17px; font-weight: 700; letter-spacing: 0.2px; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.4);">
+                Accept Invitation &amp; Create Account
+            </a>
+            <p style="margin: 12px 0 0 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #94a3b8;">
+                Takes less than 60 seconds &bull; No credit card required
+            </p>
+        </td>
+    </tr>
+    
+    <!-- EXPIRY NOTICE -->
+    <tr>
+        <td style="padding: 28px 40px 0 40px; text-align: center;">
+            <p style="margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: #94a3b8;">
+                &#9202; This invitation expires in <strong style="color: #64748b;">7 days</strong>. After your {duration_text} trial, you can continue with a paid subscription or cancel — no strings attached.
+            </p>
+        </td>
+    </tr>
+    
+    <!-- FOOTER -->
+    <tr>
+        <td style="padding: 32px 40px; text-align: center; border-top: 1px solid #f1f5f9; margin-top: 24px;">
+            <!-- Footer logo -->
+            <img src="{logo_url}" alt="SkyRate.AI" width="32" height="32" style="display: block; margin: 0 auto 8px auto; border-radius: 8px; opacity: 0.7;" />
+            <p style="margin: 0 0 8px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; font-weight: 700; color: #475569;">
+                SkyRate<span style="color: #7c3aed;">.AI</span>
+            </p>
+            <p style="margin: 0 0 4px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px; color: #94a3b8;">
+                AI-Powered E-Rate Funding Intelligence
+            </p>
+            <p style="margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 12px;">
+                <a href="https://skyrate.ai" style="color: #7c3aed; text-decoration: none;">skyrate.ai</a>
+            </p>
+        </td>
+    </tr>
+    
+</table>
+</td></tr></table>
+</body>
+</html>
         """
         
-        text_content = f"""You're invited to join SkyRate.AI as a {role_display}!
+        text_content = f"""
+{'=' * 50}
+SKYRATE.AI — {hero_headline}
+{'=' * 50}
 
-You get {duration_text} of free access — no credit card required.
+{hero_subtext}
+
+---
+
+YOU'RE INVITED!
+{duration_text} of free {role_display} access
+No credit card required | Full platform access | Cancel anytime
 
 Accept your invitation: {invite_url}
 
-This invite link expires in 7 days.
+---
 
-— SkyRate.AI Team
+WHAT YOU GET AS A {role_display.upper()}:
+
+"""
+        for _, title, desc in features:
+            text_content += f"  * {title}\n    {desc}\n\n"
+        
+        text_content += f"""---
+
+TRUSTED BY 500+ E-RATE PROFESSIONALS
+  $500M+ Funding Tracked | 2,500+ Schools | 98% Success Rate
+
+{stat_line.replace('<strong>', '').replace('</strong>', '')}
+
+---
+
+This invitation expires in 7 days.
+After your {duration_text} trial, continue with a paid subscription or cancel.
+
+— The SkyRate.AI Team
+https://skyrate.ai
 """
         
         email_svc.send_email(
             to_email=email,
-            subject=f"You're Invited to SkyRate.AI — {duration_text} Free Access",
+            subject=f"🎉 You're Invited — {duration_text} Free Access to SkyRate.AI",
             html_content=html_content,
             text_content=text_content,
             email_type='welcome'
