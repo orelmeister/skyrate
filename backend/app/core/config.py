@@ -25,6 +25,18 @@ class Settings(BaseSettings):
     # Local dev: sqlite:///./skyrate.db
     DATABASE_URL: str = "sqlite:///./skyrate.db"  # Override with env var for production
     
+    @field_validator('DATABASE_URL')
+    @classmethod
+    def validate_database_url(cls, v: str) -> str:
+        """Ensure DATABASE_URL is not empty — fall back to SQLite default if so"""
+        if not v or not v.strip():
+            import logging
+            logging.getLogger(__name__).warning(
+                "DATABASE_URL is empty, falling back to SQLite default"
+            )
+            return "sqlite:///./skyrate.db"
+        return v
+    
     # Redis
     REDIS_URL: str = "redis://localhost:6379"
     

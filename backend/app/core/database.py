@@ -3,6 +3,8 @@ Database Configuration
 SQLAlchemy setup - supports SQLite (dev), PostgreSQL (prod), and MySQL (Bluehost)
 """
 
+import os
+import logging
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -10,22 +12,35 @@ from typing import Generator
 
 from .config import settings
 
+logger = logging.getLogger(__name__)
+
+# Get DATABASE_URL with defensive fallback
+_db_url = settings.DATABASE_URL
+if not _db_url or not _db_url.strip():
+    # Last-resort fallback: check os.environ directly
+    _db_url = os.environ.get("DATABASE_URL", "").strip()
+    if _db_url:
+        logger.warning(f"DATABASE_URL empty in settings but found in os.environ (len={len(_db_url)})")
+    else:
+        _db_url = "sqlite:///./skyrate.db"
+        logger.error("DATABASE_URL is empty in both settings and os.environ! Falling back to SQLite.")
+
 # Determine database type
-is_sqlite = settings.DATABASE_URL.startswith("sqlite")
-is_mysql = settings.DATABASE_URL.startswith("mysql")
+is_sqlite = _db_url.startswith("sqlite")
+is_mysql = _db_url.startswith("mysql")
 
 # Create engine with appropriate settings
 if is_sqlite:
     # SQLite-specific settings (local development)
     engine = create_engine(
-        settings.DATABASE_URL,
+        _db_url,
         connect_args={"check_same_thread": False},  # Required for SQLite
         echo=settings.DEBUG
     )
 elif is_mysql:
     # MySQL settings (Bluehost production)
     engine = create_engine(
-        settings.DATABASE_URL,
+        _db_url,
         pool_pre_ping=True,
         pool_size=5,
         max_overflow=10,
@@ -36,7 +51,7 @@ elif is_mysql:
 else:
     # PostgreSQL settings
     engine = create_engine(
-        settings.DATABASE_URL,
+        _db_url,
         pool_pre_ping=True,
         pool_size=10,
         max_overflow=20,
