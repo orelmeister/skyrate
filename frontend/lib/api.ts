@@ -2161,6 +2161,46 @@ class ApiClient {
     return this.request('/api/v1/admin/frn-monitor/refresh', { method: 'POST' });
   }
 
+  // ==================== PROMO INVITE APIs ====================
+
+  /**
+   * Create a promo invite (admin)
+   */
+  async createPromoInvite(data: { email: string; role: string; trial_days: number }): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/admin/promo-invites', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * List all promo invites (admin)
+   */
+  async listPromoInvites(): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/admin/promo-invites');
+  }
+
+  /**
+   * Revoke a promo invite (admin)
+   */
+  async revokePromoInvite(inviteId: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/promo-invites/${inviteId}`, { method: 'DELETE' });
+  }
+
+  /**
+   * Resend a promo invite email (admin)
+   */
+  async resendPromoInvite(inviteId: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/promo-invites/${inviteId}/resend`, { method: 'POST' });
+  }
+
+  /**
+   * Validate a promo token (public — for sign-up page)
+   */
+  async validatePromoToken(token: string): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/auth/validate-promo/${token}`);
+  }
+
   /**
    * Send email to a specific user (admin)
    */

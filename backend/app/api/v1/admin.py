@@ -23,6 +23,7 @@ from ...models.support_ticket import SupportTicket, TicketMessage, TicketStatus
 from ...models.applicant import ApplicantProfile, ApplicantFRN, ApplicantBEN
 from ...models.alert import Alert
 from ...models.admin_frn_snapshot import AdminFRNSnapshot
+from ...models.promo_invite import PromoInvite, PromoInviteStatus
 from ...services.cache_service import get_cached, set_cached, make_cache_key
 
 router = APIRouter(prefix="/admin", tags=["Admin Portal"])
@@ -1086,3 +1087,268 @@ async def send_push_to_user(
     push_svc = PushNotificationService(db)
     result = push_svc.send_push_to_user(user.id, "SkyRate.AI", data.message, settings.FRONTEND_URL)
     return {"success": True, "message": f"Push notification sent to user {user.email}", "result": str(result)}
+
+
+# ==================== PROMO INVITE SYSTEM ====================
+
+class PromoInviteCreate(BaseModel):
+    email: EmailStr
+    role: str = "vendor"  # vendor, consultant, applicant
+    trial_days: int = 30  # 21, 30, 60, 90, 180
+
+class PromoInviteResponse(BaseModel):
+    id: int
+    token: str
+    email: str
+    role: str
+    trial_days: int
+    status: str
+    invite_url: str
+    invite_expires_at: Optional[str] = None
+    used_at: Optional[str] = None
+    used_by_user_id: Optional[int] = None
+    created_at: Optional[str] = None
+
+
+@router.post("/promo-invites", response_model=PromoInviteResponse)
+async def create_promo_invite(
+    data: PromoInviteCreate,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db)
+):
+    """
+    Create a promo invite and send email to the user.
+    Generates a unique URL that lets the user sign up and skip the paywall
+    for the specified trial duration.
+    """
+    import uuid
+    
+    settings = get_settings()
+    
+    # Validate role
+    if data.role not in ["vendor", "consultant", "applicant"]:
+        raise HTTPException(status_code=400, detail="Invalid role. Must be vendor, consultant, or applicant.")
+    
+    # Validate trial days (21 days to 6 months)
+    if data.trial_days < 21 or data.trial_days > 180:
+        raise HTTPException(status_code=400, detail="Trial days must be between 21 and 180.")
+    
+    # Check if email already has an active invite
+    existing = db.query(PromoInvite).filter(
+        PromoInvite.email == data.email.lower(),
+        PromoInvite.status == PromoInviteStatus.PENDING.value
+    ).first()
+    if existing:
+        # Revoke the old invite and create a new one
+        existing.status = PromoInviteStatus.REVOKED.value
+        db.flush()
+    
+    # Check if email already registered
+    existing_user = db.query(User).filter(User.email == data.email.lower()).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="This email is already registered.")
+    
+    # Generate unique token
+    token = uuid.uuid4().hex
+    
+    # Invite link expires in 7 days
+    invite_expires_at = datetime.utcnow() + timedelta(days=7)
+    
+    invite = PromoInvite(
+        token=token,
+        email=data.email.lower(),
+        role=data.role,
+        trial_days=data.trial_days,
+        status=PromoInviteStatus.PENDING.value,
+        invite_expires_at=invite_expires_at,
+        created_by_admin_id=current_user.id,
+    )
+    db.add(invite)
+    db.commit()
+    db.refresh(invite)
+    
+    # Build invite URL
+    base_url = getattr(settings, 'FRONTEND_URL', 'https://skyrate.ai')
+    invite_url = f"{base_url}/sign-up?promo={token}"
+    
+    # Send invite email in background
+    background_tasks.add_task(_send_promo_invite_email, data.email.lower(), invite_url, data.role, data.trial_days)
+    
+    return PromoInviteResponse(
+        id=invite.id,
+        token=invite.token,
+        email=invite.email,
+        role=invite.role,
+        trial_days=invite.trial_days,
+        status=invite.status,
+        invite_url=invite_url,
+        invite_expires_at=invite.invite_expires_at.isoformat() if invite.invite_expires_at else None,
+        used_at=invite.used_at.isoformat() if invite.used_at else None,
+        used_by_user_id=invite.used_by_user_id,
+        created_at=invite.created_at.isoformat() if invite.created_at else None,
+    )
+
+
+@router.get("/promo-invites")
+async def list_promo_invites(
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db)
+):
+    """List all promo invites with their status."""
+    settings = get_settings()
+    base_url = getattr(settings, 'FRONTEND_URL', 'https://skyrate.ai')
+    
+    invites = db.query(PromoInvite).order_by(PromoInvite.created_at.desc()).all()
+    
+    # Auto-expire any pending invites past their expiry date
+    now = datetime.utcnow()
+    for inv in invites:
+        if inv.status == PromoInviteStatus.PENDING.value and inv.invite_expires_at and inv.invite_expires_at < now:
+            inv.status = PromoInviteStatus.EXPIRED.value
+    db.commit()
+    
+    result = []
+    for inv in invites:
+        d = inv.to_dict()
+        d["invite_url"] = f"{base_url}/sign-up?promo={inv.token}"
+        # Include user info if used
+        if inv.used_by_user_id:
+            user = db.query(User).filter(User.id == inv.used_by_user_id).first()
+            if user:
+                d["used_by_name"] = user.full_name
+                d["used_by_email"] = user.email
+        result.append(d)
+    
+    return {
+        "invites": result,
+        "total": len(result),
+        "pending": sum(1 for i in result if i["status"] == "pending"),
+        "accepted": sum(1 for i in result if i["status"] == "accepted"),
+        "expired": sum(1 for i in result if i["status"] == "expired"),
+    }
+
+
+@router.delete("/promo-invites/{invite_id}")
+async def revoke_promo_invite(
+    invite_id: int,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db)
+):
+    """Revoke a pending promo invite."""
+    invite = db.query(PromoInvite).filter(PromoInvite.id == invite_id).first()
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    if invite.status != PromoInviteStatus.PENDING.value:
+        raise HTTPException(status_code=400, detail=f"Cannot revoke invite with status '{invite.status}'")
+    
+    invite.status = PromoInviteStatus.REVOKED.value
+    db.commit()
+    return {"success": True, "message": f"Invite to {invite.email} has been revoked."}
+
+
+@router.post("/promo-invites/{invite_id}/resend")
+async def resend_promo_invite(
+    invite_id: int,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db)
+):
+    """Resend the invite email for a pending invite."""
+    settings = get_settings()
+    invite = db.query(PromoInvite).filter(PromoInvite.id == invite_id).first()
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    if invite.status != PromoInviteStatus.PENDING.value:
+        raise HTTPException(status_code=400, detail=f"Cannot resend invite with status '{invite.status}'")
+    
+    # Reset expiry
+    invite.invite_expires_at = datetime.utcnow() + timedelta(days=7)
+    db.commit()
+    
+    base_url = getattr(settings, 'FRONTEND_URL', 'https://skyrate.ai')
+    invite_url = f"{base_url}/sign-up?promo={invite.token}"
+    
+    background_tasks.add_task(_send_promo_invite_email, invite.email, invite_url, invite.role, invite.trial_days)
+    
+    return {"success": True, "message": f"Invite resent to {invite.email}"}
+
+
+def _send_promo_invite_email(email: str, invite_url: str, role: str, trial_days: int):
+    """Send the promo invite email with a nice HTML template."""
+    try:
+        from ...services.email_service import get_email_service
+        email_svc = get_email_service()
+        
+        role_display = role.capitalize()
+        
+        if trial_days >= 30:
+            months = trial_days // 30
+            duration_text = f"{months} month{'s' if months > 1 else ''}"
+        else:
+            duration_text = f"{trial_days} days"
+        
+        html_content = f"""
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff;">
+            <div style="background: linear-gradient(135deg, #4f46e5, #7c3aed); padding: 40px 30px; text-align: center; border-radius: 12px 12px 0 0;">
+                <h1 style="color: white; margin: 0; font-size: 28px;">You're Invited to SkyRate.AI</h1>
+                <p style="color: #c4b5fd; margin: 10px 0 0 0; font-size: 16px;">E-Rate Funding Intelligence Platform</p>
+            </div>
+            
+            <div style="padding: 30px; background: #f8fafc; border-radius: 0 0 12px 12px;">
+                <p style="font-size: 16px; color: #334155; margin-bottom: 20px;">
+                    You've been invited to join <strong>SkyRate.AI</strong> as a <strong>{role_display}</strong> with 
+                    <strong>{duration_text} of free access</strong> — no credit card required.
+                </p>
+                
+                <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                    <h3 style="color: #7c3aed; margin-top: 0;">What you get:</h3>
+                    <ul style="color: #475569; line-height: 1.8;">
+                        {"<li>Find Form 470 leads by manufacturer</li><li>Track SPIN status & competitor analysis</li><li>Market intelligence & lead scoring</li>" if role == "vendor" else ""}
+                        {"<li>Manage school portfolios & FRN tracking</li><li>AI-powered appeal letter generation</li><li>Denial analysis & funding insights</li>" if role == "consultant" else ""}
+                        {"<li>Track your applications & FRN status</li><li>Funding management dashboard</li><li>AI-powered denial analysis</li>" if role == "applicant" else ""}
+                    </ul>
+                </div>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="{invite_url}" 
+                       style="display: inline-block; background: linear-gradient(135deg, #4f46e5, #7c3aed); color: white; text-decoration: none; padding: 14px 40px; border-radius: 8px; font-size: 16px; font-weight: bold;">
+                        Accept Invitation & Create Account
+                    </a>
+                </div>
+                
+                <p style="font-size: 13px; color: #94a3b8; text-align: center;">
+                    This invite link expires in 7 days. After your {duration_text} trial ends, you can continue with a paid subscription.
+                </p>
+                
+                <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;">
+                
+                <p style="font-size: 12px; color: #94a3b8; text-align: center;">
+                    SkyRate.AI — AI-Powered E-Rate Funding Intelligence<br>
+                    <a href="https://skyrate.ai" style="color: #7c3aed;">skyrate.ai</a>
+                </p>
+            </div>
+        </div>
+        """
+        
+        text_content = f"""You're invited to join SkyRate.AI as a {role_display}!
+
+You get {duration_text} of free access — no credit card required.
+
+Accept your invitation: {invite_url}
+
+This invite link expires in 7 days.
+
+— SkyRate.AI Team
+"""
+        
+        email_svc.send_email(
+            to_email=email,
+            subject=f"You're Invited to SkyRate.AI — {duration_text} Free Access",
+            html_content=html_content,
+            text_content=text_content,
+            email_type='welcome'
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to send promo invite email to {email}: {e}")

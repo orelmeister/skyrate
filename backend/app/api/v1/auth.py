@@ -44,6 +44,7 @@ class UserRegister(BaseModel):
     crn: Optional[str] = Field(None, description="Consultant Registration Number (required for consultants)")
     spin: Optional[str] = Field(None, description="Service Provider Identification Number (required for vendors)")
     ben: Optional[str] = Field(None, description="Billed Entity Number (required for applicants)")
+    promo_token: Optional[str] = Field(None, description="Promo invite token for free trial access")
     
     @field_validator('password')
     @classmethod
@@ -249,6 +250,42 @@ async def validate_ben(request: Request, data: ValidationRequest):
         return ValidationResponse(valid=False, error=f"Validation failed: {str(e)}")
 
 
+# ==================== PROMO TOKEN VALIDATION ====================
+
+@router.get("/validate-promo/{token}")
+async def validate_promo_token(token: str, db: Session = Depends(get_db)):
+    """
+    Validate a promo invite token. PUBLIC endpoint - no auth required.
+    Returns invite details if valid (email, role, trial_days).
+    """
+    from ...models.promo_invite import PromoInvite, PromoInviteStatus
+    
+    invite = db.query(PromoInvite).filter(PromoInvite.token == token).first()
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invalid invite link")
+    
+    if invite.status == PromoInviteStatus.ACCEPTED.value:
+        raise HTTPException(status_code=400, detail="This invite has already been used")
+    
+    if invite.status == PromoInviteStatus.REVOKED.value:
+        raise HTTPException(status_code=400, detail="This invite has been revoked")
+    
+    if invite.status == PromoInviteStatus.EXPIRED.value or \
+       (invite.invite_expires_at and invite.invite_expires_at < datetime.utcnow()):
+        # Mark as expired if not already
+        if invite.status != PromoInviteStatus.EXPIRED.value:
+            invite.status = PromoInviteStatus.EXPIRED.value
+            db.commit()
+        raise HTTPException(status_code=400, detail="This invite link has expired")
+    
+    return {
+        "valid": True,
+        "email": invite.email,
+        "role": invite.role,
+        "trial_days": invite.trial_days,
+    }
+
+
 # ==================== REGISTRATION & LOGIN ====================
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
@@ -361,24 +398,64 @@ async def register(
         db.add(applicant_profile)
     
     # Create trial subscription - price varies by role
-    trial_end = datetime.utcnow() + timedelta(days=14)
-    if data.role == "consultant":
-        price = settings.CONSULTANT_MONTHLY_PRICE
-    elif data.role == "vendor":
-        price = settings.VENDOR_MONTHLY_PRICE
-    else:  # applicant
-        price = getattr(settings, 'APPLICANT_MONTHLY_PRICE', 20000)  # $200 default
+    # Check if this is a promo invite registration
+    promo_invite = None
+    if data.promo_token:
+        from ...models.promo_invite import PromoInvite, PromoInviteStatus
+        promo_invite = db.query(PromoInvite).filter(
+            PromoInvite.token == data.promo_token,
+            PromoInvite.status == PromoInviteStatus.PENDING.value
+        ).first()
+        if not promo_invite:
+            raise HTTPException(status_code=400, detail="Invalid or expired promo invite token")
+        if promo_invite.invite_expires_at and promo_invite.invite_expires_at < datetime.utcnow():
+            promo_invite.status = PromoInviteStatus.EXPIRED.value
+            db.flush()
+            raise HTTPException(status_code=400, detail="This promo invite has expired")
     
-    subscription = Subscription(
-        user_id=user.id,
-        plan="monthly",
-        status=SubscriptionStatus.TRIALING.value,
-        price_cents=price,
-        start_date=datetime.utcnow(),
-        trial_end=trial_end,
-        current_period_start=datetime.utcnow(),
-        current_period_end=trial_end,
-    )
+    if promo_invite:
+        # Promo invite: grant free trial for the specified duration
+        trial_end = datetime.utcnow() + timedelta(days=promo_invite.trial_days)
+        price = 0  # Free during promo trial
+        
+        subscription = Subscription(
+            user_id=user.id,
+            plan="monthly",
+            status=SubscriptionStatus.ACTIVE.value,  # Active (not trialing) — full access
+            price_cents=price,
+            stripe_customer_id=f"PROMO_INVITE_{promo_invite.id}",
+            stripe_subscription_id=f"PROMO_INVITE_{promo_invite.id}",
+            start_date=datetime.utcnow(),
+            trial_end=trial_end,
+            end_date=trial_end,  # Access ends when promo trial ends
+            current_period_start=datetime.utcnow(),
+            current_period_end=trial_end,
+        )
+        
+        # Mark the invite as accepted
+        promo_invite.status = PromoInviteStatus.ACCEPTED.value
+        promo_invite.used_at = datetime.utcnow()
+        promo_invite.used_by_user_id = user.id
+    else:
+        # Normal registration: 14-day trial, requires payment setup
+        trial_end = datetime.utcnow() + timedelta(days=14)
+        if data.role == "consultant":
+            price = settings.CONSULTANT_MONTHLY_PRICE
+        elif data.role == "vendor":
+            price = settings.VENDOR_MONTHLY_PRICE
+        else:  # applicant
+            price = getattr(settings, 'APPLICANT_MONTHLY_PRICE', 20000)  # $200 default
+        
+        subscription = Subscription(
+            user_id=user.id,
+            plan="monthly",
+            status=SubscriptionStatus.TRIALING.value,
+            price_cents=price,
+            start_date=datetime.utcnow(),
+            trial_end=trial_end,
+            current_period_start=datetime.utcnow(),
+            current_period_end=trial_end,
+        )
     db.add(subscription)
     
     db.commit()

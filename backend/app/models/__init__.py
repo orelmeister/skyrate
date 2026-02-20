@@ -19,6 +19,7 @@ from .applicant import (
 from .blog import BlogPost, BlogStatus
 from .usac_cache import USACCache
 from .admin_frn_snapshot import AdminFRNSnapshot
+from .promo_invite import PromoInvite, PromoInviteStatus
 
 __all__ = [
     "User",
@@ -62,4 +63,7 @@ __all__ = [
     "USACCache",
     # Admin FRN Snapshot
     "AdminFRNSnapshot",
+    # Promo Invites
+    "PromoInvite",
+    "PromoInviteStatus",
 ]

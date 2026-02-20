@@ -52,7 +52,7 @@ export default function AdminDashboard() {
   const router = useRouter();
   const { user, isAuthenticated } = useAuthStore();
 
-  const [activeTab, setActiveTab] = useState<"overview" | "users" | "tickets" | "frn" | "communications" | "blog">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "users" | "tickets" | "frn" | "promo" | "communications" | "blog">("overview");
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [users, setUsers] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
@@ -238,6 +238,7 @@ export default function AdminDashboard() {
             { key: "users", label: "Users", icon: "👥" },
             { key: "tickets", label: "Support Tickets", icon: "🎫" },
             { key: "frn", label: "FRN Monitor", icon: "📡" },
+            { key: "promo", label: "Promo Invites", icon: "🎟️" },
             { key: "communications", label: "Communications", icon: "📧" },
             { key: "blog", label: "Blog Manager", icon: "📝" },
           ].map((tab) => (
@@ -303,6 +304,7 @@ export default function AdminDashboard() {
                 }
               }} />
             )}
+            {activeTab === "promo" && <PromoInvitesTab />}
             {activeTab === "communications" && (
               <CommunicationsTab
                 users={users}
@@ -2073,6 +2075,288 @@ function BlogManagerTab() {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+
+// ==================== PROMO INVITES TAB ====================
+
+function PromoInvitesTab() {
+  const [invites, setInvites] = useState<any[]>([]);
+  const [summary, setSummary] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  // Form state
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("vendor");
+  const [trialDays, setTrialDays] = useState(30);
+
+  const trialOptions = [
+    { value: 21, label: "21 days" },
+    { value: 30, label: "1 month" },
+    { value: 60, label: "2 months" },
+    { value: 90, label: "3 months" },
+    { value: 180, label: "6 months" },
+  ];
+
+  useEffect(() => {
+    loadInvites();
+  }, []);
+
+  async function loadInvites() {
+    try {
+      const res = await api.listPromoInvites();
+      setInvites(res.data?.invites || []);
+      setSummary({
+        total: res.data?.total || 0,
+        pending: res.data?.pending || 0,
+        accepted: res.data?.accepted || 0,
+        expired: res.data?.expired || 0,
+      });
+    } catch (e) {
+      setError("Failed to load invites");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    setCreating(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const res = await api.createPromoInvite({ email, role, trial_days: trialDays });
+      if (res.data?.id) {
+        setSuccess(`Invite sent to ${email}! URL: ${res.data.invite_url}`);
+        setEmail("");
+        loadInvites();
+      } else {
+        setError(res.error || "Failed to create invite");
+      }
+    } catch (e: any) {
+      setError(e?.message || "Failed to create invite");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleRevoke(id: number) {
+    if (!confirm("Revoke this invite? The link will stop working.")) return;
+    try {
+      await api.revokePromoInvite(id);
+      loadInvites();
+    } catch (e) {
+      alert("Failed to revoke invite");
+    }
+  }
+
+  async function handleResend(id: number) {
+    try {
+      await api.resendPromoInvite(id);
+      alert("Invite email resent!");
+      loadInvites();
+    } catch (e) {
+      alert("Failed to resend");
+    }
+  }
+
+  function copyUrl(url: string) {
+    navigator.clipboard.writeText(url);
+    setSuccess("URL copied to clipboard!");
+    setTimeout(() => setSuccess(""), 3000);
+  }
+
+  const statusColors: Record<string, string> = {
+    pending: "bg-yellow-100 text-yellow-800",
+    accepted: "bg-green-100 text-green-800",
+    expired: "bg-slate-100 text-slate-600",
+    revoked: "bg-red-100 text-red-800",
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Summary Cards */}
+      {summary && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-lg border p-4 text-center">
+            <div className="text-2xl font-bold text-slate-800">{summary.total}</div>
+            <div className="text-sm text-slate-500">Total Invites</div>
+          </div>
+          <div className="bg-white rounded-lg border p-4 text-center">
+            <div className="text-2xl font-bold text-yellow-600">{summary.pending}</div>
+            <div className="text-sm text-slate-500">Pending</div>
+          </div>
+          <div className="bg-white rounded-lg border p-4 text-center">
+            <div className="text-2xl font-bold text-green-600">{summary.accepted}</div>
+            <div className="text-sm text-slate-500">Accepted</div>
+          </div>
+          <div className="bg-white rounded-lg border p-4 text-center">
+            <div className="text-2xl font-bold text-slate-400">{summary.expired}</div>
+            <div className="text-sm text-slate-500">Expired</div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Invite Form */}
+      <div className="bg-white rounded-lg border p-6">
+        <h3 className="text-lg font-semibold text-slate-800 mb-4">🎟️ Send Promo Invite</h3>
+        <form onSubmit={handleCreate} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Email Address</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="user@company.com"
+                required
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              >
+                <option value="vendor">Vendor</option>
+                <option value="consultant">Consultant</option>
+                <option value="applicant">Applicant</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Trial Duration</label>
+              <select
+                value={trialDays}
+                onChange={(e) => setTrialDays(Number(e.target.value))}
+                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              >
+                {trialOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              disabled={creating || !email}
+              className="px-6 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {creating ? "Sending..." : "Send Invite"}
+            </button>
+            <span className="text-sm text-slate-400">Invite link expires in 7 days</span>
+          </div>
+        </form>
+
+        {error && (
+          <div className="mt-3 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>
+        )}
+        {success && (
+          <div className="mt-3 p-3 bg-green-50 text-green-700 rounded-lg text-sm">{success}</div>
+        )}
+      </div>
+
+      {/* Invites Table */}
+      <div className="bg-white rounded-lg border overflow-hidden">
+        <div className="px-6 py-4 border-b">
+          <h3 className="text-lg font-semibold text-slate-800">All Promo Invites</h3>
+        </div>
+        {invites.length === 0 ? (
+          <div className="p-8 text-center text-slate-500">
+            No promo invites yet. Send your first invite above!
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-slate-50 border-b">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Email</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Role</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Trial</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Created</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {invites.map((inv: any) => (
+                  <tr key={inv.id} className="hover:bg-slate-50">
+                    <td className="px-4 py-3">
+                      <div className="text-sm font-medium text-slate-800">{inv.email}</div>
+                      {inv.used_by_name && (
+                        <div className="text-xs text-slate-400">→ {inv.used_by_name}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-sm capitalize text-slate-600">{inv.role}</span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-600">
+                      {inv.trial_days >= 30 ? `${Math.floor(inv.trial_days / 30)} mo` : `${inv.trial_days}d`}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusColors[inv.status] || "bg-slate-100 text-slate-600"}`}>
+                        {inv.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-500">
+                      {inv.created_at ? new Date(inv.created_at).toLocaleDateString() : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {inv.status === "pending" && (
+                          <>
+                            <button
+                              onClick={() => copyUrl(inv.invite_url)}
+                              className="text-xs text-purple-600 hover:underline"
+                              title="Copy invite URL"
+                            >
+                              📋 Copy
+                            </button>
+                            <button
+                              onClick={() => handleResend(inv.id)}
+                              className="text-xs text-blue-600 hover:underline"
+                            >
+                              📧 Resend
+                            </button>
+                            <button
+                              onClick={() => handleRevoke(inv.id)}
+                              className="text-xs text-red-500 hover:underline"
+                            >
+                              ✕ Revoke
+                            </button>
+                          </>
+                        )}
+                        {inv.status === "accepted" && (
+                          <span className="text-xs text-green-600">
+                            ✓ Used {inv.used_at ? new Date(inv.used_at).toLocaleDateString() : ""}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

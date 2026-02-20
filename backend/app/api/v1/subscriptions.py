@@ -167,6 +167,21 @@ async def get_payment_status(
             plan=None
         )
     
+    # Check if this is a PROMO invite user whose trial has expired
+    is_promo = subscription.stripe_customer_id and subscription.stripe_customer_id.startswith("PROMO_INVITE_")
+    if is_promo and subscription.end_date and subscription.end_date < datetime.utcnow():
+        # Promo trial expired — force paywall immediately, no grace period
+        subscription.status = SubscriptionStatus.UNPAID.value
+        subscription.stripe_customer_id = None
+        subscription.stripe_subscription_id = None
+        db.commit()
+        return PaymentStatusResponse(
+            requires_payment_setup=True,
+            subscription_status=SubscriptionStatus.UNPAID.value,
+            trial_ends_at=subscription.trial_end.isoformat() if subscription.trial_end else None,
+            plan=subscription.plan
+        )
+    
     # User needs payment setup if they don't have Stripe IDs
     requires_setup = (
         not subscription.stripe_customer_id or 

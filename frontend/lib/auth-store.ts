@@ -47,6 +47,7 @@ export interface RegisterData {
   crn?: string;  // For consultants
   spin?: string; // For vendors
   ben?: string;  // For applicants
+  promo_token?: string; // For promo invite registrations
 }
 
 // Auth state interface

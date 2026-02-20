@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useCallback, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
 import { api } from "@/lib/api";
@@ -9,9 +9,29 @@ import { api } from "@/lib/api";
 type UserRole = "consultant" | "vendor" | "applicant";
 type VerificationStatus = "idle" | "verifying" | "verified" | "error";
 
-export default function SignUpPage() {
+export default function SignUpPageWrapper() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600" />
+      </div>
+    }>
+      <SignUpPage />
+    </Suspense>
+  );
+}
+
+function SignUpPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { register, isLoading, error: authError } = useAuthStore();
+  
+  // Promo invite state
+  const [promoToken, setPromoToken] = useState<string | null>(null);
+  const [promoData, setPromoData] = useState<{ email: string; role: string; trial_days: number } | null>(null);
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoError, setPromoError] = useState("");
+  
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -31,6 +51,34 @@ export default function SignUpPage() {
   const [verificationStatus, setVerificationStatus] = useState<VerificationStatus>("idle");
   const [verifiedName, setVerifiedName] = useState("");
   const [verificationError, setVerificationError] = useState("");
+
+  // Validate promo token on mount
+  useEffect(() => {
+    const token = searchParams.get("promo");
+    if (token) {
+      setPromoToken(token);
+      setPromoLoading(true);
+      api.validatePromoToken(token)
+        .then((res) => {
+          if (res.data?.valid) {
+            setPromoData(res.data);
+            // Pre-fill email and role from invite
+            setFormData((prev) => ({
+              ...prev,
+              email: res.data.email || prev.email,
+              role: (res.data.role || prev.role) as UserRole,
+            }));
+          } else {
+            setPromoError("This invite link is invalid or has expired.");
+          }
+        })
+        .catch((err: any) => {
+          const detail = err?.response?.data?.detail || err?.message || "Invalid invite link";
+          setPromoError(detail);
+        })
+        .finally(() => setPromoLoading(false));
+    }
+  }, [searchParams]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -143,12 +191,17 @@ export default function SignUpPage() {
       crn: formData.role === "consultant" ? formData.crn.trim() : undefined,
       spin: formData.role === "vendor" ? formData.spin.trim() : undefined,
       ben: formData.role === "applicant" ? formData.ben.trim() : undefined,
+      promo_token: promoToken || undefined,
     });
 
     if (success) {
-      // Redirect to subscribe page for subscription setup
-      // User must complete payment setup before accessing the dashboard
-      router.push("/subscribe");
+      if (promoToken && promoData) {
+        // Promo invite: skip paywall, go directly to dashboard
+        router.push(`/${formData.role}`);
+      } else {
+        // Normal registration: redirect to subscribe page
+        router.push("/subscribe");
+      }
     } else {
       setError(authError || "Failed to create account. Please try again.");
     }
@@ -177,11 +230,17 @@ export default function SignUpPage() {
         {/* Hero Content */}
         <div className="relative z-10 space-y-6 animate-slide-up-delay-1">
           <h1 className="text-4xl lg:text-5xl font-bold text-white leading-tight">
-            Start Your<br />
-            <span className="text-blue-200">14-Day Free Trial</span>
+            {promoData ? (
+              <>You&apos;re Invited!<br /><span className="text-blue-200">{promoData.trial_days >= 30 ? `${Math.floor(promoData.trial_days / 30)} Month${Math.floor(promoData.trial_days / 30) > 1 ? 's' : ''}` : `${promoData.trial_days} Days`} Free Access</span></>
+            ) : (
+              <>Start Your<br /><span className="text-blue-200">14-Day Free Trial</span></>
+            )}
           </h1>
           <p className="text-lg text-purple-100 max-w-md">
-            Join thousands of E-Rate professionals who trust SkyRate AI to manage their funding applications.
+            {promoData 
+              ? "You've been invited to experience SkyRate AI — the E-Rate Funding Intelligence Platform. No credit card required."
+              : "Join thousands of E-Rate professionals who trust SkyRate AI to manage their funding applications."
+            }
           </p>
           
           {/* Stats */}
@@ -224,9 +283,47 @@ export default function SignUpPage() {
 
           {/* Form Card */}
           <div className="light-card rounded-2xl p-8">
+            {/* Promo Loading */}
+            {promoLoading && (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-3" />
+                <p className="text-slate-500">Validating your invite...</p>
+              </div>
+            )}
+
+            {/* Promo Error */}
+            {promoError && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
+                <div className="font-medium text-red-700">Invalid Invite</div>
+                <div className="text-sm text-red-600 mt-1">{promoError}</div>
+                <Link href="/sign-up" className="text-sm text-purple-600 hover:underline mt-2 inline-block">
+                  Sign up normally instead →
+                </Link>
+              </div>
+            )}
+
+            {/* Promo Success Banner */}
+            {promoData && !promoLoading && (
+              <div className="mb-6 p-4 bg-purple-50 border border-purple-200 rounded-xl">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-lg">🎟️</span>
+                  <span className="font-semibold text-purple-800">You&apos;re Invited!</span>
+                </div>
+                <p className="text-sm text-purple-700">
+                  You have <strong>{promoData.trial_days >= 30 ? `${Math.floor(promoData.trial_days / 30)} month${Math.floor(promoData.trial_days / 30) > 1 ? 's' : ''}` : `${promoData.trial_days} days`}</strong> of 
+                  free access as a <strong className="capitalize">{promoData.role}</strong>. No credit card required.
+                </p>
+              </div>
+            )}
+
             <div className="text-center mb-6">
               <h1 className="text-2xl font-bold gradient-text-dark">Create your account</h1>
-              <p className="text-slate-500 mt-2">Start your free 14-day trial today</p>
+              <p className="text-slate-500 mt-2">
+                {promoData 
+                  ? `Complete your ${promoData.role} account setup`
+                  : "Start your free 14-day trial today"
+                }
+              </p>
             </div>
 
             {(error || authError) && (
@@ -247,7 +344,10 @@ export default function SignUpPage() {
               {/* Role Selection */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-3">I am a...</label>
-                <div className="grid grid-cols-3 gap-3">
+                {promoData && (
+                  <p className="text-xs text-purple-600 mb-2">Role set by your invite — <span className="capitalize font-medium">{promoData.role}</span></p>
+                )}
+                <div className={`grid grid-cols-3 gap-3 ${promoData ? 'opacity-60 pointer-events-none' : ''}`}>
                   <button
                     type="button"
                     onClick={() => { setFormData(prev => ({ ...prev, role: "consultant" })); setVerificationStatus("idle"); setVerifiedName(""); }}
@@ -507,9 +607,10 @@ export default function SignUpPage() {
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all ${promoData ? 'bg-slate-100 cursor-not-allowed' : ''}`}
                   placeholder="you@company.com"
                   required
+                  readOnly={!!promoData}
                 />
               </div>
 
@@ -575,6 +676,8 @@ export default function SignUpPage() {
                   </span>
                 ) : verificationStatus !== "verified" ? (
                   "Verify Your ID to Continue"
+                ) : promoData ? (
+                  "Accept Invite & Create Account →"
                 ) : (
                   "Start Free Trial →"
                 )}

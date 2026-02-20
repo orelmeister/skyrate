@@ -366,6 +366,7 @@ async def lifespan(app: FastAPI):
         ApplicantAutoAppeal, ApplicantStatusHistory, USACCache
     )
     from app.models.admin_frn_snapshot import AdminFRNSnapshot
+    from app.models.promo_invite import PromoInvite
     from app.models.push_subscription import PushSubscription
     from app.models.support_ticket import SupportTicket, TicketMessage
     
