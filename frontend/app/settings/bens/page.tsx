@@ -44,7 +44,7 @@ interface BENsResponse {
 
 export default function BENSettingsPage() {
   const router = useRouter();
-  const { isAuthenticated, user, token } = useAuthStore();
+  const { isAuthenticated, user, token, _hasHydrated } = useAuthStore();
   const [bens, setBens] = useState<BENData[]>([]);
   const [primaryBen, setPrimaryBen] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -63,6 +63,7 @@ export default function BENSettingsPage() {
   const [deletingBenId, setDeletingBenId] = useState<number | null>(null);
 
   useEffect(() => {
+    if (!_hasHydrated) return;
     if (!isAuthenticated) {
       router.push('/sign-in');
       return;
@@ -72,7 +73,7 @@ export default function BENSettingsPage() {
       return;
     }
     fetchBens();
-  }, [isAuthenticated, user, router]);
+  }, [_hasHydrated, isAuthenticated, user, router]);
 
   const fetchBens = async () => {
     try {

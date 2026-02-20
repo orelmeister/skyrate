@@ -1,10 +1,14 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
 import { api } from "@/lib/api";
+import { useTabParam } from "@/hooks/useTabParam";
+
+const APPLICANT_TABS = ["overview", "frns", "appeals", "changes", "frn-status", "disbursements"] as const;
+type ApplicantTab = typeof APPLICANT_TABS[number];
 
 /**
  * Applicant Dashboard
@@ -128,13 +132,28 @@ function getStatusColor(statusType: string): string {
   }
 }
 
-export default function ApplicantDashboard() {
+export default function ApplicantDashboardWrapper() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <ApplicantDashboard />
+    </Suspense>
+  );
+}
+
+function ApplicantDashboard() {
   const router = useRouter();
-  const { user, token, isAuthenticated, logout } = useAuthStore();
+  const { user, token, isAuthenticated, logout, _hasHydrated } = useAuthStore();
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedTab, setSelectedTab] = useState<'overview' | 'frns' | 'appeals' | 'changes' | 'frn-status' | 'disbursements'>('overview');
+  const [selectedTab, setSelectedTab] = useTabParam<ApplicantTab>("overview", APPLICANT_TABS);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedAppeal, setSelectedAppeal] = useState<Appeal | null>(null);
   const [selectedFrnId, setSelectedFrnId] = useState<number | null>(null);
@@ -154,6 +173,8 @@ export default function ApplicantDashboard() {
   const [disbursementYear, setDisbursementYear] = useState<number | undefined>(undefined);
 
   useEffect(() => {
+    // Wait for Zustand hydration before checking auth
+    if (!_hasHydrated) return;
     // Check authentication and role
     if (!isAuthenticated || !token) {
       router.push('/sign-in');
@@ -166,7 +187,7 @@ export default function ApplicantDashboard() {
       return;
     }
     fetchDashboard();
-  }, [isAuthenticated, token, user, router]);
+  }, [_hasHydrated, isAuthenticated, token, user, router]);
 
   // Auto-load data when switching to live tabs
   useEffect(() => {
@@ -286,6 +307,18 @@ export default function ApplicantDashboard() {
     }
   };
 
+  // Show loading spinner while store hydrates from localStorage
+  if (!_hasHydrated) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -353,7 +386,7 @@ export default function ApplicantDashboard() {
           {navItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => { setSelectedTab(item.id as any); setSidebarOpen(false); }}
+              onClick={() => { setSelectedTab(item.id as ApplicantTab); setSidebarOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${
                 selectedTab === item.id
                   ? "bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700 font-medium shadow-sm"

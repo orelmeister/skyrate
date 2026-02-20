@@ -1,12 +1,16 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
 import { api, ConsultantSchool, ConsultantProfile, AppealRecord } from "@/lib/api";
 import { SearchResultsTable } from "@/components/SearchResultsTable";
 import { AppealChat } from "@/components/AppealChat";
+import { useTabParam } from "@/hooks/useTabParam";
+
+const CONSULTANT_TABS = ["dashboard", "schools", "funding", "frn-status", "appeals", "settings"] as const;
+type ConsultantTab = typeof CONSULTANT_TABS[number];
 
 // Extended school type with USAC data
 interface EnhancedSchool {
@@ -75,11 +79,26 @@ interface DashboardStats {
   schools_with_denials: number;
 }
 
-export default function ConsultantPortalPage() {
+export default function ConsultantPortalWrapper() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <ConsultantPortalPage />
+    </Suspense>
+  );
+}
+
+function ConsultantPortalPage() {
   const router = useRouter();
-  const { user, isAuthenticated, logout } = useAuthStore();
+  const { user, isAuthenticated, logout, _hasHydrated } = useAuthStore();
   
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useTabParam<ConsultantTab>("dashboard", CONSULTANT_TABS);
   const [profile, setProfile] = useState<ConsultantProfile | null>(null);
   const [schools, setSchools] = useState<EnhancedSchool[]>([]);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
@@ -286,6 +305,7 @@ export default function ConsultantPortalPage() {
   
   useEffect(() => {
     const checkPaymentStatus = async () => {
+      if (!_hasHydrated) return;
       if (!isAuthenticated) {
         router.push("/sign-in");
         return;
@@ -316,7 +336,7 @@ export default function ConsultantPortalPage() {
     };
     
     checkPaymentStatus();
-  }, [isAuthenticated, user, router]);
+  }, [_hasHydrated, isAuthenticated, user, router]);
 
   const loadData = async (withUsacData: boolean = false) => {
     setIsLoading(true);
@@ -777,7 +797,7 @@ export default function ConsultantPortalPage() {
   };
 
   // Show loading state while checking payment status
-  if (checkingPayment) {
+  if (!_hasHydrated || checkingPayment) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
@@ -828,7 +848,7 @@ export default function ConsultantPortalPage() {
           {navItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => setActiveTab(item.id as ConsultantTab)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${
                 activeTab === item.id
                   ? "bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700 font-medium shadow-sm"

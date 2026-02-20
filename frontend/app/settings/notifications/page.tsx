@@ -29,27 +29,21 @@ interface AlertConfig {
 
 export default function NotificationSettingsPage() {
   const router = useRouter();
-  const { isAuthenticated, user, token } = useAuthStore();
+  const { isAuthenticated, user, token, _hasHydrated } = useAuthStore();
   const [config, setConfig] = useState<AlertConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-
-  // Wait for Zustand hydration before checking auth
-  useEffect(() => {
-    setHydrated(true);
-  }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!_hasHydrated) return;
     if (!isAuthenticated) {
       router.push('/sign-in');
       return;
     }
     fetchConfig();
-  }, [hydrated, isAuthenticated, router]);
+  }, [_hasHydrated, isAuthenticated, router]);
 
   const fetchConfig = async () => {
     try {
@@ -104,7 +98,7 @@ export default function NotificationSettingsPage() {
     }
   };
 
-  if (!hydrated || loading) {
+  if (!_hasHydrated || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />

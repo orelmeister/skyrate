@@ -608,15 +608,16 @@ function AccountVerificationStep({
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { isAuthenticated, user, isLoading } = useAuthStore();
+  const { isAuthenticated, user, isLoading, _hasHydrated } = useAuthStore();
   const [step, setStep] = useState(0);
 
 
   useEffect(() => {
+    if (!_hasHydrated) return;
     if (!isLoading && !isAuthenticated) {
       router.push("/sign-in");
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [_hasHydrated, isAuthenticated, isLoading, router]);
 
   const handleComplete = async () => {
     // Redirect to role-based dashboard

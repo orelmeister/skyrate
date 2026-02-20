@@ -117,7 +117,7 @@ const APPLICANT_PLANS: PricingPlan[] = [
 
 export default function SubscribePage() {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const { user, isAuthenticated, isLoading: authLoading, _hasHydrated } = useAuthStore();
   const [selectedPlan, setSelectedPlan] = useState<PlanType>("yearly");
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState("");
@@ -133,6 +133,7 @@ export default function SubscribePage() {
   // Check if user is authenticated and needs payment setup
   useEffect(() => {
     const checkPaymentStatus = async () => {
+      if (!_hasHydrated) return;
       if (!isAuthenticated) {
         router.push("/sign-in");
         return;
@@ -159,10 +160,10 @@ export default function SubscribePage() {
       }
     };
 
-    if (!authLoading) {
+    if (!authLoading && _hasHydrated) {
       checkPaymentStatus();
     }
-  }, [isAuthenticated, authLoading, user, router]);
+  }, [_hasHydrated, isAuthenticated, authLoading, user, router]);
 
   const handleSubscribe = async () => {
     setIsProcessing(true);

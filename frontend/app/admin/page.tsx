@@ -1,10 +1,14 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/auth-store";
 import { api } from "@/lib/api";
 import { requestNotificationPermission, subscribeToPush, isPushSupported, getNotificationPermission } from "@/lib/notifications";
+import { useTabParam } from "@/hooks/useTabParam";
+
+const ADMIN_TABS = ["overview", "users", "tickets", "frn", "promo", "communications", "blog"] as const;
+type AdminTab = typeof ADMIN_TABS[number];
 
 // ==================== TYPES ====================
 
@@ -48,11 +52,26 @@ interface DashboardData {
 
 // ==================== MAIN COMPONENT ====================
 
-export default function AdminDashboard() {
-  const router = useRouter();
-  const { user, isAuthenticated } = useAuthStore();
+export default function AdminDashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <AdminDashboard />
+    </Suspense>
+  );
+}
 
-  const [activeTab, setActiveTab] = useState<"overview" | "users" | "tickets" | "frn" | "promo" | "communications" | "blog">("overview");
+function AdminDashboard() {
+  const router = useRouter();
+  const { user, isAuthenticated, _hasHydrated } = useAuthStore();
+
+  const [activeTab, setActiveTab] = useTabParam<AdminTab>("overview", ADMIN_TABS);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [users, setUsers] = useState<any[]>([]);
   const [tickets, setTickets] = useState<any[]>([]);
@@ -78,14 +97,27 @@ export default function AdminDashboard() {
   const [emailMessage, setEmailMessage] = useState("");
   const [emailSending, setEmailSending] = useState(false);
 
-  // Auth guard
+  // Auth guard — wait for Zustand hydration before redirecting
   useEffect(() => {
+    if (!_hasHydrated) return;
     if (!isAuthenticated) {
       router.push("/sign-in");
     } else if (user?.role !== "admin") {
       router.push("/dashboard");
     }
-  }, [isAuthenticated, user, router]);
+  }, [_hasHydrated, isAuthenticated, user, router]);
+
+  // Show loading spinner while store hydrates from localStorage
+  if (!_hasHydrated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Load dashboard
   useEffect(() => {
@@ -244,7 +276,7 @@ export default function AdminDashboard() {
           ].map((tab) => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key as any)}
+              onClick={() => setActiveTab(tab.key as AdminTab)}
               className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === tab.key
                   ? "border-purple-600 text-purple-600"

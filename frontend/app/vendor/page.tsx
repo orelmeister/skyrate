@@ -1,10 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
 import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse, FRNStatusResponse, FRNStatusSummaryResponse, FRNStatusRecord, Form470Lead, Form470LeadsResponse, Form470DetailResponse, SavedLead, EnrichedContactData } from "@/lib/api";
+import { useTabParam } from "@/hooks/useTabParam";
+
+const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "470-leads", "competitive", "search", "leads", "settings"] as const;
+type VendorTab = typeof VENDOR_TABS[number];
 
 interface SearchResult {
   ben: string;
@@ -20,11 +24,26 @@ interface SearchResult {
   _raw?: any; // Raw USAC data for detail view
 }
 
-export default function VendorPortalPage() {
+export default function VendorPortalWrapper() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <VendorPortalPage />
+    </Suspense>
+  );
+}
+
+function VendorPortalPage() {
   const router = useRouter();
-  const { user, isAuthenticated, logout } = useAuthStore();
+  const { user, isAuthenticated, logout, _hasHydrated } = useAuthStore();
   
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useTabParam<VendorTab>("dashboard", VENDOR_TABS);
   const [profile, setProfile] = useState<VendorProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -126,6 +145,7 @@ export default function VendorPortalPage() {
 
   useEffect(() => {
     const checkPaymentStatus = async () => {
+      if (!_hasHydrated) return;
       if (!isAuthenticated) {
         router.push("/sign-in");
         return;
@@ -155,7 +175,7 @@ export default function VendorPortalPage() {
     };
     
     checkPaymentStatus();
-  }, [isAuthenticated, user, router]);
+  }, [_hasHydrated, isAuthenticated, user, router]);
 
   // Load saved leads when the "leads" tab is activated
   useEffect(() => {
@@ -805,7 +825,7 @@ export default function VendorPortalPage() {
   };
 
   // Show loading state while checking payment status
-  if (checkingPayment) {
+  if (!_hasHydrated || checkingPayment) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
@@ -876,7 +896,7 @@ export default function VendorPortalPage() {
           {navItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => setActiveTab(item.id as VendorTab)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${
                 activeTab === item.id
                   ? "bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700 font-medium shadow-sm"

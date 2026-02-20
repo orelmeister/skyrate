@@ -58,6 +58,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  _hasHydrated: boolean;
   
   // Actions
   login: (email: string, password: string) => Promise<boolean>;
@@ -67,6 +68,7 @@ interface AuthState {
   clearError: () => void;
   setUser: (user: User | null) => void;
   refreshAccessToken: () => Promise<boolean>;
+  setHasHydrated: (v: boolean) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -78,6 +80,9 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      _hasHydrated: false,
+
+      setHasHydrated: (v: boolean) => set({ _hasHydrated: v }),
 
       login: async (email: string, password: string) => {
         set({ isLoading: true, error: null });
@@ -275,6 +280,9 @@ export const useAuthStore = create<AuthState>()(
         refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     }
   )
 );
