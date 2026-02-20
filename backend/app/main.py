@@ -358,6 +358,15 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting SkyRate AI Backend...")
     
+    # SMTP diagnostic logging
+    import os
+    smtp_user_env = os.environ.get('SMTP_USER', '<NOT SET>')
+    smtp_pass_env = os.environ.get('SMTP_PASSWORD', '<NOT SET>')
+    smtp_user_settings = settings.SMTP_USER
+    smtp_pass_settings = settings.SMTP_PASSWORD
+    logger.info(f"SMTP Config Check: SMTP_USER env={smtp_user_env!r}, settings={smtp_user_settings!r}")
+    logger.info(f"SMTP Config Check: SMTP_PASSWORD env={'***' if smtp_pass_env != '<NOT SET>' else '<NOT SET>'}, settings={'***' if smtp_pass_settings else None}")
+    
     # Import all models to register them
     from app.models import (
         User, Subscription, ConsultantProfile, ConsultantSchool,

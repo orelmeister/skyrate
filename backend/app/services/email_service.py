@@ -39,6 +39,17 @@ class EmailService:
         self.smtp_password = settings.SMTP_PASSWORD
         self.from_email = settings.FROM_EMAIL
         self.from_name = settings.FROM_NAME
+        # Also check environment directly as fallback
+        import os
+        if not self.smtp_user:
+            env_user = os.environ.get('SMTP_USER')
+            env_pass = os.environ.get('SMTP_PASSWORD')
+            if env_user:
+                logger.warning(f"SMTP_USER not in settings but found in env: {env_user!r}. Using env fallback.")
+                self.smtp_user = env_user
+                self.smtp_password = env_pass
+            else:
+                logger.warning(f"SMTP_USER not found in settings or env. Settings value: {settings.SMTP_USER!r}, Env value: {env_user!r}")
     
     def _get_smtp_connection(self):
         """Create SMTP connection"""
