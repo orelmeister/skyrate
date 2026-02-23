@@ -5,7 +5,7 @@ Premium feature ($499/mo addon).
 """
 
 import enum
-from sqlalchemy import Column, Integer, String, Text, DateTime, Float, ForeignKey, JSON, Enum, Index
+from sqlalchemy import Column, Integer, String, Text, DateTime, Float, ForeignKey, JSON, Index
 from datetime import datetime
 
 from ..core.database import Base
@@ -41,7 +41,7 @@ class PredictedLead(Base):
     vendor_profile_id = Column(Integer, ForeignKey("vendor_profiles.id"), nullable=True, index=True)
     
     # Prediction metadata
-    prediction_type = Column(Enum(PredictionType), nullable=False, index=True)
+    prediction_type = Column(String(50), nullable=False, index=True)
     confidence_score = Column(Float, nullable=False, default=0.5)  # 0.0 - 1.0
     prediction_reason = Column(Text, nullable=False)  # Human-readable explanation
     
@@ -88,7 +88,7 @@ class PredictedLead(Base):
     source_dataset = Column(String(100), nullable=True)  # Which USAC dataset
     
     # Status tracking
-    status = Column(Enum(PredictionStatus), default=PredictionStatus.NEW, nullable=False)
+    status = Column(String(50), default="new", nullable=False)
     
     # Batch tracking
     batch_id = Column(String(100), nullable=True, index=True)  # Groups predictions from same run
@@ -110,7 +110,7 @@ class PredictedLead(Base):
         return {
             "id": self.id,
             "vendor_profile_id": self.vendor_profile_id,
-            "prediction_type": self.prediction_type.value if self.prediction_type else None,
+            "prediction_type": self.prediction_type,
             "confidence_score": self.confidence_score,
             "prediction_reason": self.prediction_reason,
             "predicted_action_date": self.predicted_action_date.isoformat() if self.predicted_action_date else None,
@@ -147,7 +147,7 @@ class PredictedLead(Base):
             "frn": self.frn,
             "source_dataset": self.source_dataset,
             # Status
-            "status": self.status.value if self.status else None,
+            "status": self.status,
             "batch_id": self.batch_id,
             # Timestamps
             "created_at": self.created_at.isoformat() if self.created_at else None,
