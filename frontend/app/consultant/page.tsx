@@ -1672,7 +1672,7 @@ function ConsultantPortalPage() {
                         <span className="text-2xl">📄</span>
                       </div>
                       <h4 className="font-medium text-slate-900 mb-1">No appeals generated yet</h4>
-                      <p className="text-sm text-slate-500">Generate an appeal from a denied application above, or create one manually</p>
+                      <p className="text-sm text-slate-500">Generate an appeal from an application above, or create one manually</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -2704,7 +2704,7 @@ function ConsultantPortalPage() {
                     <textarea
                       value={newAppealContext}
                       onChange={(e) => setNewAppealContext(e.target.value)}
-                      placeholder="Add any additional information to help generate the appeal..."
+                      placeholder="Describe the adverse action (e.g., commitment adjustment to $0, rescission reason, denial details)..."
                       rows={3}
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                     />
@@ -2748,7 +2748,7 @@ function ConsultantPortalPage() {
               <>
                 <div className="p-6 border-b border-slate-200">
                   <h2 className="text-xl font-semibold text-slate-900">Generate New Appeal</h2>
-                  <p className="text-sm text-slate-500 mt-1">Enter a denied FRN to generate an appeal letter</p>
+                  <p className="text-sm text-slate-500 mt-1">Enter an FRN to generate an appeal letter (denials, commitment adjustments, rescissions)</p>
                 </div>
                 
                 <div className="p-6 space-y-4">
@@ -2778,7 +2778,7 @@ function ConsultantPortalPage() {
                     <textarea
                       value={newAppealContext}
                       onChange={(e) => setNewAppealContext(e.target.value)}
-                      placeholder="Add any additional information to help generate the appeal..."
+                      placeholder="Describe the adverse action (e.g., commitment adjustment to $0, rescission reason, denial details)..."
                       rows={3}
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                     />

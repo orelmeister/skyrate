@@ -60,6 +60,59 @@ class GenerateAppealRequest(BaseModel):
     additional_context: Optional[str] = None
 
 
+# Statuses that indicate an adverse action worth appealing
+APPEALABLE_STATUS_KEYWORDS = [
+    "denied", "cancel", "rescind", "adjustment", "modified",
+    "reduced", "recovered", "revoked", "rejected"
+]
+
+
+def _is_appealable_status(status_name: str, frn_data: Dict = None, additional_context: str = None) -> tuple:
+    """
+    Determine if an FRN status is appealable and what type of appeal it is.
+    
+    Returns:
+        (is_appealable: bool, appeal_type: str, reason: str)
+        appeal_type: 'denial', 'commitment_adjustment', 'rescission', 'user_specified', 'other'
+    """
+    status_lower = status_name.lower().strip()
+    
+    # Direct denial
+    if "denied" in status_lower:
+        return True, "denial", "FRN denied"
+    
+    # Check for commitment adjustment / rescission keywords in status
+    for keyword in APPEALABLE_STATUS_KEYWORDS:
+        if keyword in status_lower:
+            return True, "commitment_adjustment", f"Status indicates adverse action: {status_name}"
+    
+    # Check if commitment was reduced to $0 (rescission)
+    if frn_data:
+        committed = float(frn_data.get("total_authorized_disbursement") or frn_data.get("committed_amount") or frn_data.get("funding_commitment_request") or -1)
+        original = float(frn_data.get("original_request") or frn_data.get("funding_commitment_request") or 0)
+        
+        # Check COMAD (Commitment Adjustment) fields
+        comad_amount = frn_data.get("commitment_adjustment_amount")
+        if comad_amount is not None:
+            try:
+                comad_val = float(comad_amount)
+                if comad_val < 0:  # Negative adjustment = reduction
+                    return True, "commitment_adjustment", f"Commitment adjustment of ${comad_val:,.2f}"
+            except (ValueError, TypeError):
+                pass
+        
+        # If FCDL comment mentions rescission/adjustment
+        fcdl = str(frn_data.get("fcdl_comment") or "").lower()
+        if any(kw in fcdl for kw in ["rescind", "adjustment", "recover", "reduce", "ineligible"]):
+            return True, "rescission", "FCDL indicates adverse action"
+    
+    # If user provided additional context, trust them — they know the situation
+    if additional_context and len(additional_context.strip()) > 10:
+        return True, "user_specified", "User provided appeal context"
+    
+    return False, "none", f"FRN status is {status_name}; not recognized as an adverse action"
+
+
 class ChatMessage(BaseModel):
     """A single chat message"""
     role: str  # "user" or "assistant"
@@ -112,10 +165,19 @@ class ChatResponse(BaseModel):
 
 # ==================== HELPER FUNCTIONS ====================
 
-def _build_denial_details(application: Application, frn_data: Dict[str, Any] = None) -> Dict[str, Any]:
-    """Build comprehensive denial details from application and USAC data"""
+def _build_denial_details(application: Application, frn_data: Dict[str, Any] = None, appeal_type: str = "denial", additional_context: str = None) -> Dict[str, Any]:
+    """Build comprehensive details for appeal generation (supports denials, commitment adjustments, rescissions)"""
     denial_reasons = application.denial_reasons or []
     fcdl_comment = application.fcdl_comment or ""
+    
+    # For commitment adjustments/rescissions, incorporate the user's context as the primary reason
+    if appeal_type in ("commitment_adjustment", "rescission", "user_specified") and additional_context:
+        if not fcdl_comment:
+            fcdl_comment = additional_context
+        elif additional_context not in fcdl_comment:
+            fcdl_comment = f"{fcdl_comment}\n\nAdditional context: {additional_context}"
+        if additional_context not in denial_reasons:
+            denial_reasons = [additional_context] + denial_reasons
     
     # If we have raw USAC data, extract additional fields
     if frn_data:
@@ -123,7 +185,7 @@ def _build_denial_details(application: Application, frn_data: Dict[str, Any] = N
         fcdl_comment = fcdl_comment or frn_data.get("fcdl_comment", "") or frn_data.get("denial_reason", "") or frn_data.get("frn_denial_reason_desc", "")
         
         # Extract additional USAC fields for context
-        additional_context = {
+        usac_additional_context = {
             "form_471_status": frn_data.get("form_471_frn_status_name", ""),
             "form_471_line_item_number": frn_data.get("form_471_line_item_number", ""),
             "line_item_narrative": frn_data.get("line_item_narrative", ""),
@@ -142,7 +204,7 @@ def _build_denial_details(application: Application, frn_data: Dict[str, Any] = N
             "product_type": frn_data.get("product_type", ""),
         }
     else:
-        additional_context = {}
+        usac_additional_context = {}
     
     # Build reasons list from denial_reasons and fcdl_comment
     reasons = []
@@ -190,7 +252,9 @@ def _build_denial_details(application: Application, frn_data: Dict[str, Any] = N
         "violation_types": violation_types if violation_types else ["procedural"],
         "overall_appealability": "medium",  # Default, can be adjusted based on analysis
         # Additional USAC data for AI context
-        "usac_context": additional_context,
+        "usac_context": usac_additional_context,
+        # Appeal type for AI context
+        "appeal_type": appeal_type,
     }
 
 
@@ -218,19 +282,38 @@ def _generate_appeal_letter(strategy: Dict[str, Any], denial_details: Dict[str, 
     # Build the data context for the AI - Following OpenData's successful approach
     # Pass denial_details as a clean string representation
     data_context = str(denial_details)
+    
+    # Determine appeal language based on appeal type
+    appeal_type = denial_details.get("appeal_type", "denial")
+    if appeal_type == "commitment_adjustment":
+        action_desc = "commitment adjustment (COMAD)"
+        amount_label = "Amount Affected"
+        action_verb = "reversal of the commitment adjustment"
+    elif appeal_type == "rescission":
+        action_desc = "rescission of funding commitment"
+        amount_label = "Amount Rescinded"
+        action_verb = "reinstatement of the funding commitment"
+    elif appeal_type == "user_specified":
+        action_desc = "adverse action"
+        amount_label = "Amount at Issue"
+        action_verb = "reversal of the adverse action"
+    else:
+        action_desc = "denial"
+        amount_label = "Amount Denied"
+        action_verb = "reversal of the denial decision"
 
     # Simplified prompt following OpenData's successful approach
-    appeal_prompt = f"""Generate a formal E-Rate appeal letter for the following denied application:
+    appeal_prompt = f"""Generate a formal E-Rate appeal letter for the following {action_desc}:
 
 Organization: {org_name}
 Application Number: {app_number}
 Funding Request Number: {frn}
 Funding Year: {funding_year}
-Amount Denied: ${amount:,.2f}
+{amount_label}: ${amount:,.2f}
 Service Type: {denial_details.get('service_type', 'E-Rate services')}
 
-Denial Reason (FCDL Comment):
-{fcdl_comment or 'No specific denial reason provided'}
+Reason for Adverse Action (FCDL Comment):
+{fcdl_comment or 'No specific reason provided'}
 
 Violation Types: {', '.join(violation_types) if violation_types else 'General procedural'}
 
@@ -241,8 +324,8 @@ Write a professional, comprehensive appeal letter that:
 1. Addresses the USAC Appeals Committee formally
 2. Includes Introduction, Background, Grounds for Appeal, Supporting Documentation, and Conclusion sections
 3. Cites relevant FCC regulations (47 C.F.R. § 54.xxx) and precedents
-4. Directly addresses each denial reason with specific counter-arguments
-5. Argues for reversal of the denial decision
+4. Directly addresses each reason for the {action_desc} with specific counter-arguments
+5. Argues for {action_verb}
 6. Is ready to submit (at least 1500 words)"""
 
     try:
@@ -473,6 +556,7 @@ async def generate_appeal(
     # Store raw USAC data for AI context
     frn_data = None
     form_470_data = None
+    appeal_type = "denial"  # Default appeal type, updated based on status analysis
     
     # First, try to find existing application by FRN
     application = db.query(Application).filter(
@@ -498,12 +582,16 @@ async def generate_appeal(
         ben = frn_data.get("ben", "")
         funding_year = frn_data.get("funding_year")
         
-        # Check if it's denied
-        status_name = str(frn_data.get("form_471_frn_status_name", "")).lower()
-        if "denied" not in status_name:
+        # Check if the FRN has an appealable adverse action
+        status_name = str(frn_data.get("form_471_frn_status_name", ""))
+        is_appealable, appeal_type, appeal_reason = _is_appealable_status(
+            status_name, frn_data, request.additional_context
+        )
+        if not is_appealable:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"FRN {frn} is not denied (status: {frn_data.get('form_471_frn_status_name', 'Unknown')})"
+                detail=f"FRN {frn} does not appear to have an adverse action (status: {status_name}). "
+                       f"If this FRN had a commitment adjustment or rescission, please provide details in the Additional Context field."
             )
         
         # Fetch Form 470 data if available (for competitive bidding context)
@@ -603,15 +691,22 @@ async def generate_appeal(
                 if form_470_data_list:
                     form_470_data = form_470_data_list[0]
         
-        # Check if existing application is denied
-        if application.status and "denied" not in application.status.lower():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Application is not denied (status: {application.status})"
+        # Check if existing application has an appealable adverse action
+        if application.status:
+            is_appealable, appeal_type, appeal_reason = _is_appealable_status(
+                application.status, frn_data, request.additional_context
             )
+            if not is_appealable:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"FRN {frn} does not appear to have an adverse action (status: {application.status}). "
+                           f"If this FRN had a commitment adjustment or rescission, please provide details in the Additional Context field."
+                )
+        else:
+            appeal_type = "denial"  # Default for existing applications without status
     
     # Build comprehensive denial details with USAC data
-    denial_details = _build_denial_details(application, frn_data)
+    denial_details = _build_denial_details(application, frn_data, appeal_type, request.additional_context)
     
     # Add Form 470 context if available
     if form_470_data:
