@@ -2184,3 +2184,159 @@ async def delete_lead(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete lead: {str(e)}"
         )
+
+
+# ==================== PREDICTIVE LEAD INTELLIGENCE ($499/mo Premium) ====================
+
+class PredictionFilterRequest(BaseModel):
+    prediction_type: Optional[str] = None  # contract_expiry, equipment_refresh, c2_budget_reset
+    states: Optional[List[str]] = None
+    manufacturers: Optional[List[str]] = None
+    min_confidence: float = 0.0
+    min_deal_value: float = 0.0
+    sort_by: str = "confidence_score"
+    sort_order: str = "desc"
+    limit: int = 50
+    offset: int = 0
+
+
+class PredictionStatusUpdate(BaseModel):
+    status: str  # new, viewed, contacted, converted, dismissed
+
+
+@router.get("/predicted-leads")
+async def get_predicted_leads(
+    prediction_type: Optional[str] = None,
+    state: Optional[str] = None,
+    manufacturer: Optional[str] = None,
+    min_confidence: float = 0.0,
+    min_deal_value: float = 0.0,
+    sort_by: str = "confidence_score",
+    sort_order: str = "desc",
+    limit: int = 50,
+    offset: int = 0,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """
+    Get predicted leads based on AI analysis of USAC data.
+    Premium feature — requires Predictive Intelligence subscription ($499/mo).
+    
+    Prediction types:
+    - contract_expiry: Contracts expiring in 3-12 months
+    - equipment_refresh: Aging equipment due for replacement  
+    - c2_budget_reset: Unspent C2 budget before cycle reset
+    """
+    from ...services.prediction_service import prediction_service
+    from ...models.prediction import PredictionType, PredictionStatus
+    
+    # Map prediction type string to enum
+    ptype = None
+    if prediction_type:
+        try:
+            ptype = PredictionType(prediction_type)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid prediction_type. Valid: {[t.value for t in PredictionType]}"
+            )
+    
+    # Parse filters
+    states = [s.strip() for s in state.split(',')] if state else None
+    manufacturers_list = [m.strip() for m in manufacturer.split(',')] if manufacturer else None
+    
+    result = prediction_service.get_predictions(
+        db=db,
+        vendor_profile_id=profile.id,
+        prediction_type=ptype,
+        states=states,
+        manufacturers=manufacturers_list,
+        min_confidence=min_confidence,
+        min_deal_value=min_deal_value,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        limit=min(limit, 100),
+        offset=offset,
+    )
+    
+    return result
+
+
+@router.get("/predicted-leads/stats")
+async def get_predicted_leads_stats(
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """Get summary statistics for the prediction dashboard."""
+    from ...services.prediction_service import prediction_service
+    
+    return prediction_service.get_prediction_stats(db)
+
+
+@router.get("/predicted-leads/{prediction_id}")
+async def get_predicted_lead_detail(
+    prediction_id: int,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """Get a single predicted lead with full details. Marks as viewed."""
+    from ...services.prediction_service import prediction_service
+    
+    result = prediction_service.get_prediction_by_id(db, prediction_id, mark_viewed=True)
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="Predicted lead not found")
+    
+    return {"success": True, "data": result}
+
+
+@router.patch("/predicted-leads/{prediction_id}/status")
+async def update_predicted_lead_status(
+    prediction_id: int,
+    body: PredictionStatusUpdate,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """Update the status of a predicted lead (contacted, converted, dismissed)."""
+    from ...models.prediction import PredictionStatus
+    from ...services.prediction_service import prediction_service
+    
+    try:
+        new_status = PredictionStatus(body.status)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status. Valid: {[s.value for s in PredictionStatus]}"
+        )
+    
+    success = prediction_service.update_prediction_status(db, prediction_id, new_status)
+    
+    if not success:
+        raise HTTPException(status_code=404, detail="Predicted lead not found")
+    
+    return {"success": True, "message": f"Status updated to {body.status}"}
+
+
+@router.post("/predicted-leads/refresh")
+async def refresh_predictions(
+    states: Optional[str] = None,
+    force: bool = False,
+    current_user: User = Depends(require_role("admin", "vendor")),
+    db: Session = Depends(get_db)
+):
+    """
+    Trigger a manual prediction refresh.
+    This fetches fresh data from USAC and re-runs all prediction algorithms.
+    Admin or premium vendor access required.
+    """
+    from ...services.prediction_service import prediction_service
+    
+    state_list = [s.strip() for s in states.split(',')] if states else None
+    
+    result = prediction_service.generate_all_predictions(
+        db=db,
+        states=state_list,
+        force_refresh=force,
+    )
+    
+    return result

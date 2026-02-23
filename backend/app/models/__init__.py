@@ -20,6 +20,7 @@ from .blog import BlogPost, BlogStatus
 from .usac_cache import USACCache
 from .admin_frn_snapshot import AdminFRNSnapshot
 from .promo_invite import PromoInvite, PromoInviteStatus
+from .prediction import PredictedLead, PredictionRefreshLog, PredictionType, PredictionStatus
 
 __all__ = [
     "User",
@@ -66,4 +67,9 @@ __all__ = [
     # Promo Invites
     "PromoInvite",
     "PromoInviteStatus",
+    # Predictive Leads
+    "PredictedLead",
+    "PredictionRefreshLog",
+    "PredictionType",
+    "PredictionStatus",
 ]

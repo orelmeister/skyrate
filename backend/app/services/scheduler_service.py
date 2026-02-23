@@ -533,6 +533,38 @@ def refresh_admin_frn_snapshot():
         db.close()
 
 
+def refresh_predicted_leads():
+    """
+    Weekly job: Refresh predictive lead intelligence.
+    Fetches fresh data from USAC Socrata API and runs all prediction algorithms.
+    Premium feature ($499/mo addon for vendors).
+    """
+    logger.info("Starting predictive leads refresh...")
+    db = SessionLocal()
+    try:
+        from app.services.prediction_service import prediction_service
+        
+        result = prediction_service.generate_all_predictions(
+            db=db,
+            force_refresh=False  # Keep existing viewed/contacted predictions
+        )
+        
+        if result.get('success'):
+            logger.info(
+                f"Predictive leads refresh complete: {result.get('total_predictions', 0)} predictions. "
+                f"Contract: {result['counts'].get('contract_expiry', 0)}, "
+                f"Equipment: {result['counts'].get('equipment_refresh', 0)}, "
+                f"C2 Budget: {result['counts'].get('c2_budget_reset', 0)}. "
+                f"Duration: {result.get('duration_seconds', 0):.1f}s"
+            )
+        else:
+            logger.error(f"Predictive leads refresh failed: {result.get('error', 'Unknown')}")
+    except Exception as e:
+        logger.error(f"Predictive leads refresh job failed: {e}")
+    finally:
+        db.close()
+
+
 def init_scheduler():
     """Initialize the background scheduler with all jobs"""
     global scheduler
@@ -594,6 +626,15 @@ def init_scheduler():
         trigger=IntervalTrigger(hours=6),
         id='refresh_admin_frn_snapshot',
         name='Refresh admin FRN snapshot from USAC',
+        replace_existing=True
+    )
+    
+    # Predictive leads refresh - weekly on Sunday 2 AM
+    scheduler.add_job(
+        refresh_predicted_leads,
+        trigger=CronTrigger(day_of_week='sun', hour=2, minute=0),
+        id='refresh_predicted_leads',
+        name='Refresh predictive lead intelligence from USAC',
         replace_existing=True
     )
     

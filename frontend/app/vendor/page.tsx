@@ -6,8 +6,9 @@ import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
 import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse, FRNStatusResponse, FRNStatusSummaryResponse, FRNStatusRecord, Form470Lead, Form470LeadsResponse, Form470DetailResponse, SavedLead, EnrichedContactData } from "@/lib/api";
 import { useTabParam } from "@/hooks/useTabParam";
+import PredictedLeadsTab from "@/components/PredictedLeadsTab";
 
-const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "470-leads", "competitive", "search", "leads", "settings"] as const;
+const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "470-leads", "predicted-leads", "competitive", "search", "leads", "settings"] as const;
 type VendorTab = typeof VENDOR_TABS[number];
 
 interface SearchResult {
@@ -870,6 +871,7 @@ function VendorPortalPage() {
     { id: "my-entities", label: "My Entities", icon: "🏫" },
     { id: "frn-status", label: "FRN Status", icon: "📈" },
     { id: "470-leads", label: "Form 470 Leads", icon: "🎯" },
+    { id: "predicted-leads", label: "Predicted Leads", icon: "🔮" },
     { id: "competitive", label: "471 Lookup", icon: "🔎" },
     { id: "search", label: "School Search", icon: "🔍" },
     { id: "leads", label: "Saved Leads", icon: "📋" },
@@ -1836,6 +1838,11 @@ function VendorPortalPage() {
               </div>
             )}
           </div>
+        )}
+
+        {/* Predicted Leads Tab */}
+        {activeTab === "predicted-leads" && (
+          <PredictedLeadsTab />
         )}
 
         {/* Form 471 Competitive Analysis Tab */}

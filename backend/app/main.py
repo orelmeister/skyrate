@@ -378,6 +378,7 @@ async def lifespan(app: FastAPI):
     from app.models.promo_invite import PromoInvite
     from app.models.push_subscription import PushSubscription
     from app.models.support_ticket import SupportTicket, TicketMessage
+    from app.models.prediction import PredictedLead, PredictionRefreshLog
     
     # Database initialization (non-blocking — health checks can pass even if DB is slow)
     try:

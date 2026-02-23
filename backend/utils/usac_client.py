@@ -2616,3 +2616,238 @@ class USACDataClient:
         except Exception as e:
             logger.error(f"Error batch fetching disbursements for {len(bens)} BENs: {e}")
             return {'success': False, 'error': str(e), 'results': {}}
+    
+    # =========================================================================
+    # PREDICTIVE LEAD INTELLIGENCE METHODS
+    # Premium feature: Fetches data for contract expiry, equipment refresh,
+    # C2 budget reset, and historical pattern predictions.
+    # =========================================================================
+    
+    def get_expiring_contracts(
+        self,
+        months_ahead: int = 12,
+        states: Optional[List[str]] = None,
+        funded_only: bool = True,
+        limit: int = 5000,
+        offset: int = 0
+    ) -> Dict[str, Any]:
+        """
+        Find FRNs with contracts expiring within N months.
+        Uses: frn_status dataset (qdmp-ygft) which has contract_expiration_date.
+        
+        Returns dict with 'success', 'data' (list of dicts), 'total' count.
+        """
+        try:
+            url = USAC_ENDPOINTS['frn_status']
+            
+            from datetime import datetime, timedelta
+            now = datetime.utcnow()
+            future_date = now + timedelta(days=months_ahead * 30)
+            
+            # SoQL: contracts expiring between now and N months ahead
+            where_parts = [
+                f"contract_expiration_date >= '{now.strftime('%Y-%m-%dT00:00:00.000')}'",
+                f"contract_expiration_date <= '{future_date.strftime('%Y-%m-%dT00:00:00.000')}'",
+            ]
+            
+            if funded_only:
+                where_parts.append("form_471_frn_status_name = 'Funded'")
+            
+            if states:
+                state_list = ", ".join(f"'{s}'" for s in states)
+                where_parts.append(f"state IN ({state_list})")
+            
+            params = {
+                '$where': ' AND '.join(where_parts),
+                '$limit': limit,
+                '$offset': offset,
+                '$order': 'contract_expiration_date ASC',
+                '$select': (
+                    'funding_request_number, application_number, ben, organization_name, '
+                    'state, contract_expiration_date, extended_expiration_date, '
+                    'contract_number, contract_type_name, spin_name, '
+                    'form_471_service_type_name, form_471_frn_status_name, '
+                    'funding_year, funding_commitment_request, total_pre_discount_costs, '
+                    'dis_pct, bid_count, cnct_email, organization_entity_type_name, '
+                    'service_start_date, months_of_service'
+                ),
+            }
+            
+            if self.app_token:
+                params['$$app_token'] = self.app_token
+            
+            response = self.session.get(url, params=params, timeout=60)
+            response.raise_for_status()
+            data = response.json()
+            
+            logger.info(f"Expiring contracts query: {len(data)} results (months_ahead={months_ahead})")
+            return {'success': True, 'data': data, 'total': len(data)}
+            
+        except Exception as e:
+            logger.error(f"Error fetching expiring contracts: {e}")
+            return {'success': False, 'error': str(e), 'data': []}
+    
+    def get_471_equipment_details(
+        self,
+        funding_years: Optional[List[int]] = None,
+        manufacturers: Optional[List[str]] = None,
+        states: Optional[List[str]] = None,
+        limit: int = 5000,
+        offset: int = 0
+    ) -> Dict[str, Any]:
+        """
+        Get Form 471 line item equipment details for equipment refresh predictions.
+        Uses: 471_line_items dataset (hbj5-2bpj) which has manufacturer and model info.
+        
+        Returns dict with 'success', 'data' (list of dicts), 'total' count.
+        """
+        try:
+            url = USAC_ENDPOINTS['471_line_items']
+            
+            where_parts = []
+            
+            if funding_years:
+                year_list = ", ".join(f"'{y}'" for y in funding_years)
+                where_parts.append(f"funding_year IN ({year_list})")
+            
+            if manufacturers:
+                # Use UPPER for case-insensitive matching
+                mfr_conditions = []
+                for mfr in manufacturers:
+                    mfr_conditions.append(f"upper(form_471_manufacturer_name) LIKE upper('%{mfr}%')")
+                where_parts.append(f"({' OR '.join(mfr_conditions)})")
+            
+            if states:
+                state_list = ", ".join(f"'{s}'" for s in states)
+                where_parts.append(f"state IN ({state_list})")
+            
+            params = {
+                '$limit': limit,
+                '$offset': offset,
+                '$order': 'funding_year ASC',
+                '$select': (
+                    'funding_request_number, application_number, ben, organization_name, '
+                    'state, funding_year, form_471_manufacturer_name, model_of_equipment, '
+                    'form_471_product_name, form_471_function_name, '
+                    'one_time_eligible_costs, total_eligible_one_time_costs, '
+                    'total_eligible_recurring_costs, months_of_service, '
+                    'applicant_type, cnct_email, form_471_line_item_number'
+                ),
+            }
+            
+            if where_parts:
+                params['$where'] = ' AND '.join(where_parts)
+            
+            if self.app_token:
+                params['$$app_token'] = self.app_token
+            
+            response = self.session.get(url, params=params, timeout=60)
+            response.raise_for_status()
+            data = response.json()
+            
+            logger.info(f"471 equipment query: {len(data)} results")
+            return {'success': True, 'data': data, 'total': len(data)}
+            
+        except Exception as e:
+            logger.error(f"Error fetching 471 equipment details: {e}")
+            return {'success': False, 'error': str(e), 'data': []}
+    
+    def get_c2_budget_opportunities(
+        self,
+        min_remaining_budget: float = 5000,
+        budget_cycles: Optional[List[str]] = None,
+        states: Optional[List[str]] = None,
+        limit: int = 5000,
+        offset: int = 0
+    ) -> Dict[str, Any]:
+        """
+        Find schools with significant C2 budget remaining near cycle end.
+        Uses: c2_budget dataset (6brt-5pbv) which has budget cycle and remaining amounts.
+        
+        Schools with large remaining budgets near cycle reset = strong leads.
+        
+        Returns dict with 'success', 'data' (list of dicts), 'total' count.
+        """
+        try:
+            url = USAC_ENDPOINTS['c2_budget']
+            
+            where_parts = [
+                f"available_c2_budget_amount >= {min_remaining_budget}",
+            ]
+            
+            if budget_cycles:
+                cycle_list = ", ".join(f"'{c}'" for c in budget_cycles)
+                where_parts.append(f"c2_budget_cycle IN ({cycle_list})")
+            
+            if states:
+                state_list = ", ".join(f"'{s}'" for s in states)
+                where_parts.append(f"state IN ({state_list})")
+            
+            params = {
+                '$where': ' AND '.join(where_parts),
+                '$limit': limit,
+                '$offset': offset,
+                '$order': 'available_c2_budget_amount DESC',
+                '$select': (
+                    'ben, billed_entity_name, state, city, applicant_type, '
+                    'c2_budget, available_c2_budget_amount, funded_c2_budget_amount, '
+                    'pending_c2_budget_amount, c2_budget_cycle, c2_budget_version, '
+                    'full_time_students, consulting_firm_name_crn'
+                ),
+            }
+            
+            if self.app_token:
+                params['$$app_token'] = self.app_token
+            
+            response = self.session.get(url, params=params, timeout=60)
+            response.raise_for_status()
+            data = response.json()
+            
+            logger.info(f"C2 budget opportunities: {len(data)} results (min_remaining=${min_remaining_budget})")
+            return {'success': True, 'data': data, 'total': len(data)}
+            
+        except Exception as e:
+            logger.error(f"Error fetching C2 budget opportunities: {e}")
+            return {'success': False, 'error': str(e), 'data': []}
+    
+    def get_historical_471_by_entity(
+        self,
+        ben: str,
+        limit: int = 100
+    ) -> Dict[str, Any]:
+        """
+        Get historical Form 471 filings for a specific entity (BEN).
+        Used to detect rebid patterns (e.g., school files every 3 years).
+        
+        Returns dict with 'success', 'data' (list of dicts).
+        """
+        try:
+            url = USAC_ENDPOINTS['471_basic']
+            
+            params = {
+                '$where': f"ben = '{ben}'",
+                '$limit': limit,
+                '$order': 'funding_year DESC',
+                '$select': (
+                    'application_number, funding_year, organization_name, '
+                    'form_471_status_name, chosen_category_of_service, '
+                    'c1_discount, c2_discount, pre_discount_eligible_amount, '
+                    'funding_request_amount, org_state, org_city, '
+                    'cnct_email, cnct_first_name, cnct_last_name, cnct_phone, '
+                    'organization_entity_type_name, full_time_students, '
+                    'is_urban, nslp_percentage'
+                ),
+            }
+            
+            if self.app_token:
+                params['$$app_token'] = self.app_token
+            
+            response = self.session.get(url, params=params, timeout=60)
+            response.raise_for_status()
+            data = response.json()
+            
+            return {'success': True, 'data': data}
+            
+        except Exception as e:
+            logger.error(f"Error fetching historical 471 for BEN {ben}: {e}")
+            return {'success': False, 'error': str(e), 'data': []}
