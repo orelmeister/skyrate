@@ -11,5 +11,4 @@
 11. https://skyrate.ai/vendor in the Form 471 Competitive Analysis we add filter by a year for the user to choose
 12. in the vendor FRN Status Monitoring we need to have an option to filter "frn pending reason" 
 13. In all account i dont see where then can optin to get alerts for their system. we need to add this so they can opt in and we can alert them immiditlly wehnfrn status changes and wehen "frn pending reason" changes. 
-14. in the skyrate.ai/blog we still not seeing the new blogs created 
 15. SPAC need to show the vendor if he filed 
