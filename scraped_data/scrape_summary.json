@@ -1,0 +1,12 @@
+{
+  "scrape_timestamp": "2026-02-23T05:43:09.748249",
+  "elapsed_seconds": 502.0,
+  "consultants_count": 0,
+  "vendors_count": 0,
+  "entities_count": 30244,
+  "output_files": {
+    "consultants": "C:\\Users\\orelm\\OneDrive\\Documents\\GitHub\\erateapp.com\\opendata\\scraped_data\\usac_consultants.csv",
+    "vendors": "C:\\Users\\orelm\\OneDrive\\Documents\\GitHub\\erateapp.com\\opendata\\scraped_data\\usac_vendors.csv",
+    "entities": "C:\\Users\\orelm\\OneDrive\\Documents\\GitHub\\erateapp.com\\opendata\\scraped_data\\usac_entities.csv"
+  }
+}
