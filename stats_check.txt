@@ -1,0 +1,1 @@
+﻿{"success":true,"total_predictions":0,"by_type":{"contract_expiry":0,"equipment_refresh":0,"c2_budget_reset":0,"historical_pattern":0},"by_status":{"new":0,"viewed":0,"contacted":0,"converted":0,"dismissed":0},"average_confidence":0.0,"total_estimated_value":0.0,"top_states":[],"top_manufacturers":[],"last_refresh":null}

@@ -3,13 +3,15 @@ Vendor Portal API Endpoints
 Handles school search, equipment matching, and lead generation
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 from datetime import datetime
 import sys
 import os
+import threading
+import uuid as uuid_mod
 
 # Add skyrate-ai to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..', 'skyrate-ai'))
@@ -2317,6 +2319,37 @@ async def update_predicted_lead_status(
     return {"success": True, "message": f"Status updated to {body.status}"}
 
 
+def _run_prediction_refresh(states: Optional[List[str]], force: bool):
+    """
+    Background worker that runs prediction refresh in a separate thread
+    with its own DB session. This prevents blocking the async event loop.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    from ...core.database import SessionLocal
+    from ...services.prediction_service import prediction_service
+    
+    logger.info("Background prediction refresh started")
+    db = SessionLocal()
+    try:
+        result = prediction_service.generate_all_predictions(
+            db=db,
+            states=states,
+            force_refresh=force,
+        )
+        if result.get('success'):
+            logger.info(
+                f"Background prediction refresh complete: {result.get('total_predictions', 0)} predictions "
+                f"in {result.get('duration_seconds', 0):.1f}s"
+            )
+        else:
+            logger.error(f"Background prediction refresh failed: {result}")
+    except Exception as e:
+        logger.error(f"Background prediction refresh error: {e}")
+    finally:
+        db.close()
+
+
 @router.post("/predicted-leads/refresh")
 async def refresh_predictions(
     states: Optional[str] = None,
@@ -2327,16 +2360,21 @@ async def refresh_predictions(
     """
     Trigger a manual prediction refresh.
     This fetches fresh data from USAC and re-runs all prediction algorithms.
+    Runs in a background thread so the API remains responsive.
     Admin or premium vendor access required.
     """
-    from ...services.prediction_service import prediction_service
-    
     state_list = [s.strip() for s in states.split(',')] if states else None
     
-    result = prediction_service.generate_all_predictions(
-        db=db,
-        states=state_list,
-        force_refresh=force,
+    # Run in a background thread so we don't block the event loop
+    thread = threading.Thread(
+        target=_run_prediction_refresh,
+        args=(state_list, force),
+        daemon=True
     )
+    thread.start()
     
-    return result
+    return {
+        "success": True,
+        "message": "Prediction refresh started in background. Check stats endpoint for progress.",
+        "status": "processing"
+    }
