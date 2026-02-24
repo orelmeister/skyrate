@@ -634,7 +634,7 @@ export interface SavedLeadsResponse {
 }
 
 export interface SaveLeadRequest {
-  form_type: '470' | '471';
+  form_type: '470' | '471' | 'predicted';
   application_number: string;
   ben: string;
   entity_name?: string;
@@ -1794,6 +1794,36 @@ class ApiClient {
     return this.request('/api/v1/vendor/saved-leads/export', {
       method: 'POST',
       body: JSON.stringify(options || {}),
+    });
+  }
+
+  // ==================== PREDICTED LEAD ACTIONS ====================
+
+  /**
+   * Save a predicted lead to Saved Leads for follow-up
+   */
+  async savePredictedLead(predictionId: number): Promise<ApiResponse<{
+    success: boolean;
+    lead?: SavedLead;
+    message?: string;
+    error?: string;
+  }>> {
+    return this.request(`/api/v1/vendor/predicted-leads/${predictionId}/save`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Enrich a predicted lead with contact info (Hunter.io + LinkedIn)
+   */
+  async enrichPredictedLead(predictionId: number, forceRefresh = false): Promise<ApiResponse<{
+    success: boolean;
+    enrichment?: Record<string, any>;
+    prediction?: Record<string, any>;
+    error?: string;
+  }>> {
+    return this.request(`/api/v1/vendor/predicted-leads/${predictionId}/enrich?force_refresh=${forceRefresh}`, {
+      method: 'POST',
     });
   }
 

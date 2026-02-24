@@ -153,6 +153,14 @@ export default function PredictedLeadsTab() {
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
 
+  // Save & Enrich state
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedLeadId, setSavedLeadId] = useState<number | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isEnriching, setIsEnriching] = useState(false);
+  const [enrichedData, setEnrichedData] = useState<Record<string, any> | null>(null);
+  const [enrichError, setEnrichError] = useState<string | null>(null);
+
   // Filters
   const [filterType, setFilterType] = useState<string>("");
   const [filterState, setFilterState] = useState<string>("");
@@ -234,6 +242,75 @@ export default function PredictedLeadsTab() {
       }
     } catch (error) {
       console.error("Failed to update status:", error);
+    }
+  };
+
+  // Reset save/enrich state when selecting a new lead
+  const handleSelectLead = (lead: PredictedLead) => {
+    setSelectedLead(lead);
+    setSavedLeadId(null);
+    setSaveError(null);
+    setEnrichedData(null);
+    setEnrichError(null);
+  };
+
+  const handleSaveAsLead = async () => {
+    if (!selectedLead) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const response = await api.savePredictedLead(selectedLead.id);
+      const data = response.data as any;
+      if (data?.success) {
+        setSavedLeadId(data.lead?.id || -1);
+        // Mark as converted locally
+        setLeads((prev) =>
+          prev.map((l) => (l.id === selectedLead.id ? { ...l, status: "converted" } : l))
+        );
+        setSelectedLead({ ...selectedLead, status: "converted" });
+      } else {
+        setSaveError(data.error || "Failed to save lead");
+        // If already saved, still show success state
+        if (data.error?.includes("already been saved") && data.lead?.id) {
+          setSavedLeadId(data.lead.id);
+        }
+      }
+    } catch (error: any) {
+      setSaveError(error?.message || "Failed to save lead");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleEnrich = async () => {
+    if (!selectedLead) return;
+    setIsEnriching(true);
+    setEnrichError(null);
+    try {
+      const response = await api.enrichPredictedLead(selectedLead.id);
+      const data = response.data as any;
+      if (data?.success && data?.enrichment) {
+        setEnrichedData(data.enrichment);
+        // Update the selected lead with new contact info if available
+        if (data.prediction) {
+          const updated = {
+            ...selectedLead,
+            contact_name: data.prediction.contact_name || selectedLead.contact_name,
+            contact_email: data.prediction.contact_email || selectedLead.contact_email,
+            contact_phone: data.prediction.contact_phone || selectedLead.contact_phone,
+          };
+          setSelectedLead(updated);
+          setLeads((prev) =>
+            prev.map((l) => (l.id === selectedLead.id ? updated : l))
+          );
+        }
+      } else {
+        setEnrichError(data.error || "No enrichment data available");
+      }
+    } catch (error: any) {
+      setEnrichError(error?.message || "Failed to enrich contact");
+    } finally {
+      setIsEnriching(false);
     }
   };
 
@@ -434,7 +511,7 @@ export default function PredictedLeadsTab() {
                 return (
                   <div
                     key={lead.id}
-                    onClick={() => setSelectedLead(lead)}
+                    onClick={() => handleSelectLead(lead)}
                     className={`bg-white rounded-2xl border p-4 cursor-pointer transition-all hover:shadow-md ${
                       isSelected
                         ? "border-purple-400 ring-2 ring-purple-100 shadow-md"
@@ -649,7 +726,194 @@ export default function PredictedLeadsTab() {
                 )}
               </div>
 
-              {/* Action Buttons */}
+              {/* Save & Enrich Actions */}
+              <div className="flex gap-2 border-t border-slate-200 pt-4 mb-3">
+                {savedLeadId ? (
+                  <div className="flex-1 px-3 py-2 bg-green-50 border border-green-200 text-green-700 rounded-xl text-sm font-medium text-center">
+                    ✅ Saved to Leads
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleSaveAsLead}
+                    disabled={isSaving}
+                    className="flex-1 px-3 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-sm font-medium hover:shadow-lg transition-all disabled:opacity-50"
+                  >
+                    {isSaving ? (
+                      <span className="flex items-center justify-center gap-1">
+                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Saving...
+                      </span>
+                    ) : "💾 Save as Lead"}
+                  </button>
+                )}
+                <button
+                  onClick={handleEnrich}
+                  disabled={isEnriching}
+                  className="flex-1 px-3 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl text-sm font-medium hover:shadow-lg transition-all disabled:opacity-50"
+                >
+                  {isEnriching ? (
+                    <span className="flex items-center justify-center gap-1">
+                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Enriching...
+                    </span>
+                  ) : "🔍 Enrich Contact"}
+                </button>
+              </div>
+
+              {/* Save Error */}
+              {saveError && !savedLeadId && (
+                <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600">
+                  {saveError}
+                </div>
+              )}
+
+              {/* Enriched Contacts Section */}
+              {enrichedData && (
+                <div className="mb-3 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-4 border border-amber-200">
+                  <h4 className="text-sm font-semibold text-amber-800 mb-3 flex items-center gap-1">
+                    📇 Enriched Contact Info
+                    {enrichedData.from_cache && (
+                      <span className="text-xs font-normal text-amber-500 ml-1">(cached)</span>
+                    )}
+                  </h4>
+
+                  {/* Primary Contact */}
+                  {enrichedData.person && Object.keys(enrichedData.person).length > 0 && (
+                    <div className="space-y-1.5 mb-3">
+                      {enrichedData.person.full_name && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-amber-600">Name</span>
+                          <span className="font-medium text-slate-800">{enrichedData.person.full_name}</span>
+                        </div>
+                      )}
+                      {enrichedData.person.position && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-amber-600">Title</span>
+                          <span className="font-medium text-slate-800">{enrichedData.person.position}</span>
+                        </div>
+                      )}
+                      {enrichedData.person.email && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-amber-600">Email</span>
+                          <a href={`mailto:${enrichedData.person.email}`} className="font-medium text-purple-600 hover:underline">
+                            {enrichedData.person.email}
+                          </a>
+                        </div>
+                      )}
+                      {enrichedData.person.phone_number && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-amber-600">Phone</span>
+                          <a href={`tel:${enrichedData.person.phone_number}`} className="font-medium text-purple-600 hover:underline">
+                            {enrichedData.person.phone_number}
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* LinkedIn Links */}
+                  <div className="flex flex-col gap-1.5 mb-3">
+                    {enrichedData.person?.linkedin_url && (
+                      <a
+                        href={enrichedData.person.linkedin_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors w-fit"
+                      >
+                        🔗 LinkedIn Profile
+                      </a>
+                    )}
+                    {enrichedData.linkedin_search_url && (
+                      <a
+                        href={enrichedData.linkedin_search_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-200 transition-colors w-fit"
+                      >
+                        🔍 Search LinkedIn
+                      </a>
+                    )}
+                    {enrichedData.org_linkedin_search_url && (
+                      <a
+                        href={enrichedData.org_linkedin_search_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-200 transition-colors w-fit"
+                      >
+                        🏢 Find IT Director on LinkedIn
+                      </a>
+                    )}
+                  </div>
+
+                  {/* Additional Contacts */}
+                  {enrichedData.additional_contacts && enrichedData.additional_contacts.length > 0 && (
+                    <div>
+                      <span className="text-xs font-medium text-amber-700 block mb-1.5">
+                        Additional Contacts ({enrichedData.additional_contacts.length})
+                      </span>
+                      <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                        {enrichedData.additional_contacts.slice(0, 5).map((contact: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between bg-white/70 rounded-lg px-2 py-1.5 text-xs">
+                            <div>
+                              <span className="font-medium text-slate-800">
+                                {contact.first_name} {contact.last_name}
+                              </span>
+                              {contact.position && (
+                                <span className="text-slate-500 ml-1">• {contact.position}</span>
+                              )}
+                            </div>
+                            {contact.email && (
+                              <a href={`mailto:${contact.email}`} className="text-purple-600 hover:underline ml-2 shrink-0">
+                                {contact.email}
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Company Info */}
+                  {enrichedData.company && Object.keys(enrichedData.company).length > 0 && (
+                    <div className="mt-3 pt-2 border-t border-amber-200">
+                      <span className="text-xs font-medium text-amber-700 block mb-1">Company Info</span>
+                      <div className="space-y-1">
+                        {enrichedData.company.name && (
+                          <div className="text-xs text-slate-600">{enrichedData.company.name}</div>
+                        )}
+                        {enrichedData.company.domain && (
+                          <a href={`https://${enrichedData.company.domain}`} target="_blank" rel="noopener noreferrer" className="text-xs text-purple-600 hover:underline">
+                            {enrichedData.company.domain}
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Note / Error from enrichment */}
+                  {enrichedData.note && (
+                    <p className="text-xs text-amber-600 mt-2 italic">{enrichedData.note}</p>
+                  )}
+                  {enrichedData.credits_used > 0 && (
+                    <p className="text-xs text-amber-500 mt-1">API credits used: {enrichedData.credits_used}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Enrich Error */}
+              {enrichError && !enrichedData && (
+                <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600">
+                  {enrichError}
+                </div>
+              )}
+
+              {/* Status Buttons */}
               <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-4">
                 {selectedLead.status !== "contacted" && (
                   <button
@@ -659,7 +923,7 @@ export default function PredictedLeadsTab() {
                     ✉️ Mark Contacted
                   </button>
                 )}
-                {selectedLead.status !== "converted" && (
+                {selectedLead.status !== "converted" && !savedLeadId && (
                   <button
                     onClick={() => handleStatusUpdate(selectedLead.id, "converted")}
                     className="flex-1 px-3 py-2 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700 transition-colors"

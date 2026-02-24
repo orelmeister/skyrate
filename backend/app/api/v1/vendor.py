@@ -2378,3 +2378,213 @@ async def refresh_predictions(
         "message": "Prediction refresh started in background. Check stats endpoint for progress.",
         "status": "processing"
     }
+
+
+@router.post("/predicted-leads/{prediction_id}/save")
+async def save_predicted_lead(
+    prediction_id: int,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """
+    Save a predicted lead to the vendor's Saved Leads for follow-up.
+    
+    Converts prediction data into a SavedLead record, mapping all available
+    fields (entity info, contact, funding, service type, manufacturer, etc.).
+    Deduplicates by BEN + FRN to prevent double-saving.
+    """
+    from ...models.prediction import PredictedLead
+    from ...models.vendor import SavedLead
+    
+    # Fetch the prediction
+    prediction = db.query(PredictedLead).filter(PredictedLead.id == prediction_id).first()
+    if not prediction:
+        raise HTTPException(status_code=404, detail="Predicted lead not found")
+    
+    # Check if already saved (by BEN + FRN or BEN + application_number)
+    existing_query = db.query(SavedLead).filter(
+        SavedLead.vendor_profile_id == profile.id,
+        SavedLead.ben == (prediction.ben or ""),
+    )
+    if prediction.frn:
+        existing = existing_query.filter(SavedLead.frn == prediction.frn).first()
+    elif prediction.application_number:
+        existing = existing_query.filter(SavedLead.application_number == prediction.application_number).first()
+    else:
+        existing = existing_query.filter(SavedLead.form_type == "predicted").first()
+    
+    if existing:
+        return {
+            "success": False,
+            "error": "This lead has already been saved",
+            "lead": existing.to_dict()
+        }
+    
+    # Create SavedLead from prediction data
+    saved_lead = SavedLead(
+        vendor_profile_id=profile.id,
+        form_type="predicted",
+        application_number=prediction.application_number or prediction.frn or str(prediction.id),
+        ben=prediction.ben or "",
+        frn=prediction.frn,
+        entity_name=prediction.organization_name,
+        entity_type=prediction.entity_type,
+        entity_state=prediction.state,
+        entity_city=prediction.city,
+        contact_name=prediction.contact_name,
+        contact_email=prediction.contact_email,
+        contact_phone=prediction.contact_phone,
+        funding_year=prediction.funding_year,
+        service_type=prediction.service_type,
+        manufacturers=[prediction.manufacturer] if prediction.manufacturer else [],
+        lead_status="new",
+        notes=f"Saved from Predicted Leads ({prediction.prediction_type}). {prediction.prediction_reason or ''}",
+        source_data={
+            "prediction_id": prediction.id,
+            "prediction_type": prediction.prediction_type,
+            "confidence_score": prediction.confidence_score,
+            "estimated_deal_value": prediction.estimated_deal_value,
+            "predicted_action_date": prediction.predicted_action_date.isoformat() if prediction.predicted_action_date else None,
+            "contract_expiration_date": prediction.contract_expiration_date.isoformat() if prediction.contract_expiration_date else None,
+            "current_provider_name": prediction.current_provider_name,
+            "current_spin": prediction.current_spin,
+            "manufacturer": prediction.manufacturer,
+            "equipment_model": prediction.equipment_model,
+        },
+    )
+    
+    # Copy financial data if available
+    if prediction.estimated_deal_value:
+        saved_lead.funding_amount = int(prediction.estimated_deal_value)
+    if prediction.discount_rate:
+        saved_lead.source_data["discount_rate"] = prediction.discount_rate
+    
+    db.add(saved_lead)
+    
+    # Update prediction status to converted
+    prediction.status = "converted"
+    
+    db.commit()
+    db.refresh(saved_lead)
+    
+    return {
+        "success": True,
+        "lead": saved_lead.to_dict(),
+        "message": "Lead saved! You can find it in your Saved Leads tab."
+    }
+
+
+@router.post("/predicted-leads/{prediction_id}/enrich")
+async def enrich_predicted_lead(
+    prediction_id: int,
+    force_refresh: bool = False,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """
+    Enrich a predicted lead with contact information via Hunter.io.
+    
+    Looks up the organization domain to find:
+    - Email addresses of key contacts (IT, executive, management)
+    - LinkedIn profile URLs
+    - Phone numbers and titles
+    
+    Results are cached by domain (90-day expiry) so multiple vendors
+    or repeated lookups don't waste API credits.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    from ...models.prediction import PredictedLead
+    from ...models.vendor import OrganizationEnrichmentCache
+    from ...services.enrichment_service import EnrichmentService
+    
+    prediction = db.query(PredictedLead).filter(PredictedLead.id == prediction_id).first()
+    if not prediction:
+        raise HTTPException(status_code=404, detail="Predicted lead not found")
+    
+    # Determine domain for enrichment
+    email = prediction.contact_email
+    name = prediction.contact_name
+    domain = None
+    
+    # Try to extract domain from email
+    if email and '@' in email:
+        domain = email.split('@')[1]
+    
+    # If no domain from email, try to construct from org name
+    if not domain and prediction.organization_name:
+        # Try common patterns: orgname.org, orgname.edu, orgname.k12.state.us
+        org_clean = prediction.organization_name.lower().strip()
+        # For schools/libraries, try .org or .edu
+        # We'll let the enrichment service handle domain discovery
+        # For now, generate a LinkedIn search URL as fallback
+        pass
+    
+    # Generate LinkedIn search URLs regardless (free, no API needed)
+    enrichment_service = EnrichmentService()
+    linkedin_url = enrichment_service.generate_linkedin_search_url(
+        name=name,
+        company=prediction.organization_name
+    ) if name else None
+    
+    org_linkedin_url = enrichment_service.generate_linkedin_search_url(
+        company=prediction.organization_name,
+        title="Technology Director"
+    ) if prediction.organization_name else None
+    
+    enrichment_result = {
+        "success": True,
+        "linkedin_search_url": linkedin_url,
+        "org_linkedin_search_url": org_linkedin_url,
+        "person": {},
+        "company": {},
+        "additional_contacts": [],
+        "credits_used": 0,
+        "from_cache": False,
+    }
+    
+    if domain:
+        logger.info(f"Enriching predicted lead {prediction_id} with domain: {domain}")
+        
+        # Check cache expiry for force_refresh
+        if force_refresh:
+            cache_entry = db.query(OrganizationEnrichmentCache).filter(
+                OrganizationEnrichmentCache.domain == domain.lower()
+            ).first()
+            if cache_entry and not cache_entry.is_expired:
+                cache_age_days = (datetime.utcnow() - cache_entry.created_at).days if cache_entry.created_at else 0
+                return {
+                    "success": False,
+                    "error": f"Cannot refresh yet. Data is only {cache_age_days} days old.",
+                    "enrichment": enrichment_result
+                }
+        
+        try:
+            enrichment_result = await enrichment_service.enrich_contact_with_cache(
+                db=db,
+                email=email,
+                name=name,
+                domain=domain,
+                ben=prediction.ben,
+                organization_name=prediction.organization_name,
+                force_refresh=force_refresh
+            )
+        except Exception as e:
+            logger.error(f"Enrichment API call failed: {e}")
+            enrichment_result["error"] = str(e)
+    else:
+        enrichment_result["note"] = "No email domain available. Use LinkedIn search to find contacts."
+    
+    # Store enrichment data on the prediction record for future display
+    prediction.contact_name = enrichment_result.get("person", {}).get("full_name") or prediction.contact_name
+    prediction.contact_email = enrichment_result.get("person", {}).get("email") or prediction.contact_email
+    prediction.contact_phone = enrichment_result.get("person", {}).get("phone_number") or prediction.contact_phone
+    
+    db.commit()
+    
+    return {
+        "success": True,
+        "enrichment": enrichment_result,
+        "prediction": prediction.to_dict()
+    }
