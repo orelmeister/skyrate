@@ -194,12 +194,21 @@ class EnrichmentService:
         if not force_refresh:
             cached = self._get_cached_enrichment(db, domain)
             if cached:
-                # Update person info with the specific contact we're looking for
-                if name and not cached.get("person", {}).get("name"):
-                    cached["person"]["name"] = name
-                if email and not cached.get("person", {}).get("email"):
-                    cached["person"]["email"] = email
-                return cached
+                # Check if cached data is "rich enough" for our needs
+                has_person_data = bool(cached.get("person", {}).get("position") or cached.get("person", {}).get("linkedin"))
+                has_contacts = bool(cached.get("additional_contacts"))
+                has_company = bool(cached.get("company", {}).get("name"))
+                
+                # If domain search is requested but cache has no contacts, re-fetch
+                if include_domain_search and not has_contacts and not has_person_data:
+                    logger.info(f"Cache has minimal data for {domain}, re-fetching with domain search")
+                else:
+                    # Update person info with the specific contact we're looking for
+                    if name and not cached.get("person", {}).get("name"):
+                        cached["person"]["name"] = name
+                    if email and not cached.get("person", {}).get("email"):
+                        cached["person"]["email"] = email
+                    return cached
         
         # Cache miss or force refresh - call the API
         logger.info(f"Fetching fresh enrichment data for domain: {domain}")

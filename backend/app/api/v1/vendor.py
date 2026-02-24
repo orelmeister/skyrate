@@ -2568,6 +2568,7 @@ async def enrich_predicted_lead(
                 domain=domain,
                 ben=prediction.ben,
                 organization_name=prediction.organization_name,
+                include_domain_search=True,  # Find additional contacts at the organization
                 force_refresh=force_refresh
             )
         except Exception as e:

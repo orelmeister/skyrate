@@ -260,6 +260,15 @@ export default function PredictedLeadsTab() {
     setSaveError(null);
     try {
       const response = await api.savePredictedLead(selectedLead.id);
+      if (!response.success) {
+        const errMsg = response.error || "Failed to save lead";
+        setSaveError(errMsg);
+        // If already saved, still show success state
+        if (errMsg.includes("already been saved")) {
+          setSavedLeadId(-1);
+        }
+        return;
+      }
       const data = response.data as any;
       if (data?.success) {
         setSavedLeadId(data.lead?.id || -1);
@@ -269,9 +278,8 @@ export default function PredictedLeadsTab() {
         );
         setSelectedLead({ ...selectedLead, status: "converted" });
       } else {
-        setSaveError(data.error || "Failed to save lead");
-        // If already saved, still show success state
-        if (data.error?.includes("already been saved") && data.lead?.id) {
+        setSaveError(data?.error || "Failed to save lead");
+        if (data?.error?.includes("already been saved") && data?.lead?.id) {
           setSavedLeadId(data.lead.id);
         }
       }
@@ -288,6 +296,10 @@ export default function PredictedLeadsTab() {
     setEnrichError(null);
     try {
       const response = await api.enrichPredictedLead(selectedLead.id);
+      if (!response.success) {
+        setEnrichError(response.error || "Failed to enrich contact");
+        return;
+      }
       const data = response.data as any;
       if (data?.success && data?.enrichment) {
         setEnrichedData(data.enrichment);
@@ -305,7 +317,7 @@ export default function PredictedLeadsTab() {
           );
         }
       } else {
-        setEnrichError(data.error || "No enrichment data available");
+        setEnrichError(data?.error || "No enrichment data available");
       }
     } catch (error: any) {
       setEnrichError(error?.message || "Failed to enrich contact");

@@ -336,6 +336,26 @@ def _run_schema_migrations(engine):
         ("alert_configs", "alert_on_competitor", "TINYINT(1) DEFAULT 0", None),
         ("alert_configs", "deadline_warning_days", "INT DEFAULT 14", None),
         ("alert_configs", "min_alert_amount", "FLOAT DEFAULT 0", None),
+        # SavedLead columns (added after initial table creation)
+        ("saved_leads", "frn", "VARCHAR(50) DEFAULT NULL", None),
+        ("saved_leads", "entity_address", "VARCHAR(500) DEFAULT NULL", None),
+        ("saved_leads", "entity_zip", "VARCHAR(20) DEFAULT NULL", None),
+        ("saved_leads", "entity_phone", "VARCHAR(50) DEFAULT NULL", None),
+        ("saved_leads", "entity_website", "VARCHAR(255) DEFAULT NULL", None),
+        ("saved_leads", "contact_title", "VARCHAR(100) DEFAULT NULL", None),
+        ("saved_leads", "all_contacts", "JSON DEFAULT NULL", None),
+        ("saved_leads", "enriched_data", "JSON DEFAULT NULL", None),
+        ("saved_leads", "enrichment_date", "DATETIME DEFAULT NULL", None),
+        ("saved_leads", "tags", "JSON DEFAULT NULL", None),
+        ("saved_leads", "application_status", "VARCHAR(50) DEFAULT NULL", None),
+        ("saved_leads", "frn_status", "VARCHAR(50) DEFAULT NULL", None),
+        ("saved_leads", "committed_amount", "INT DEFAULT 0", None),
+        ("saved_leads", "funded_amount", "INT DEFAULT 0", None),
+        ("saved_leads", "categories", "JSON DEFAULT NULL", None),
+        ("saved_leads", "services", "JSON DEFAULT NULL", None),
+        ("saved_leads", "service_type", "VARCHAR(255) DEFAULT NULL", None),
+        ("saved_leads", "manufacturers", "JSON DEFAULT NULL", None),
+        ("saved_leads", "source_data", "JSON DEFAULT NULL", None),
     ]
     
     try:
