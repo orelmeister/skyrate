@@ -349,6 +349,8 @@ def _run_schema_migrations(engine):
         ("saved_leads", "tags", "JSON DEFAULT NULL", None),
         ("saved_leads", "application_status", "VARCHAR(50) DEFAULT NULL", None),
         ("saved_leads", "frn_status", "VARCHAR(50) DEFAULT NULL", None),
+        ("saved_leads", "funding_year", "INT DEFAULT NULL", None),
+        ("saved_leads", "funding_amount", "INT DEFAULT 0", None),
         ("saved_leads", "committed_amount", "INT DEFAULT 0", None),
         ("saved_leads", "funded_amount", "INT DEFAULT 0", None),
         ("saved_leads", "categories", "JSON DEFAULT NULL", None),
