@@ -17,6 +17,9 @@ class PredictionType(str, enum.Enum):
     EQUIPMENT_REFRESH = "equipment_refresh"      # Aging equipment needs replacement
     C2_BUDGET_RESET = "c2_budget_reset"          # Category 2 budget cycle resetting
     HISTORICAL_PATTERN = "historical_pattern"    # Historical rebid patterns
+    
+    def __str__(self):
+        return self.value
 
 
 class PredictionStatus(str, enum.Enum):
@@ -26,6 +29,9 @@ class PredictionStatus(str, enum.Enum):
     CONTACTED = "contacted"
     CONVERTED = "converted"
     DISMISSED = "dismissed"
+    
+    def __str__(self):
+        return self.value
 
 
 class PredictedLead(Base):
@@ -106,11 +112,32 @@ class PredictedLead(Base):
         Index("ix_predicted_leads_batch", "batch_id", "created_at"),
     )
     
+    def _normalize_enum_value(self, raw: str, enum_class) -> str:
+        """Normalize stored enum values to lowercase value format.
+        Handles: 'PredictionType.CONTRACT_EXPIRY', 'CONTRACT_EXPIRY', 'contract_expiry'
+        """
+        if not raw:
+            return raw
+        # Strip class prefix if present (e.g. "PredictionType.CONTRACT_EXPIRY" -> "CONTRACT_EXPIRY")
+        if '.' in raw:
+            raw = raw.split('.')[-1]
+        # Try to look up by name first (handles "CONTRACT_EXPIRY")
+        try:
+            return enum_class[raw].value
+        except (KeyError, TypeError):
+            pass
+        # Already a value (handles "contract_expiry")
+        try:
+            return enum_class(raw).value
+        except (ValueError, TypeError):
+            pass
+        return raw.lower()
+
     def to_dict(self) -> dict:
         return {
             "id": self.id,
             "vendor_profile_id": self.vendor_profile_id,
-            "prediction_type": self.prediction_type,
+            "prediction_type": self._normalize_enum_value(self.prediction_type, PredictionType),
             "confidence_score": self.confidence_score,
             "prediction_reason": self.prediction_reason,
             "predicted_action_date": self.predicted_action_date.isoformat() if self.predicted_action_date else None,
@@ -147,7 +174,7 @@ class PredictedLead(Base):
             "frn": self.frn,
             "source_dataset": self.source_dataset,
             # Status
-            "status": self.status,
+            "status": self._normalize_enum_value(self.status, PredictionStatus),
             "batch_id": self.batch_id,
             # Timestamps
             "created_at": self.created_at.isoformat() if self.created_at else None,

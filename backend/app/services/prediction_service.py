@@ -298,7 +298,7 @@ class PredictionService:
                 discount_float = float(discount) if discount else None
                 
                 lead = PredictedLead(
-                    prediction_type=PredictionType.CONTRACT_EXPIRY,
+                    prediction_type=PredictionType.CONTRACT_EXPIRY.value,
                     confidence_score=round(confidence, 2),
                     prediction_reason=reason,
                     predicted_action_date=exp_date - timedelta(days=90),  # 3 months before expiry
@@ -317,7 +317,7 @@ class PredictionService:
                     application_number=record.get('application_number', ''),
                     frn=frn,
                     source_dataset='frn_status',
-                    status=PredictionStatus.NEW,
+                    status=PredictionStatus.NEW.value,
                     batch_id=batch_id,
                     expires_at=exp_date + timedelta(days=30),  # Prediction expires 30 days after contract
                 )
@@ -459,7 +459,7 @@ class PredictionService:
                 )
                 
                 lead = PredictedLead(
-                    prediction_type=PredictionType.EQUIPMENT_REFRESH,
+                    prediction_type=PredictionType.EQUIPMENT_REFRESH.value,
                     confidence_score=round(confidence, 2),
                     prediction_reason=reason,
                     predicted_action_date=predicted_refresh,
@@ -476,7 +476,7 @@ class PredictionService:
                     application_number=record.get('application_number', ''),
                     frn=record.get('funding_request_number', ''),
                     source_dataset='471_line_items',
-                    status=PredictionStatus.NEW,
+                    status=PredictionStatus.NEW.value,
                     batch_id=batch_id,
                     expires_at=predicted_refresh + timedelta(days=365),
                 )
@@ -593,7 +593,7 @@ class PredictionService:
                 )
                 
                 lead = PredictedLead(
-                    prediction_type=PredictionType.C2_BUDGET_RESET,
+                    prediction_type=PredictionType.C2_BUDGET_RESET.value,
                     confidence_score=round(confidence, 2),
                     prediction_reason=reason,
                     predicted_action_date=predicted_action,
@@ -607,7 +607,7 @@ class PredictionService:
                     c2_budget_remaining=budget_remaining,
                     c2_budget_cycle=budget_cycle,
                     source_dataset='c2_budget',
-                    status=PredictionStatus.NEW,
+                    status=PredictionStatus.NEW.value,
                     batch_id=batch_id,
                     expires_at=datetime(cycle_end_year + 1, 7, 1) if cycle_end_year else None,
                 )
