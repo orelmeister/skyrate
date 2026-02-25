@@ -2547,19 +2547,6 @@ async def enrich_predicted_lead(
     if domain:
         logger.info(f"Enriching predicted lead {prediction_id} with domain: {domain}")
         
-        # Check cache expiry for force_refresh
-        if force_refresh:
-            cache_entry = db.query(OrganizationEnrichmentCache).filter(
-                OrganizationEnrichmentCache.domain == domain.lower()
-            ).first()
-            if cache_entry and not cache_entry.is_expired:
-                cache_age_days = (datetime.utcnow() - cache_entry.created_at).days if cache_entry.created_at else 0
-                return {
-                    "success": False,
-                    "error": f"Cannot refresh yet. Data is only {cache_age_days} days old.",
-                    "enrichment": enrichment_result
-                }
-        
         try:
             enrichment_result = await enrichment_service.enrich_contact_with_cache(
                 db=db,
