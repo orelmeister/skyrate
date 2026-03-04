@@ -522,7 +522,7 @@ export interface USACContact {
 
 export interface SavedLead {
   id: number;
-  form_type: '470' | '471';
+  form_type: '470' | '471' | 'predicted';
   application_number: string;
   ben: string;
   frn?: string;
