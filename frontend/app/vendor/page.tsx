@@ -137,6 +137,10 @@ function VendorPortalPage() {
   const [enrichingLead, setEnrichingLead] = useState(false);
   const [currentSavedLead, setCurrentSavedLead] = useState<SavedLead | null>(null);
   const [enrichmentData, setEnrichmentData] = useState<EnrichedContactData | null>(null);
+
+  // Saved Lead Detail Modal state (for predicted/non-470 leads)
+  const [showSavedLeadDetailModal, setShowSavedLeadDetailModal] = useState(false);
+  const [selectedSavedLeadDetail, setSelectedSavedLeadDetail] = useState<SavedLead | null>(null);
   
   // Form 470 Leads selection for export
   const [selectedForm470Leads, setSelectedForm470Leads] = useState<Set<string>>(new Set());
@@ -2529,8 +2533,14 @@ function VendorPortalPage() {
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => {
-                              // Open the form 470 detail modal for this lead
-                              load470Detail(lead.application_number);
+                              if (lead.form_type === '470') {
+                                // Real Form 470 lead — fetch full USAC detail
+                                load470Detail(lead.application_number);
+                              } else {
+                                // Predicted or 471 lead — show saved lead's own data in detail modal
+                                setSelectedSavedLeadDetail(lead);
+                                setShowSavedLeadDetailModal(true);
+                              }
                             }}
                             className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
                             title="View Details"
@@ -4355,6 +4365,273 @@ function VendorPortalPage() {
                   setSelectedSearchResult(null);
                   setEntityEnrichment(null);
                 }}
+                className="px-4 py-2 text-slate-700 hover:bg-slate-200 rounded-xl transition-colors ml-auto"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Saved Lead Detail Modal (for predicted/non-470 leads) */}
+      {showSavedLeadDetailModal && selectedSavedLeadDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => { setShowSavedLeadDetailModal(false); setSelectedSavedLeadDetail(null); }}
+          />
+          
+          {/* Modal */}
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-purple-600 to-pink-600 text-white">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-xl font-bold">{selectedSavedLeadDetail.entity_name || `BEN: ${selectedSavedLeadDetail.ben}`}</h2>
+                  <p className="text-purple-100 mt-1">
+                    {selectedSavedLeadDetail.form_type === 'predicted' ? '🔮 Predicted Lead' : `Form ${selectedSavedLeadDetail.form_type}`} #{selectedSavedLeadDetail.application_number}
+                    {selectedSavedLeadDetail.funding_year && ` • FY ${selectedSavedLeadDetail.funding_year}`}
+                  </p>
+                </div>
+                <button
+                  onClick={() => { setShowSavedLeadDetailModal(false); setSelectedSavedLeadDetail(null); }}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="space-y-6">
+                {/* Entity & Contact Info */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                      <span>🏫</span> Entity Information
+                    </h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">BEN:</span>
+                        <span className="font-medium">{selectedSavedLeadDetail.ben}</span>
+                      </div>
+                      {selectedSavedLeadDetail.entity_type && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Type:</span>
+                          <span className="font-medium">{selectedSavedLeadDetail.entity_type}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Location:</span>
+                        <span className="font-medium">
+                          {[selectedSavedLeadDetail.entity_city, selectedSavedLeadDetail.entity_state].filter(Boolean).join(', ') || 'N/A'}
+                        </span>
+                      </div>
+                      {selectedSavedLeadDetail.entity_address && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Address:</span>
+                          <span className="font-medium">{selectedSavedLeadDetail.entity_address}</span>
+                        </div>
+                      )}
+                      {selectedSavedLeadDetail.entity_phone && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Phone:</span>
+                          <a href={`tel:${selectedSavedLeadDetail.entity_phone}`} className="text-blue-600 hover:underline">{selectedSavedLeadDetail.entity_phone}</a>
+                        </div>
+                      )}
+                      {selectedSavedLeadDetail.entity_website && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Website:</span>
+                          <a href={selectedSavedLeadDetail.entity_website.startsWith('http') ? selectedSavedLeadDetail.entity_website : `https://${selectedSavedLeadDetail.entity_website}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Visit →</a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                      <span>👤</span> Contact Information
+                      {selectedSavedLeadDetail.contact_name && selectedSavedLeadDetail.entity_name && (
+                        <a
+                          href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(selectedSavedLeadDetail.contact_name + ' ' + selectedSavedLeadDetail.entity_name)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ml-auto px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs hover:bg-blue-200 transition-colors flex items-center gap-1"
+                        >
+                          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+                          </svg>
+                          LinkedIn
+                        </a>
+                      )}
+                    </h3>
+                    <div className="space-y-2 text-sm">
+                      {selectedSavedLeadDetail.contact_name && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Contact:</span>
+                          <span className="font-medium">{selectedSavedLeadDetail.contact_name}</span>
+                        </div>
+                      )}
+                      {selectedSavedLeadDetail.contact_title && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Title:</span>
+                          <span className="font-medium">{selectedSavedLeadDetail.contact_title}</span>
+                        </div>
+                      )}
+                      {selectedSavedLeadDetail.contact_email && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Email:</span>
+                          <a href={`mailto:${selectedSavedLeadDetail.contact_email}`} className="text-blue-600 hover:underline">{selectedSavedLeadDetail.contact_email}</a>
+                        </div>
+                      )}
+                      {selectedSavedLeadDetail.contact_phone && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Phone:</span>
+                          <a href={`tel:${selectedSavedLeadDetail.contact_phone}`} className="text-blue-600 hover:underline">{selectedSavedLeadDetail.contact_phone}</a>
+                        </div>
+                      )}
+                      {selectedSavedLeadDetail.enriched_data?.linkedin_url && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">LinkedIn:</span>
+                          <a href={selectedSavedLeadDetail.enriched_data.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">View Profile →</a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Services & Categories */}
+                {(selectedSavedLeadDetail.categories?.length > 0 || selectedSavedLeadDetail.services?.length > 0 || selectedSavedLeadDetail.manufacturers?.length > 0) && (
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                      <span>📦</span> Services & Categories
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedSavedLeadDetail.categories?.map((cat: string, idx: number) => (
+                        <span key={`cat-${idx}`} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">{cat}</span>
+                      ))}
+                      {selectedSavedLeadDetail.services?.map((svc: string, idx: number) => (
+                        <span key={`svc-${idx}`} className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm">{svc}</span>
+                      ))}
+                      {selectedSavedLeadDetail.manufacturers?.map((mfr: string, idx: number) => (
+                        <span key={`mfr-${idx}`} className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm">{mfr}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Funding Info */}
+                {(selectedSavedLeadDetail.funding_amount || selectedSavedLeadDetail.committed_amount || selectedSavedLeadDetail.funded_amount) && (
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                      <span>💰</span> Funding Information
+                    </h3>
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      {selectedSavedLeadDetail.funding_amount != null && (
+                        <div>
+                          <span className="text-slate-500 block">Requested</span>
+                          <span className="font-semibold text-lg">${selectedSavedLeadDetail.funding_amount.toLocaleString()}</span>
+                        </div>
+                      )}
+                      {selectedSavedLeadDetail.committed_amount != null && (
+                        <div>
+                          <span className="text-slate-500 block">Committed</span>
+                          <span className="font-semibold text-lg">${selectedSavedLeadDetail.committed_amount.toLocaleString()}</span>
+                        </div>
+                      )}
+                      {selectedSavedLeadDetail.funded_amount != null && (
+                        <div>
+                          <span className="text-slate-500 block">Funded</span>
+                          <span className="font-semibold text-lg">${selectedSavedLeadDetail.funded_amount.toLocaleString()}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Additional Contacts (from enrichment) */}
+                {selectedSavedLeadDetail.enriched_data?.additional_contacts && selectedSavedLeadDetail.enriched_data.additional_contacts.length > 0 && (
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                      <span>👥</span> Additional Contacts ({selectedSavedLeadDetail.enriched_data.additional_contacts.length})
+                    </h3>
+                    <div className="space-y-2">
+                      {selectedSavedLeadDetail.enriched_data.additional_contacts.map((contact: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0 text-sm">
+                          <div className="flex items-center gap-3">
+                            <span className="font-medium">{contact.name}</span>
+                            {contact.position && <span className="text-slate-400">({contact.position})</span>}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {contact.email && <a href={`mailto:${contact.email}`} className="text-blue-600 hover:underline">{contact.email}</a>}
+                            {contact.phone && <a href={`tel:${contact.phone}`} className="text-blue-600 hover:underline">{contact.phone}</a>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* All USAC Contacts */}
+                {selectedSavedLeadDetail.all_contacts && selectedSavedLeadDetail.all_contacts.length > 0 && (
+                  <div className="bg-slate-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                      <span>📋</span> USAC Contacts ({selectedSavedLeadDetail.all_contacts.length})
+                    </h3>
+                    <div className="space-y-2">
+                      {selectedSavedLeadDetail.all_contacts.map((contact, idx) => (
+                        <div key={idx} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0 text-sm">
+                          <span className="font-medium">{contact.name}</span>
+                          <div className="flex items-center gap-3">
+                            {contact.email && <a href={`mailto:${contact.email}`} className="text-blue-600 hover:underline">{contact.email}</a>}
+                            {contact.phone && <a href={`tel:${contact.phone}`} className="text-blue-600 hover:underline">{contact.phone}</a>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Notes */}
+                {selectedSavedLeadDetail.notes && (
+                  <div className="bg-yellow-50 rounded-xl p-4">
+                    <h3 className="font-semibold text-slate-900 mb-2">📝 Notes</h3>
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{selectedSavedLeadDetail.notes}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center gap-3">
+              {selectedSavedLeadDetail.contact_email && (
+                <a
+                  href={`mailto:${selectedSavedLeadDetail.contact_email}?subject=Regarding E-Rate Services for ${selectedSavedLeadDetail.entity_name || selectedSavedLeadDetail.ben}`}
+                  className="px-4 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-2"
+                >
+                  📧 Contact Entity
+                </a>
+              )}
+              {selectedSavedLeadDetail.entity_name && (
+                <a
+                  href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(selectedSavedLeadDetail.entity_name)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-blue-700 text-white rounded-xl hover:bg-blue-800 transition-colors flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+                  </svg>
+                  Find Staff
+                </a>
+              )}
+              <button
+                onClick={() => { setShowSavedLeadDetailModal(false); setSelectedSavedLeadDetail(null); }}
                 className="px-4 py-2 text-slate-700 hover:bg-slate-200 rounded-xl transition-colors ml-auto"
               >
                 Close
