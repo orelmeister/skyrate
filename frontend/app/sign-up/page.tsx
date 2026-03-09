@@ -365,7 +365,7 @@ function SignUpPage() {
                     </div>
                     <div className="text-xs text-slate-500 mt-0.5">Manage schools</div>
                     <div className={`text-xs mt-1 font-medium ${formData.role === "consultant" ? "text-indigo-600" : "text-slate-400"}`}>
-                      $300/mo
+                      $499/mo
                     </div>
                   </button>
                   <button
@@ -383,7 +383,7 @@ function SignUpPage() {
                     </div>
                     <div className="text-xs text-slate-500 mt-0.5">Find leads</div>
                     <div className={`text-xs mt-1 font-medium ${formData.role === "vendor" ? "text-purple-600" : "text-slate-400"}`}>
-                      $199/mo
+                      $499/mo
                     </div>
                   </button>
                   <button
@@ -401,7 +401,7 @@ function SignUpPage() {
                     </div>
                     <div className="text-xs text-slate-500 mt-0.5">Track funding</div>
                     <div className={`text-xs mt-1 font-medium ${formData.role === "applicant" ? "text-emerald-600" : "text-slate-400"}`}>
-                      $200/mo
+                      $199/mo
                     </div>
                   </button>
                 </div>

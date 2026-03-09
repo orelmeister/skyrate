@@ -117,7 +117,7 @@ class BENValidationResult(BaseModel):
 # ==================== DEPENDENCIES ====================
 
 async def get_consultant_profile(
-    current_user: User = Depends(require_role("admin", "consultant")),
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
     db: Session = Depends(get_db)
 ) -> ConsultantProfile:
     """Get or create consultant profile for current user"""
@@ -2407,4 +2407,167 @@ async def get_institution_details(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch details: {str(e)}"
+        )
+
+
+# ==================== SERVICE SEARCH ENDPOINT ====================
+
+class ServiceSearchRequest(BaseModel):
+    """Service search filters — searches USAC FRN data scoped to consultant's BENs"""
+    ben: Optional[str] = None  # Filter by specific BEN from portfolio
+    status_filter: Optional[str] = None  # Funded, Denied, Pending
+    service_type: Optional[str] = None
+    year: Optional[int] = None
+    min_amount: Optional[float] = None
+    max_amount: Optional[float] = None
+    limit: int = 100
+
+
+@router.post("/service-search")
+async def service_search(
+    data: ServiceSearchRequest,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    db: Session = Depends(get_db)
+):
+    """
+    Search for E-Rate funded services across the consultant's managed BENs.
+    Similar to the vendor search but scoped to the consultant's school portfolio.
+    Uses the FRN Status USAC dataset.
+    """
+    try:
+        # Get the consultant's managed BENs
+        managed_schools = db.query(ConsultantSchool).filter(
+            ConsultantSchool.consultant_profile_id == profile.id
+        ).all()
+        
+        if not managed_schools:
+            return {
+                "success": True,
+                "count": 0,
+                "results": [],
+                "message": "No schools in your portfolio. Add schools first to search their services."
+            }
+        
+        # Determine which BENs to search
+        if data.ben:
+            # Verify the requested BEN is in the consultant's portfolio
+            ben_list = [data.ben]
+            if not any(s.ben == data.ben for s in managed_schools):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"BEN {data.ben} is not in your school portfolio."
+                )
+        else:
+            # Search across all managed BENs
+            ben_list = [s.ben for s in managed_schools]
+        
+        # Build USAC API query
+        # FRN Status dataset: qdmp-ygft
+        dataset_id = "qdmp-ygft"
+        url = f"https://opendata.usac.org/resource/{dataset_id}.json"
+        
+        # Build the where clause
+        where_parts = []
+        
+        # BEN filter
+        if len(ben_list) == 1:
+            where_parts.append(f"ben='{ben_list[0]}'")
+        else:
+            ben_values = "','".join(ben_list)
+            where_parts.append(f"ben in ('{ben_values}')")
+        
+        # Year filter
+        if data.year:
+            where_parts.append(f"funding_year='{data.year}'")
+        
+        # Status filter
+        if data.status_filter:
+            status_map = {
+                "funded": "Funded",
+                "denied": "Denied",
+                "pending": "Pending",
+            }
+            mapped = status_map.get(data.status_filter.lower(), data.status_filter)
+            where_parts.append(f"form_471_frn_status_name='{mapped}'")
+        
+        # Service type filter
+        if data.service_type:
+            svc_lower = data.service_type.lower()
+            service_type_map = {
+                "internal connections": "Internal Connections",
+                "basic maintenance": "Basic Maintenance of Internal Connections",
+                "managed internal broadband services": "Managed Internal Broadband Services",
+                "internet access": "Data Transmission and/or Internet Access",
+                "data transmission": "Data Transmission and/or Internet Access",
+                "voice": "Voice",
+            }
+            for key, value in service_type_map.items():
+                if key in svc_lower:
+                    where_parts.append(f"form_471_service_type_name='{value}'")
+                    break
+        
+        where_clause = " AND ".join(where_parts) if where_parts else "1=1"
+        
+        params = {
+            "$limit": min(data.limit, 500),
+            "$where": where_clause,
+            "$order": "funding_year DESC",
+        }
+        
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        raw_results = response.json()
+        
+        if not raw_results:
+            return {"success": True, "count": 0, "results": []}
+        
+        # Build a school name lookup from the consultant's portfolio
+        school_name_map = {s.ben: s.school_name for s in managed_schools}
+        
+        # Transform results
+        results = []
+        for r in raw_results:
+            funding_amount = 0
+            try:
+                funding_amount = float(r.get('funding_commitment_request', 0) or 0)
+            except (ValueError, TypeError):
+                pass
+            
+            # Apply amount filters
+            if data.min_amount and funding_amount < data.min_amount:
+                continue
+            if data.max_amount and funding_amount > data.max_amount:
+                continue
+            
+            ben = r.get('ben', '')
+            results.append({
+                "ben": ben,
+                "name": r.get('organization_name', '') or school_name_map.get(ben, ''),
+                "state": r.get('state', ''),
+                "city": r.get('city', ''),
+                "status": r.get('form_471_frn_status_name', ''),
+                "funding_amount": funding_amount,
+                "service_type": r.get('form_471_service_type_name', ''),
+                "funding_year": r.get('funding_year', ''),
+                "application_number": r.get('application_number', ''),
+                "frn": r.get('funding_request_number', ''),
+                "_raw": r,
+            })
+        
+        return {
+            "success": True,
+            "count": len(results),
+            "results": results,
+            "bens_searched": len(ben_list),
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in consultant service search: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Service search failed: {str(e)}"
         )

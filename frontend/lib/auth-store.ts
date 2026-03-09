@@ -13,7 +13,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 export interface User {
   id: number;
   email: string;
-  role: "consultant" | "vendor" | "admin" | "applicant";
+  role: "consultant" | "vendor" | "admin" | "applicant" | "super";
   first_name?: string;
   last_name?: string;
   full_name?: string;

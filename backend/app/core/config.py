@@ -134,15 +134,15 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000", "https://skyrate.ai", "https://*.skyrate.ai"]
     
     # Subscription Pricing (cents)
-    # Consultants: $300/month or $3,000/year
-    CONSULTANT_MONTHLY_PRICE: int = 30000   # $300
-    CONSULTANT_YEARLY_PRICE: int = 300000   # $3,000
-    # Vendors: $300/month or $3,000/year  
-    VENDOR_MONTHLY_PRICE: int = 30000       # $300
-    VENDOR_YEARLY_PRICE: int = 300000       # $3,000
-    # Applicants: $200/month or $2,000/year
-    APPLICANT_MONTHLY_PRICE: int = 20000    # $200
-    APPLICANT_YEARLY_PRICE: int = 200000    # $2,000
+    # Consultants: $499/month or $4,999/year
+    CONSULTANT_MONTHLY_PRICE: int = 49900   # $499
+    CONSULTANT_YEARLY_PRICE: int = 499900   # $4,999
+    # Vendors: $499/month or $4,999/year  
+    VENDOR_MONTHLY_PRICE: int = 49900       # $499
+    VENDOR_YEARLY_PRICE: int = 499900       # $4,999
+    # Applicants: $199/month or $1,999/year
+    APPLICANT_MONTHLY_PRICE: int = 19900    # $199
+    APPLICANT_YEARLY_PRICE: int = 199900    # $1,999
     
     # Test/Demo Account Settings
     # Emails containing these patterns get free access (case-insensitive)
@@ -150,6 +150,7 @@ class Settings(BaseSettings):
     # Specific test account emails (exact match, case-insensitive)
     TEST_ACCOUNT_EMAILS: List[str] = [
         "admin@skyrate.ai",
+        "super@skyrate.ai",
         "test_consultant@example.com",
         "test_vendor@example.com",
         "test_applicant@example.com",

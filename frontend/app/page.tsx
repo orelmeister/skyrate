@@ -621,10 +621,10 @@ export default function HomePage() {
               </p>
               <div className="mb-4 sm:mb-6">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-3xl sm:text-4xl font-bold text-emerald-600">$200</span>
+                  <span className="text-3xl sm:text-4xl font-bold text-emerald-600">$199</span>
                   <span className="text-slate-500">/month</span>
                 </div>
-                <p className="text-xs sm:text-sm text-slate-500 mt-1">or $2,000/year (save $400)</p>
+                <p className="text-xs sm:text-sm text-slate-500 mt-1">or $1,999/year (save $389)</p>
               </div>
               <ul className="space-y-2 sm:space-y-3 mb-6 sm:mb-8 text-sm sm:text-base">
                 {["Automatic FRN tracking", "Real-time status alerts", "AI-generated appeal letters", "Deadline reminders", "Unlimited appeal refinements", "Email support"].map((f) => (
@@ -649,10 +649,10 @@ export default function HomePage() {
               </p>
               <div className="mb-4 sm:mb-6">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-3xl sm:text-4xl font-bold text-indigo-600">$300</span>
+                  <span className="text-3xl sm:text-4xl font-bold text-indigo-600">$499</span>
                   <span className="text-slate-500">/month</span>
                 </div>
-                <p className="text-xs sm:text-sm text-slate-500 mt-1">or $3,000/year (save $600)</p>
+                <p className="text-xs sm:text-sm text-slate-500 mt-1">or $4,999/year (save $989)</p>
               </div>
               <ul className="space-y-2 sm:space-y-3 mb-6 sm:mb-8 text-sm sm:text-base">
                 {["Unlimited schools", "AI appeal generation", "Denial pattern analysis", "CRN auto-import", "Natural language search", "Email support"].map((f) => (
@@ -677,10 +677,10 @@ export default function HomePage() {
               </p>
               <div className="mb-4 sm:mb-6">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-3xl sm:text-4xl font-bold text-purple-600">$300</span>
+                  <span className="text-3xl sm:text-4xl font-bold text-purple-600">$499</span>
                   <span className="text-slate-500">/month</span>
                 </div>
-                <p className="text-xs sm:text-sm text-slate-500 mt-1">or $3,000/year (save $600)</p>
+                <p className="text-xs sm:text-sm text-slate-500 mt-1">or $4,999/year (save $989)</p>
               </div>
               <ul className="space-y-2 sm:space-y-3 mb-6 sm:mb-8 text-sm sm:text-base">
                 {["Form 470 lead tracking", "Multi-manufacturer monitoring", "FRN status tracking", "Competitor analysis", "Market intelligence dashboard", "Priority support"].map((f) => (

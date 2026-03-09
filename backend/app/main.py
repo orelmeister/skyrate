@@ -122,6 +122,53 @@ def seed_demo_accounts():
             admin_existing.email_verified = True
             logger.info(f"Updated super admin account: {admin_email}")
         
+        # Seed super account (has both consultant and vendor privileges)
+        super_email = "super@skyrate.ai"
+        super_existing = db.query(User).filter(User.email == super_email).first()
+        super_password = "super@12345"
+        super_hashed = bcrypt.hashpw(super_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        if not super_existing:
+            super_user = User(
+                email=super_email,
+                password_hash=super_hashed,
+                role=UserRole.SUPER.value,
+                first_name="Super",
+                last_name="User",
+                company_name="SkyRate AI",
+                is_active=True,
+                is_verified=True,
+                email_verified=True,
+            )
+            db.add(super_user)
+            db.flush()
+            # Create both consultant and vendor profiles for super user
+            super_cp = ConsultantProfile(
+                user_id=super_user.id,
+                company_name="SkyRate AI (Super)",
+                contact_name="Super User",
+            )
+            db.add(super_cp)
+            super_vp = VendorProfile(
+                user_id=super_user.id,
+                company_name="SkyRate AI (Super)",
+                contact_name="Super User",
+            )
+            db.add(super_vp)
+            db.flush()
+            logger.info(f"Created super account: {super_email} with consultant + vendor profiles")
+        else:
+            super_existing.password_hash = super_hashed
+            super_existing.role = UserRole.SUPER.value
+            super_existing.is_active = True
+            super_existing.is_verified = True
+            super_existing.email_verified = True
+            # Ensure both profiles exist
+            if not db.query(ConsultantProfile).filter(ConsultantProfile.user_id == super_existing.id).first():
+                db.add(ConsultantProfile(user_id=super_existing.id, company_name="SkyRate AI (Super)", contact_name="Super User"))
+            if not db.query(VendorProfile).filter(VendorProfile.user_id == super_existing.id).first():
+                db.add(VendorProfile(user_id=super_existing.id, company_name="SkyRate AI (Super)", contact_name="Super User"))
+            logger.info(f"Updated super account: {super_email}")
+        
         for email, role, password in demo_accounts:
             existing = db.query(User).filter(User.email == email).first()
             hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')

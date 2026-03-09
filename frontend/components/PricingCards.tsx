@@ -8,8 +8,8 @@ const plans = [
   {
     name: "Consultant",
     description: "For E-Rate consultants managing school portfolios",
-    monthlyPrice: 300,
-    yearlyPrice: 3000,
+    monthlyPrice: 499,
+    yearlyPrice: 4999,
     icon: Briefcase,
     color: "indigo",
     href: "/sign-up?plan=consultant",
@@ -28,8 +28,8 @@ const plans = [
   {
     name: "Vendor",
     description: "For service providers finding E-Rate opportunities",
-    monthlyPrice: 199,
-    yearlyPrice: 1999,
+    monthlyPrice: 499,
+    yearlyPrice: 4999,
     icon: Target,
     color: "purple",
     popular: true,
@@ -49,8 +49,8 @@ const plans = [
   {
     name: "Applicant",
     description: "For schools & libraries managing E-Rate applications",
-    monthlyPrice: 200,
-    yearlyPrice: 2000,
+    monthlyPrice: 199,
+    yearlyPrice: 1999,
     icon: FileText,
     color: "violet",
     href: "/sign-up?plan=applicant",

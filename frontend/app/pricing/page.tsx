@@ -6,7 +6,7 @@ import PricingCards from "@/components/PricingCards";
 export const metadata: Metadata = {
   title: "E-Rate Software Pricing & Plans | SkyRate AI",
   description:
-    "Transparent pricing for E-Rate management software. Plans for consultants ($300/mo), vendors ($199/mo), and school applicants ($200/mo). Start your 14-day free trial.",
+    "Transparent pricing for E-Rate management software. Plans for consultants ($499/mo), vendors ($499/mo), and school applicants ($199/mo). Start your 14-day free trial.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/pricing" },
   openGraph: {
@@ -30,7 +30,7 @@ const faqs = [
   },
   {
     q: "Is there a discount for paying annually?",
-    a: "Yes — annual plans save you up to 17% compared to monthly billing. For example, the Vendor plan is $199/mo monthly but only $1,999/year (equivalent to ~$167/mo).",
+    a: "Yes — annual plans save you up to 17% compared to monthly billing. For example, the Vendor plan is $499/mo monthly but only $4,999/year (equivalent to ~$417/mo).",
   },
   {
     q: "Do you offer discounts for multiple users?",

@@ -307,9 +307,9 @@ async def create_checkout_session(
         price_id = None  # Would need separate vendor prices
     else:  # applicant
         if data.plan == "yearly":
-            price_cents = getattr(settings, 'APPLICANT_YEARLY_PRICE', 200000)  # $2000
+            price_cents = getattr(settings, 'APPLICANT_YEARLY_PRICE', 199900)  # $1,999
         else:
-            price_cents = getattr(settings, 'APPLICANT_MONTHLY_PRICE', 20000)  # $200
+            price_cents = getattr(settings, 'APPLICANT_MONTHLY_PRICE', 19900)  # $199
         price_id = None
     
     try:

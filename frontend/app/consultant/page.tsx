@@ -10,7 +10,7 @@ import { SearchResultsTable } from "@/components/SearchResultsTable";
 import { AppealChat } from "@/components/AppealChat";
 import { useTabParam } from "@/hooks/useTabParam";
 
-const CONSULTANT_TABS = ["dashboard", "schools", "funding", "frn-status", "appeals", "settings"] as const;
+const CONSULTANT_TABS = ["dashboard", "schools", "funding", "frn-status", "appeals", "service-search", "settings"] as const;
 type ConsultantTab = typeof CONSULTANT_TABS[number];
 
 // Extended school type with USAC data
@@ -187,6 +187,17 @@ function ConsultantPortalPage() {
   const [expandedSchools, setExpandedSchools] = useState<Set<string>>(new Set());
   const [frnSortBy, setFrnSortBy] = useState<string>("name");
   
+  // Service Search state
+  const [serviceSearchBen, setServiceSearchBen] = useState("");
+  const [serviceSearchStatus, setServiceSearchStatus] = useState("");
+  const [serviceSearchType, setServiceSearchType] = useState("");
+  const [serviceSearchYear, setServiceSearchYear] = useState(2025);
+  const [serviceSearchMinAmount, setServiceSearchMinAmount] = useState("");
+  const [serviceSearchMaxAmount, setServiceSearchMaxAmount] = useState("");
+  const [serviceSearchResults, setServiceSearchResults] = useState<any[]>([]);
+  const [serviceSearchLoading, setServiceSearchLoading] = useState(false);
+  const [serviceSearchBensSearched, setServiceSearchBensSearched] = useState(0);
+
   // Query state
   const [queryInput, setQueryInput] = useState("");
   const [queryResults, setQueryResults] = useState<any>(null);
@@ -314,7 +325,7 @@ function ConsultantPortalPage() {
       }
       // Verification guard handles redirect to /onboarding
       if (!emailVerified) return;
-      if (user?.role !== "consultant" && user?.role !== "admin") {
+      if (user?.role !== "consultant" && user?.role !== "admin" && user?.role !== "super") {
         // Redirect to appropriate dashboard based on role
         const dashboard = user?.role === 'applicant' ? '/applicant' : '/vendor';
         router.push(dashboard);
@@ -800,6 +811,35 @@ function ConsultantPortalPage() {
     localStorage.removeItem('skyrate_query_history');
   };
 
+  // Service Search handler
+  const handleServiceSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setServiceSearchLoading(true);
+    setServiceSearchResults([]);
+    setServiceSearchBensSearched(0);
+    
+    try {
+      const filters: any = {};
+      if (serviceSearchBen) filters.ben = serviceSearchBen;
+      if (serviceSearchStatus) filters.status_filter = serviceSearchStatus;
+      if (serviceSearchType) filters.service_type = serviceSearchType;
+      if (serviceSearchYear) filters.year = serviceSearchYear;
+      if (serviceSearchMinAmount) filters.min_amount = parseFloat(serviceSearchMinAmount);
+      if (serviceSearchMaxAmount) filters.max_amount = parseFloat(serviceSearchMaxAmount);
+      filters.limit = 100;
+      
+      const response = await api.consultantServiceSearch(filters);
+      if (response.success && response.data) {
+        setServiceSearchResults(response.data.results || []);
+        setServiceSearchBensSearched(response.data.bens_searched || 0);
+      }
+    } catch (error) {
+      console.error("Service search error:", error);
+    } finally {
+      setServiceSearchLoading(false);
+    }
+  };
+
   // Show loading state while checking payment status
   if (!_hasHydrated || checkingPayment) {
     return (
@@ -829,6 +869,7 @@ function ConsultantPortalPage() {
     { id: "funding", label: "Funding Data", icon: "💰" },
     { id: "frn-status", label: "FRN Status", icon: "📈" },
     { id: "appeals", label: "Appeals", icon: "📋" },
+    { id: "service-search", label: "Service Search", icon: "🔍" },
     { id: "settings", label: "Settings", icon: "⚙️" },
   ];
 
@@ -2105,6 +2146,177 @@ function ConsultantPortalPage() {
                   <button className="px-4 py-2 border border-slate-200 bg-white rounded-lg hover:bg-slate-50">Manage Billing</button>
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === "service-search" && (
+            <div className="space-y-6">
+              {/* Service Search Filters */}
+              <form onSubmit={handleServiceSearch} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                <h2 className="text-lg font-semibold text-slate-900 mb-4">Service Search Filters</h2>
+                <p className="text-sm text-slate-500 mb-4">Search E-Rate funded services across your managed schools.</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">School (BEN)</label>
+                    <select
+                      value={serviceSearchBen}
+                      onChange={(e) => setServiceSearchBen(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                    >
+                      <option value="">All My Schools</option>
+                      {schools.map(school => (
+                        <option key={school.ben} value={school.ben}>
+                          {school.school_name || school.name || school.ben} ({school.ben})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Status</label>
+                    <select
+                      value={serviceSearchStatus}
+                      onChange={(e) => setServiceSearchStatus(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                    >
+                      <option value="">All Statuses</option>
+                      <option value="Funded">Funded</option>
+                      <option value="Pending">Pending</option>
+                      <option value="Denied">Denied</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Service Type</label>
+                    <select
+                      value={serviceSearchType}
+                      onChange={(e) => setServiceSearchType(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                    >
+                      <option value="">All Types</option>
+                      <option value="Internal Connections">Internal Connections</option>
+                      <option value="Basic Maintenance">Basic Maintenance</option>
+                      <option value="Internet Access">Internet Access</option>
+                      <option value="Data Transmission">Data Transmission</option>
+                      <option value="Voice">Voice</option>
+                      <option value="Managed Internal Broadband Services">Managed Internal Broadband Services</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Year</label>
+                    <select
+                      value={serviceSearchYear}
+                      onChange={(e) => setServiceSearchYear(parseInt(e.target.value))}
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                    >
+                      <option value={2025}>2025</option>
+                      <option value={2024}>2024</option>
+                      <option value={2023}>2023</option>
+                      <option value={2022}>2022</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Min Amount ($)</label>
+                    <input
+                      type="number"
+                      value={serviceSearchMinAmount}
+                      onChange={(e) => setServiceSearchMinAmount(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Max Amount ($)</label>
+                    <input
+                      type="number"
+                      value={serviceSearchMaxAmount}
+                      onChange={(e) => setServiceSearchMaxAmount(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                      placeholder="No limit"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={serviceSearchLoading}
+                  className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg hover:shadow-indigo-200 transition-all disabled:opacity-50 font-medium"
+                >
+                  {serviceSearchLoading ? (
+                    <span className="flex items-center gap-2">
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Searching...
+                    </span>
+                  ) : "Search Services"}
+                </button>
+              </form>
+
+              {/* Service Search Results */}
+              {serviceSearchResults.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-slate-900">
+                      Results ({serviceSearchResults.length})
+                    </h2>
+                    <span className="text-sm text-slate-500">
+                      {serviceSearchBensSearched > 0 && `Searched across ${serviceSearchBensSearched} school(s)`}
+                    </span>
+                  </div>
+                  
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">BEN</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">School Name</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">FRN</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Year</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Funding</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Service</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {serviceSearchResults.map((result, idx) => (
+                          <tr key={`${result.ben}-${result.frn}-${idx}`} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-4 py-3 font-mono text-indigo-600">{result.ben}</td>
+                            <td className="px-4 py-3 font-medium text-slate-900">{result.name || '-'}</td>
+                            <td className="px-4 py-3 font-mono text-sm">{result.frn || '-'}</td>
+                            <td className="px-4 py-3 text-sm">{result.funding_year || '-'}</td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                result.status === 'Funded' ? 'bg-green-100 text-green-700' :
+                                result.status === 'Denied' ? 'bg-red-100 text-red-700' :
+                                result.status === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-slate-100 text-slate-700'
+                              }`}>
+                                {result.status || '-'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 font-medium">{result.funding_amount ? `$${result.funding_amount.toLocaleString()}` : '-'}</td>
+                            <td className="px-4 py-3 text-sm">{result.service_type || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {serviceSearchResults.length === 0 && !serviceSearchLoading && (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                    <span className="text-3xl">🔍</span>
+                  </div>
+                  <h2 className="text-lg font-semibold text-slate-900">No Results Yet</h2>
+                  <p className="text-slate-500 mt-2 max-w-md mx-auto">
+                    {schools.length === 0 
+                      ? "Add schools to your portfolio first, then search for their E-Rate services."
+                      : "Use the filters above to search for E-Rate funded services across your managed schools."
+                    }
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -61,7 +61,7 @@ class SaveSearchRequest(BaseModel):
 # ==================== DEPENDENCIES ====================
 
 async def get_vendor_profile(
-    current_user: User = Depends(require_role("admin", "vendor")),
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
     db: Session = Depends(get_db)
 ) -> VendorProfile:
     """Get or create vendor profile for current user"""

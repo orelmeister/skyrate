@@ -15,6 +15,7 @@ export default function SignInPage() {
     if (isAuthenticated && user) {
       const dashboard = user.role === 'vendor' ? '/vendor' : 
                        user.role === 'admin' ? '/admin' :
+                       user.role === 'super' ? '/super' :
                        user.role === 'applicant' ? '/applicant' : '/consultant';
       router.push(dashboard);
     }
@@ -29,6 +30,7 @@ export default function SignInPage() {
       const currentUser = useAuthStore.getState().user;
       const dashboard = currentUser?.role === 'vendor' ? '/vendor' : 
                        currentUser?.role === 'admin' ? '/admin' :
+                       currentUser?.role === 'super' ? '/super' :
                        currentUser?.role === 'applicant' ? '/applicant' : '/consultant';
       router.push(dashboard);
     }

@@ -159,7 +159,7 @@ function VendorPortalPage() {
       }
       // Verification guard handles redirect to /onboarding
       if (!emailVerified) return;
-      if (user?.role !== "vendor" && user?.role !== "admin") {
+      if (user?.role !== "vendor" && user?.role !== "admin" && user?.role !== "super") {
         // Redirect to appropriate dashboard based on role
         const dashboard = user?.role === 'applicant' ? '/applicant' : '/consultant';
         router.push(dashboard);

@@ -15,7 +15,7 @@ export interface ApiResponse<T = any> {
 export interface User {
   id: number;
   email: string;
-  role: 'consultant' | 'vendor' | 'admin' | 'applicant';
+  role: 'consultant' | 'vendor' | 'admin' | 'applicant' | 'super';
   first_name: string | null;
   last_name: string | null;
   full_name: string | null;
@@ -1452,6 +1452,23 @@ class ApiClient {
     });
     if (!response.ok) throw new Error('Failed to download appeal');
     return response.blob();
+  }
+
+  // ==================== CONSULTANT SERVICE SEARCH ====================
+
+  async consultantServiceSearch(filters: {
+    ben?: string;
+    status_filter?: string;
+    service_type?: string;
+    year?: number;
+    min_amount?: number;
+    max_amount?: number;
+    limit?: number;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/consultant/service-search', {
+      method: 'POST',
+      body: JSON.stringify(filters),
+    });
   }
 
   // ==================== VENDOR ====================

@@ -23,6 +23,7 @@ import { useAuthStore } from "@/lib/auth-store";
 // Test/demo accounts that bypass verification (matches backend TEST_ACCOUNT_EMAILS)
 const TEST_ACCOUNT_EMAILS = [
   "admin@skyrate.ai",
+  "super@skyrate.ai",
   "test_consultant@example.com",
   "test_vendor@example.com",
   "test_applicant@example.com",
@@ -56,8 +57,8 @@ export function useVerificationGuard() {
       return;
     }
 
-    // Admin users bypass verification
-    if (user.role === "admin") {
+    // Admin and super users bypass verification
+    if (user.role === "admin" || user.role === "super") {
       setVerified(true);
       setChecking(false);
       return;
