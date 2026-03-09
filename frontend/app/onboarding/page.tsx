@@ -21,6 +21,8 @@ import {
   Send,
   Check,
   X,
+  Mail,
+  Phone,
 } from "lucide-react";
 
 // ==================== TYPES ====================
@@ -47,14 +49,449 @@ interface AlertPreferences {
   notification_frequency: string;
 }
 
-// ==================== STEP 1: FRN DISCOVERY ====================
+// ==================== STEP 1: EMAIL VERIFICATION (MANDATORY) ====================
+
+function EmailVerificationStep({
+  onNext,
+}: {
+  onNext: () => void;
+}) {
+  const { user } = useAuthStore();
+  const [code, setCode] = useState("");
+  const [codeSent, setCodeSent] = useState(false);
+  const [verified, setVerified] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [error, setError] = useState("");
+  const [maskedEmail, setMaskedEmail] = useState("");
+  const [resendTimer, setResendTimer] = useState(0);
+
+  useEffect(() => {
+    if (resendTimer > 0) {
+      const t = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
+      return () => clearTimeout(t);
+    }
+  }, [resendTimer]);
+
+  // If user already verified email (coming back to onboarding), skip ahead
+  useEffect(() => {
+    if (user?.email_verified || user?.is_verified) {
+      setVerified(true);
+    }
+  }, [user]);
+
+  const sendCode = async () => {
+    setSending(true);
+    setError("");
+    try {
+      const res = await api.sendEmailVerification();
+      if (res.success) {
+        setCodeSent(true);
+        setResendTimer(60);
+        if (res.data?.email) setMaskedEmail(res.data.email);
+      } else {
+        setError(res.error || "Failed to send verification code");
+      }
+    } catch {
+      setError("Failed to send code. Please try again.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const verifyCode = async () => {
+    if (!code.trim() || code.length < 4) {
+      setError("Please enter the verification code");
+      return;
+    }
+    setVerifying(true);
+    setError("");
+    try {
+      const res = await api.verifyEmailCode(code.trim());
+      if (res.success && res.data?.verified) {
+        setVerified(true);
+      } else {
+        setError(res.error || res.data?.message || "Invalid verification code. Please try again.");
+      }
+    } catch {
+      setError("Verification failed. Please try again.");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="text-center mb-6">
+        <div className="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+          <Mail className="w-7 h-7 text-purple-600" />
+        </div>
+        <h2 className="text-2xl font-bold text-slate-900">Verify Your Email</h2>
+        <p className="text-slate-500 mt-1">
+          Required to activate your account and receive important E-Rate notifications
+        </p>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 flex items-start gap-2">
+          <X className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+
+      {!verified && (
+        <div className="space-y-4">
+          {!codeSent ? (
+            <div className="text-center">
+              <div className="bg-slate-50 rounded-xl p-4 mb-4">
+                <p className="text-sm text-slate-600">
+                  We&apos;ll send a 6-digit verification code to
+                </p>
+                <p className="font-semibold text-slate-800 mt-1">{user?.email || "your email"}</p>
+              </div>
+              <button
+                onClick={sendCode}
+                disabled={sending}
+                className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 mx-auto"
+              >
+                {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                Send Verification Code
+              </button>
+            </div>
+          ) : (
+            <div>
+              <p className="text-sm text-slate-600 mb-3">
+                A verification code was sent to <span className="font-medium">{maskedEmail || user?.email}</span>
+              </p>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Verification Code</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="Enter 6-digit code"
+                  maxLength={6}
+                  className="flex-1 px-4 py-2.5 border border-slate-300 rounded-xl text-sm text-center tracking-widest font-mono focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  onKeyDown={(e) => { if (e.key === "Enter" && code.length >= 4) verifyCode(); }}
+                />
+                <button
+                  onClick={verifyCode}
+                  disabled={verifying || code.length < 4}
+                  className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {verifying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+                  Verify
+                </button>
+              </div>
+              <div className="flex items-center justify-end mt-2">
+                <button
+                  onClick={sendCode}
+                  disabled={resendTimer > 0 || sending}
+                  className="text-xs text-purple-600 hover:text-purple-700 disabled:text-slate-400"
+                >
+                  {resendTimer > 0 ? `Resend in ${resendTimer}s` : "Resend code"}
+                </button>
+              </div>
+              <p className="text-xs text-slate-400 mt-2">Check your spam folder if you don&apos;t see the email</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {verified && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3 mb-4">
+          <CheckCircle2 className="w-6 h-6 text-green-600 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-green-800">Email verified successfully!</p>
+            <p className="text-xs text-green-600">Your account is now activated</p>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-end mt-6 pt-4 border-t border-slate-100">
+        {/* No back button - email verification is the first mandatory step */}
+        <button
+          onClick={onNext}
+          disabled={!verified}
+          className={`flex items-center gap-2 ${
+            verified
+              ? "bg-purple-600 hover:bg-purple-700 shadow-lg shadow-purple-200"
+              : "bg-slate-300 cursor-not-allowed"
+          } text-white px-6 py-2.5 rounded-xl font-medium text-sm transition-all disabled:opacity-50`}
+        >
+          {verified ? <CheckCircle2 className="w-4 h-4" /> : null}
+          {verified ? "Continue" : "Verify email to continue"}
+          {verified && <ChevronRight className="w-4 h-4" />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ==================== STEP 2: PHONE/SMS VERIFICATION (OPTIONAL) ====================
+
+function PhoneVerificationStep({
+  onNext,
+  onSkip,
+  onBack,
+}: {
+  onNext: () => void;
+  onSkip: () => void;
+  onBack: () => void;
+}) {
+  const { user } = useAuthStore();
+  const [phoneNumber, setPhoneNumber] = useState(user?.phone || "");
+  const [code, setCode] = useState("");
+  const [codeSent, setCodeSent] = useState(false);
+  const [verified, setVerified] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [error, setError] = useState("");
+  const [resendTimer, setResendTimer] = useState(0);
+  const [smsUnavailable, setSmsUnavailable] = useState(false);
+
+  useEffect(() => {
+    if (resendTimer > 0) {
+      const t = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
+      return () => clearTimeout(t);
+    }
+  }, [resendTimer]);
+
+  // If user already verified phone, skip ahead
+  useEffect(() => {
+    if (user?.phone_verified) {
+      setVerified(true);
+      setPhoneNumber(user.phone || "");
+    }
+  }, [user]);
+
+  const formatPhoneForAPI = (phone: string): string => {
+    // Strip everything except digits and +
+    const cleaned = phone.replace(/[^\d+]/g, "");
+    // If it starts with a digit (no +), prepend +1 for US
+    if (cleaned.startsWith("+")) return cleaned;
+    if (cleaned.length === 10) return `+1${cleaned}`;
+    if (cleaned.length === 11 && cleaned.startsWith("1")) return `+${cleaned}`;
+    return `+${cleaned}`;
+  };
+
+  const sendCode = async () => {
+    if (!phoneNumber.trim()) {
+      setError("Please enter your phone number");
+      return;
+    }
+    
+    const formattedPhone = formatPhoneForAPI(phoneNumber);
+    if (formattedPhone.length < 11) {
+      setError("Please enter a valid phone number");
+      return;
+    }
+    
+    setSending(true);
+    setError("");
+    try {
+      const res = await api.sendPhoneVerification(formattedPhone);
+      if (res.success) {
+        setCodeSent(true);
+        setResendTimer(60);
+      } else {
+        if (res.error?.includes("not yet available") || res.error?.includes("503")) {
+          setSmsUnavailable(true);
+          setError("SMS verification is temporarily unavailable. You can verify later in settings.");
+        } else {
+          setError(res.error || "Failed to send verification code");
+        }
+      }
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || err?.message || "";
+      if (detail.includes("not yet available") || detail.includes("503")) {
+        setSmsUnavailable(true);
+        setError("SMS verification is temporarily unavailable. You can verify later in settings.");
+      } else {
+        setError("Failed to send code. Please check the number and try again.");
+      }
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const verifyCode = async () => {
+    if (!code.trim() || code.length < 4) {
+      setError("Please enter the verification code");
+      return;
+    }
+    setVerifying(true);
+    setError("");
+    try {
+      const formattedPhone = formatPhoneForAPI(phoneNumber);
+      const res = await api.verifyPhoneCode(formattedPhone, code.trim());
+      if (res.success && res.data?.verified) {
+        setVerified(true);
+      } else {
+        setError(res.error || res.data?.message || "Invalid code. Please try again.");
+      }
+    } catch {
+      setError("Verification failed. Please try again.");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="text-center mb-6">
+        <div className="w-14 h-14 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+          <Phone className="w-7 h-7 text-indigo-600" />
+        </div>
+        <h2 className="text-2xl font-bold text-slate-900">Verify Your Phone</h2>
+        <p className="text-slate-500 mt-1">
+          Enable SMS alerts for real-time E-Rate funding updates
+        </p>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 flex items-start gap-2">
+          <X className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+
+      {!verified && !smsUnavailable && (
+        <div className="space-y-4">
+          {!codeSent ? (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Phone Number</label>
+              <div className="flex gap-2">
+                <input
+                  type="tel"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  placeholder="+1 (555) 123-4567"
+                  className="flex-1 px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+                <button
+                  onClick={sendCode}
+                  disabled={sending || !phoneNumber.trim()}
+                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  Send Code
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                Standard SMS rates may apply. By verifying, you consent to receiving SMS alerts from SkyRate.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <p className="text-sm text-slate-600 mb-3">
+                A verification code was sent to <span className="font-medium">{phoneNumber}</span>
+              </p>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Verification Code</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                  placeholder="Enter code"
+                  maxLength={8}
+                  className="flex-1 px-4 py-2.5 border border-slate-300 rounded-xl text-sm text-center tracking-widest font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  onKeyDown={(e) => { if (e.key === "Enter" && code.length >= 4) verifyCode(); }}
+                />
+                <button
+                  onClick={verifyCode}
+                  disabled={verifying || code.length < 4}
+                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {verifying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+                  Verify
+                </button>
+              </div>
+              <div className="flex items-center justify-between mt-2">
+                <button
+                  onClick={() => { setCodeSent(false); setCode(""); setError(""); }}
+                  className="text-xs text-slate-500 hover:text-slate-700"
+                >
+                  Change number
+                </button>
+                <button
+                  onClick={sendCode}
+                  disabled={resendTimer > 0 || sending}
+                  className="text-xs text-indigo-600 hover:text-indigo-700 disabled:text-slate-400"
+                >
+                  {resendTimer > 0 ? `Resend in ${resendTimer}s` : "Resend code"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {verified && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3 mb-4">
+          <CheckCircle2 className="w-6 h-6 text-green-600 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-green-800">Phone verified successfully!</p>
+            <p className="text-xs text-green-600">SMS alerts are now enabled for {phoneNumber || user?.phone}</p>
+          </div>
+        </div>
+      )}
+
+      {smsUnavailable && !verified && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 mb-4">
+          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-800">SMS temporarily unavailable</p>
+            <p className="text-xs text-amber-600 mt-1">
+              You can verify your phone number later from your account settings.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
+        <button onClick={onBack} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700">
+          <ChevronLeft className="w-4 h-4" /> Back
+        </button>
+        <div className="flex items-center gap-3">
+          {!verified && (
+            <button
+              onClick={onSkip}
+              className="text-sm text-slate-500 hover:text-slate-700"
+            >
+              Skip for now
+            </button>
+          )}
+          <button
+            onClick={verified ? onNext : (smsUnavailable ? onSkip : undefined)}
+            disabled={!verified && !smsUnavailable}
+            className={`flex items-center gap-2 ${
+              verified
+                ? "bg-indigo-600 hover:bg-indigo-700"
+                : smsUnavailable
+                ? "bg-slate-500 hover:bg-slate-600"
+                : "bg-slate-300 cursor-not-allowed"
+            } text-white px-6 py-2.5 rounded-xl font-medium text-sm transition-all disabled:opacity-50`}
+          >
+            Continue
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==================== STEP 3: FRN DISCOVERY ====================
 
 function FRNDiscoveryStep({
   onNext,
   onSkip,
+  onBack,
 }: {
   onNext: () => void;
   onSkip: () => void;
+  onBack: () => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [frns, setFrns] = useState<DiscoveredFRN[]>([]);
@@ -213,38 +650,44 @@ function FRNDiscoveryStep({
       )}
 
       <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
-        <button
-          onClick={onSkip}
-          className="text-sm text-slate-500 hover:text-slate-700"
-        >
-          Skip for now
+        <button onClick={onBack} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700">
+          <ChevronLeft className="w-4 h-4" /> Back
         </button>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl font-medium text-sm transition-colors disabled:opacity-50"
-        >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          {frns.length > 0 ? "Continue" : "Next"}
-          <ChevronRight className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onSkip}
+            className="text-sm text-slate-500 hover:text-slate-700"
+          >
+            Skip for now
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl font-medium text-sm transition-colors disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            {frns.length > 0 ? "Continue" : "Next"}
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-// ==================== STEP 2: ALERT PREFERENCES ====================
+// ==================== STEP 4: ALERT PREFERENCES ====================
 
 function AlertPreferencesStep({
-  onNext,
+  onComplete,
   onBack,
 }: {
-  onNext: () => void;
+  onComplete: () => void;
   onBack: () => void;
 }) {
   const { user } = useAuthStore();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [completing, setCompleting] = useState(false);
   const [prefs, setPrefs] = useState<AlertPreferences>({
     status_changes: true,
     new_denials: true,
@@ -253,7 +696,7 @@ function AlertPreferencesStep({
     form_470_matches: user?.role === "vendor",
     email_notifications: true,
     push_notifications: true,
-    sms_notifications: false,
+    sms_notifications: !!user?.phone_verified,
     notification_frequency: "realtime",
   });
 
@@ -274,17 +717,20 @@ function AlertPreferencesStep({
     }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
+  const handleComplete = async () => {
+    setCompleting(true);
     try {
       await api.updateAlertPreferences(prefs);
-      onNext();
     } catch {
       // Continue anyway since defaults are sensible
-      onNext();
-    } finally {
-      setSaving(false);
     }
+    try {
+      await api.completeOnboarding();
+    } catch {
+      // Continue regardless
+    }
+    setCompleting(false);
+    onComplete();
   };
 
   const alertTypes = [
@@ -356,26 +802,34 @@ function AlertPreferencesStep({
           {[
             { key: "email_notifications" as const, label: "Email", icon: "📧" },
             { key: "push_notifications" as const, label: "Push", icon: "🔔" },
-            { key: "sms_notifications" as const, label: "SMS", icon: "📱" },
+            { key: "sms_notifications" as const, label: "SMS", icon: "📱", requiresPhone: true },
           ].map((ch) => (
             <button
               key={ch.key}
-              onClick={() => setPrefs((p) => ({ ...p, [ch.key]: !p[ch.key] }))}
+              onClick={() => {
+                if (ch.requiresPhone && !user?.phone_verified) return;
+                setPrefs((p) => ({ ...p, [ch.key]: !p[ch.key] }));
+              }}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium transition-all ${
                 prefs[ch.key]
                   ? "border-purple-300 bg-purple-50 text-purple-700"
+                  : ch.requiresPhone && !user?.phone_verified
+                  ? "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed"
                   : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"
               }`}
             >
               <span>{ch.icon}</span>
               {ch.label}
+              {ch.requiresPhone && user?.phone_verified && (
+                <CheckCircle2 className="w-3 h-3 text-green-500" />
+              )}
             </button>
           ))}
         </div>
-        {prefs.sms_notifications && (
-          <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
+        {!user?.phone_verified && (
+          <p className="text-xs text-slate-400 mt-2 flex items-center gap-1">
             <Smartphone className="w-3 h-3" />
-            SMS alerts will be available once your number is verified in settings
+            SMS requires a verified phone number
           </p>
         )}
       </div>
@@ -406,198 +860,12 @@ function AlertPreferencesStep({
           <ChevronLeft className="w-4 h-4" /> Back
         </button>
         <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl font-medium text-sm transition-colors disabled:opacity-50"
+          onClick={handleComplete}
+          disabled={completing}
+          className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-6 py-2.5 rounded-xl font-medium text-sm transition-all shadow-lg shadow-purple-200 disabled:opacity-50"
         >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          Continue
-          <ChevronRight className="w-4 h-4" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ==================== STEP 3: ACCOUNT VERIFICATION ====================
-
-function AccountVerificationStep({
-  onComplete,
-  onBack,
-}: {
-  onComplete: () => void;
-  onBack: () => void;
-}) {
-  const { user } = useAuthStore();
-  const [code, setCode] = useState("");
-  const [codeSent, setCodeSent] = useState(false);
-  const [verified, setVerified] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-  const [completing, setCompleting] = useState(false);
-  const [error, setError] = useState("");
-  const [maskedEmail, setMaskedEmail] = useState("");
-  const [resendTimer, setResendTimer] = useState(0);
-
-  useEffect(() => {
-    if (resendTimer > 0) {
-      const t = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
-      return () => clearTimeout(t);
-    }
-  }, [resendTimer]);
-
-  const sendCode = async () => {
-    setSending(true);
-    setError("");
-    try {
-      const res = await api.sendEmailVerification();
-      if (res.success) {
-        setCodeSent(true);
-        setResendTimer(60);
-        if (res.data?.email) setMaskedEmail(res.data.email);
-      } else {
-        setError(res.error || "Failed to send verification code");
-      }
-    } catch {
-      setError("Failed to send code. Please try again.");
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const verifyCode = async () => {
-    if (!code.trim() || code.length < 4) {
-      setError("Please enter the verification code");
-      return;
-    }
-    setVerifying(true);
-    setError("");
-    try {
-      const res = await api.verifyEmailCode(code.trim());
-      if (res.success && res.data?.verified) {
-        setVerified(true);
-      } else {
-        setError(res.error || res.data?.message || "Invalid verification code. Please try again.");
-      }
-    } catch {
-      setError("Verification failed. Please try again.");
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  const handleComplete = async () => {
-    setCompleting(true);
-    try {
-      await api.completeOnboarding();
-      onComplete();
-    } catch {
-      onComplete();
-    }
-  };
-
-  return (
-    <div>
-      <div className="text-center mb-6">
-        <div className="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
-          <Shield className="w-7 h-7 text-purple-600" />
-        </div>
-        <h2 className="text-2xl font-bold text-slate-900">Verify Your Account</h2>
-        <p className="text-slate-500 mt-1">
-          We&apos;ll send a verification code to your email
-        </p>
-      </div>
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 flex items-start gap-2">
-          <X className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
-          <p className="text-sm text-red-700">{error}</p>
-        </div>
-      )}
-
-      {!verified && (
-        <div className="space-y-4">
-          {!codeSent ? (
-            <div className="text-center">
-              <p className="text-sm text-slate-600 mb-4">
-                Click below to receive a 6-digit verification code at{" "}
-                <span className="font-medium text-slate-800">{user?.email || "your email"}</span>
-              </p>
-              <button
-                onClick={sendCode}
-                disabled={sending}
-                className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 mx-auto"
-              >
-                {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                Send Verification Code
-              </button>
-            </div>
-          ) : (
-            <div>
-              <p className="text-sm text-slate-600 mb-3">
-                A verification code was sent to <span className="font-medium">{maskedEmail || user?.email}</span>
-              </p>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Verification Code</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="Enter 6-digit code"
-                  maxLength={6}
-                  className="flex-1 px-4 py-2.5 border border-slate-300 rounded-xl text-sm text-center tracking-widest font-mono focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
-                <button
-                  onClick={verifyCode}
-                  disabled={verifying || code.length < 4}
-                  className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
-                >
-                  {verifying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
-                  Verify
-                </button>
-              </div>
-              <div className="flex items-center justify-end mt-2">
-                <button
-                  onClick={sendCode}
-                  disabled={resendTimer > 0 || sending}
-                  className="text-xs text-purple-600 hover:text-purple-700 disabled:text-slate-400"
-                >
-                  {resendTimer > 0 ? `Resend in ${resendTimer}s` : "Resend code"}
-                </button>
-              </div>
-              <p className="text-xs text-slate-400 mt-2">Check your spam folder if you don&apos;t see the email</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {verified && (
-        <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3 mb-4">
-          <CheckCircle2 className="w-6 h-6 text-green-600 flex-shrink-0" />
-          <div>
-            <p className="text-sm font-medium text-green-800">Account verified successfully!</p>
-            <p className="text-xs text-green-600">Your E-Rate monitoring is ready to go</p>
-          </div>
-        </div>
-      )}
-
-      <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
-        <button onClick={onBack} className="flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700">
-          <ChevronLeft className="w-4 h-4" /> Back
-        </button>
-        <button
-          onClick={verified ? handleComplete : sendCode}
-          disabled={completing || (codeSent && !verified)}
-          className={`flex items-center gap-2 ${
-            verified
-              ? "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-lg shadow-purple-200"
-              : codeSent
-              ? "bg-slate-300 cursor-not-allowed"
-              : "bg-purple-600 hover:bg-purple-700"
-          } text-white px-6 py-2.5 rounded-xl font-medium text-sm transition-all disabled:opacity-50`}
-        >
-          {completing ? <Loader2 className="w-4 h-4 animate-spin" /> : verified ? <CheckCircle2 className="w-4 h-4" /> : null}
-          {verified ? "Go to Dashboard" : codeSent ? "Enter code above" : "Send Code"}
+          {completing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+          Go to Dashboard
         </button>
       </div>
     </div>
@@ -611,13 +879,23 @@ export default function OnboardingPage() {
   const { isAuthenticated, user, isLoading, _hasHydrated } = useAuthStore();
   const [step, setStep] = useState(0);
 
-
   useEffect(() => {
     if (!_hasHydrated) return;
     if (!isLoading && !isAuthenticated) {
       router.push("/sign-in");
     }
   }, [_hasHydrated, isAuthenticated, isLoading, router]);
+
+  // If user already verified, start at the appropriate step
+  useEffect(() => {
+    if (user?.email_verified || user?.is_verified) {
+      if (user?.phone_verified) {
+        setStep(2); // Skip to FRN discovery
+      } else {
+        setStep(1); // Skip to phone verification
+      }
+    }
+  }, [user]);
 
   const handleComplete = async () => {
     // Redirect to role-based dashboard
@@ -631,9 +909,10 @@ export default function OnboardingPage() {
   };
 
   const steps = [
-    { label: "FRN Discovery", icon: Search },
+    { label: "Email", icon: Mail },
+    { label: "Phone", icon: Phone },
+    { label: "FRNs", icon: Search },
     { label: "Alerts", icon: Bell },
-    { label: "Verify", icon: Shield },
   ];
 
   if (isLoading) {
@@ -661,15 +940,15 @@ export default function OnboardingPage() {
               SkyRate<span className="text-purple-600">.AI</span>
             </span>
           </div>
-          <p className="text-sm text-slate-500">Welcome! Let's set up your E-Rate monitoring</p>
+          <p className="text-sm text-slate-500">Welcome! Let&apos;s set up your E-Rate monitoring</p>
         </div>
 
         {/* Step Indicator */}
-        <div className="flex items-center justify-center gap-2 mb-6">
+        <div className="flex items-center justify-center gap-1.5 mb-6">
           {steps.map((s, i) => (
-            <div key={i} className="flex items-center gap-2">
+            <div key={i} className="flex items-center gap-1.5">
               <div
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all ${
                   i === step
                     ? "bg-purple-600 text-white shadow-md shadow-purple-200"
                     : i < step
@@ -685,7 +964,7 @@ export default function OnboardingPage() {
                 <span className="hidden sm:inline">{s.label}</span>
               </div>
               {i < steps.length - 1 && (
-                <div className={`w-6 h-0.5 ${i < step ? "bg-purple-400" : "bg-slate-200"}`} />
+                <div className={`w-4 h-0.5 ${i < step ? "bg-purple-400" : "bg-slate-200"}`} />
               )}
             </div>
           ))}
@@ -694,23 +973,28 @@ export default function OnboardingPage() {
         {/* Card */}
         <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-200/80 p-6 sm:p-8">
           {step === 0 && (
-            <FRNDiscoveryStep
+            <EmailVerificationStep
               onNext={() => setStep(1)}
-              onSkip={() => setStep(1)}
             />
           )}
           {step === 1 && (
-            <AlertPreferencesStep
-              onNext={() => {
-                setStep(2);
-              }}
+            <PhoneVerificationStep
+              onNext={() => setStep(2)}
+              onSkip={() => setStep(2)}
               onBack={() => setStep(0)}
             />
           )}
           {step === 2 && (
-            <AccountVerificationStep
-              onComplete={handleComplete}
+            <FRNDiscoveryStep
+              onNext={() => setStep(3)}
+              onSkip={() => setStep(3)}
               onBack={() => setStep(1)}
+            />
+          )}
+          {step === 3 && (
+            <AlertPreferencesStep
+              onComplete={handleComplete}
+              onBack={() => setStep(2)}
             />
           )}
         </div>

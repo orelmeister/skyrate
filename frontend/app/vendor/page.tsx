@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
+import { useVerificationGuard } from "@/lib/use-verification-guard";
 import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse, FRNStatusResponse, FRNStatusSummaryResponse, FRNStatusRecord, Form470Lead, Form470LeadsResponse, Form470DetailResponse, SavedLead, EnrichedContactData } from "@/lib/api";
 import { useTabParam } from "@/hooks/useTabParam";
 import PredictedLeadsTab from "@/components/PredictedLeadsTab";
@@ -43,6 +44,7 @@ export default function VendorPortalWrapper() {
 function VendorPortalPage() {
   const router = useRouter();
   const { user, isAuthenticated, logout, _hasHydrated } = useAuthStore();
+  const { verified: emailVerified, checking: checkingVerification } = useVerificationGuard();
   
   const [activeTab, setActiveTab] = useTabParam<VendorTab>("dashboard", VENDOR_TABS);
   const [profile, setProfile] = useState<VendorProfile | null>(null);
@@ -150,11 +152,13 @@ function VendorPortalPage() {
 
   useEffect(() => {
     const checkPaymentStatus = async () => {
-      if (!_hasHydrated) return;
+      if (!_hasHydrated || checkingVerification) return;
       if (!isAuthenticated) {
         router.push("/sign-in");
         return;
       }
+      // Verification guard handles redirect to /onboarding
+      if (!emailVerified) return;
       if (user?.role !== "vendor" && user?.role !== "admin") {
         // Redirect to appropriate dashboard based on role
         const dashboard = user?.role === 'applicant' ? '/applicant' : '/consultant';
@@ -180,7 +184,7 @@ function VendorPortalPage() {
     };
     
     checkPaymentStatus();
-  }, [_hasHydrated, isAuthenticated, user, router]);
+  }, [_hasHydrated, isAuthenticated, user, router, checkingVerification, emailVerified]);
 
   // Load saved leads when the "leads" tab is activated
   useEffect(() => {

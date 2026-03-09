@@ -312,9 +312,17 @@ def _run_schema_migrations(engine):
     migrations = [
         # (table, column, SQL type, default)
         ("users", "phone_verified", "TINYINT(1) DEFAULT 0", None),
+        ("users", "phone_verified_at", "DATETIME DEFAULT NULL", None),
         ("users", "onboarding_completed", "TINYINT(1) DEFAULT 0", None),
         ("users", "auth_provider", "VARCHAR(50) DEFAULT 'local'", None),
         ("users", "full_name", "VARCHAR(255) DEFAULT NULL", None),
+        ("users", "email_verified", "TINYINT(1) DEFAULT 0", None),
+        ("users", "email_verified_at", "DATETIME DEFAULT NULL", None),
+        ("users", "sms_opt_in", "TINYINT(1) DEFAULT 0", None),
+        ("users", "sms_opted_in_at", "DATETIME DEFAULT NULL", None),
+        # Email verification codes table (replaces in-memory dict)
+        # Note: This table is created via Base.metadata.create_all, migration entries here
+        # are only for columns on existing tables.
         # Blog post image columns (added after initial table creation)
         ("blog_posts", "hero_image", "LONGBLOB DEFAULT NULL", None),
         ("blog_posts", "hero_image_mime", "VARCHAR(50) DEFAULT 'image/png'", None),
@@ -401,6 +409,7 @@ async def lifespan(app: FastAPI):
     from app.models.push_subscription import PushSubscription
     from app.models.support_ticket import SupportTicket, TicketMessage
     from app.models.prediction import PredictedLead, PredictionRefreshLog
+    from app.models.email_verification import EmailVerificationCode
     
     # Database initialization (non-blocking — health checks can pass even if DB is slow)
     try:

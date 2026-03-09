@@ -4,6 +4,7 @@ import React, { useState, useEffect, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
+import { useVerificationGuard } from "@/lib/use-verification-guard";
 import { api } from "@/lib/api";
 import { useTabParam } from "@/hooks/useTabParam";
 
@@ -150,6 +151,7 @@ export default function ApplicantDashboardWrapper() {
 function ApplicantDashboard() {
   const router = useRouter();
   const { user, token, isAuthenticated, logout, _hasHydrated } = useAuthStore();
+  const { verified: emailVerified, checking: checkingVerification } = useVerificationGuard();
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -174,12 +176,14 @@ function ApplicantDashboard() {
 
   useEffect(() => {
     // Wait for Zustand hydration before checking auth
-    if (!_hasHydrated) return;
+    if (!_hasHydrated || checkingVerification) return;
     // Check authentication and role
     if (!isAuthenticated || !token) {
       router.push('/sign-in');
       return;
     }
+    // Verification guard handles redirect to /onboarding
+    if (!emailVerified) return;
     if (user?.role !== 'applicant' && user?.role !== 'admin') {
       // Redirect to appropriate dashboard
       const dashboard = user?.role === 'vendor' ? '/vendor' : '/consultant';
@@ -187,7 +191,7 @@ function ApplicantDashboard() {
       return;
     }
     fetchDashboard();
-  }, [_hasHydrated, isAuthenticated, token, user, router]);
+  }, [_hasHydrated, isAuthenticated, token, user, router, checkingVerification, emailVerified]);
 
   // Auto-load data when switching to live tabs
   useEffect(() => {

@@ -36,6 +36,7 @@ function SignUpPage() {
     firstName: "",
     lastName: "",
     email: "",
+    phone: "",
     password: "",
     confirmPassword: "",
     company: "",
@@ -187,6 +188,7 @@ function SignUpPage() {
       first_name: formData.firstName || undefined,
       last_name: formData.lastName || undefined,
       company_name: formData.company || undefined,
+      phone: formData.phone.trim() || undefined,
       role: formData.role,
       crn: formData.role === "consultant" ? formData.crn.trim() : undefined,
       spin: formData.role === "vendor" ? formData.spin.trim() : undefined,
@@ -196,10 +198,10 @@ function SignUpPage() {
 
     if (success) {
       if (promoToken && promoData) {
-        // Promo invite: skip paywall, go directly to dashboard
-        router.push(`/${formData.role}`);
+        // Promo invite: go to onboarding for verification, then dashboard
+        router.push("/onboarding");
       } else {
-        // Normal registration: redirect to subscribe page
+        // Normal registration: go to subscribe, then onboarding handles verification
         router.push("/subscribe");
       }
     } else {
@@ -612,6 +614,21 @@ function SignUpPage() {
                   required
                   readOnly={!!promoData}
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Phone Number <span className="text-slate-400 font-normal">(optional)</span>
+                </label>
+                <input
+                  type="tel"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  placeholder="+1 (555) 123-4567"
+                />
+                <p className="mt-1 text-xs text-slate-500">For SMS alerts and verification. We&apos;ll never share your number.</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

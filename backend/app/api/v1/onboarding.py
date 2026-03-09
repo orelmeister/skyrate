@@ -1,11 +1,9 @@
 """
 Onboarding API
-Handles post-registration onboarding: FRN discovery, alert preferences, phone verification
+Handles post-registration onboarding: FRN discovery, alert preferences, email & phone verification
 """
 
 import logging
-import random
-import string
 from typing import Optional, List, Dict, Tuple
 from datetime import datetime, timedelta
 
@@ -20,31 +18,8 @@ from ...models.alert import AlertConfig
 from ...models.applicant import ApplicantProfile, ApplicantFRN, FRNStatusType
 from ...models.consultant import ConsultantProfile, ConsultantSchool
 from ...models.vendor import VendorProfile
+from ...models.email_verification import EmailVerificationCode
 from ...services.usac_service import get_usac_service
-
-# In-memory store for email verification codes: {email: (code, expiry)}
-_verification_codes: Dict[str, Tuple[str, datetime]] = {}
-
-def _generate_code() -> str:
-    return ''.join(random.choices(string.digits, k=6))
-
-def _store_code(email: str) -> str:
-    code = _generate_code()
-    _verification_codes[email] = (code, datetime.utcnow() + timedelta(minutes=10))
-    return code
-
-def _verify_code(email: str, code: str) -> bool:
-    stored = _verification_codes.get(email)
-    if not stored:
-        return False
-    stored_code, expiry = stored
-    if datetime.utcnow() > expiry:
-        del _verification_codes[email]
-        return False
-    if stored_code != code:
-        return False
-    del _verification_codes[email]
-    return True
 
 logger = logging.getLogger(__name__)
 
@@ -501,9 +476,13 @@ async def verify_phone_code(
     result = sms_service.check_verification_code(data.phone_number, data.code)
     
     if result["success"]:
-        # Mark phone as verified
+        # Mark phone as verified with timestamp
+        now = datetime.utcnow()
         current_user.phone = data.phone_number
         current_user.phone_verified = True
+        current_user.phone_verified_at = now
+        current_user.sms_opt_in = True
+        current_user.sms_opted_in_at = now
         db.commit()
         
         # Also enable SMS in alert config if they have one
@@ -531,12 +510,26 @@ async def send_email_verification(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Send a 6-digit verification code to the user's email"""
+    """Send a 6-digit verification code to the user's email (stored in DB)"""
     email = data.email or current_user.email
     if not email:
         raise HTTPException(status_code=400, detail="No email address available")
     
-    code = _store_code(email)
+    # Invalidate any existing unused codes for this email
+    existing_codes = db.query(EmailVerificationCode).filter(
+        EmailVerificationCode.email == email.lower().strip(),
+        EmailVerificationCode.verified_at == None,
+    ).all()
+    for old_code in existing_codes:
+        old_code.verified_at = datetime.utcnow()  # Mark as consumed
+    
+    # Create new code in DB
+    verification = EmailVerificationCode.create_for_email(email)
+    db.add(verification)
+    db.commit()
+    db.refresh(verification)
+    
+    code = verification.code
     
     # Send the code via email in the background
     def _send():
@@ -583,28 +576,49 @@ async def verify_email_code(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Verify the email verification code"""
+    """Verify the email verification code (DB-backed, fixes is_verified)"""
     email = current_user.email
     if not email:
         raise HTTPException(status_code=400, detail="No email address on account")
     
-    if _verify_code(email, data.code):
-        # Mark as verified — we use phone_verified field to gate SMS
-        # but email verification means the account itself is verified
-        current_user.onboarding_completed = False  # Will be set by /complete
-        db.commit()
-        
-        return {
-            "success": True,
-            "verified": True,
-            "message": "Email verified successfully!"
-        }
-    else:
+    # Find the latest unused, non-expired code for this email
+    verification = db.query(EmailVerificationCode).filter(
+        EmailVerificationCode.email == email.lower().strip(),
+        EmailVerificationCode.verified_at == None,
+        EmailVerificationCode.expires_at > datetime.utcnow(),
+    ).order_by(EmailVerificationCode.created_at.desc()).first()
+    
+    if not verification:
         return {
             "success": False,
             "verified": False,
             "message": "Invalid or expired code. Please request a new one."
         }
+    
+    if verification.code != data.code:
+        return {
+            "success": False,
+            "verified": False,
+            "message": "Invalid code. Please check and try again."
+        }
+    
+    # Code matches — mark code as used
+    verification.mark_verified()
+    
+    # Mark user as email-verified AND account-verified
+    now = datetime.utcnow()
+    current_user.is_verified = True
+    current_user.email_verified = True
+    current_user.email_verified_at = now
+    # Don't set onboarding_completed here — that's set by /complete
+    
+    db.commit()
+    
+    return {
+        "success": True,
+        "verified": True,
+        "message": "Email verified successfully!"
+    }
 
 
 # ==================== Complete Onboarding ====================
@@ -659,6 +673,8 @@ async def get_onboarding_status(
     
     return {
         "onboarding_completed": current_user.onboarding_completed,
+        "email_verified": current_user.email_verified or False,
+        "is_verified": current_user.is_verified,
         "frns_selected": frn_count > 0,
         "frn_count": frn_count,
         "alert_config_set": has_alert_config,

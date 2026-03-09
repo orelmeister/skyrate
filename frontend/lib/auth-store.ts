@@ -19,8 +19,12 @@ export interface User {
   full_name?: string;
   company_name?: string;
   phone?: string;
+  phone_verified?: boolean;
   is_active: boolean;
   is_verified: boolean;
+  email_verified?: boolean;
+  sms_opt_in?: boolean;
+  onboarding_completed?: boolean;
   created_at: string;
   last_login?: string;
   subscription?: {
@@ -43,6 +47,7 @@ export interface RegisterData {
   first_name?: string;
   last_name?: string;
   company_name?: string;
+  phone?: string;  // Optional phone for SMS verification
   role: "consultant" | "vendor" | "applicant";
   crn?: string;  // For consultants
   spin?: string; // For vendors

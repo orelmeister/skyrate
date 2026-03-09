@@ -3,7 +3,7 @@ User Model
 Handles users across all portal types (admin, consultant, vendor)
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Enum
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -33,11 +33,18 @@ class User(Base):
     company_name = Column(String(255))
     phone = Column(String(50))
     phone_verified = Column(Boolean, default=False)
+    phone_verified_at = Column(DateTime, nullable=True)
     onboarding_completed = Column(Boolean, default=False)
     
-    # Status
+    # Verification status
     is_active = Column(Boolean, default=True)
-    is_verified = Column(Boolean, default=False)
+    is_verified = Column(Boolean, default=False)  # True once email is verified
+    email_verified = Column(Boolean, default=False)
+    email_verified_at = Column(DateTime, nullable=True)
+    
+    # SMS opt-in consent tracking
+    sms_opt_in = Column(Boolean, default=False)
+    sms_opted_in_at = Column(DateTime, nullable=True)
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -67,8 +74,12 @@ class User(Base):
             "full_name": self.full_name,
             "company_name": self.company_name,
             "phone": self.phone,
+            "phone_verified": self.phone_verified,
             "is_active": self.is_active,
             "is_verified": self.is_verified,
+            "email_verified": self.email_verified,
+            "sms_opt_in": self.sms_opt_in,
+            "onboarding_completed": self.onboarding_completed,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_login": self.last_login.isoformat() if self.last_login else None,
         }

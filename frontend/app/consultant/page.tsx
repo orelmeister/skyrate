@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
+import { useVerificationGuard } from "@/lib/use-verification-guard";
 import { api, ConsultantSchool, ConsultantProfile, AppealRecord } from "@/lib/api";
 import { SearchResultsTable } from "@/components/SearchResultsTable";
 import { AppealChat } from "@/components/AppealChat";
@@ -97,6 +98,7 @@ export default function ConsultantPortalWrapper() {
 function ConsultantPortalPage() {
   const router = useRouter();
   const { user, isAuthenticated, logout, _hasHydrated } = useAuthStore();
+  const { verified: emailVerified, checking: checkingVerification } = useVerificationGuard();
   
   const [activeTab, setActiveTab] = useTabParam<ConsultantTab>("dashboard", CONSULTANT_TABS);
   const [profile, setProfile] = useState<ConsultantProfile | null>(null);
@@ -305,11 +307,13 @@ function ConsultantPortalPage() {
   
   useEffect(() => {
     const checkPaymentStatus = async () => {
-      if (!_hasHydrated) return;
+      if (!_hasHydrated || checkingVerification) return;
       if (!isAuthenticated) {
         router.push("/sign-in");
         return;
       }
+      // Verification guard handles redirect to /onboarding
+      if (!emailVerified) return;
       if (user?.role !== "consultant" && user?.role !== "admin") {
         // Redirect to appropriate dashboard based on role
         const dashboard = user?.role === 'applicant' ? '/applicant' : '/vendor';
@@ -336,7 +340,7 @@ function ConsultantPortalPage() {
     };
     
     checkPaymentStatus();
-  }, [_hasHydrated, isAuthenticated, user, router]);
+  }, [_hasHydrated, isAuthenticated, user, router, checkingVerification, emailVerified]);
 
   const loadData = async (withUsacData: boolean = false) => {
     setIsLoading(true);

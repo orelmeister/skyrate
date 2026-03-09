@@ -40,6 +40,7 @@ class UserRegister(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     company_name: Optional[str] = None
+    phone: Optional[str] = Field(None, description="Phone number (optional, for SMS verification)")
     role: str = Field(default="consultant", pattern="^(consultant|vendor|applicant)$")
     crn: Optional[str] = Field(None, description="Consultant Registration Number (required for consultants)")
     spin: Optional[str] = Field(None, description="Service Provider Identification Number (required for vendors)")
@@ -366,8 +367,9 @@ async def register(
         first_name=data.first_name,
         last_name=data.last_name,
         company_name=data.company_name,
+        phone=data.phone.strip() if data.phone else None,
         is_active=True,
-        is_verified=False,  # Email verification can be added later
+        is_verified=False,  # Must verify email during onboarding
     )
     db.add(user)
     db.flush()  # Get user.id
