@@ -149,8 +149,10 @@ class Settings(BaseSettings):
     TEST_EMAIL_PATTERNS: List[str] = ["test_", "test@", "demo@", "demo_"]
     # Specific test account emails (exact match, case-insensitive)
     TEST_ACCOUNT_EMAILS: List[str] = [
+        "admin@skyrate.ai",
         "test_consultant@example.com",
         "test_vendor@example.com",
+        "test_applicant@example.com",
         "demo@skyrate.ai"
     ]
     # Coupon codes that bypass payment (case-insensitive)

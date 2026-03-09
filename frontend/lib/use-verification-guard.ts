@@ -20,6 +20,27 @@ import { useAuthStore } from "@/lib/auth-store";
  * if (checking || !verified) return <LoadingSpinner />;
  * ```
  */
+// Test/demo accounts that bypass verification (matches backend TEST_ACCOUNT_EMAILS)
+const TEST_ACCOUNT_EMAILS = [
+  "admin@skyrate.ai",
+  "test_consultant@example.com",
+  "test_vendor@example.com",
+  "test_applicant@example.com",
+  "demo@skyrate.ai",
+];
+
+function isTestAccount(email?: string): boolean {
+  if (!email) return false;
+  const lower = email.toLowerCase();
+  return (
+    TEST_ACCOUNT_EMAILS.includes(lower) ||
+    lower.startsWith("test_") ||
+    lower.startsWith("test@") ||
+    lower.startsWith("demo@") ||
+    lower.startsWith("demo_")
+  );
+}
+
 export function useVerificationGuard() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading, _hasHydrated } = useAuthStore();
@@ -37,6 +58,13 @@ export function useVerificationGuard() {
 
     // Admin users bypass verification
     if (user.role === "admin") {
+      setVerified(true);
+      setChecking(false);
+      return;
+    }
+
+    // Test/demo accounts bypass verification
+    if (isTestAccount(user.email)) {
       setVerified(true);
       setChecking(false);
       return;

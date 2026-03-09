@@ -109,6 +109,7 @@ def seed_demo_accounts():
                 company_name="SkyRate AI",
                 is_active=True,
                 is_verified=True,
+                email_verified=True,
             )
             db.add(admin_user)
             db.flush()
@@ -117,6 +118,8 @@ def seed_demo_accounts():
             admin_existing.password_hash = admin_hashed
             admin_existing.role = UserRole.ADMIN.value
             admin_existing.is_active = True
+            admin_existing.is_verified = True
+            admin_existing.email_verified = True
             logger.info(f"Updated super admin account: {admin_email}")
         
         for email, role, password in demo_accounts:
@@ -127,7 +130,9 @@ def seed_demo_accounts():
                     email=email,
                     password_hash=hashed,
                     role=role,
-                    is_active=True
+                    is_active=True,
+                    is_verified=True,
+                    email_verified=True,
                 )
                 db.add(user)
                 db.flush()  # Get the user ID
@@ -136,6 +141,8 @@ def seed_demo_accounts():
                 # Update existing user's password hash to ensure login works
                 existing.password_hash = hashed
                 existing.is_active = True
+                existing.is_verified = True
+                existing.email_verified = True
                 user = existing
                 logger.info(f"Updated password for demo account: {email}")
             
