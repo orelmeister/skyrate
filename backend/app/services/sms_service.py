@@ -151,7 +151,7 @@ class SMSService:
             "APPEAL_DEADLINE": "\U0001f6a8",
         }.get(alert_type, "\U0001f4e2")
         
-        sms_text = f"{prefix} SkyRate AI: {title}"
+        sms_text = f"{prefix} SkyRate: {title}"
         if message:
             # Keep SMS under 160 chars when possible
             remaining = 160 - len(sms_text) - 3  # 3 for " - "
@@ -162,7 +162,7 @@ class SMSService:
     
     def send_admin_broadcast_sms(self, to_phone: str, message: str) -> bool:
         """Send an admin broadcast SMS to a user"""
-        sms_text = f"SkyRate AI: {message}"
+        sms_text = f"SkyRate: {message}"
         if len(sms_text) > 1600:
             sms_text = sms_text[:1597] + "..."
         return self.send_sms(to_phone, sms_text)
