@@ -99,7 +99,9 @@ export default function RootLayout({
                 "contactPoint": {
                   "@type": "ContactPoint",
                   "email": "support@skyrate.ai",
-                  "contactType": "customer support"
+                  "telephone": "+1-855-765-7291",
+                  "contactType": "customer support",
+                  "availableLanguage": "English"
                 }
               }
             }),

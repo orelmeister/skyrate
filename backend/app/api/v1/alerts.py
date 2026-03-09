@@ -34,6 +34,8 @@ class AlertConfigUpdate(BaseModel):
     in_app_notifications: Optional[bool] = None
     daily_digest: Optional[bool] = None
     notification_email: Optional[str] = None
+    sms_notifications: Optional[bool] = None
+    notification_phone: Optional[str] = None
     alert_filters: Optional[Dict[str, Any]] = None
 
 

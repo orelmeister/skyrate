@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { 
   Bell, Mail, AlertTriangle, Clock, DollarSign, Building, 
   Users, Calendar, Save, CheckCircle, XCircle, ArrowLeft,
-  Loader2
+  Loader2, Smartphone
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/auth-store';
 import { api } from '@/lib/api';
@@ -24,7 +24,9 @@ interface AlertConfig {
   email_notifications: boolean;
   in_app_notifications: boolean;
   daily_digest: boolean;
+  sms_notifications: boolean;
   notification_email: string | null;
+  notification_phone: string | null;
 }
 
 export default function NotificationSettingsPage() {
@@ -229,6 +231,47 @@ export default function NotificationSettingsPage() {
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
               </label>
             </div>
+
+            {/* SMS Notifications */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-orange-100 rounded-lg">
+                  <Smartphone className="h-5 w-5 text-orange-600" />
+                </div>
+                <div>
+                  <h3 className="font-medium text-gray-900">SMS Notifications</h3>
+                  <p className="text-sm text-gray-500">Receive text alerts for critical updates</p>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={config.sms_notifications}
+                  onChange={(e) => updateConfig('sms_notifications', e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+              </label>
+            </div>
+
+            {config.sms_notifications && (
+              <div className="ml-14 p-4 bg-orange-50 rounded-lg border border-orange-200">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  SMS Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={config.notification_phone || ''}
+                  onChange={(e) => updateConfig('notification_phone', e.target.value)}
+                  placeholder="(555) 123-4567"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                />
+                <p className="mt-2 text-xs text-gray-500">
+                  Standard message rates apply. By enabling, you agree to receive SMS alerts from SkyRate.
+                  <a href="/sms-terms" className="text-blue-600 hover:underline ml-1">SMS Terms</a>
+                </p>
+              </div>
+            )}
 
             {/* Custom Email */}
             <div className="pt-4 border-t border-gray-200">
