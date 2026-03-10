@@ -386,8 +386,8 @@ export default function NotificationSettingsPage() {
               </label>
             </div>
 
-            {/* Form 470 (Vendors) */}
-            {user?.role === 'vendor' && (
+            {/* Form 470 (Vendors + Super/Admin) */}
+            {(user?.role === 'vendor' || user?.role === 'super' || user?.role === 'admin') && (
               <div className="flex items-center justify-between py-2 pt-4 border-t border-gray-200">
                 <div>
                   <h3 className="font-medium text-gray-900">📋 New Form 470 Matches</h3>
@@ -405,8 +405,8 @@ export default function NotificationSettingsPage() {
               </div>
             )}
 
-            {/* Competitor Activity (Vendors) */}
-            {user?.role === 'vendor' && (
+            {/* Competitor Activity (Vendors + Super/Admin) */}
+            {(user?.role === 'vendor' || user?.role === 'super' || user?.role === 'admin') && (
               <div className="flex items-center justify-between py-2">
                 <div>
                   <h3 className="font-medium text-gray-900">👀 Competitor Activity</h3>

@@ -146,6 +146,8 @@ export default function SubscribePage() {
           const onboardingRes = await api.getOnboardingStatus().catch(() => null);
           if (onboardingRes?.success && !onboardingRes.data?.onboarding_completed) {
             router.push("/onboarding");
+          } else if (user?.role === "super") {
+            router.push("/super");
           } else if (user?.role === "vendor") {
             router.push("/vendor");
           } else {
@@ -310,7 +312,7 @@ export default function SubscribePage() {
                   <span className="text-xl text-indigo-200">/{selectedPlanDetails.interval}</span>
                 </div>
                 <p className="mt-4 text-indigo-200">
-                  {user?.role === "consultant" ? "Consultant" : "Vendor"} Plan
+                  {user?.role === "consultant" ? "Consultant" : user?.role === "applicant" ? "Applicant" : "Vendor"} Plan
                 </p>
               </div>
 

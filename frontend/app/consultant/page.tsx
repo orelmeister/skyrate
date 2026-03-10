@@ -1047,11 +1047,17 @@ function ConsultantPortalPage() {
         <div className="absolute bottom-20 left-4 right-4">
           <div className="bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl p-4 text-white">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium opacity-90">Pro Plan</span>
-              <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs">Active</span>
+              <span className="text-sm font-medium opacity-90">
+                {user?.role === 'super' || user?.role === 'admin' ? 'Full Access' : 'Pro Plan'}
+              </span>
+              <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs">
+                {user?.role === 'super' ? '⭐ Super' : user?.role === 'admin' ? '🔑 Admin' : 'Active'}
+              </span>
             </div>
             <div className="text-2xl font-bold">{schools.length} Schools</div>
-            <div className="text-sm opacity-75 mt-1">Unlimited access</div>
+            <div className="text-sm opacity-75 mt-1">
+              {user?.role === 'super' || user?.role === 'admin' ? 'Full platform access' : 'Unlimited access'}
+            </div>
           </div>
         </div>
 
@@ -2412,13 +2418,23 @@ function ConsultantPortalPage() {
               </div>
 
               <div className="bg-white rounded-2xl border border-slate-200 p-6">
-                <h2 className="text-lg font-semibold text-slate-900 mb-4">Subscription</h2>
+                <h2 className="text-lg font-semibold text-slate-900 mb-4">
+                  {user?.role === 'super' || user?.role === 'admin' ? 'Account Access' : 'Subscription'}
+                </h2>
                 <div className="flex items-center justify-between p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl">
                   <div>
-                    <div className="font-semibold text-slate-900">{user?.subscription?.plan === 'yearly' ? 'Annual Plan' : 'Monthly Plan'}</div>
-                    <div className="text-sm text-slate-600">Status: <span className="capitalize">{user?.subscription?.status || 'Unknown'}</span></div>
+                    <div className="font-semibold text-slate-900">
+                      {user?.role === 'super' ? '⭐ Super Account — Full Access' : user?.role === 'admin' ? '🔑 Admin Account — Full Access' : user?.subscription?.plan === 'yearly' ? 'Annual Plan' : 'Monthly Plan'}
+                    </div>
+                    <div className="text-sm text-slate-600">
+                      Status: <span className="capitalize">
+                        {user?.role === 'super' || user?.role === 'admin' ? 'Active — No billing required' : user?.subscription?.status || 'Unknown'}
+                      </span>
+                    </div>
                   </div>
-                  <button className="px-4 py-2 border border-slate-200 bg-white rounded-lg hover:bg-slate-50">Manage Billing</button>
+                  {user?.role !== 'super' && user?.role !== 'admin' && (
+                    <button className="px-4 py-2 border border-slate-200 bg-white rounded-lg hover:bg-slate-50">Manage Billing</button>
+                  )}
                 </div>
               </div>
             </div>

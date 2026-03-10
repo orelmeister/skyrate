@@ -926,11 +926,17 @@ function VendorPortalPage() {
         <div className="absolute bottom-20 left-4 right-4">
           <div className="bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl p-4 text-white">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium opacity-90">Pro Plan</span>
-              <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs">Active</span>
+              <span className="text-sm font-medium opacity-90">
+                {user?.role === 'super' || user?.role === 'admin' ? 'Full Access' : 'Pro Plan'}
+              </span>
+              <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs">
+                {user?.role === 'super' ? '⭐ Super' : user?.role === 'admin' ? '🔑 Admin' : 'Active'}
+              </span>
             </div>
             <div className="text-2xl font-bold">{profile?.search_count || 0} Searches</div>
-            <div className="text-sm opacity-75 mt-1">Unlimited access</div>
+            <div className="text-sm opacity-75 mt-1">
+              {user?.role === 'super' || user?.role === 'admin' ? 'Full platform access' : 'Unlimited access'}
+            </div>
           </div>
         </div>
 
@@ -1104,12 +1110,16 @@ function VendorPortalPage() {
                     <div className="w-12 h-12 rounded-xl bg-pink-100 flex items-center justify-center">
                       <span className="text-2xl">✅</span>
                     </div>
-                    <span className="text-xs text-pink-600 font-medium px-2 py-1 bg-pink-50 rounded-full">Active</span>
+                    <span className="text-xs text-pink-600 font-medium px-2 py-1 bg-pink-50 rounded-full">
+                      {user?.role === 'super' || user?.role === 'admin' ? '⭐ Full' : 'Active'}
+                    </span>
                   </div>
                   <div className="text-3xl font-bold text-slate-900">
-                    {user?.subscription?.status === 'trialing' ? 'Trial' : 'Pro'}
+                    {user?.role === 'super' ? 'Super' : user?.role === 'admin' ? 'Admin' : user?.subscription?.status === 'trialing' ? 'Trial' : 'Pro'}
                   </div>
-                  <div className="text-sm text-slate-500 mt-1">Subscription</div>
+                  <div className="text-sm text-slate-500 mt-1">
+                    {user?.role === 'super' || user?.role === 'admin' ? 'Full Access' : 'Subscription'}
+                  </div>
                 </div>
               </div>
 
@@ -3058,25 +3068,33 @@ function VendorPortalPage() {
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
-                  <span className="text-xl">💳</span>
+                  <span className="text-xl">{user?.role === 'super' || user?.role === 'admin' ? '⭐' : '💳'}</span>
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">Subscription</h2>
-                  <p className="text-sm text-slate-500">Manage your billing and plan</p>
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    {user?.role === 'super' || user?.role === 'admin' ? 'Account Access' : 'Subscription'}
+                  </h2>
+                  <p className="text-sm text-slate-500">
+                    {user?.role === 'super' || user?.role === 'admin' ? 'You have full platform access' : 'Manage your billing and plan'}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-100">
                 <div>
                   <div className="font-semibold text-slate-900">
-                    {user?.subscription?.plan === 'yearly' ? 'Yearly Plan' : 'Monthly Plan'}
+                    {user?.role === 'super' ? '⭐ Super Account — Full Access' : user?.role === 'admin' ? '🔑 Admin Account — Full Access' : user?.subscription?.plan === 'yearly' ? 'Yearly Plan' : 'Monthly Plan'}
                   </div>
                   <div className="text-sm text-slate-500 mt-1">
-                    Status: <span className="text-green-600 font-medium">{user?.subscription?.status || 'Unknown'}</span>
+                    Status: <span className="text-green-600 font-medium">
+                      {user?.role === 'super' || user?.role === 'admin' ? 'Active — No billing required' : user?.subscription?.status || 'Unknown'}
+                    </span>
                   </div>
                 </div>
-                <button className="px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-700 font-medium transition">
-                  Manage Subscription
-                </button>
+                {user?.role !== 'super' && user?.role !== 'admin' && (
+                  <button className="px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-700 font-medium transition">
+                    Manage Subscription
+                  </button>
+                )}
               </div>
             </div>
           </div>

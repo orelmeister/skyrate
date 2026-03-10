@@ -900,7 +900,9 @@ export default function OnboardingPage() {
   const handleComplete = async () => {
     // Redirect to role-based dashboard
     const dashboardUrl =
-      user?.role === "vendor"
+      user?.role === "super"
+        ? "/super"
+        : user?.role === "vendor"
         ? "/vendor"
         : user?.role === "applicant"
         ? "/applicant"

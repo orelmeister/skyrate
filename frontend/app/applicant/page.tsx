@@ -184,7 +184,7 @@ function ApplicantDashboard() {
     }
     // Verification guard handles redirect to /onboarding
     if (!emailVerified) return;
-    if (user?.role !== 'applicant' && user?.role !== 'admin') {
+    if (user?.role !== 'applicant' && user?.role !== 'admin' && user?.role !== 'super') {
       // Redirect to appropriate dashboard
       const dashboard = user?.role === 'vendor' ? '/vendor' : '/consultant';
       router.push(dashboard);
@@ -417,8 +417,12 @@ function ApplicantDashboard() {
         <div className="absolute bottom-20 left-4 right-4">
           <div className="bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl p-4 text-white">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium opacity-90">Pro Plan</span>
-              <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs">Active</span>
+              <span className="text-sm font-medium opacity-90">
+                {user?.role === 'super' || user?.role === 'admin' ? 'Full Access' : 'Pro Plan'}
+              </span>
+              <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs">
+                {user?.role === 'super' ? '⭐ Super' : user?.role === 'admin' ? '🔑 Admin' : 'Active'}
+              </span>
             </div>
             <div className="text-2xl font-bold">{frns.length} FRNs</div>
             <div className="text-sm opacity-75 mt-1">Tracked applications</div>

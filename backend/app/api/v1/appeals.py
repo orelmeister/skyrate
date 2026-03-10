@@ -159,8 +159,9 @@ class ChatResponse(BaseModel):
     """Response from chat refinement"""
     success: bool
     appeal_id: int
-    message: ChatMessage
-    updated_appeal_text: Optional[str] = None
+    response: str
+    updated_letter: str
+    chat_history: Optional[List[Dict[str, Any]]] = None
 
 
 # ==================== HELPER FUNCTIONS ====================
@@ -170,14 +171,27 @@ def _build_denial_details(application: Application, frn_data: Dict[str, Any] = N
     denial_reasons = application.denial_reasons or []
     fcdl_comment = application.fcdl_comment or ""
     
-    # For commitment adjustments/rescissions, incorporate the user's context as the primary reason
-    if appeal_type in ("commitment_adjustment", "rescission", "user_specified") and additional_context:
-        if not fcdl_comment:
-            fcdl_comment = additional_context
-        elif additional_context not in fcdl_comment:
-            fcdl_comment = f"{fcdl_comment}\n\nAdditional context: {additional_context}"
-        if additional_context not in denial_reasons:
-            denial_reasons = [additional_context] + denial_reasons
+    # Incorporate additional_context for ALL appeal types (including denials)
+    # This ensures user-provided context is always available to the AI
+    if additional_context:
+        if appeal_type in ("commitment_adjustment", "rescission", "user_specified"):
+            # For non-standard types, make user context the primary reason
+            if not fcdl_comment:
+                fcdl_comment = additional_context
+            elif additional_context not in fcdl_comment:
+                fcdl_comment = f"{fcdl_comment}\n\nAdditional context: {additional_context}"
+            if additional_context not in denial_reasons:
+                denial_reasons = [additional_context] + denial_reasons
+        elif appeal_type == "denial":
+            # For denials, supplement any sparse USAC data with user context
+            if not fcdl_comment:
+                # No USAC denial reason — use user context as primary
+                fcdl_comment = f"Applicant notes: {additional_context}"
+            elif additional_context not in fcdl_comment:
+                # Add user context alongside USAC reason
+                fcdl_comment = f"{fcdl_comment}\n\nApplicant notes: {additional_context}"
+            if additional_context not in str(denial_reasons):
+                denial_reasons.append(f"Applicant context: {additional_context}")
     
     # If we have raw USAC data, extract additional fields
     if frn_data:
@@ -758,9 +772,13 @@ async def generate_appeal(
     # Generate appeal letter using AI with comprehensive context
     appeal_text = _generate_appeal_letter(strategy, denial_details, organization_info)
     
-    # Apply additional context if provided
-    if request.additional_context:
-        appeal_text += f"\n\n[Additional Context: {request.additional_context}]"
+    # Note: additional_context is now incorporated into denial_details via _build_denial_details
+    # so it flows into the AI prompt naturally. No need to append it as a raw note.
+    
+    # Build informative initial chat message
+    denial_note = ""
+    if not denial_details.get("fcdl_comment"):
+        denial_note = " Note: USAC did not provide a specific denial reason in their data. The appeal uses available context. You can ask me to add specific denial details if you know them."
     
     # Create draft appeal record
     appeal_record = AppealRecord(
@@ -770,7 +788,7 @@ async def generate_appeal(
         status="draft",
         chat_history=[{
             "role": "assistant",
-            "content": f"I've generated an initial appeal for FRN {application.frn}. The appeal addresses the denial reasons and includes a strategy based on the violation types identified. Would you like me to modify any section?",
+            "content": f"I've generated an initial appeal for FRN {application.frn}. The appeal addresses the denial reasons and includes a strategy based on the violation types identified.{denial_note} Would you like me to modify any section?",
             "timestamp": datetime.utcnow().isoformat()
         }]
     )
@@ -796,7 +814,8 @@ async def chat_about_appeal(
 ):
     """
     Send a chat message to refine an appeal.
-    The AI will respond with suggestions and optionally update the appeal text.
+    Uses AI to understand the user's request and modify the appeal letter accordingly.
+    Returns response, updated letter, and full chat history matching frontend expectations.
     """
     # Get the appeal
     appeal = db.query(AppealRecord).filter(
@@ -819,8 +838,7 @@ async def chat_about_appeal(
     chat_history = appeal.chat_history or []
     chat_history.append(user_message)
     
-    # Generate AI response based on context
-    # For now, use a simple response generator - can be enhanced with AI service
+    # Generate AI-powered response that actually modifies the appeal
     ai_response = _generate_chat_response(
         user_message=request.message,
         appeal_text=appeal.appeal_text,
@@ -835,14 +853,13 @@ async def chat_about_appeal(
     }
     chat_history.append(assistant_message)
     
-    # Update appeal with new chat history
+    # Update appeal with new chat history and potentially updated text
     appeal.chat_history = chat_history
     
-    # If AI suggests text updates, apply them
-    updated_appeal_text = None
+    updated_letter = appeal.appeal_text  # Default to current text
     if ai_response.get("updated_text"):
         appeal.appeal_text = ai_response["updated_text"]
-        updated_appeal_text = ai_response["updated_text"]
+        updated_letter = ai_response["updated_text"]
     
     appeal.updated_at = datetime.utcnow()
     db.commit()
@@ -850,12 +867,9 @@ async def chat_about_appeal(
     return ChatResponse(
         success=True,
         appeal_id=appeal.id,
-        message=ChatMessage(
-            role="assistant",
-            content=ai_response["response"],
-            timestamp=assistant_message["timestamp"]
-        ),
-        updated_appeal_text=updated_appeal_text
+        response=ai_response["response"],
+        updated_letter=updated_letter,
+        chat_history=chat_history
     )
 
 
@@ -866,81 +880,137 @@ def _generate_chat_response(
     chat_history: List[Dict[str, Any]]
 ) -> Dict[str, Any]:
     """
-    Generate a contextual response for appeal refinement chat.
-    This is a simplified implementation - can be enhanced with full AI integration.
+    Generate an AI-powered response for appeal refinement chat.
+    Uses AIModelManager to actually understand and apply the user's requested changes
+    to the appeal letter, returning both a conversational response and the updated text.
     """
+    try:
+        from utils.ai_models import AIModelManager
+        
+        ai_manager = AIModelManager()
+        
+        # Build conversation context from recent chat history (last 6 messages)
+        recent_history = chat_history[-6:] if len(chat_history) > 6 else chat_history
+        conversation_context = "\n".join([
+            f"{'User' if msg['role'] == 'user' else 'Assistant'}: {msg['content']}"
+            for msg in recent_history if msg.get('content')
+        ])
+        
+        # Build strategy summary for context
+        strategy_summary = ""
+        if strategy:
+            denial_types = strategy.get("violation_types", [])
+            evidence = strategy.get("evidence_checklist", [])
+            timeline = strategy.get("timeline", {})
+            if denial_types:
+                strategy_summary += f"Violation Types: {', '.join(denial_types)}\n"
+            if evidence:
+                evidence_items = [e.get('item', str(e)) if isinstance(e, dict) else str(e) for e in evidence[:5]]
+                strategy_summary += f"Key Evidence: {', '.join(evidence_items)}\n"
+            if timeline:
+                strategy_summary += f"Deadline: {timeline.get('appeal_deadline', 'Not specified')}\n"
+        
+        # Craft the AI prompt to modify the appeal
+        prompt = f"""You are an expert E-Rate appeal consultant helping refine an appeal letter.
+The user has asked you to make changes to their appeal. You must:
+
+1. UNDERSTAND what the user wants changed
+2. ACTUALLY MODIFY the appeal letter based on their request
+3. Provide a brief explanation of what you changed
+
+USER'S REQUEST: {user_message}
+
+RECENT CONVERSATION:
+{conversation_context}
+
+APPEAL STRATEGY CONTEXT:
+{strategy_summary}
+
+CURRENT APPEAL LETTER:
+{appeal_text}
+
+INSTRUCTIONS:
+- Apply the user's requested changes directly to the appeal letter
+- Return your response in this EXACT format (use these exact delimiters):
+  
+===RESPONSE===
+[Your brief conversational explanation of what you changed, 2-4 sentences max]
+===UPDATED_LETTER===
+[The complete updated appeal letter with the user's changes applied]
+===END===
+
+- The UPDATED_LETTER must be the COMPLETE letter, not just the changed section
+- If the user asks a question rather than requesting a change, still provide the current letter unchanged
+- Maintain the formal, professional tone appropriate for USAC submissions
+- Keep all factual details (dates, FRN numbers, amounts) accurate"""
+
+        data_context = f"Appeal Letter Length: {len(appeal_text)} chars\nStrategy: {json.dumps(strategy, default=str)[:500]}"
+        
+        ai_result = ai_manager.deep_analysis(data_context, prompt)
+        
+        if ai_result and len(ai_result) > 50:
+            # Parse the AI response
+            response_text = ""
+            updated_text = None
+            
+            if "===RESPONSE===" in ai_result and "===UPDATED_LETTER===" in ai_result:
+                parts = ai_result.split("===RESPONSE===")
+                if len(parts) > 1:
+                    remainder = parts[1]
+                    letter_parts = remainder.split("===UPDATED_LETTER===")
+                    response_text = letter_parts[0].strip()
+                    if len(letter_parts) > 1:
+                        updated_raw = letter_parts[1]
+                        # Remove the ===END=== delimiter if present
+                        if "===END===" in updated_raw:
+                            updated_raw = updated_raw.split("===END===")[0]
+                        updated_text = updated_raw.strip()
+                        # Validate the updated text is substantial (not empty/garbage)
+                        if len(updated_text) < 100:
+                            updated_text = None  # Too short, likely parsing error
+            else:
+                # AI didn't follow the format - use the whole response as the reply
+                response_text = ai_result.strip()
+                # Try to extract if the AI included a full letter anyway
+                if len(ai_result) > len(appeal_text) * 0.8:
+                    # The AI might have returned a modified version
+                    updated_text = ai_result.strip()
+            
+            if response_text:
+                return {
+                    "response": response_text,
+                    "updated_text": updated_text
+                }
+    
+    except Exception as e:
+        print(f"AI chat response generation failed: {e}")
+    
+    # Fallback: Quick keyword-based responses (only if AI fails)
     message_lower = user_message.lower()
     
-    # Detect intent and generate appropriate response
     if any(word in message_lower for word in ["stronger", "improve", "better", "enhance"]):
-        return {
-            "response": "I can help strengthen the appeal. Here are some suggestions:\n\n"
-                       "1. **Add specific dates and documentation references** - Concrete evidence is more persuasive\n"
-                       "2. **Cite relevant FCC orders** - Reference precedents where similar appeals succeeded\n"
-                       "3. **Emphasize good faith effort** - USAC often considers applicant intent\n\n"
-                       "Would you like me to apply any of these improvements to a specific section?",
-            "updated_text": None
-        }
-    
+        fallback_msg = ("I'll strengthen the appeal by adding more specific arguments and evidence references. "
+                       "Note: AI refinement is temporarily unavailable, but you can edit the letter directly "
+                       "using the Edit button on the Letter tab.")
     elif any(word in message_lower for word in ["shorten", "shorter", "concise", "brief"]):
-        return {
-            "response": "I can help make the appeal more concise. The current version includes detailed explanations for each violation. "
-                       "Would you like me to:\n\n"
-                       "1. Remove the internal strategy notes section?\n"
-                       "2. Condense the grounds for appeal to key points only?\n"
-                       "3. Simplify the conclusion?\n\n"
-                       "Let me know which sections to trim.",
-            "updated_text": None
-        }
-    
+        fallback_msg = ("I'll work on making the appeal more concise. "
+                       "Note: AI refinement is temporarily unavailable, but you can edit the letter directly "
+                       "using the Edit button on the Letter tab.")
     elif any(word in message_lower for word in ["formal", "tone", "professional"]):
-        return {
-            "response": "The current appeal uses a formal, professional tone appropriate for USAC submissions. "
-                       "If you'd like, I can:\n\n"
-                       "1. Make it more formal by removing contractions and using passive voice\n"
-                       "2. Add more legal terminology and citations\n"
-                       "3. Restructure to follow a more traditional legal brief format\n\n"
-                       "What adjustment would you prefer?",
-            "updated_text": None
-        }
-    
-    elif any(word in message_lower for word in ["evidence", "document", "proof", "attach"]):
-        # Get evidence from strategy
-        evidence = strategy.get("evidence_checklist", [])
-        evidence_text = "\n".join([f"- {e.get('item', e)}" for e in evidence[:5]]) if evidence else "No specific evidence listed"
-        
-        return {
-            "response": f"Based on the denial reasons, here's the recommended evidence to include:\n\n{evidence_text}\n\n"
-                       "Would you like me to add specific references to this evidence in the appeal letter?",
-            "updated_text": None
-        }
-    
-    elif any(word in message_lower for word in ["deadline", "timeline", "when", "date"]):
-        timeline = strategy.get("timeline", {})
-        deadline = timeline.get("appeal_deadline", "Not specified")
-        days_remaining = timeline.get("days_remaining", "Unknown")
-        
-        return {
-            "response": f"**Appeal Timeline:**\n\n"
-                       f"- Appeal Deadline: {deadline}\n"
-                       f"- Days Remaining: {days_remaining}\n\n"
-                       "Remember to submit the appeal via the EPC portal before the deadline. "
-                       "Would you like me to add a timeline section to the appeal?",
-            "updated_text": None
-        }
-    
+        fallback_msg = ("I'll adjust the tone to be more formal and professional. "
+                       "Note: AI refinement is temporarily unavailable, but you can edit the letter directly "
+                       "using the Edit button on the Letter tab.")
     else:
-        # General response
-        return {
-            "response": "I'm here to help refine this appeal. You can ask me to:\n\n"
-                       "- **Strengthen** specific arguments\n"
-                       "- **Add evidence** references\n"
-                       "- **Adjust the tone** (more/less formal)\n"
-                       "- **Explain** the strategy or timeline\n"
-                       "- **Modify** specific sections\n\n"
-                       "What would you like to change?",
-            "updated_text": None
-        }
+        fallback_msg = (f"I understand your request: \"{user_message}\"\n\n"
+                       "AI refinement is temporarily unavailable. You can:\n"
+                       "- **Edit directly**: Use the Edit button on the Letter tab to make manual changes\n"
+                       "- **Try again**: Send your request again in a moment\n"
+                       "- **Be specific**: Describe exactly what section to change and how")
+    
+    return {
+        "response": fallback_msg,
+        "updated_text": None
+    }
 
 
 @router.put("/{appeal_id}/save")

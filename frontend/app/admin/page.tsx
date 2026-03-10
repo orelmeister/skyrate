@@ -102,7 +102,7 @@ function AdminDashboard() {
     if (!_hasHydrated) return;
     if (!isAuthenticated) {
       router.push("/sign-in");
-    } else if (user?.role !== "admin") {
+    } else if (user?.role !== "admin" && user?.role !== "super") {
       router.push("/dashboard");
     }
   }, [_hasHydrated, isAuthenticated, user, router]);
@@ -121,14 +121,14 @@ function AdminDashboard() {
 
   // Load dashboard
   useEffect(() => {
-    if (user?.role === "admin") {
+    if (user?.role === "admin" || user?.role === "super") {
       loadDashboard();
     }
   }, [user]);
 
   // Load tab-specific data
   useEffect(() => {
-    if (user?.role === "admin") {
+    if (user?.role === "admin" || user?.role === "super") {
       if (activeTab === "users") loadUsers();
       if (activeTab === "tickets") loadTickets();
       if (activeTab === "frn") loadFRNs();
@@ -236,7 +236,7 @@ function AdminDashboard() {
     }
   }
 
-  if (!user || user.role !== "admin") return null;
+  if (!user || (user.role !== "admin" && user.role !== "super")) return null;
 
   // ==================== RENDER ====================
 

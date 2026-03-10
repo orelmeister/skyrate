@@ -68,7 +68,7 @@ export default function BENSettingsPage() {
       router.push('/sign-in');
       return;
     }
-    if (user?.role !== 'applicant') {
+    if (user?.role !== 'applicant' && user?.role !== 'admin' && user?.role !== 'super') {
       router.push('/dashboard');
       return;
     }
