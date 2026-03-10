@@ -565,11 +565,22 @@ async def list_crns(
     ).order_by(ConsultantCRN.is_primary.desc(), ConsultantCRN.created_at).all()
     
     # Count schools per CRN
+    from sqlalchemy import or_
     for crn_record in crns:
-        count = db.query(ConsultantSchool).filter(
-            ConsultantSchool.consultant_profile_id == profile.id,
-            ConsultantSchool.source_crn == crn_record.crn
-        ).count()
+        if crn_record.is_primary:
+            # Primary CRN: count schools with matching source_crn OR NULL source_crn (legacy imports)
+            count = db.query(ConsultantSchool).filter(
+                ConsultantSchool.consultant_profile_id == profile.id,
+                or_(
+                    ConsultantSchool.source_crn == crn_record.crn,
+                    ConsultantSchool.source_crn.is_(None)
+                )
+            ).count()
+        else:
+            count = db.query(ConsultantSchool).filter(
+                ConsultantSchool.consultant_profile_id == profile.id,
+                ConsultantSchool.source_crn == crn_record.crn
+            ).count()
         crn_record.schools_count = count
     db.commit()
     

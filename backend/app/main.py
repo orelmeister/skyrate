@@ -447,6 +447,8 @@ def _run_schema_migrations(engine):
         ("saved_leads", "service_type", "VARCHAR(255) DEFAULT NULL", None),
         ("saved_leads", "manufacturers", "JSON DEFAULT NULL", None),
         ("saved_leads", "source_data", "JSON DEFAULT NULL", None),
+        # Multi-CRN: track which CRN imported each school
+        ("consultant_schools", "source_crn", "VARCHAR(50) DEFAULT NULL", None),
     ]
     
     try:

@@ -50,7 +50,7 @@ class ConsultantProfile(Base):
             "website": self.website,
             "settings": self.settings or {},
             "school_count": len(self.schools) if self.schools else 0,
-            "crn_count": len(self.crns) if self.crns else 0,
+            "crn_count": len(self.crns) if hasattr(self, 'crns') and self.crns else 0,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
