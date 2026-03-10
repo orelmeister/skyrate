@@ -1471,6 +1471,63 @@ class ApiClient {
     });
   }
 
+  // ==================== CONSULTANT CRN MANAGEMENT ====================
+
+  async listCRNs(): Promise<ApiResponse<{
+    crns: Array<{
+      id: number;
+      crn: string;
+      company_name: string | null;
+      phone: string | null;
+      is_primary: boolean;
+      is_verified: boolean;
+      verified_at: string | null;
+      is_free: boolean;
+      payment_status: string;
+      schools_count: number;
+      created_at: string | null;
+    }>;
+    count: number;
+    is_free_user: boolean;
+    can_add_free: boolean;
+  }>> {
+    return this.request('/api/v1/consultant/crns');
+  }
+
+  async addCRN(crn: string, plan?: string): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/consultant/crns/add', {
+      method: 'POST',
+      body: JSON.stringify({ crn, plan }),
+    });
+  }
+
+  async createCRNCheckout(crnId: number, plan: string = 'monthly'): Promise<ApiResponse<{
+    checkout_url: string;
+    session_id: string;
+  }>> {
+    return this.request('/api/v1/consultant/crns/checkout', {
+      method: 'POST',
+      body: JSON.stringify({
+        crn_id: crnId,
+        plan,
+        success_url: `${window.location.origin}/consultant?tab=settings&crn_added=true`,
+        cancel_url: `${window.location.origin}/consultant?tab=settings`,
+      }),
+    });
+  }
+
+  async activateCRNAfterPayment(crn: string, sessionId: string): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/consultant/crns/activate?crn=${encodeURIComponent(crn)}&session_id=${encodeURIComponent(sessionId)}`, {
+      method: 'POST',
+    });
+  }
+
+  async removeCRN(crnId: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/consultant/crns/${crnId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // ==================== VENDOR ====================
 
   async getVendorProfile(): Promise<ApiResponse<{ profile: VendorProfile }>> {

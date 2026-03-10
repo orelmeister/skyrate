@@ -210,6 +210,21 @@ function ConsultantPortalPage() {
   const [isVerifyingCRN, setIsVerifyingCRN] = useState(false);
   const [crnVerificationResult, setCrnVerificationResult] = useState<any>(null);
   const [crnError, setCrnError] = useState<string | null>(null);
+  
+  // Multi-CRN management state
+  const [crnList, setCrnList] = useState<Array<{
+    id: number; crn: string; company_name: string | null; phone: string | null;
+    is_primary: boolean; is_verified: boolean; is_free: boolean;
+    payment_status: string; schools_count: number; created_at: string | null;
+  }>>([]);
+  const [isFreeUser, setIsFreeUser] = useState(false);
+  const [canAddFree, setCanAddFree] = useState(true);
+  const [showAddCrnModal, setShowAddCrnModal] = useState(false);
+  const [newCrnInput, setNewCrnInput] = useState("");
+  const [addingCrn, setAddingCrn] = useState(false);
+  const [addCrnError, setAddCrnError] = useState<string | null>(null);
+  const [pendingCrn, setPendingCrn] = useState<string | null>(null);  // CRN waiting for payment
+  const [showCrnPaywall, setShowCrnPaywall] = useState(false);
 
   // School search and filter state
   const [schoolSearchQuery, setSchoolSearchQuery] = useState("");
@@ -348,6 +363,14 @@ function ConsultantPortalPage() {
       setCheckingPayment(false);
       loadData();
       loadDashboardStats();
+      loadCRNList();
+      
+      // Check if returning from CRN payment
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('crn_added') === 'true') {
+        // Reload CRN list after successful payment redirect
+        setTimeout(() => loadCRNList(), 1000);
+      }
     };
     
     checkPaymentStatus();
@@ -524,6 +547,117 @@ function ConsultantPortalPage() {
       setCrnError(error?.message || "Failed to verify CRN. Please check the number and try again.");
     } finally {
       setIsVerifyingCRN(false);
+    }
+  };
+
+  // ========== Multi-CRN Management Handlers ==========
+  
+  const loadCRNList = async () => {
+    try {
+      const response = await api.listCRNs();
+      if (response.success && response.data) {
+        setCrnList(response.data.crns || []);
+        setIsFreeUser(response.data.is_free_user);
+        setCanAddFree(response.data.can_add_free);
+      }
+    } catch (error) {
+      console.error("Failed to load CRN list:", error);
+    }
+  };
+
+  const handleAddNewCRN = async () => {
+    const crn = newCrnInput.trim();
+    if (!crn) {
+      setAddCrnError("Please enter a CRN number");
+      return;
+    }
+    
+    setAddingCrn(true);
+    setAddCrnError(null);
+    
+    try {
+      const response = await api.addCRN(crn);
+      if (response.success && response.data) {
+        if (response.data.requires_payment) {
+          // Store the pending CRN and show paywall
+          setPendingCrn(crn);
+          setShowAddCrnModal(false);
+          setShowCrnPaywall(true);
+        } else {
+          // CRN added successfully (free user or first CRN)
+          setShowAddCrnModal(false);
+          setNewCrnInput("");
+          await loadCRNList();
+          await loadData(true);
+        }
+      } else {
+        setAddCrnError(response.error || "Failed to add CRN");
+      }
+    } catch (error: any) {
+      console.error("Failed to add CRN:", error);
+      setAddCrnError(error?.message || "Failed to add CRN. Please try again.");
+    } finally {
+      setAddingCrn(false);
+    }
+  };
+
+  const handleCRNCheckout = async (plan: 'monthly' | 'yearly') => {
+    if (!pendingCrn) return;
+    
+    // Find the CRN ID from the list (it was added as pending)
+    const pendingCrnEntry = crnList.find(c => c.crn === pendingCrn);
+    if (!pendingCrnEntry) {
+      // The CRN might not be in the list yet if it was just verified
+      // Try to add it first, then checkout
+      try {
+        const addRes = await api.addCRN(pendingCrn, plan);
+        if (addRes.success && addRes.data?.crn_id) {
+          const checkoutRes = await api.createCRNCheckout(addRes.data.crn_id, plan);
+          if (checkoutRes.success && checkoutRes.data?.checkout_url) {
+            window.location.href = checkoutRes.data.checkout_url;
+            return;
+          }
+        }
+        setAddCrnError("Failed to create checkout session");
+      } catch (error: any) {
+        setAddCrnError(error?.message || "Failed to create checkout");
+      }
+      return;
+    }
+    
+    try {
+      const response = await api.createCRNCheckout(pendingCrnEntry.id, plan);
+      if (response.success && response.data?.checkout_url) {
+        window.location.href = response.data.checkout_url;
+      } else {
+        setAddCrnError("Failed to create checkout session");
+      }
+    } catch (error: any) {
+      console.error("CRN checkout error:", error);
+      setAddCrnError(error?.message || "Failed to create checkout session");
+    }
+  };
+
+  const handleRemoveCRN = async (crnId: number, crnNumber: string, isPrimary: boolean) => {
+    if (isPrimary) {
+      alert("Cannot remove your primary CRN. It's linked to your main subscription.");
+      return;
+    }
+    if (!confirm(`Remove CRN ${crnNumber}? This will also remove all schools imported from this CRN. Any active subscription for this CRN will be cancelled.`)) {
+      return;
+    }
+    
+    try {
+      const response = await api.removeCRN(crnId);
+      if (response.success) {
+        await loadCRNList();
+        await loadData(true);
+      } else {
+        alert(response.error || "Failed to remove CRN");
+      }
+    } catch (error: any) {
+      console.error("Failed to remove CRN:", error);
+      alert(error?.message || "Failed to remove CRN");
     }
   };
 
@@ -2053,51 +2187,192 @@ function ConsultantPortalPage() {
               <div className="bg-white rounded-2xl border border-slate-200 p-6">
                 <h2 className="text-lg font-semibold text-slate-900 mb-4">Profile Settings</h2>
                 
-                {/* CRN Section */}
+                {/* Multi-CRN Management Section */}
                 <div className="mb-6 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-100">
-                  <label className="block text-sm font-medium text-indigo-700 mb-2">
-                    CRN (Consultant Registration Number)
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <input 
-                      type="text" 
-                      value={crnInput !== "" ? crnInput : (profile?.crn || "")} 
-                      onChange={(e) => setCrnInput(e.target.value.toUpperCase())}
-                      placeholder="Enter your USAC CRN"
-                      className="flex-1 px-4 py-2.5 bg-white border border-indigo-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono uppercase" 
-                    />
-                    <button 
-                      onClick={handleVerifyCRN}
-                      disabled={isVerifyingCRN}
-                      className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-indigo-800">CRN Management</h3>
+                      <p className="text-xs text-indigo-600 mt-0.5">Manage your USAC Consultant Registration Numbers</p>
+                    </div>
+                    <button
+                      onClick={() => { setShowAddCrnModal(true); setNewCrnInput(""); setAddCrnError(null); }}
+                      className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs font-medium flex items-center gap-1.5 transition"
                     >
-                      {isVerifyingCRN ? (
-                        <>
-                          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Verifying...
-                        </>
-                      ) : 'Verify & Import'}
+                      <span className="text-sm">+</span> Add CRN
                     </button>
                   </div>
-                  {crnError && (
-                    <p className="mt-2 text-xs text-red-600">{crnError}</p>
-                  )}
-                  {crnVerificationResult && crnVerificationResult.valid && (
-                    <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                      <p className="text-sm text-green-800 font-medium">✅ CRN Verified Successfully!</p>
-                      <p className="text-xs text-green-700 mt-1">
-                        Company: {crnVerificationResult.consultant?.company_name || 'N/A'} | 
-                        Schools: {crnVerificationResult.school_count} found, {crnVerificationResult.imported_count} imported
-                      </p>
+                  
+                  {/* CRN List */}
+                  {crnList.length === 0 ? (
+                    <div className="text-center py-6 bg-white/60 rounded-lg border border-indigo-100/50">
+                      <p className="text-sm text-slate-500">No CRNs added yet</p>
+                      <p className="text-xs text-slate-400 mt-1">Add your USAC CRN to import schools automatically</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {crnList.map((crn) => (
+                        <div key={crn.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200 hover:border-indigo-200 transition">
+                          <div className="flex items-center gap-3">
+                            <div className="flex flex-col">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-sm font-semibold text-slate-900">{crn.crn}</span>
+                                {crn.is_primary && (
+                                  <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-semibold rounded uppercase">Primary</span>
+                                )}
+                                {crn.is_verified ? (
+                                  <span className="text-green-500 text-xs" title="Verified">✓</span>
+                                ) : (
+                                  <span className="text-amber-500 text-xs" title="Unverified">⏳</span>
+                                )}
+                                {!crn.is_free && crn.payment_status === 'active' && (
+                                  <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-[10px] font-medium rounded">Paid</span>
+                                )}
+                                {!crn.is_free && crn.payment_status === 'pending' && (
+                                  <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-medium rounded">Payment Pending</span>
+                                )}
+                              </div>
+                              <span className="text-xs text-slate-500 mt-0.5">
+                                {crn.company_name || 'Company N/A'} · {crn.schools_count} school{crn.schools_count !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {!crn.is_primary && (
+                              <button
+                                onClick={() => handleRemoveCRN(crn.id, crn.crn, crn.is_primary)}
+                                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
+                                title="Remove CRN"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
-                  <p className="mt-2 text-xs text-indigo-600">
-                    Your CRN is used to automatically import schools you represent from USAC.
-                  </p>
+                  
+                  {isFreeUser && (
+                    <p className="mt-2 text-[10px] text-indigo-500 italic">
+                      ✨ Unlimited CRNs — Admin/Super account
+                    </p>
+                  )}
                 </div>
+
+                {/* Add CRN Modal */}
+                {showAddCrnModal && (
+                  <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowAddCrnModal(false)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
+                      <h3 className="text-lg font-semibold text-slate-900 mb-1">Add CRN</h3>
+                      <p className="text-sm text-slate-500 mb-4">Enter a USAC Consultant Registration Number to verify and import schools.</p>
+                      
+                      <input
+                        type="text"
+                        value={newCrnInput}
+                        onChange={(e) => setNewCrnInput(e.target.value.toUpperCase())}
+                        placeholder="Enter CRN (e.g., 17026509)"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono uppercase mb-3"
+                        autoFocus
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddNewCRN()}
+                      />
+                      
+                      {addCrnError && (
+                        <p className="text-xs text-red-600 mb-3">{addCrnError}</p>
+                      )}
+                      
+                      {!isFreeUser && !canAddFree && (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg mb-3">
+                          <p className="text-xs text-amber-800">
+                            💳 Additional CRNs require a subscription: <strong>$499/mo</strong> or <strong>$4,999/yr</strong> per CRN.
+                          </p>
+                        </div>
+                      )}
+                      
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => setShowAddCrnModal(false)}
+                          className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleAddNewCRN}
+                          disabled={addingCrn || !newCrnInput.trim()}
+                          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition"
+                        >
+                          {addingCrn ? (
+                            <>
+                              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Verifying...
+                            </>
+                          ) : 'Verify & Add'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* CRN Paywall Modal */}
+                {showCrnPaywall && pendingCrn && (
+                  <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowCrnPaywall(false)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 p-6" onClick={e => e.stopPropagation()}>
+                      <div className="text-center mb-4">
+                        <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                          <span className="text-xl">🔑</span>
+                        </div>
+                        <h3 className="text-lg font-semibold text-slate-900">Add CRN: <span className="font-mono">{pendingCrn}</span></h3>
+                        <p className="text-sm text-slate-500 mt-1">Choose a plan to track this additional CRN</p>
+                      </div>
+                      
+                      {addCrnError && (
+                        <p className="text-xs text-red-600 text-center mb-3">{addCrnError}</p>
+                      )}
+                      
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                        {/* Monthly Plan */}
+                        <button
+                          onClick={() => handleCRNCheckout('monthly')}
+                          className="group p-4 border-2 border-slate-200 rounded-xl hover:border-indigo-500 hover:bg-indigo-50/50 transition text-left"
+                        >
+                          <div className="text-xs text-slate-500 uppercase font-semibold mb-1">Monthly</div>
+                          <div className="text-2xl font-bold text-slate-900">$499<span className="text-sm font-normal text-slate-500">/mo</span></div>
+                          <div className="text-xs text-slate-500 mt-2">Billed monthly. Cancel anytime.</div>
+                          <div className="mt-3 w-full py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium text-center group-hover:bg-indigo-700 transition">
+                            Choose Monthly
+                          </div>
+                        </button>
+                        
+                        {/* Yearly Plan */}
+                        <button
+                          onClick={() => handleCRNCheckout('yearly')}
+                          className="group relative p-4 border-2 border-indigo-300 rounded-xl hover:border-indigo-500 bg-indigo-50/30 hover:bg-indigo-50 transition text-left"
+                        >
+                          <div className="absolute -top-2 right-3 px-2 py-0.5 bg-green-500 text-white text-[10px] font-bold rounded-full">SAVE 17%</div>
+                          <div className="text-xs text-indigo-600 uppercase font-semibold mb-1">Yearly</div>
+                          <div className="text-2xl font-bold text-slate-900">$4,999<span className="text-sm font-normal text-slate-500">/yr</span></div>
+                          <div className="text-xs text-slate-500 mt-2">~$417/mo. Best value.</div>
+                          <div className="mt-3 w-full py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium text-center group-hover:bg-indigo-700 transition">
+                            Choose Yearly
+                          </div>
+                        </button>
+                      </div>
+                      
+                      <div className="text-center">
+                        <button
+                          onClick={() => { setShowCrnPaywall(false); setPendingCrn(null); setAddCrnError(null); }}
+                          className="text-sm text-slate-500 hover:text-slate-700 transition"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>

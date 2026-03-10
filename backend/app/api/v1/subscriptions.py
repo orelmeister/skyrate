@@ -423,10 +423,22 @@ async def stripe_webhook(
         session = event["data"]["object"]
         user_id = session["metadata"].get("user_id")
         plan = session["metadata"].get("plan", "monthly")
+        checkout_type = session["metadata"].get("type", "")
         
         if user_id:
             user = db.query(User).filter(User.id == int(user_id)).first()
-            if user and user.subscription:
+            
+            # Handle additional CRN checkout
+            if checkout_type == "additional_crn":
+                crn_id = session["metadata"].get("crn_id")
+                if crn_id:
+                    from ...models.consultant import ConsultantCRN
+                    crn_record = db.query(ConsultantCRN).filter(ConsultantCRN.id == int(crn_id)).first()
+                    if crn_record:
+                        crn_record.stripe_subscription_id = session.get("subscription")
+                        crn_record.payment_status = "active"
+                        db.commit()
+            elif user and user.subscription:
                 user.subscription.status = SubscriptionStatus.ACTIVE.value
                 user.subscription.plan = plan
                 user.subscription.stripe_subscription_id = session.get("subscription")
@@ -435,6 +447,15 @@ async def stripe_webhook(
     elif event["type"] == "customer.subscription.updated":
         subscription_obj = event["data"]["object"]
         stripe_sub_id = subscription_obj["id"]
+        
+        # Check if this is a CRN subscription
+        from ...models.consultant import ConsultantCRN
+        crn_sub = db.query(ConsultantCRN).filter(
+            ConsultantCRN.stripe_subscription_id == stripe_sub_id
+        ).first()
+        if crn_sub:
+            crn_sub.payment_status = subscription_obj["status"]
+            db.commit()
         
         sub = db.query(Subscription).filter(
             Subscription.stripe_subscription_id == stripe_sub_id

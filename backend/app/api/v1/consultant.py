@@ -24,11 +24,19 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..
 from ...core.database import get_db
 from ...core.security import get_current_user, require_role
 from ...models.user import User
-from ...models.consultant import ConsultantProfile, ConsultantSchool
+from ...models.consultant import ConsultantProfile, ConsultantSchool, ConsultantCRN
 from ...models.application import SchoolSnapshot, Application, AppealRecord
+from ...core.config import get_settings
 
 # Import USAC service for validation
 from ...services.usac_service import get_usac_service
+
+# Stripe for additional CRN subscriptions
+try:
+    import stripe
+    STRIPE_AVAILABLE = True
+except ImportError:
+    STRIPE_AVAILABLE = False
 
 router = APIRouter(prefix="/consultant", tags=["Consultant Portal"])
 
@@ -517,6 +525,411 @@ async def verify_and_import_crn(
         "skipped": skipped,
         "sync_result": sync_result
     }
+
+
+# ==================== MULTI-CRN MANAGEMENT ENDPOINTS ====================
+
+class AddCRNRequest(BaseModel):
+    crn: str
+    plan: Optional[str] = None  # "monthly" or "yearly" — only needed for paid additional CRNs
+
+class CRNCheckoutRequest(BaseModel):
+    crn_id: int
+    plan: str = "monthly"
+    success_url: str = "https://skyrate.ai/consultant?tab=settings&crn_added=true"
+    cancel_url: str = "https://skyrate.ai/consultant?tab=settings"
+
+
+def _is_free_crn_user(user: User) -> bool:
+    """Check if user gets unlimited free CRNs (super, admin, or test account)."""
+    settings = get_settings()
+    if user.role in ("super", "admin"):
+        return True
+    if user.email.lower() in [e.lower() for e in settings.TEST_ACCOUNT_EMAILS]:
+        return True
+    for pattern in settings.TEST_EMAIL_PATTERNS:
+        if pattern.lower() in user.email.lower():
+            return True
+    return False
+
+
+@router.get("/crns")
+async def list_crns(
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
+    db: Session = Depends(get_db)
+):
+    """List all CRNs for the current consultant."""
+    crns = db.query(ConsultantCRN).filter(
+        ConsultantCRN.consultant_profile_id == profile.id
+    ).order_by(ConsultantCRN.is_primary.desc(), ConsultantCRN.created_at).all()
+    
+    # Count schools per CRN
+    for crn_record in crns:
+        count = db.query(ConsultantSchool).filter(
+            ConsultantSchool.consultant_profile_id == profile.id,
+            ConsultantSchool.source_crn == crn_record.crn
+        ).count()
+        crn_record.schools_count = count
+    db.commit()
+    
+    is_free_user = _is_free_crn_user(current_user)
+    
+    return {
+        "success": True,
+        "crns": [c.to_dict() for c in crns],
+        "count": len(crns),
+        "is_free_user": is_free_user,
+        "can_add_free": is_free_user or len(crns) == 0,  # First CRN is always free
+    }
+
+
+@router.post("/crns/add")
+async def add_crn(
+    data: AddCRNRequest,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
+    db: Session = Depends(get_db)
+):
+    """
+    Add a new CRN. Verifies with USAC, imports schools.
+    - Super/admin/test accounts: unlimited free CRNs
+    - Regular consultants: first CRN free, additional CRNs require payment ($499/mo or $4,999/yr)
+    """
+    crn_value = data.crn.upper().strip()
+    
+    # Check if CRN already exists for this consultant
+    existing = db.query(ConsultantCRN).filter(
+        ConsultantCRN.consultant_profile_id == profile.id,
+        ConsultantCRN.crn == crn_value
+    ).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"CRN {crn_value} is already added to your account"
+        )
+    
+    # Verify CRN with USAC
+    usac_service = get_usac_service()
+    result = usac_service.verify_crn(crn_value)
+    
+    if not result["valid"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("error", "Invalid CRN — not found in USAC database")
+        )
+    
+    # How many CRNs does this consultant already have?
+    current_crn_count = db.query(ConsultantCRN).filter(
+        ConsultantCRN.consultant_profile_id == profile.id
+    ).count()
+    
+    is_free_user = _is_free_crn_user(current_user)
+    is_first_crn = current_crn_count == 0
+    needs_payment = not is_free_user and not is_first_crn
+    
+    if needs_payment:
+        # Don't add CRN yet — return that payment is required
+        # Frontend will redirect to checkout
+        return {
+            "success": True,
+            "requires_payment": True,
+            "crn": crn_value,
+            "consultant": result["consultant"],
+            "school_count": result["school_count"],
+            "message": f"Additional CRN requires a subscription ($499/mo or $4,999/yr). Please complete payment to activate CRN {crn_value}."
+        }
+    
+    # Free CRN — add directly
+    consultant_info = result["consultant"]
+    crn_record = ConsultantCRN(
+        consultant_profile_id=profile.id,
+        crn=crn_value,
+        company_name=consultant_info.get("company_name"),
+        phone=consultant_info.get("phone"),
+        is_primary=is_first_crn,
+        is_verified=True,
+        verified_at=datetime.utcnow(),
+        is_free=True,
+        payment_status="active",
+    )
+    db.add(crn_record)
+    db.flush()
+    
+    # Also update profile's primary CRN if this is the first
+    if is_first_crn:
+        profile.crn = crn_value
+        if consultant_info.get("company_name"):
+            profile.company_name = consultant_info["company_name"]
+        if consultant_info.get("phone"):
+            profile.phone = consultant_info["phone"]
+    
+    # Import schools from this CRN
+    imported = _import_schools_for_crn(profile, crn_value, result["schools"], db)
+    
+    db.commit()
+    
+    return {
+        "success": True,
+        "requires_payment": False,
+        "crn_record": crn_record.to_dict(),
+        "consultant": consultant_info,
+        "school_count": result["school_count"],
+        "imported_count": imported["imported_count"],
+        "skipped_count": imported["skipped_count"],
+    }
+
+
+@router.post("/crns/checkout")
+async def create_crn_checkout(
+    data: CRNCheckoutRequest,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
+    db: Session = Depends(get_db)
+):
+    """
+    Create a Stripe Checkout session for an additional CRN subscription.
+    Called after /crns/add returns requires_payment=true.
+    """
+    settings = get_settings()
+    
+    if not STRIPE_AVAILABLE or not settings.STRIPE_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Payment processing is not configured"
+        )
+    
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    
+    # Pricing for additional CRN (same as consultant base subscription)
+    if data.plan == "yearly":
+        price_cents = settings.CONSULTANT_YEARLY_PRICE  # $4,999
+        interval = "year"
+        plan_name = "Annual"
+    else:
+        price_cents = settings.CONSULTANT_MONTHLY_PRICE  # $499
+        interval = "month"
+        plan_name = "Monthly"
+    
+    try:
+        # Get or create Stripe customer
+        from ...models.subscription import Subscription
+        sub = db.query(Subscription).filter(Subscription.user_id == current_user.id).first()
+        if sub and sub.stripe_customer_id:
+            customer_id = sub.stripe_customer_id
+        else:
+            customer = stripe.Customer.create(
+                email=current_user.email,
+                name=current_user.full_name,
+                metadata={"user_id": str(current_user.id), "role": current_user.role}
+            )
+            customer_id = customer.id
+        
+        session = stripe.checkout.Session.create(
+            customer=customer_id,
+            payment_method_types=["card", "us_bank_account"],
+            payment_method_options={
+                "us_bank_account": {
+                    "verification_method": "instant",
+                    "financial_connections": {"permissions": ["payment_method"]}
+                }
+            },
+            line_items=[{
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {
+                        "name": f"SkyRate AI — Additional CRN ({plan_name})",
+                        "description": f"Track an additional Consultant Registration Number. ${price_cents/100:.0f}/{interval}.",
+                    },
+                    "unit_amount": price_cents,
+                    "recurring": {"interval": interval}
+                },
+                "quantity": 1
+            }],
+            mode="subscription",
+            success_url=data.success_url + ("&" if "?" in data.success_url else "?") + "crn_checkout=success&session_id={CHECKOUT_SESSION_ID}",
+            cancel_url=data.cancel_url,
+            metadata={
+                "user_id": str(current_user.id),
+                "crn_id": str(data.crn_id),
+                "type": "additional_crn",
+                "plan": data.plan,
+            },
+            allow_promotion_codes=True,
+        )
+        
+        return {
+            "success": True,
+            "checkout_url": session.url,
+            "session_id": session.id,
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Stripe error: {str(e)}"
+        )
+
+
+@router.post("/crns/activate")
+async def activate_crn_after_payment(
+    crn: str = Query(..., description="CRN to activate after payment"),
+    session_id: str = Query(..., description="Stripe checkout session ID"),
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
+    db: Session = Depends(get_db)
+):
+    """
+    Activate a CRN after successful Stripe payment.
+    Called by frontend after Stripe checkout redirect.
+    """
+    settings = get_settings()
+    crn_value = crn.upper().strip()
+    
+    # Verify the Stripe session was paid
+    stripe_sub_id = None
+    if STRIPE_AVAILABLE and settings.STRIPE_SECRET_KEY:
+        stripe.api_key = settings.STRIPE_SECRET_KEY
+        try:
+            session = stripe.checkout.Session.retrieve(session_id)
+            if session.payment_status != "paid" and session.status != "complete":
+                raise HTTPException(status_code=400, detail="Payment not completed")
+            stripe_sub_id = session.subscription
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Could not verify payment: {str(e)}")
+    
+    # Verify CRN with USAC
+    usac_service = get_usac_service()
+    result = usac_service.verify_crn(crn_value)
+    
+    if not result["valid"]:
+        raise HTTPException(status_code=400, detail="Invalid CRN")
+    
+    # Check if already exists
+    existing = db.query(ConsultantCRN).filter(
+        ConsultantCRN.consultant_profile_id == profile.id,
+        ConsultantCRN.crn == crn_value
+    ).first()
+    
+    if existing:
+        # Update with payment info
+        existing.stripe_subscription_id = stripe_sub_id
+        existing.payment_status = "active"
+        existing.is_verified = True
+        existing.verified_at = datetime.utcnow()
+    else:
+        consultant_info = result["consultant"]
+        crn_record = ConsultantCRN(
+            consultant_profile_id=profile.id,
+            crn=crn_value,
+            company_name=consultant_info.get("company_name"),
+            phone=consultant_info.get("phone"),
+            is_primary=False,
+            is_verified=True,
+            verified_at=datetime.utcnow(),
+            is_free=False,
+            stripe_subscription_id=stripe_sub_id,
+            payment_status="active",
+        )
+        db.add(crn_record)
+    
+    # Import schools
+    imported = _import_schools_for_crn(profile, crn_value, result["schools"], db)
+    
+    db.commit()
+    
+    return {
+        "success": True,
+        "crn": crn_value,
+        "imported_count": imported["imported_count"],
+        "skipped_count": imported["skipped_count"],
+    }
+
+
+@router.delete("/crns/{crn_id}")
+async def remove_crn(
+    crn_id: int,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
+    db: Session = Depends(get_db)
+):
+    """Remove a CRN from the consultant's account. Does not remove imported schools."""
+    crn_record = db.query(ConsultantCRN).filter(
+        ConsultantCRN.id == crn_id,
+        ConsultantCRN.consultant_profile_id == profile.id
+    ).first()
+    
+    if not crn_record:
+        raise HTTPException(status_code=404, detail="CRN not found")
+    
+    if crn_record.is_primary:
+        raise HTTPException(status_code=400, detail="Cannot remove primary CRN. Change your primary CRN first.")
+    
+    # Cancel Stripe subscription if exists
+    if crn_record.stripe_subscription_id and STRIPE_AVAILABLE:
+        settings = get_settings()
+        stripe.api_key = settings.STRIPE_SECRET_KEY
+        try:
+            stripe.Subscription.modify(
+                crn_record.stripe_subscription_id,
+                cancel_at_period_end=True
+            )
+        except Exception:
+            pass  # Best effort
+    
+    db.delete(crn_record)
+    db.commit()
+    
+    return {"success": True, "message": f"CRN {crn_record.crn} removed"}
+
+
+def _import_schools_for_crn(
+    profile: ConsultantProfile,
+    crn_value: str,
+    schools: List[Dict],
+    db: Session
+) -> Dict[str, int]:
+    """Helper: Import schools from a CRN into the consultant's portfolio."""
+    existing_bens = set(
+        s.ben for s in db.query(ConsultantSchool).filter(
+            ConsultantSchool.consultant_profile_id == profile.id
+        ).all()
+    )
+    
+    imported_count = 0
+    skipped_count = 0
+    new_schools = []
+    
+    for school in schools:
+        ben = school.get("ben", "")
+        if ben in existing_bens:
+            skipped_count += 1
+            continue
+        
+        new_school = ConsultantSchool(
+            consultant_profile_id=profile.id,
+            ben=ben,
+            school_name=school.get("organization_name"),
+            state=school.get("state"),
+            entity_type=school.get("applicant_type"),
+            source_crn=crn_value,
+            notes=f"Auto-imported from CRN {crn_value}",
+        )
+        db.add(new_school)
+        new_schools.append(new_school)
+        existing_bens.add(ben)
+        imported_count += 1
+    
+    db.flush()
+    
+    # Sync new schools with USAC status data
+    if new_schools:
+        all_schools = db.query(ConsultantSchool).filter(
+            ConsultantSchool.consultant_profile_id == profile.id
+        ).all()
+        sync_schools_with_usac(all_schools, db)
+    
+    return {"imported_count": imported_count, "skipped_count": skipped_count}
 
 
 # ==================== SCHOOL PORTFOLIO ENDPOINTS ====================

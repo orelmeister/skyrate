@@ -1,7 +1,7 @@
 # SkyRate AI - Models Package
 from .user import User, UserRole
 from .subscription import Subscription, SubscriptionStatus, SubscriptionPlan
-from .consultant import ConsultantProfile, ConsultantSchool
+from .consultant import ConsultantProfile, ConsultantSchool, ConsultantCRN
 from .vendor import VendorProfile, VendorSearch, SavedLead, OrganizationEnrichmentCache
 from .application import SchoolSnapshot, Application, AppealRecord, QueryHistory
 from .alert import Alert, AlertConfig, AlertType, AlertPriority
@@ -30,6 +30,7 @@ __all__ = [
     "SubscriptionPlan",
     "ConsultantProfile",
     "ConsultantSchool",
+    "ConsultantCRN",
     "VendorProfile",
     "VendorSearch",
     "SavedLead",

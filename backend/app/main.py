@@ -75,7 +75,7 @@ def seed_demo_accounts():
     """Create demo accounts if they don't exist, and auto-sync data from USAC"""
     from app.models.applicant import ApplicantBEN
     from app.models.vendor import VendorProfile
-    from app.models.consultant import ConsultantProfile
+    from app.models.consultant import ConsultantProfile, ConsultantCRN
     from sqlalchemy.orm import Session
     from app.models.user import User, UserRole
     from app.models.applicant import ApplicantProfile
@@ -327,6 +327,33 @@ def seed_demo_accounts():
         
         db.commit()
         logger.info("Demo accounts seeded")
+        
+        # Migrate existing CRN data to consultant_crns table
+        # This runs on every startup to ensure consistency
+        all_consultant_profiles = db.query(ConsultantProfile).filter(
+            ConsultantProfile.crn.isnot(None),
+            ConsultantProfile.crn != ""
+        ).all()
+        for cp in all_consultant_profiles:
+            existing_crn = db.query(ConsultantCRN).filter(
+                ConsultantCRN.consultant_profile_id == cp.id,
+                ConsultantCRN.crn == cp.crn
+            ).first()
+            if not existing_crn:
+                crn_record = ConsultantCRN(
+                    consultant_profile_id=cp.id,
+                    crn=cp.crn,
+                    company_name=cp.company_name,
+                    phone=cp.phone,
+                    is_primary=True,
+                    is_verified=True,
+                    verified_at=cp.updated_at or cp.created_at,
+                    is_free=True,
+                    payment_status="active",
+                )
+                db.add(crn_record)
+                logger.info(f"Migrated CRN {cp.crn} to consultant_crns table for profile {cp.id}")
+        db.commit()
         
         # Now trigger USAC data sync for profiles that need it
         if _profiles_to_sync:
