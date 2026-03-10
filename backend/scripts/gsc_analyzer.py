@@ -58,11 +58,11 @@ DEFAULT_CREDENTIALS_PATH = os.getenv(
     str(Path(__file__).resolve().parent.parent.parent / ".credentials" / "gsc-key.json"),
 )
 
-# All three SkyRate properties (Domain or URL-prefix format)
+# SkyRate public properties (Domain or URL-prefix format)
+# Note: app.erateapp.com is a private CRM — not tracked in GSC
 SKYRATE_SITES = {
     "erateapp":     "sc-domain:erateapp.com",
     "skyrate":      "sc-domain:skyrate.ai",
-    "app_erateapp": "sc-domain:app.erateapp.com",
 }
 
 DEFAULT_SITE = os.getenv("GSC_DEFAULT_SITE", SKYRATE_SITES["erateapp"])
