@@ -28,7 +28,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -55,7 +55,7 @@ SCOPES = [
 
 DEFAULT_CREDENTIALS_PATH = os.getenv(
     "GOOGLE_APPLICATION_CREDENTIALS",
-    str(Path(__file__).resolve().parent.parent.parent / ".credentials" / "gsc-key.json"),
+    str(Path(__file__).resolve().parent.parent.parent.parent / ".credentials" / "gsc-key.json"),
 )
 
 # SkyRate public properties (Domain or URL-prefix format)
@@ -130,7 +130,7 @@ def get_indexing_errors(
 
     result: dict[str, Any] = {
         "site": site_url,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
         "total_errors": 0,
         "categories": {
             "crawl_errors": [],
@@ -170,7 +170,7 @@ def get_indexing_errors(
     # candidates for indexing problems
     try:
         wm = _build_webmasters(creds_path)
-        end_date = datetime.utcnow().date()
+        end_date = datetime.now(timezone.utc).date()
         start_date = end_date - timedelta(days=30)
 
         analytics_body = {
@@ -318,7 +318,7 @@ def get_top_queries(
     }
     """
     wm = _build_webmasters(creds_path)
-    end_date = datetime.utcnow().date()
+    end_date = datetime.now(timezone.utc).date()
     start_date = end_date - timedelta(days=days)
 
     body = {
@@ -448,7 +448,7 @@ def inspect_url(
         return {
             "url": page_url,
             "site": site_url,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
             "error": f"API Error {e.resp.status}: {e._get_reason()}",
         }
 
@@ -463,7 +463,7 @@ def inspect_url(
     return {
         "url": page_url,
         "site": site_url,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
         "index_status": {
             "verdict": index_status.get("verdict", "UNKNOWN"),
             "coverage_state": index_status.get("coverageState", ""),
@@ -622,7 +622,7 @@ def full_audit(creds_path: str = DEFAULT_CREDENTIALS_PATH) -> dict[str, Any]:
     """
     report: dict[str, Any] = {
         "audit_type": "full_skyrate_seo_audit",
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
         "domains": {},
     }
 
