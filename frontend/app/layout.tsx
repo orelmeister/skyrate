@@ -86,8 +86,8 @@ export default function RootLayout({
               "description": "AI-powered E-Rate funding intelligence platform for consultants, vendors, and school applicants.",
               "offers": {
                 "@type": "AggregateOffer",
-                "lowPrice": "199",
-                "highPrice": "300",
+                "lowPrice": "0",
+                "highPrice": "499",
                 "priceCurrency": "USD",
                 "offerCount": "3"
               },
