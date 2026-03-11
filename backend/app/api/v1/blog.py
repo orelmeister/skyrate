@@ -27,6 +27,7 @@ class BlogGenerateRequest(BaseModel):
     target_keyword: str
     additional_instructions: Optional[str] = ""
     preferred_model: Optional[str] = "gemini"
+    auto_publish: Optional[bool] = True
 
 
 class BlogCreateRequest(BaseModel):
@@ -333,6 +334,8 @@ async def admin_generate_blog(
         slug = f"{base_slug}-{counter}"
         counter += 1
     
+    initial_status = BlogStatus.PUBLISHED.value if data.auto_publish else BlogStatus.DRAFT.value
+    
     post = BlogPost(
         title=result["title"],
         slug=slug,
@@ -341,7 +344,7 @@ async def admin_generate_blog(
         category=result.get("category", "Guide"),
         author_name=result.get("author_name", "SkyRate AI Team"),
         read_time_minutes=result.get("read_time_minutes", 8),
-        status=BlogStatus.DRAFT.value,
+        status=initial_status,
         ai_model_used=result.get("ai_model_used"),
         ai_prompt_used=result.get("ai_prompt_used"),
         canonical_url=f"https://skyrate.ai/blog/{slug}",
@@ -349,14 +352,18 @@ async def admin_generate_blog(
         og_description=result.get("meta_description"),
     )
     
+    if data.auto_publish:
+        post.published_at = datetime.utcnow()
+    
     db.add(post)
     db.commit()
     db.refresh(post)
     
+    status_msg = "published" if data.auto_publish else "generated as draft"
     return {
         "success": True,
         "post": post.to_dict(),
-        "message": f"Blog post generated as draft. Review and publish when ready.",
+        "message": f"Blog post {status_msg}. {'It is now live on the blog.' if data.auto_publish else 'Review and publish when ready.'}",
     }
 
 

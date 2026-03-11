@@ -2606,6 +2606,7 @@ class ApiClient {
     target_keyword: string;
     additional_instructions?: string;
     preferred_model?: string;
+    auto_publish?: boolean;
   }): Promise<ApiResponse<any>> {
     return this.request('/api/v1/blog/admin/generate', {
       method: 'POST',

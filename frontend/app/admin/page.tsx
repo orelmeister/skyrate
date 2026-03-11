@@ -1569,6 +1569,7 @@ function BlogManagerTab() {
   const [genKeyword, setGenKeyword] = useState("");
   const [genInstructions, setGenInstructions] = useState("");
   const [genModel, setGenModel] = useState("gemini");
+  const [genAutoPublish, setGenAutoPublish] = useState(true);
   const [generating, setGenerating] = useState(false);
 
   // Editor state
@@ -1642,6 +1643,7 @@ function BlogManagerTab() {
         target_keyword: genKeyword,
         additional_instructions: genInstructions,
         preferred_model: genModel,
+        auto_publish: genAutoPublish,
       });
       if (res.data?.post) {
         // Open the generated post in editor
@@ -2011,12 +2013,24 @@ function BlogManagerTab() {
                 <option value="deepseek">DeepSeek (Deep)</option>
               </select>
             </div>
+            <div className="flex items-center gap-2 self-end pb-1">
+              <input
+                type="checkbox"
+                id="autoPublish"
+                checked={genAutoPublish}
+                onChange={(e) => setGenAutoPublish(e.target.checked)}
+                className="rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+              />
+              <label htmlFor="autoPublish" className="text-xs font-medium text-purple-800 cursor-pointer">
+                Auto-publish
+              </label>
+            </div>
             <div className="flex-1" />
             <button onClick={() => setShowGenerator(false)} className="text-sm text-purple-600 hover:underline">
               Cancel
             </button>
             <button onClick={handleGenerate} disabled={generating || !genTopic.trim() || !genKeyword.trim()} className="bg-purple-600 text-white text-sm font-medium px-6 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50">
-              {generating ? "Generating..." : "Generate Draft"}
+              {generating ? "Generating..." : genAutoPublish ? "Generate & Publish" : "Generate Draft"}
             </button>
           </div>
           {generating && (
