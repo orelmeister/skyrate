@@ -176,8 +176,8 @@ async def get_ticket(
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
 
-    # Users can only view their own tickets; admins can view any
-    if ticket.user_id != current_user.id and current_user.role != UserRole.ADMIN.value:
+    # Users can only view their own tickets; admins/super can view any
+    if ticket.user_id != current_user.id and current_user.role not in [UserRole.ADMIN.value, "super"]:
         raise HTTPException(status_code=403, detail="Not authorized to view this ticket")
 
     return {
@@ -199,11 +199,11 @@ async def add_message(
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
 
-    # Users can only message their own tickets; admins can message any
-    if ticket.user_id != current_user.id and current_user.role != UserRole.ADMIN.value:
+    # Users can only message their own tickets; admins/super can message any
+    if ticket.user_id != current_user.id and current_user.role not in [UserRole.ADMIN.value, "super"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    is_admin = current_user.role == UserRole.ADMIN.value
+    is_admin = current_user.role in [UserRole.ADMIN.value, "super"]
 
     message = TicketMessage(
         ticket_id=ticket.id,

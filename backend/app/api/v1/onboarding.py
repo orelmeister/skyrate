@@ -638,6 +638,7 @@ async def complete_onboarding(
         "vendor": "/vendor",
         "applicant": "/applicant",
         "admin": "/admin",
+        "super": "/super",
     }
     
     redirect_url = role_redirects.get(current_user.role, "/dashboard")

@@ -505,7 +505,7 @@ async def get_dashboard(
     Get applicant dashboard with all data.
     "boom he sees all the information ready for him about all of his denials everything"
     """
-    if current_user.role != UserRole.APPLICANT.value:
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This endpoint is only for applicants"
@@ -575,7 +575,7 @@ async def get_frns(
     db: Session = Depends(get_db)
 ):
     """Get all FRNs for the applicant with optional filters"""
-    if current_user.role != UserRole.APPLICANT.value:
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
     
     profile = db.query(ApplicantProfile).filter(
@@ -604,7 +604,7 @@ async def get_frn_detail(
     db: Session = Depends(get_db)
 ):
     """Get detailed info for a specific FRN with real-time USAC enrichment"""
-    if current_user.role != UserRole.APPLICANT.value:
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
     
     profile = db.query(ApplicantProfile).filter(
@@ -665,7 +665,7 @@ async def get_appeals(
     db: Session = Depends(get_db)
 ):
     """Get all auto-generated appeals"""
-    if current_user.role != UserRole.APPLICANT.value:
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
     
     profile = db.query(ApplicantProfile).filter(
@@ -694,7 +694,7 @@ async def get_appeal_detail(
     db: Session = Depends(get_db)
 ):
     """Get detailed info for a specific appeal"""
-    if current_user.role != UserRole.APPLICANT.value:
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
     
     profile = db.query(ApplicantProfile).filter(
@@ -729,7 +729,7 @@ async def update_appeal(
     db: Session = Depends(get_db)
 ):
     """Update an appeal (edit letter, mark as submitted, etc.)"""
-    if current_user.role != UserRole.APPLICANT.value:
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
     
     profile = db.query(ApplicantProfile).filter(
@@ -772,7 +772,7 @@ async def chat_with_appeal(
     db: Session = Depends(get_db)
 ):
     """Chat with AI about refining an appeal"""
-    if current_user.role != UserRole.APPLICANT.value:
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
     
     profile = db.query(ApplicantProfile).filter(
@@ -835,7 +835,7 @@ async def trigger_sync(
     db: Session = Depends(get_db)
 ):
     """Manually trigger a data sync from USAC"""
-    if current_user.role != UserRole.APPLICANT.value:
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
     
     profile = db.query(ApplicantProfile).filter(
@@ -862,7 +862,7 @@ async def mark_change_read(
     db: Session = Depends(get_db)
 ):
     """Mark a status change as read"""
-    if current_user.role != UserRole.APPLICANT.value:
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
     
     profile = db.query(ApplicantProfile).filter(
@@ -892,7 +892,7 @@ async def mark_all_changes_read(
     db: Session = Depends(get_db)
 ):
     """Mark all status changes as read"""
-    if current_user.role != UserRole.APPLICANT.value:
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
     
     profile = db.query(ApplicantProfile).filter(
@@ -947,7 +947,7 @@ async def list_monitored_bens(
     List all BENs being monitored by this applicant.
     "schools they have multiple Ben numbers and because they have different locations"
     """
-    if current_user.role != UserRole.APPLICANT.value:
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
     
     profile = db.query(ApplicantProfile).filter(
@@ -983,7 +983,7 @@ async def add_monitored_ben(
     
     Returns info about the BEN and whether payment is required.
     """
-    if current_user.role != UserRole.APPLICANT.value:
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
     
     profile = db.query(ApplicantProfile).filter(
@@ -1050,7 +1050,7 @@ async def get_ben_details(
     db: Session = Depends(get_db)
 ):
     """Get detailed information about a specific BEN"""
-    if current_user.role != UserRole.APPLICANT.value:
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
     
     profile = db.query(ApplicantProfile).filter(
@@ -1087,7 +1087,7 @@ async def update_ben(
     db: Session = Depends(get_db)
 ):
     """Update BEN settings (e.g., display name)"""
-    if current_user.role != UserRole.APPLICANT.value:
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
     
     profile = db.query(ApplicantProfile).filter(
@@ -1124,7 +1124,7 @@ async def remove_ben(
     Remove a BEN from monitoring.
     Cannot remove the primary BEN.
     """
-    if current_user.role != UserRole.APPLICANT.value:
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
     
     profile = db.query(ApplicantProfile).filter(
@@ -1166,7 +1166,7 @@ async def sync_ben_data(
     Trigger data sync for a specific BEN.
     Only works if BEN subscription is active.
     """
-    if current_user.role != UserRole.APPLICANT.value:
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
     
     profile = db.query(ApplicantProfile).filter(
@@ -1318,7 +1318,7 @@ async def activate_ben_subscription(
     Activate a BEN subscription (called after payment).
     This is typically called by a webhook, but can be called manually for testing.
     """
-    if current_user.role != UserRole.APPLICANT.value:
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
     
     profile = db.query(ApplicantProfile).filter(
@@ -1367,7 +1367,7 @@ async def get_live_frn_status(
     Get live FRN status from USAC for all applicant BENs.
     Fetches directly from USAC Open Data API.
     """
-    if current_user.role != UserRole.APPLICANT.value:
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
     
     profile = db.query(ApplicantProfile).filter(
@@ -1504,7 +1504,7 @@ async def get_disbursements(
     Get disbursement/invoice data for all applicant BENs.
     Shows how much funding has actually been disbursed vs authorized.
     """
-    if current_user.role != UserRole.APPLICANT.value:
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
     
     profile = db.query(ApplicantProfile).filter(
