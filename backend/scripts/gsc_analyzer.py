@@ -10,11 +10,13 @@ Usage (CLI):
     python gsc_analyzer.py --action queries  [--site URL] [--days 30]
     python gsc_analyzer.py --action inspect  --site https://erateapp.com --url https://erateapp.com/schools.html
     python gsc_analyzer.py --action audit
+    python gsc_analyzer.py --action report   [--email david@skyrate.ai]
 
     # Subcommand style also supported:
     python gsc_analyzer.py errors   [--site URL]
     python gsc_analyzer.py queries  [--site URL] [--days 30]
     python gsc_analyzer.py inspect  --url PAGE_URL [--site URL]
+    python gsc_analyzer.py report   [--email david@skyrate.ai]
 
 Environment:
     GOOGLE_APPLICATION_CREDENTIALS — path to Service Account JSON
@@ -27,8 +29,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import smtplib
 import sys
 from datetime import datetime, timedelta, timezone
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Any
 
@@ -639,6 +644,302 @@ def full_audit(creds_path: str = DEFAULT_CREDENTIALS_PATH) -> dict[str, Any]:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Email Report: Generate & Send HTML SEO Report
+# ═══════════════════════════════════════════════════════════════════════════
+
+# SMTP config — reads from env vars or skyrate.ai backend .env
+_ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+
+
+def _load_env_file() -> dict[str, str]:
+    """Load key=value pairs from .env file (simple parser, no lib needed)."""
+    env: dict[str, str] = {}
+    if _ENV_PATH.exists():
+        for line in _ENV_PATH.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                k, v = line.split("=", 1)
+                env[k.strip()] = v.strip()
+    return env
+
+
+def _get_smtp_config() -> dict[str, str]:
+    """Resolve SMTP config from environment or .env file."""
+    env = _load_env_file()
+    return {
+        "host": os.getenv("SMTP_HOST", env.get("SMTP_HOST", "smtp.gmail.com")),
+        "port": int(os.getenv("SMTP_PORT", env.get("SMTP_PORT", "587"))),
+        "user": os.getenv("SMTP_USER", env.get("SMTP_USER", "")),
+        "password": os.getenv("SMTP_PASSWORD", env.get("SMTP_PASSWORD", "")),
+        "from_email": os.getenv("FROM_EMAIL", env.get("FROM_EMAIL", "alerts@skyrate.ai")),
+    }
+
+
+def _build_html_report(audit_data: dict[str, Any]) -> str:
+    """
+    Build a styled HTML email report from the full audit data.
+    Returns a complete HTML document suitable for email clients.
+    """
+    timestamp = audit_data.get("timestamp", datetime.now(timezone.utc).isoformat())
+
+    # ── Per-domain sections ──
+    domain_sections = ""
+    total_clicks_all = 0
+    total_impressions_all = 0
+    total_queries_all = 0
+    critical_items = []
+
+    for name, domain_data in audit_data.get("domains", {}).items():
+        if "error" in domain_data:
+            domain_sections += f"""
+            <div style="background:#FEF2F2;border-left:4px solid #EF4444;padding:16px;margin:16px 0;border-radius:4px;">
+                <h3 style="color:#991B1B;margin:0 0 8px 0;">{name}</h3>
+                <p style="color:#991B1B;margin:0;">Error: {domain_data['error']}</p>
+            </div>"""
+            continue
+
+        queries = domain_data.get("top_queries", {})
+        errors = domain_data.get("indexing_errors", {})
+        summary = queries.get("summary", {})
+        period = queries.get("period", {})
+        query_list = queries.get("queries", [])
+
+        total_clicks = summary.get("total_clicks", 0)
+        total_impressions = summary.get("total_impressions", 0)
+        avg_ctr = summary.get("avg_ctr", 0)
+        avg_position = summary.get("avg_position", 0)
+        total_errors = errors.get("total_errors", 0)
+
+        total_clicks_all += total_clicks
+        total_impressions_all += total_impressions
+        total_queries_all += queries.get("total_queries", 0)
+
+        # Color-code CTR
+        ctr_color = "#EF4444" if avg_ctr < 0.01 else "#F59E0B" if avg_ctr < 0.03 else "#10B981"
+        clicks_color = "#EF4444" if total_clicks == 0 else "#10B981"
+
+        # Find critical/high opportunity queries
+        for q in query_list:
+            if q.get("opportunity_score") in ("CRITICAL", "HIGH"):
+                critical_items.append({
+                    "domain": name,
+                    "query": q["query"],
+                    "impressions": q["impressions"],
+                    "position": q["position"],
+                    "score": q["opportunity_score"],
+                })
+
+        # Build query table rows
+        query_rows = ""
+        for q in query_list[:15]:
+            opp = q.get("opportunity_score", "LOW")
+            opp_badge_color = {
+                "CRITICAL": "#DC2626", "HIGH": "#EA580C",
+                "MEDIUM": "#CA8A04", "LOW": "#6B7280"
+            }.get(opp, "#6B7280")
+            query_rows += f"""
+                <tr style="border-bottom:1px solid #E5E7EB;">
+                    <td style="padding:8px 12px;font-size:13px;">{q['query']}</td>
+                    <td style="padding:8px 12px;text-align:center;font-size:13px;">{q['impressions']}</td>
+                    <td style="padding:8px 12px;text-align:center;font-size:13px;color:{clicks_color};font-weight:600;">{q['clicks']}</td>
+                    <td style="padding:8px 12px;text-align:center;font-size:13px;">{q['position']:.1f}</td>
+                    <td style="padding:8px 6px;text-align:center;">
+                        <span style="background:{opp_badge_color};color:white;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;">{opp}</span>
+                    </td>
+                </tr>"""
+
+        # Error summary
+        error_section = ""
+        if total_errors > 0:
+            error_section = f"""
+            <div style="background:#FEF2F2;border-left:4px solid #EF4444;padding:12px;margin:12px 0;border-radius:4px;">
+                <strong style="color:#991B1B;">{total_errors} Indexing Issue{'s' if total_errors != 1 else ''} Detected</strong>
+            </div>"""
+
+        domain_sections += f"""
+        <div style="background:white;border:1px solid #E5E7EB;border-radius:8px;margin:20px 0;overflow:hidden;">
+            <div style="background:#1E293B;padding:16px 20px;">
+                <h2 style="color:white;margin:0;font-size:18px;">{domain_data.get('site', name)}</h2>
+                <p style="color:#94A3B8;margin:4px 0 0 0;font-size:13px;">{period.get('start', '')} to {period.get('end', '')}</p>
+            </div>
+            <div style="display:flex;padding:16px 20px;gap:16px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:100px;text-align:center;padding:12px;background:#F8FAFC;border-radius:8px;">
+                    <div style="font-size:28px;font-weight:700;color:{clicks_color};">{total_clicks}</div>
+                    <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.5px;">Clicks</div>
+                </div>
+                <div style="flex:1;min-width:100px;text-align:center;padding:12px;background:#F8FAFC;border-radius:8px;">
+                    <div style="font-size:28px;font-weight:700;color:#1E293B;">{total_impressions:,}</div>
+                    <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.5px;">Impressions</div>
+                </div>
+                <div style="flex:1;min-width:100px;text-align:center;padding:12px;background:#F8FAFC;border-radius:8px;">
+                    <div style="font-size:28px;font-weight:700;color:{ctr_color};">{avg_ctr:.1%}</div>
+                    <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.5px;">Avg CTR</div>
+                </div>
+                <div style="flex:1;min-width:100px;text-align:center;padding:12px;background:#F8FAFC;border-radius:8px;">
+                    <div style="font-size:28px;font-weight:700;color:#1E293B;">{avg_position:.1f}</div>
+                    <div style="font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.5px;">Avg Position</div>
+                </div>
+            </div>
+            {error_section}
+            <div style="padding:0 20px 20px 20px;">
+                <h3 style="margin:16px 0 8px 0;font-size:15px;color:#1E293B;">Top Queries</h3>
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr style="background:#F8FAFC;border-bottom:2px solid #E5E7EB;">
+                            <th style="padding:8px 12px;text-align:left;font-size:12px;color:#64748B;text-transform:uppercase;">Query</th>
+                            <th style="padding:8px 12px;text-align:center;font-size:12px;color:#64748B;text-transform:uppercase;">Impr</th>
+                            <th style="padding:8px 12px;text-align:center;font-size:12px;color:#64748B;text-transform:uppercase;">Clicks</th>
+                            <th style="padding:8px 12px;text-align:center;font-size:12px;color:#64748B;text-transform:uppercase;">Pos</th>
+                            <th style="padding:8px 6px;text-align:center;font-size:12px;color:#64748B;text-transform:uppercase;">Opp</th>
+                        </tr>
+                    </thead>
+                    <tbody>{query_rows}</tbody>
+                </table>
+            </div>
+        </div>"""
+
+    # ── Action items section ──
+    action_section = ""
+    if critical_items:
+        action_rows = ""
+        for item in critical_items:
+            badge_color = "#DC2626" if item["score"] == "CRITICAL" else "#EA580C"
+            action_rows += f"""
+                <tr style="border-bottom:1px solid #E5E7EB;">
+                    <td style="padding:8px 12px;font-size:13px;">
+                        <span style="background:{badge_color};color:white;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;">{item['score']}</span>
+                    </td>
+                    <td style="padding:8px 12px;font-size:13px;">{item['domain']}</td>
+                    <td style="padding:8px 12px;font-size:13px;font-weight:600;">{item['query']}</td>
+                    <td style="padding:8px 12px;text-align:center;font-size:13px;">{item['impressions']}</td>
+                    <td style="padding:8px 12px;text-align:center;font-size:13px;">{item['position']:.1f}</td>
+                </tr>"""
+        action_section = f"""
+        <div style="background:white;border:1px solid #E5E7EB;border-radius:8px;margin:20px 0;overflow:hidden;">
+            <div style="background:#7C3AED;padding:16px 20px;">
+                <h2 style="color:white;margin:0;font-size:18px;">Action Items ({len(critical_items)})</h2>
+            </div>
+            <div style="padding:16px 20px;">
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr style="background:#F8FAFC;border-bottom:2px solid #E5E7EB;">
+                            <th style="padding:8px 12px;text-align:left;font-size:12px;color:#64748B;">Priority</th>
+                            <th style="padding:8px 12px;text-align:left;font-size:12px;color:#64748B;">Domain</th>
+                            <th style="padding:8px 12px;text-align:left;font-size:12px;color:#64748B;">Query</th>
+                            <th style="padding:8px 12px;text-align:center;font-size:12px;color:#64748B;">Impr</th>
+                            <th style="padding:8px 12px;text-align:center;font-size:12px;color:#64748B;">Pos</th>
+                        </tr>
+                    </thead>
+                    <tbody>{action_rows}</tbody>
+                </table>
+            </div>
+        </div>"""
+
+    # ── Assemble full HTML ──
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#F1F5F9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+    <div style="max-width:680px;margin:0 auto;padding:20px;">
+        <!-- Header -->
+        <div style="background:linear-gradient(135deg,#0F172A 0%,#1E293B 100%);border-radius:12px 12px 0 0;padding:28px 24px;text-align:center;">
+            <h1 style="color:white;margin:0;font-size:24px;">SkyRate SEO Monitor</h1>
+            <p style="color:#94A3B8;margin:8px 0 0 0;font-size:14px;">Weekly Search Performance Report</p>
+            <p style="color:#64748B;margin:4px 0 0 0;font-size:12px;">{timestamp[:10]}</p>
+        </div>
+
+        <!-- Executive Summary -->
+        <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:0 0 12px 12px;padding:16px 24px;margin-bottom:8px;">
+            <p style="margin:0;font-size:14px;color:#1E40AF;">
+                <strong>Summary:</strong> {total_queries_all} queries tracked | {total_impressions_all:,} total impressions | {total_clicks_all} total clicks |
+                {len(critical_items)} action item{'s' if len(critical_items) != 1 else ''}
+            </p>
+        </div>
+
+        {action_section}
+        {domain_sections}
+
+        <!-- Footer -->
+        <div style="text-align:center;padding:24px;color:#94A3B8;font-size:12px;">
+            <p>SkyRate LLC | 30 N Gould St Ste N, Sheridan, WY 82801</p>
+            <p>Generated by gsc_analyzer.py | Data source: Google Search Console API</p>
+        </div>
+    </div>
+</body>
+</html>"""
+
+
+def send_report_email(
+    audit_data: dict[str, Any],
+    to_email: str = "david@skyrate.ai",
+    creds_path: str = DEFAULT_CREDENTIALS_PATH,
+) -> dict[str, Any]:
+    """
+    Generate an HTML report from audit data and send it via email.
+
+    Returns:
+        {"success": True/False, "message": "...", "to": "..."}
+    """
+    smtp_cfg = _get_smtp_config()
+
+    if not smtp_cfg["user"] or not smtp_cfg["password"]:
+        return {
+            "success": False,
+            "message": "SMTP credentials not configured. Set SMTP_USER and SMTP_PASSWORD.",
+            "to": to_email,
+        }
+
+    html_body = _build_html_report(audit_data)
+
+    # Build summary line for subject
+    total_clicks = 0
+    total_impressions = 0
+    for domain_data in audit_data.get("domains", {}).values():
+        s = domain_data.get("top_queries", {}).get("summary", {})
+        total_clicks += s.get("total_clicks", 0)
+        total_impressions += s.get("total_impressions", 0)
+
+    date_str = datetime.now(timezone.utc).strftime("%b %d, %Y")
+    subject = f"SEO Report {date_str} — {total_impressions:,} impressions, {total_clicks} clicks"
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"SkyRate SEO Monitor <{smtp_cfg['from_email']}>"
+    msg["To"] = to_email
+
+    # Plain text fallback
+    plain = f"SkyRate SEO Report for {date_str}\n\n"
+    plain += f"Total impressions: {total_impressions:,}\nTotal clicks: {total_clicks}\n\n"
+    plain += "View the full HTML report in a compatible email client."
+
+    msg.attach(MIMEText(plain, "plain"))
+    msg.attach(MIMEText(html_body, "html"))
+
+    try:
+        server = smtplib.SMTP(smtp_cfg["host"], int(smtp_cfg["port"]))
+        server.ehlo()
+        server.starttls()
+        server.ehlo()
+        server.login(smtp_cfg["user"], smtp_cfg["password"])
+        server.sendmail(smtp_cfg["from_email"], [to_email], msg.as_string())
+        server.quit()
+        return {
+            "success": True,
+            "message": f"Report sent to {to_email}",
+            "to": to_email,
+            "subject": subject,
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"SMTP error: {str(e)}",
+            "to": to_email,
+        }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # CLI Interface
 # ═══════════════════════════════════════════════════════════════════════════
 def _json_out(data: Any) -> None:
@@ -657,26 +958,30 @@ Examples (--action flag style):
   python gsc_analyzer.py --action queries --days 7 --limit 50
   python gsc_analyzer.py --action inspect --site https://erateapp.com --url https://erateapp.com/schools.html
   python gsc_analyzer.py --action audit
+  python gsc_analyzer.py --action report
+  python gsc_analyzer.py --action report --email someone@example.com
 
 Examples (subcommand style — also supported):
   python gsc_analyzer.py errors
   python gsc_analyzer.py queries --days 7
   python gsc_analyzer.py inspect --url https://erateapp.com/schools.html
   python gsc_analyzer.py audit
+  python gsc_analyzer.py report --email someone@example.com
         """,
     )
 
     # ── Top-level --action flag (primary interface per spec) ─────────
     parser.add_argument(
         "--action",
-        choices=["errors", "queries", "inspect", "audit"],
-        help="Action to perform (errors|queries|inspect|audit)",
+        choices=["errors", "queries", "inspect", "audit", "report"],
+        help="Action to perform (errors|queries|inspect|audit|report)",
     )
     parser.add_argument("--site", default=DEFAULT_SITE, help="GSC property URL")
     parser.add_argument("--url", default=None, help="Full URL to inspect (required for inspect action)")
     parser.add_argument("--days", type=int, default=30, help="Lookback period in days")
     parser.add_argument("--limit", type=int, default=100, help="Max rows to return")
     parser.add_argument("--creds", default=DEFAULT_CREDENTIALS_PATH, help="Path to SA JSON key")
+    parser.add_argument("--email", default="david@skyrate.ai", help="Email recipient for report action")
 
     # ── Subcommand style (also supported for convenience) ───────────
     subparsers = parser.add_subparsers(dest="command", help="Command to execute (alternative to --action)")
@@ -699,6 +1004,10 @@ Examples (subcommand style — also supported):
     p_audit = subparsers.add_parser("audit", help="Full audit across all SkyRate domains")
     p_audit.add_argument("--creds", default=DEFAULT_CREDENTIALS_PATH, help="Path to SA JSON key")
 
+    p_report = subparsers.add_parser("report", help="Run full audit and email HTML report")
+    p_report.add_argument("--email", default="david@skyrate.ai", help="Recipient email address")
+    p_report.add_argument("--creds", default=DEFAULT_CREDENTIALS_PATH, help="Path to SA JSON key")
+
     args = parser.parse_args()
 
     # Resolve action from either --action flag or subcommand
@@ -718,6 +1027,17 @@ Examples (subcommand style — also supported):
             _json_out(inspect_url(args.url, args.site, args.creds))
         elif action == "audit":
             _json_out(full_audit(args.creds))
+        elif action == "report":
+            print("Running full audit...")
+            audit_data = full_audit(args.creds)
+            print("Generating and sending email report...")
+            result = send_report_email(audit_data, to_email=args.email, creds_path=args.creds)
+            _json_out(result)
+            if result["success"]:
+                print(f"\n[OK] Report sent to {result['to']}")
+            else:
+                print(f"\n[FAIL] {result['message']}")
+                sys.exit(1)
     except FileNotFoundError as e:
         _json_out({"error": str(e), "hint": "Set up GSC Service Account credentials first."})
         sys.exit(1)
