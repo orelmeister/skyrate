@@ -6,7 +6,7 @@ Admin: CRUD, AI generation, publish/unpublish
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 from sqlalchemy import desc
 from pydantic import BaseModel
 from typing import Optional, List
@@ -62,7 +62,11 @@ def list_published_posts(
     db: Session = Depends(get_db),
 ):
     """List all published blog posts (public, no auth required)"""
-    query = db.query(BlogPost).filter(BlogPost.status == BlogStatus.PUBLISHED.value)
+    query = db.query(BlogPost).options(
+        defer(BlogPost.hero_image),
+        defer(BlogPost.mid_image),
+        defer(BlogPost.content_html),
+    ).filter(BlogPost.status == BlogStatus.PUBLISHED.value)
     
     if category:
         query = query.filter(BlogPost.category == category)
@@ -124,7 +128,11 @@ def admin_list_posts(
     db: Session = Depends(get_db),
 ):
     """List all blog posts (admin — includes drafts/archived)"""
-    query = db.query(BlogPost)
+    query = db.query(BlogPost).options(
+        defer(BlogPost.hero_image),
+        defer(BlogPost.mid_image),
+        defer(BlogPost.content_html),
+    )
     
     if status_filter:
         query = query.filter(BlogPost.status == status_filter)
