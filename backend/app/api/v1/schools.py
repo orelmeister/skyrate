@@ -359,11 +359,11 @@ async def get_school_applications(
 @router.post("/{ben}/refresh-cache")
 async def refresh_school_cache(
     ben: str,
-    current_user: User = Depends(require_role("admin", "consultant"))
+    current_user: User = Depends(require_role("admin", "consultant", "super"))
 ):
     """
     Force refresh cached data for a school.
-    Requires consultant or admin role.
+    Requires consultant, admin, or super role.
     """
     # Delete existing cache
     cache_path = get_cache_path(ben)

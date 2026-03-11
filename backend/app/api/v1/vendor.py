@@ -252,7 +252,7 @@ class Form471SearchRequest(BaseModel):
 async def get_471_by_entity(
     ben: str,
     year: Optional[int] = None,
-    current_user: User = Depends(require_role("admin", "vendor")),
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
 ):
     """
     Get all Form 471 applications for a specific entity (BEN).
@@ -290,7 +290,7 @@ async def get_471_by_state(
     year: Optional[int] = None,
     category: Optional[str] = None,
     limit: int = 500,
-    current_user: User = Depends(require_role("admin", "vendor")),
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
 ):
     """
     Search Form 471 applications by state.
@@ -352,7 +352,7 @@ async def get_competitors(
 @router.post("/471/search")
 async def search_471(
     data: Form471SearchRequest,
-    current_user: User = Depends(require_role("admin", "vendor")),
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
 ):
     """
     Search Form 471 applications with multiple filters.
@@ -523,7 +523,7 @@ async def get_frn_status_summary(
 async def lookup_spin_details(
     spin: str,
     year: Optional[int] = None,
-    current_user: User = Depends(require_role("admin", "vendor")),
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
 ):
     """
     Look up any SPIN to see what entities they service.
@@ -586,7 +586,7 @@ async def get_470_leads(
     sort_by: Optional[str] = None,
     limit: int = 2000,
     offset: int = 0,
-    current_user: User = Depends(require_role("admin", "vendor")),
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
 ):
     """
     Get Form 470 postings for lead generation.
@@ -642,7 +642,7 @@ async def get_470_by_state(
     year: Optional[int] = None,
     category: Optional[str] = None,
     limit: int = 500,
-    current_user: User = Depends(require_role("admin", "vendor")),
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
 ):
     """
     Get Form 470 postings for a specific state.
@@ -675,7 +675,7 @@ async def get_470_by_manufacturer(
     year: Optional[int] = None,
     state: Optional[str] = None,
     limit: int = 500,
-    current_user: User = Depends(require_role("admin", "vendor")),
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
 ):
     """
     Get Form 470 postings that mention a specific manufacturer.
@@ -713,7 +713,7 @@ async def get_470_by_manufacturer(
 @router.get("/470/{application_number}")
 async def get_470_detail(
     application_number: str,
-    current_user: User = Depends(require_role("admin", "vendor")),
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
 ):
     """
     Get detailed information about a specific Form 470 application.
@@ -750,7 +750,7 @@ async def get_470_detail(
 @router.post("/470/search")
 async def search_470(
     data: Form470SearchRequest,
-    current_user: User = Depends(require_role("admin", "vendor")),
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
 ):
     """
     Advanced Form 470 search with multiple filters.
@@ -2354,7 +2354,7 @@ def _run_prediction_refresh(states: Optional[List[str]], force: bool):
 async def refresh_predictions(
     states: Optional[str] = None,
     force: bool = False,
-    current_user: User = Depends(require_role("admin", "vendor")),
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
     db: Session = Depends(get_db)
 ):
     """
