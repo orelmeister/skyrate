@@ -58,7 +58,7 @@ class SubscriptionUpdate(BaseModel):
 
 # ==================== DEPENDENCIES ====================
 
-AdminUser = Depends(require_role("admin"))
+AdminUser = Depends(require_role("admin", "super"))
 
 
 # ==================== USER MANAGEMENT ====================
@@ -968,7 +968,7 @@ class SMSRequest(BaseModel):
 async def admin_broadcast(
     data: BroadcastRequest,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "super")),
     db: Session = Depends(get_db)
 ):
     """
@@ -1050,7 +1050,7 @@ async def admin_broadcast(
 async def send_sms_to_user(
     user_id: int,
     data: SMSRequest,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "super")),
     db: Session = Depends(get_db)
 ):
     """Send an SMS to a specific user (must have verified phone)"""
@@ -1074,7 +1074,7 @@ async def send_sms_to_user(
 async def send_push_to_user(
     user_id: int,
     data: SMSRequest,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "super")),
     db: Session = Depends(get_db)
 ):
     """Send a push notification to a specific user"""
@@ -1114,7 +1114,7 @@ class PromoInviteResponse(BaseModel):
 async def create_promo_invite(
     data: PromoInviteCreate,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "super")),
     db: Session = Depends(get_db)
 ):
     """
@@ -1192,7 +1192,7 @@ async def create_promo_invite(
 
 @router.get("/promo-invites")
 async def list_promo_invites(
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "super")),
     db: Session = Depends(get_db)
 ):
     """List all promo invites with their status."""
@@ -1232,7 +1232,7 @@ async def list_promo_invites(
 @router.delete("/promo-invites/{invite_id}")
 async def revoke_promo_invite(
     invite_id: int,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "super")),
     db: Session = Depends(get_db)
 ):
     """Revoke a pending promo invite."""
@@ -1251,7 +1251,7 @@ async def revoke_promo_invite(
 async def resend_promo_invite(
     invite_id: int,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "super")),
     db: Session = Depends(get_db)
 ):
     """Resend the invite email for a pending invite."""

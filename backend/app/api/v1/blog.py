@@ -119,7 +119,7 @@ def admin_list_posts(
     limit: int = 50,
     offset: int = 0,
     status_filter: Optional[str] = None,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "super")),
     db: Session = Depends(get_db),
 ):
     """List all blog posts (admin — includes drafts/archived)"""
@@ -141,7 +141,7 @@ def admin_list_posts(
 @router.get("/admin/posts/{post_id}")
 def admin_get_post(
     post_id: int,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "super")),
     db: Session = Depends(get_db),
 ):
     """Get full blog post by ID (admin)"""
@@ -158,7 +158,7 @@ def admin_get_post(
 @router.post("/admin/posts")
 def admin_create_post(
     data: BlogCreateRequest,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "super")),
     db: Session = Depends(get_db),
 ):
     """Create a new blog post manually (admin)"""
@@ -198,7 +198,7 @@ def admin_create_post(
 def admin_update_post(
     post_id: int,
     data: BlogUpdateRequest,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "super")),
     db: Session = Depends(get_db),
 ):
     """Update an existing blog post (admin)"""
@@ -241,7 +241,7 @@ def admin_update_post(
 @router.delete("/admin/posts/{post_id}")
 def admin_delete_post(
     post_id: int,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "super")),
     db: Session = Depends(get_db),
 ):
     """Delete a blog post (admin)"""
@@ -261,7 +261,7 @@ def admin_delete_post(
 @router.post("/admin/posts/{post_id}/publish")
 def admin_publish_post(
     post_id: int,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "super")),
     db: Session = Depends(get_db),
 ):
     """Publish a draft blog post (admin)"""
@@ -284,7 +284,7 @@ def admin_publish_post(
 @router.post("/admin/posts/{post_id}/unpublish")
 def admin_unpublish_post(
     post_id: int,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "super")),
     db: Session = Depends(get_db),
 ):
     """Unpublish a blog post (admin)"""
@@ -307,7 +307,7 @@ def admin_unpublish_post(
 @router.post("/admin/generate")
 async def admin_generate_blog(
     data: BlogGenerateRequest,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "super")),
     db: Session = Depends(get_db),
 ):
     """Generate a blog post using AI (admin). Creates as draft for review."""
@@ -406,7 +406,7 @@ def get_mid_image(slug: str, db: Session = Depends(get_db)):
 @router.get("/admin/posts/{post_id}/hero-image")
 def admin_get_hero_image(
     post_id: int,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "super")),
     db: Session = Depends(get_db),
 ):
     """Serve the hero image for any blog post (admin preview)"""
@@ -424,7 +424,7 @@ def admin_get_hero_image(
 @router.get("/admin/posts/{post_id}/mid-image")
 def admin_get_mid_image(
     post_id: int,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "super")),
     db: Session = Depends(get_db),
 ):
     """Serve the mid-article image for any blog post (admin preview)"""
@@ -443,7 +443,7 @@ def admin_get_mid_image(
 async def admin_generate_image(
     post_id: int,
     data: ImageGenerateRequest,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "super")),
     db: Session = Depends(get_db),
 ):
     """Generate a hero or mid-article image for a blog post using AI (admin)"""
@@ -495,7 +495,7 @@ async def admin_generate_image(
 @router.delete("/admin/posts/{post_id}/hero-image")
 def admin_delete_hero_image(
     post_id: int,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "super")),
     db: Session = Depends(get_db),
 ):
     """Remove the hero image from a blog post (admin)"""
@@ -514,7 +514,7 @@ def admin_delete_hero_image(
 @router.delete("/admin/posts/{post_id}/mid-image")
 def admin_delete_mid_image(
     post_id: int,
-    current_user: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "super")),
     db: Session = Depends(get_db),
 ):
     """Remove the mid-article image from a blog post (admin)"""
