@@ -67,6 +67,15 @@ services:
       - key: FROM_EMAIL
         scope: RUN_TIME
         value: alerts@skyrate.ai
+      - key: GEMINI_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: DEEPSEEK_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: ANTHROPIC_API_KEY
+        scope: RUN_TIME
+        type: SECRET
       - key: FRONTEND_URL
         scope: RUN_TIME
         value: https://skyrate.ai

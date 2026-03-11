@@ -149,12 +149,13 @@ CATEGORY: [One of: Guide, Analysis, Strategy, Industry, News]
     
     # Run synchronous AI calls in a thread to avoid blocking the event loop
     import asyncio
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     
-    if preferred_model == "gemini" and os.environ.get('GEMINI_API_KEY'):
+    gemini_key = os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
+    if preferred_model == "gemini" and gemini_key:
         try:
             import google.generativeai as genai
-            genai.configure(api_key=os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY'))
+            genai.configure(api_key=gemini_key)
             model = genai.GenerativeModel('gemini-2.0-flash')
             
             def _call_gemini():
@@ -190,13 +191,13 @@ CATEGORY: [One of: Guide, Analysis, Strategy, Industry, News]
             try:
                 content = await loop.run_in_executor(None, call_fn)
                 model_used = model_name
-                if content and not content.startswith("[AI"):
+                if content and not content.startswith("["):
                     break
             except Exception:
                 continue
     
-    if not content:
-        raise ValueError("All AI models failed to generate blog content")
+    if not content or content.startswith("["):
+        raise ValueError("All AI models failed to generate blog content. Please check that at least one API key (GEMINI_API_KEY, DEEPSEEK_API_KEY, or ANTHROPIC_API_KEY) is configured.")
     
     # Parse out title, meta, category from the end of the content
     title = topic  # fallback

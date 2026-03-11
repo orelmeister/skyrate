@@ -51,6 +51,15 @@ services:
   - key: VAPID_PUBLIC_KEY
     scope: RUN_TIME
     value: BOQ_1ePgEdPmLcqMCOwM1XGJakthkvFnt3AuCJaGZMs-gm71tz7QorrUdZzBwK-6XWX_SwaRlnO02jyZZNzM-8I
+  - key: GEMINI_API_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: DEEPSEEK_API_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: ANTHROPIC_API_KEY
+    scope: RUN_TIME
+    type: SECRET
   - key: VAPID_CONTACT_EMAIL
     scope: RUN_TIME
     value: alerts@skyrate.ai
