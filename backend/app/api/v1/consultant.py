@@ -2091,18 +2091,27 @@ async def generate_appeal(
         
         logger.info(f"Denial reasons for AI prompt: {denial_reasons_text[:500]}")
         
-        # Generate appeal letter with AI
-        appeal_prompt = f"""Generate a formal E-Rate appeal letter for the following denied application:
+        # Generate appeal letter with AI - USAC-optimized format
+        # USAC prefers short, factual appeals (1-2 pages), NOT legal briefs
+        appeal_prompt = f"""Generate a USAC E-Rate appeal letter that is SHORT and FACTUAL.
 
+CRITICAL FORMATTING RULES:
+- Maximum 1.5 pages (about 400-500 words)
+- Use EXACTLY 4 sections: ISSUE, FACTS, EXPLANATION, REQUESTED ACTION
+- NO legal jargon (avoid: "arbitrary and capricious", "Administrative Procedure Act", "due process", "procedural flaws")
+- NO aggressive language - use respectful, factual tone
+- Focus on FACTS and DOCUMENTATION, not policy arguments
+- State the problem in the FIRST paragraph
+
+APPLICATION DATA:
 Organization: {denial_details.get('organization_name')}
+BEN: {denial_details.get('ben')}
 Application Number: {denial_details.get('application_number')}
 FRN: {denial_details.get('frn')}
 Funding Year: {denial_details.get('funding_year')}
 Service Type: {denial_details.get('service_type')}
 Denied Amount: ${denial_details.get('total_denied_amount', 0):,.2f}
 FCDL Date: {denial_details.get('fcdl_date') or 'Unknown'}
-Appeal Deadline: {denial_details.get('appeal_deadline') or 'Unknown'}
-Days Remaining: {denial_details.get('days_remaining') if denial_details.get('days_remaining') is not None else 'Unknown'}
 
 DENIAL REASONS FROM FCDL:
 {denial_reasons_text}
@@ -2110,20 +2119,37 @@ DENIAL REASONS FROM FCDL:
 RAW FCDL COMMENT:
 {denial_details.get('fcdl_comment') or 'Not available'}
 
-RECOMMENDED APPEAL STRATEGY:
-{strategy.get('recommended_approach', 'Standard appeal approach')}
-
-EVIDENCE TO GATHER:
-{', '.join(strategy.get('evidence_needed', ['Standard documentation']))}
-
 Additional Context from User: {data.additional_context or 'None provided'}
 
-Write a professional, formal E-Rate appeal letter that:
-1. Addresses each denial reason specifically
-2. Argues for reconsideration with proper legal and regulatory references
-3. Cites relevant FCC orders and E-Rate program rules
-4. Maintains a respectful but firm tone
-5. Includes proper formatting for USAC submission"""
+APPEAL STRUCTURE (follow exactly):
+
+1. ISSUE (2-3 sentences max)
+State exactly: "[Organization] (BEN [number]) respectfully requests reversal of USAC's [decision type] of FRN [number] for Funding Year [year]."
+Then state what USAC's stated reason was and that it appears to be based on a misunderstanding.
+
+2. FACTS (bullet points, 5-8 items max)
+- Key facts about the applicant
+- Prior E-Rate funding history (if any) - THIS IS VERY IMPORTANT
+- Relevant eligibility facts
+- What actually happened vs what USAC believed
+
+3. EXPLANATION (1-2 short paragraphs)
+- Explain why USAC's determination was incorrect
+- Reference specific evidence/documentation
+- If the applicant received prior E-Rate funding, emphasize this strongly
+- Keep it factual, not argumentative
+
+4. REQUESTED ACTION (2-3 sentences)
+Simply state: "Based on the above, [Organization] respectfully requests that USAC reverse its decision and reinstate FRN [number]."
+List any supporting documents being submitted.
+
+TONE GUIDANCE:
+- Use: "This determination appears to be based on a misunderstanding of..."
+- Avoid: "This decision was arbitrary and capricious..."
+- Use: "The applicant has provided documentation showing..."
+- Avoid: "USAC violated due process by..."
+
+Remember: USAC reviewers prefer concise, factual corrections over lengthy legal arguments. Prior E-Rate approvals are often the strongest evidence."""
 
         appeal_text = ai_manager.deep_analysis(
             str(denial_details),

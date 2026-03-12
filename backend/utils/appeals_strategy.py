@@ -368,34 +368,31 @@ class AppealsStrategy:
             return "Appeal unlikely to succeed - consult compliance specialist before proceeding"
     
     def _generate_letter_outline(self, denial_details: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate outline for the appeal letter."""
+        """Generate outline for the appeal letter - USAC-optimized format."""
         reasons = denial_details.get("reasons", [])
         
+        # USAC prefers short, factual appeals - NOT legal briefs
         return {
             "sections": [
                 {
-                    "title": "Introduction",
-                    "content": "Identify the application, FRN, and FCDL date. State intent to appeal."
+                    "title": "Issue",
+                    "content": "State the FRN, BEN, funding year, and what USAC's stated reason was. Keep to 2-3 sentences."
                 },
                 {
-                    "title": "Background",
-                    "content": "Provide context about the applicant and the funding request."
+                    "title": "Facts",
+                    "content": "Bullet-point list of key facts (5-8 items). Include prior E-Rate funding history if any."
                 },
                 {
-                    "title": "Violation Response",
-                    "content": f"Address each of the {len(reasons)} violations individually with evidence."
+                    "title": "Explanation",
+                    "content": "1-2 short paragraphs explaining why USAC's determination was incorrect. Focus on facts and evidence, not policy arguments."
                 },
                 {
-                    "title": "Supporting Evidence",
-                    "content": "Reference all attached documentation that supports the appeal."
-                },
-                {
-                    "title": "Conclusion",
-                    "content": "Summarize key points and request specific relief (full/partial funding)."
+                    "title": "Requested Action",
+                    "content": "2-3 sentences requesting reversal. List supporting documents being submitted."
                 }
             ],
-            "estimated_length": f"{max(3, len(reasons) + 2)} pages",
-            "tone_guidance": "Professional, factual, and non-confrontational. Focus on compliance demonstration."
+            "estimated_length": "1-1.5 pages",
+            "tone_guidance": "Factual and respectful. Avoid legal jargon (no 'arbitrary and capricious', 'due process', 'APA'). USAC responds better to factual corrections than legal arguments."
         }
     
     def _generate_recommendations(self, denial_details: Dict[str, Any]) -> List[str]:
