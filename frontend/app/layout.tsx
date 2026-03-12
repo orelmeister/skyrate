@@ -93,9 +93,17 @@ export default function RootLayout({
               },
               "provider": {
                 "@type": "Organization",
-                "name": "SkyRate AI",
+                "name": "SkyRate LLC",
                 "url": "https://skyrate.ai",
                 "logo": "https://skyrate.ai/images/logos/logo-icon-transparent.png",
+                "address": {
+                  "@type": "PostalAddress",
+                  "streetAddress": "30 N Gould St Ste N",
+                  "addressLocality": "Sheridan",
+                  "addressRegion": "WY",
+                  "postalCode": "82801",
+                  "addressCountry": "US"
+                },
                 "contactPoint": {
                   "@type": "ContactPoint",
                   "email": "support@skyrate.ai",

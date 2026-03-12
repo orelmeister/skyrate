@@ -4,13 +4,13 @@ import { SafeEmail } from "@/components/SafeEmail";
 import { ArrowRight, ArrowLeft, FileText, Search, Clock, CheckCircle, Sparkles, BookOpen, Users, ShoppingCart, Target, BarChart3, Filter } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate Form 470 Guide: Everything You Need to Know | SkyRate AI",
-  description: "Complete guide to E-Rate Form 470. Learn what it is, how to search filings, respond to opportunities, and use Form 470 data to find new E-Rate business.",
+  title: "E-Rate Form 470 Guide 2026 [Process & Exact Deadlines]",
+  description: "Complete 2026 guide to E-Rate Form 470. Learn the exact deadlines, how to search filings, respond to opportunities, and win new E-Rate business.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/blog/erate-form-470-guide" },
   openGraph: {
-    title: "E-Rate Form 470 Guide: Everything You Need to Know",
-    description: "Complete guide to understanding and leveraging E-Rate Form 470 filings.",
+    title: "E-Rate Form 470 Guide 2026 [Process & Exact Deadlines]",
+    description: "Complete 2026 guide to E-Rate Form 470. Learn the exact deadlines, how to search filings, respond to opportunities, and win new E-Rate business.",
     url: "https://skyrate.ai/blog/erate-form-470-guide",
     siteName: "SkyRate AI",
     type: "article",
