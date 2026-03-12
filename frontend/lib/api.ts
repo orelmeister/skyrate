@@ -286,6 +286,81 @@ export interface FRNStatusResponse {
   error?: string;
 }
 
+// ==================== FRN WATCH / REPORT MONITOR TYPES ====================
+
+export interface FRNWatch {
+  id: number;
+  user_id: number;
+  name: string;
+  watch_type: 'frn' | 'ben' | 'portfolio';
+  target_id: string | null;
+  target_name: string | null;
+  frequency: 'daily' | 'weekly' | 'biweekly' | 'monthly';
+  recipient_email: string;
+  cc_emails: string[];
+  funding_year: number | null;
+  status_filter: string | null;
+  include_funded: boolean;
+  include_pending: boolean;
+  include_denied: boolean;
+  include_summary: boolean;
+  include_details: boolean;
+  include_changes: boolean;
+  is_active: boolean;
+  last_sent_at: string | null;
+  next_send_at: string | null;
+  send_count: number;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateWatchRequest {
+  name: string;
+  watch_type?: 'frn' | 'ben' | 'portfolio';
+  target_id?: string;
+  target_name?: string;
+  frequency?: 'daily' | 'weekly' | 'biweekly' | 'monthly';
+  recipient_email: string;
+  cc_emails?: string[];
+  funding_year?: number;
+  status_filter?: string;
+  include_funded?: boolean;
+  include_pending?: boolean;
+  include_denied?: boolean;
+  include_summary?: boolean;
+  include_details?: boolean;
+  include_changes?: boolean;
+}
+
+export interface UpdateWatchRequest {
+  name?: string;
+  frequency?: string;
+  recipient_email?: string;
+  cc_emails?: string[];
+  funding_year?: number;
+  status_filter?: string;
+  include_funded?: boolean;
+  include_pending?: boolean;
+  include_denied?: boolean;
+  include_summary?: boolean;
+  include_details?: boolean;
+  include_changes?: boolean;
+  is_active?: boolean;
+}
+
+export interface FRNWatchListResponse {
+  success: boolean;
+  watches: FRNWatch[];
+  total: number;
+}
+
+export interface FRNWatchResponse {
+  success: boolean;
+  watch: FRNWatch;
+  message?: string;
+}
+
 export interface FRNStatusSummaryResponse {
   success: boolean;
   spin: string;
@@ -2679,6 +2754,62 @@ class ApiClient {
   async getApplicantDisbursements(year?: number): Promise<ApiResponse<any>> {
     const params = year ? `?year=${year}` : '';
     return this.request(`/api/v1/applicant/disbursements${params}`);
+  }
+
+  // ==================== FRN WATCH / REPORT MONITOR ====================
+
+  /**
+   * List all FRN watches for the current user
+   */
+  async getFRNWatches(): Promise<ApiResponse<FRNWatchListResponse>> {
+    return this.request('/api/v1/frn-reports');
+  }
+
+  /**
+   * Create a new FRN watch monitor  
+   */
+  async createFRNWatch(data: CreateWatchRequest): Promise<ApiResponse<FRNWatchResponse>> {
+    return this.request('/api/v1/frn-reports', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * Update an existing FRN watch
+   */
+  async updateFRNWatch(watchId: number, data: UpdateWatchRequest): Promise<ApiResponse<FRNWatchResponse>> {
+    return this.request(`/api/v1/frn-reports/${watchId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
+   * Delete an FRN watch
+   */
+  async deleteFRNWatch(watchId: number): Promise<ApiResponse<{ success: boolean }>> {
+    return this.request(`/api/v1/frn-reports/${watchId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Send a report immediately (does not affect schedule)
+   */
+  async sendFRNWatchNow(watchId: number): Promise<ApiResponse<{ success: boolean; message: string; frn_count: number }>> {
+    return this.request(`/api/v1/frn-reports/${watchId}/send-now`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Toggle an FRN watch active/inactive
+   */
+  async toggleFRNWatch(watchId: number): Promise<ApiResponse<FRNWatchResponse>> {
+    return this.request(`/api/v1/frn-reports/${watchId}/toggle`, {
+      method: 'POST',
+    });
   }
 }
 

@@ -24,7 +24,7 @@ from app.core.config import settings
 from app.core.database import engine, Base
 
 # Import API routers - services are imported lazily within these
-from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals, alerts, applicant, notifications, support, onboarding, blog
+from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals, alerts, applicant, notifications, support, onboarding, blog, frn_reports
 
 # Configure logging
 logging.basicConfig(
@@ -488,6 +488,7 @@ async def lifespan(app: FastAPI):
         ApplicantAutoAppeal, ApplicantStatusHistory, USACCache
     )
     from app.models.admin_frn_snapshot import AdminFRNSnapshot
+    from app.models.frn_watch import FRNWatch
     from app.models.promo_invite import PromoInvite
     from app.models.push_subscription import PushSubscription
     from app.models.support_ticket import SupportTicket, TicketMessage
@@ -646,6 +647,7 @@ app.include_router(applicant.router, prefix="/v1")
 app.include_router(support.router, prefix="/v1")
 app.include_router(onboarding.router, prefix="/v1")
 app.include_router(blog.router, prefix="/v1")
+app.include_router(frn_reports.router, prefix="/v1")
 
 # ==================== MODELS ====================
 

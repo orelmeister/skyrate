@@ -25,6 +25,7 @@ class EmailService:
         'digest': ('alerts@skyrate.ai', 'SkyRate AI Alerts'),
         'weekly': ('alerts@skyrate.ai', 'SkyRate AI Alerts'),
         'deadline': ('alerts@skyrate.ai', 'SkyRate AI Alerts'),
+        'report': ('alerts@skyrate.ai', 'SkyRate AI Reports'),
         'welcome': ('welcome@skyrate.ai', 'SkyRate AI'),
         'billing': ('billing@skyrate.ai', 'SkyRate AI Billing'),
         'noreply': ('noreply@skyrate.ai', 'SkyRate AI'),

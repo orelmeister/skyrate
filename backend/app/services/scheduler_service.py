@@ -55,6 +55,14 @@ def check_upcoming_deadlines():
                 _check_user_deadlines(db, alert_service, config)
             except Exception as e:
                 logger.error(f"Error checking deadlines for user {config.user_id}: {e}")
+            try:
+                _check_consultant_deadlines(db, alert_service, config)
+            except Exception as e:
+                logger.error(f"Error checking consultant deadlines for user {config.user_id}: {e}")
+            try:
+                _check_vendor_deadlines(db, alert_service, config)
+            except Exception as e:
+                logger.error(f"Error checking vendor deadlines for user {config.user_id}: {e}")
         
         logger.info(f"Deadline check complete. Processed {len(configs)} users.")
         
@@ -102,6 +110,215 @@ def _check_user_deadlines(db: Session, alert_service: AlertService, config: Aler
                     deadline_date=appeal.appeal_deadline,
                     days_remaining=days_remaining
                 )
+
+
+def _check_consultant_deadlines(db: Session, alert_service: AlertService, config: AlertConfig):
+    """Check E-Rate deadlines for consultant users using live USAC FRN data"""
+    from ..models.consultant import ConsultantProfile, ConsultantSchool
+    
+    user = db.query(User).filter(User.id == config.user_id).first()
+    if not user or user.role not in ('consultant', 'super'):
+        return
+    
+    profile = db.query(ConsultantProfile).filter(
+        ConsultantProfile.user_id == user.id
+    ).first()
+    if not profile:
+        return
+    
+    warning_days = config.deadline_warning_days or 14
+    
+    # Get all school BENs for this consultant
+    schools = db.query(ConsultantSchool).filter(
+        ConsultantSchool.consultant_profile_id == profile.id
+    ).all()
+    
+    if not schools:
+        return
+    
+    bens = [s.ben for s in schools if s.ben]
+    if not bens:
+        return
+    
+    try:
+        from utils.usac_client import USACDataClient
+        client = USACDataClient()
+        batch_result = client.get_frn_status_batch(bens)
+        
+        if not batch_result.get("success"):
+            return
+        
+        from ..models.alert import Alert, AlertType
+        now = datetime.utcnow()
+        
+        for ben, ben_data in batch_result.get("results", {}).items():
+            entity_name = ben_data.get("entity_name", f"BEN {ben}")
+            
+            for frn in ben_data.get("frns", []):
+                frn_number = frn.get("frn", "")
+                status = (frn.get("status") or "").lower()
+                
+                # Check appeal deadline for denied FRNs (60 days from FCDL date)
+                if "denied" in status:
+                    fcdl_date_str = frn.get("fcdl_date", "")
+                    if fcdl_date_str:
+                        try:
+                            fcdl_date = _parse_date(fcdl_date_str)
+                            if fcdl_date:
+                                appeal_deadline = fcdl_date + timedelta(days=60)
+                                days_remaining = (appeal_deadline - now).days
+                                
+                                if 0 < days_remaining <= warning_days:
+                                    # Check for recent duplicate alert
+                                    recent = db.query(Alert).filter(
+                                        Alert.user_id == user.id,
+                                        Alert.entity_id == frn_number,
+                                        Alert.alert_type == AlertType.APPEAL_DEADLINE.value,
+                                        Alert.created_at >= now - timedelta(days=3)
+                                    ).first()
+                                    
+                                    if not recent:
+                                        alert_service.alert_on_deadline(
+                                            user_id=user.id,
+                                            entity_id=frn_number,
+                                            entity_name=entity_name,
+                                            deadline_type="Appeal Deadline",
+                                            deadline_date=appeal_deadline,
+                                            days_remaining=days_remaining
+                                        )
+                        except Exception as e:
+                            logger.debug(f"Could not parse FCDL date for FRN {frn_number}: {e}")
+                
+                # Check Form 486 deadline (120 days after FCDL date or service start, whichever is later)
+                if "funded" in status or "committed" in status:
+                    f486_status = (frn.get("f486_status") or "").lower()
+                    if f486_status and "filed" not in f486_status and "approved" not in f486_status:
+                        fcdl_date_str = frn.get("fcdl_date", "")
+                        service_start_str = frn.get("service_start", "")
+                        
+                        later_date = None
+                        fcdl_dt = _parse_date(fcdl_date_str) if fcdl_date_str else None
+                        svc_dt = _parse_date(service_start_str) if service_start_str else None
+                        
+                        if fcdl_dt and svc_dt:
+                            later_date = max(fcdl_dt, svc_dt)
+                        elif fcdl_dt:
+                            later_date = fcdl_dt
+                        elif svc_dt:
+                            later_date = svc_dt
+                        
+                        if later_date:
+                            f486_deadline = later_date + timedelta(days=120)
+                            days_remaining = (f486_deadline - now).days
+                            
+                            if 0 < days_remaining <= warning_days:
+                                recent = db.query(Alert).filter(
+                                    Alert.user_id == user.id,
+                                    Alert.entity_id == frn_number,
+                                    Alert.alert_type == AlertType.DEADLINE_APPROACHING.value,
+                                    Alert.created_at >= now - timedelta(days=3)
+                                ).first()
+                                
+                                if not recent:
+                                    alert_service.alert_on_deadline(
+                                        user_id=user.id,
+                                        entity_id=frn_number,
+                                        entity_name=entity_name,
+                                        deadline_type="Form 486 Filing Deadline",
+                                        deadline_date=f486_deadline,
+                                        days_remaining=days_remaining
+                                    )
+    except Exception as e:
+        logger.error(f"Error checking consultant deadlines for user {config.user_id}: {e}")
+
+
+def _check_vendor_deadlines(db: Session, alert_service: AlertService, config: AlertConfig):
+    """Check E-Rate deadlines for vendor users"""
+    from ..models.vendor import VendorProfile
+    
+    user = db.query(User).filter(User.id == config.user_id).first()
+    if not user or user.role not in ('vendor', 'super'):
+        return
+    
+    profile = db.query(VendorProfile).filter(
+        VendorProfile.user_id == user.id
+    ).first()
+    if not profile or not profile.spin:
+        return
+    
+    warning_days = config.deadline_warning_days or 14
+    
+    try:
+        from utils.usac_client import USACDataClient
+        client = USACDataClient()
+        spin_result = client.get_frn_status_by_spin(profile.spin)
+        
+        if not spin_result.get("success"):
+            return
+        
+        from ..models.alert import Alert, AlertType
+        now = datetime.utcnow()
+        
+        for frn in spin_result.get("frns", []):
+            frn_number = frn.get("frn", "")
+            status = (frn.get("status") or "").lower()
+            entity_name = frn.get("entity_name") or f"FRN {frn_number}"
+            
+            # Check invoice deadline for funded FRNs
+            if "funded" in status or "committed" in status:
+                invoicing_ready = (frn.get("invoicing_ready") or "").lower()
+                last_invoice = frn.get("last_invoice_date", "")
+                service_end_str = frn.get("service_end", "")
+                
+                # Invoice deadline = service end date + 120 days
+                if service_end_str and not last_invoice:
+                    svc_end = _parse_date(service_end_str)
+                    if svc_end:
+                        invoice_deadline = svc_end + timedelta(days=120)
+                        days_remaining = (invoice_deadline - now).days
+                        
+                        if 0 < days_remaining <= warning_days:
+                            recent = db.query(Alert).filter(
+                                Alert.user_id == user.id,
+                                Alert.entity_id == frn_number,
+                                Alert.alert_type == AlertType.DEADLINE_APPROACHING.value,
+                                Alert.created_at >= now - timedelta(days=3)
+                            ).first()
+                            
+                            if not recent:
+                                alert_service.alert_on_deadline(
+                                    user_id=user.id,
+                                    entity_id=frn_number,
+                                    entity_name=entity_name,
+                                    deadline_type="Invoice Filing Deadline",
+                                    deadline_date=invoice_deadline,
+                                    days_remaining=days_remaining
+                                )
+    except Exception as e:
+        logger.error(f"Error checking vendor deadlines for user {config.user_id}: {e}")
+
+
+def _parse_date(date_str: str) -> Optional[datetime]:
+    """Parse various USAC date formats"""
+    if not date_str:
+        return None
+    
+    from datetime import datetime as dt
+    formats = [
+        "%Y-%m-%dT%H:%M:%S.%f",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d",
+        "%m/%d/%Y",
+        "%m/%d/%y",
+    ]
+    
+    for fmt in formats:
+        try:
+            return dt.strptime(date_str.strip(), fmt)
+        except (ValueError, AttributeError):
+            continue
+    
+    return None
 
 
 def send_daily_digests():
@@ -565,6 +782,29 @@ def refresh_predicted_leads():
         db.close()
 
 
+def process_frn_watch_reports():
+    """
+    Process FRN watch monitors and send email reports.
+    Runs every hour, checks for watches whose next_send_at has passed.
+    """
+    logger.info("Running FRN watch report processing...")
+    
+    db = SessionLocal()
+    try:
+        from .frn_report_service import FRNReportService
+        report_service = FRNReportService(db)
+        result = report_service.process_due_watches()
+        
+        logger.info(
+            f"FRN watch processing complete. "
+            f"Processed: {result['processed']}, Sent: {result['sent']}, Errors: {result['errors']}"
+        )
+    except Exception as e:
+        logger.error(f"FRN watch report processing failed: {e}")
+    finally:
+        db.close()
+
+
 def init_scheduler():
     """Initialize the background scheduler with all jobs"""
     global scheduler
@@ -635,6 +875,15 @@ def init_scheduler():
         trigger=CronTrigger(day_of_week='sun', hour=2, minute=0),
         id='refresh_predicted_leads',
         name='Refresh predictive lead intelligence from USAC',
+        replace_existing=True
+    )
+    
+    # FRN watch report processing - every hour
+    scheduler.add_job(
+        process_frn_watch_reports,
+        trigger=IntervalTrigger(hours=1),
+        id='process_frn_watches',
+        name='Process FRN watch email reports',
         replace_existing=True
     )
     

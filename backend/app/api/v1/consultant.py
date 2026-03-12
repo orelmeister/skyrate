@@ -1333,6 +1333,48 @@ async def get_denied_applications(
         import traceback
         traceback.print_exc()
     
+    # ========== CROSS-REFERENCE: Enrich denial reasons from FRN Status dataset ==========
+    # The Form 471 dataset (srbr-2d59) often lacks denial_reason/fcdl fields.
+    # The FRN Status dataset (qdmp-ygft) has fcdl_comment_frn with actual FCDL comments.
+    frns_missing_reasons = [app for app in denied_applications if not app.get("denial_reason")]
+
+    if frns_missing_reasons:
+        try:
+            from utils.usac_client import USACDataClient
+            client = USACDataClient()
+
+            # Get unique BENs that need enrichment
+            bens_to_enrich = list(set(app["ben"] for app in frns_missing_reasons))
+
+            # Batch fetch from FRN Status dataset (qdmp-ygft) — 1 API call
+            batch_result = client.get_frn_status_batch(
+                bens=bens_to_enrich,
+                year=funding_year,
+                status_filter="Denied"
+            )
+
+            if batch_result.get("success"):
+                # Build FRN -> fcdl_comment lookup from FRN Status dataset
+                frn_fcdl_map = {}
+                for ben_data in batch_result.get("results", {}).values():
+                    for frn_record in ben_data.get("frns", []):
+                        frn_num = frn_record.get("frn", "")
+                        fcdl = frn_record.get("fcdl_comment", "")
+                        pending = frn_record.get("pending_reason", "")
+                        if frn_num and (fcdl or pending):
+                            frn_fcdl_map[frn_num] = fcdl or pending
+
+                # Enrich denied applications with FCDL comments
+                enriched_count = 0
+                for app in denied_applications:
+                    if not app.get("denial_reason") and app["frn"] in frn_fcdl_map:
+                        app["denial_reason"] = frn_fcdl_map[app["frn"]]
+                        enriched_count += 1
+
+                print(f"DEBUG denied-applications: Enriched {enriched_count}/{len(frns_missing_reasons)} denial reasons from FRN Status dataset")
+        except Exception as e:
+            print(f"Warning: Failed to enrich denial reasons from FRN Status dataset: {e}")
+
     print(f"DEBUG denied-applications: Returning {len(denied_applications)} denied applications")
     
     # Sort by urgency (most urgent first), then by amount
