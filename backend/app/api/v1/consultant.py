@@ -105,6 +105,73 @@ class SchoolUpdate(BaseModel):
 class AppealGenerateRequest(BaseModel):
     frn: str
     additional_context: Optional[str] = None
+    appeal_type: Optional[str] = None  # "usac" | "fcc" | None (auto-detect)
+
+
+# ==================== APPEAL TYPE DETECTION ====================
+
+# FCC Secretary - NOTE: This changes over time, verify before FCC appeals
+FCC_SECRETARY = {
+    "name": "Marlene H. Dortch",
+    "title": "Secretary",
+    "organization": "Federal Communications Commission",
+    "office": "Office of the Secretary",
+    "address": "445 12th Street, SW",
+    "city_state_zip": "Washington, DC 20554",
+    "last_verified": "2026-03-12"
+}
+
+def determine_appeal_type(
+    days_remaining: Optional[int],
+    denial_reasons: List[Dict],
+    user_context: Optional[str] = None,
+    user_override: Optional[str] = None
+) -> tuple:
+    """
+    Determine whether this should be a USAC or FCC appeal.
+    
+    USAC Appeals (within 60 days):
+    - Contest factual determinations with evidence
+    - "USAC got the facts wrong, here's proof"
+    
+    FCC Appeals (after 60 days OR waiver needed):
+    - Request waiver of a rule
+    - Claim USAC violated FCC order/procedure
+    
+    Returns: (appeal_type, reason, can_override)
+    """
+    # If user explicitly chose, respect it (with warning if inappropriate)
+    if user_override:
+        if user_override.lower() == "fcc":
+            return ("fcc", "User selected FCC appeal", False)
+        elif user_override.lower() == "usac":
+            if days_remaining is not None and days_remaining < 0:
+                return ("fcc", "USAC deadline expired - must use FCC appeal", False)
+            return ("usac", "User selected USAC appeal", False)
+    
+    # Hard rule: past 60 days = FCC only
+    if days_remaining is not None and days_remaining < 0:
+        return ("fcc", f"USAC appeal window expired ({abs(days_remaining)} days ago). FCC appeal required.", False)
+    
+    # Check for waiver keywords in user context
+    waiver_keywords = ["waiver", "late filing", "missed deadline", "extension", "procedural"]
+    if user_context:
+        context_lower = user_context.lower()
+        for keyword in waiver_keywords:
+            if keyword in context_lower:
+                return ("fcc", f"Waiver request detected ('{keyword}'). FCC appeal recommended.", True)
+    
+    # Check denial reasons for timing/procedural issues that need waiver
+    for reason in denial_reasons:
+        violation_type = reason.get("violation_type", "").lower()
+        if violation_type in ["timing", "deadline", "late_filing"]:
+            return ("fcc", "Timing violation may require FCC waiver rather than USAC appeal.", True)
+    
+    # Default: USAC appeal for factual disputes within window
+    if days_remaining is not None and days_remaining > 0:
+        return ("usac", f"Within 60-day USAC appeal window ({days_remaining} days remaining). Factual dispute.", True)
+    
+    return ("usac", "Default to USAC appeal for factual correction.", True)
 
 
 class BENValidationRequest(BaseModel):
@@ -2091,14 +2158,93 @@ async def generate_appeal(
         
         logger.info(f"Denial reasons for AI prompt: {denial_reasons_text[:500]}")
         
-        # Generate appeal letter with AI - USAC-optimized format
-        # USAC prefers short, factual appeals (1-2 pages), NOT legal briefs
-        appeal_prompt = f"""Generate a USAC E-Rate appeal letter that is SHORT and FACTUAL.
+        # Determine appeal type (USAC vs FCC)
+        appeal_type, appeal_type_reason, can_override = determine_appeal_type(
+            days_remaining=denial_details.get('days_remaining'),
+            denial_reasons=denial_details.get('denial_reasons', []),
+            user_context=data.additional_context,
+            user_override=data.appeal_type
+        )
+        
+        logger.info(f"Appeal type determined: {appeal_type} - {appeal_type_reason}")
+        
+        # Build the appropriate prompt based on appeal type
+        if appeal_type == "fcc":
+            # FCC Appeal - for waivers or after USAC deadline
+            appeal_prompt = f"""Generate an FCC E-Rate appeal letter requesting a waiver or review of USAC's decision.
+
+ADDRESSEE (include at top of letter):
+{FCC_SECRETARY['name']}, {FCC_SECRETARY['title']}
+{FCC_SECRETARY['organization']}
+{FCC_SECRETARY['office']}
+{FCC_SECRETARY['address']}
+{FCC_SECRETARY['city_state_zip']}
+
+CRITICAL FORMATTING RULES:
+- Maximum 2 pages (about 600-700 words)
+- Use these sections: STATEMENT OF APPEAL, BACKGROUND, SPECIAL CIRCUMSTANCES, WAIVER JUSTIFICATION, REQUESTED RELIEF
+- Reference FCC orders and rules (not civil law)
+- Professional but not overly legalistic
+- Focus on why waiver should be granted
+
+APPLICATION DATA:
+Organization: {denial_details.get('organization_name')}
+BEN: {denial_details.get('ben')}
+Application Number: {denial_details.get('application_number')}
+FRN: {denial_details.get('frn')}
+Funding Year: {denial_details.get('funding_year')}
+Service Type: {denial_details.get('service_type')}
+Denied Amount: ${denial_details.get('total_denied_amount', 0):,.2f}
+FCDL Date: {denial_details.get('fcdl_date') or 'Unknown'}
+Appeal Deadline: {denial_details.get('appeal_deadline') or 'Unknown'}
+Days Since Deadline: {abs(denial_details.get('days_remaining', 0)) if denial_details.get('days_remaining', 0) < 0 else 'Within window'}
+
+DENIAL REASONS:
+{denial_reasons_text}
+
+RAW FCDL COMMENT:
+{denial_details.get('fcdl_comment') or 'Not available'}
+
+Additional Context: {data.additional_context or 'None provided'}
+
+APPEAL STRUCTURE:
+
+1. STATEMENT OF APPEAL (2-3 sentences)
+State: "[Organization] respectfully petitions the Federal Communications Commission to [grant a waiver / review USAC's decision] regarding FRN [number]."
+
+2. BACKGROUND (1 paragraph)
+Brief factual background of the application and USAC's decision.
+
+3. SPECIAL CIRCUMSTANCES (bullet points)
+- Good faith effort to comply with program rules
+- First-time violation (if applicable)
+- No competitive advantage gained
+- Impact on students/educational mission
+- Prior E-Rate participation history
+
+4. WAIVER JUSTIFICATION (1-2 paragraphs)
+Explain why granting the waiver:
+- Serves the underlying purpose of the E-Rate program
+- Would not undermine program integrity
+- Is consistent with FCC precedent (cite specific FCC orders if known)
+Reference 47 C.F.R. § 1.3 (general waiver authority) if requesting waiver.
+
+5. REQUESTED RELIEF (2-3 sentences)
+Clearly state what action the FCC should take.
+
+TONE: Professional, respectful, focused on public interest and program goals."""
+        else:
+            # USAC Appeal - factual correction within 60 days
+            appeal_prompt = f"""Generate a USAC E-Rate appeal letter that is SHORT and FACTUAL.
+
+ADDRESSEE:
+USAC Appeals
+Universal Service Administrative Company
 
 CRITICAL FORMATTING RULES:
 - Maximum 1.5 pages (about 400-500 words)
 - Use EXACTLY 4 sections: ISSUE, FACTS, EXPLANATION, REQUESTED ACTION
-- NO legal jargon (avoid: "arbitrary and capricious", "Administrative Procedure Act", "due process", "procedural flaws")
+- NO legal jargon (avoid: "arbitrary and capricious", "Administrative Procedure Act", "due process")
 - NO aggressive language - use respectful, factual tone
 - Focus on FACTS and DOCUMENTATION, not policy arguments
 - State the problem in the FIRST paragraph
@@ -2112,6 +2258,8 @@ Funding Year: {denial_details.get('funding_year')}
 Service Type: {denial_details.get('service_type')}
 Denied Amount: ${denial_details.get('total_denied_amount', 0):,.2f}
 FCDL Date: {denial_details.get('fcdl_date') or 'Unknown'}
+Appeal Deadline: {denial_details.get('appeal_deadline') or 'Unknown'}
+Days Remaining: {denial_details.get('days_remaining') or 'Unknown'}
 
 DENIAL REASONS FROM FCDL:
 {denial_reasons_text}
@@ -2161,9 +2309,13 @@ Remember: USAC reviewers prefer concise, factual corrections over lengthy legal 
             "appeal": {
                 "frn": data.frn,
                 "organization": denial_details.get("organization_name"),
+                "appeal_type": appeal_type,
+                "appeal_type_reason": appeal_type_reason,
+                "can_override_type": can_override,
                 "denial_details": denial_details,
                 "strategy": strategy,
                 "appeal_letter": appeal_text,
+                "addressee": FCC_SECRETARY if appeal_type == "fcc" else {"name": "USAC Appeals", "organization": "Universal Service Administrative Company"}
             }
         }
     
