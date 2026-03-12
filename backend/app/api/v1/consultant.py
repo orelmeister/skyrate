@@ -2028,36 +2028,34 @@ async def generate_appeal(
         from utils.ai_models import AIModelManager
         from utils.denial_analyzer import DenialAnalyzer
         from utils.appeals_strategy import AppealsStrategy
+        import logging
+        logger = logging.getLogger(__name__)
         
-        # Fetch application data
+        logger.info(f"Starting appeal generation for FRN: {data.frn}")
+        
+        # Initialize the USAC client
         client = USACDataClient()
-        df = client.fetch_data(filters={"funding_request_number": data.frn}, limit=1)
         
-        if df.empty:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Application with FRN {data.frn} not found"
-            )
-        
-        record = df.iloc[0].to_dict()
-        
-        # Verify it's denied
-        status_val = record.get("application_status", "").lower()
-        if "denied" not in status_val and "unfunded" not in status_val:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Application status is '{record.get('application_status')}', not denied"
-            )
-        
-        # Initialize analyzers
-        ai_manager = AIModelManager()
+        # First, get FRN status from the frn_status dataset (has denial reasons)
         denial_analyzer = DenialAnalyzer(client)
-        appeals_strategy = AppealsStrategy()
-        
-        # Analyze denial
         denial_details = denial_analyzer.fetch_denial_details(data.frn)
         
+        logger.info(f"Denial details fetched: {bool(denial_details)}")
+        if denial_details:
+            logger.info(f"Denial reasons found: {len(denial_details.get('denial_reasons', []))}")
+            logger.info(f"FCDL comment: {denial_details.get('fcdl_comment', '')[:200] if denial_details.get('fcdl_comment') else 'EMPTY'}")
+        
+        # If frn_status doesn't have the data, fall back to form_471
         if not denial_details:
+            df = client.fetch_data(filters={"funding_request_number": data.frn}, limit=1)
+            
+            if df.empty:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Application with FRN {data.frn} not found"
+                )
+            
+            record = df.iloc[0].to_dict()
             denial_details = {
                 "organization_name": record.get("organization_name"),
                 "application_number": record.get("application_number"),
@@ -2067,22 +2065,65 @@ async def generate_appeal(
                 "appeal_deadline": None,
                 "days_remaining": None,
                 "denial_reasons": [],
+                "fcdl_comment": "",
             }
         
-        # Generate strategy
+        # Verify it's denied based on status
+        frn_status = (denial_details.get("frn_status") or "").lower()
+        if frn_status and "denied" not in frn_status and "unfunded" not in frn_status:
+            logger.warning(f"FRN status is '{frn_status}', not denied - proceeding anyway")
+        
+        # Initialize AI manager and strategy generator
+        ai_manager = AIModelManager()
+        appeals_strategy = AppealsStrategy()
+        
+        # Generate strategy based on denial details
         strategy = appeals_strategy.generate_strategy(denial_details)
+        
+        # Build comprehensive denial reasons text for the AI
+        denial_reasons_text = ""
+        for reason in denial_details.get('denial_reasons', []):
+            denial_reasons_text += f"\n- {reason.get('code', 'N/A')}: {reason.get('description', 'No description')}"
+            denial_reasons_text += f" (Type: {reason.get('violation_type', 'unknown')}, Appealability: {reason.get('appealability', 'unknown')})"
+        
+        if not denial_reasons_text:
+            denial_reasons_text = denial_details.get('fcdl_comment', '') or "No specific denial reasons available"
+        
+        logger.info(f"Denial reasons for AI prompt: {denial_reasons_text[:500]}")
         
         # Generate appeal letter with AI
         appeal_prompt = f"""Generate a formal E-Rate appeal letter for the following denied application:
 
 Organization: {denial_details.get('organization_name')}
 Application Number: {denial_details.get('application_number')}
-Denial Reasons: {denial_details.get('denial_reasons')}
-Appeal Strategy: {strategy.get('recommended_approach')}
+FRN: {denial_details.get('frn')}
+Funding Year: {denial_details.get('funding_year')}
+Service Type: {denial_details.get('service_type')}
+Denied Amount: ${denial_details.get('total_denied_amount', 0):,.2f}
+FCDL Date: {denial_details.get('fcdl_date') or 'Unknown'}
+Appeal Deadline: {denial_details.get('appeal_deadline') or 'Unknown'}
+Days Remaining: {denial_details.get('days_remaining') if denial_details.get('days_remaining') is not None else 'Unknown'}
 
-Additional Context: {data.additional_context or 'None provided'}
+DENIAL REASONS FROM FCDL:
+{denial_reasons_text}
 
-Write a professional appeal letter that addresses each denial reason and argues for reconsideration."""
+RAW FCDL COMMENT:
+{denial_details.get('fcdl_comment') or 'Not available'}
+
+RECOMMENDED APPEAL STRATEGY:
+{strategy.get('recommended_approach', 'Standard appeal approach')}
+
+EVIDENCE TO GATHER:
+{', '.join(strategy.get('evidence_needed', ['Standard documentation']))}
+
+Additional Context from User: {data.additional_context or 'None provided'}
+
+Write a professional, formal E-Rate appeal letter that:
+1. Addresses each denial reason specifically
+2. Argues for reconsideration with proper legal and regulatory references
+3. Cites relevant FCC orders and E-Rate program rules
+4. Maintains a respectful but firm tone
+5. Includes proper formatting for USAC submission"""
 
         appeal_text = ai_manager.deep_analysis(
             str(denial_details),

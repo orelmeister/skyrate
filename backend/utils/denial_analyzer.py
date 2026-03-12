@@ -317,8 +317,10 @@ class DenialAnalyzer:
         try:
             from datetime import datetime, timedelta
             
-            # Fetch FRN status data using the client
+            # Fetch FRN status data using the frn_status dataset (qdmp-ygft)
+            # This dataset contains fcdl_comment_frn with denial reasons
             df = self.usac_client.fetch_data(
+                dataset='frn_status',  # Critical: must use frn_status, not default form_471
                 filters={"funding_request_number": frn},
                 limit=10
             )
@@ -328,14 +330,16 @@ class DenialAnalyzer:
                 return None
             
             record = df.iloc[0].to_dict()
+            logger.info(f"FRN {frn} - Available fields: {list(record.keys())}")
             
-            # Get FCDL comment - check multiple possible field names
+            # Get FCDL comment - frn_status dataset uses 'fcdl_comment_frn'
             fcdl_comment = (
+                record.get("fcdl_comment_frn") or  # frn_status dataset field name
                 record.get("fcdl_comment") or
-                record.get("fcdl_comment_frn") or
                 record.get("fcdl_comments") or
                 ""
             )
+            logger.info(f"FRN {frn} - FCDL comment found: {bool(fcdl_comment)}, content preview: {fcdl_comment[:200] if fcdl_comment else 'EMPTY'}")
             
             # Parse denial reasons from FCDL comment
             denial_reasons = []
