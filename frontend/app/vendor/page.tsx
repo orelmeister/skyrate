@@ -143,12 +143,45 @@ function VendorPortalPage() {
       return null;
     });
   };
+
+  // Toggle Form 470 leads sort
+  const toggleForm470Sort = (field: string) => {
+    setForm470Sort(prev => {
+      if (!prev || prev.field !== field) return { field, dir: 'asc' };
+      if (prev.dir === 'asc') return { field, dir: 'desc' };
+      return null;
+    });
+  };
+
+  // Toggle school search sort
+  const toggleSchoolSearchSort = (field: string) => {
+    setSchoolSearchSort(prev => {
+      if (!prev || prev.field !== field) return { field, dir: 'asc' };
+      if (prev.dir === 'asc') return { field, dir: 'desc' };
+      return null;
+    });
+  };
+
+  // Toggle serviced entities sort
+  const toggleServicedEntitiesSort = (field: string) => {
+    setServicedEntitiesSort(prev => {
+      if (!prev || prev.field !== field) return { field, dir: 'asc' };
+      if (prev.dir === 'asc') return { field, dir: 'desc' };
+      return null;
+    });
+  };
+
   const [frnWatches, setFrnWatches] = useState<FRNWatch[]>([]);
   const [showCreateWatch, setShowCreateWatch] = useState(false);
   const [watchLoading, setWatchLoading] = useState(false);
   const [reportHistory, setReportHistory] = useState<FRNReportHistory[]>([]);
   const [selectedReport, setSelectedReport] = useState<{html: string; name: string} | null>(null);
   
+  // Table sort states for entity columns
+  const [form470Sort, setForm470Sort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
+  const [schoolSearchSort, setSchoolSearchSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
+  const [servicedEntitiesSort, setServicedEntitiesSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
+
   // Form 470 Lead Generation state (Sprint 3)
   const [form470Leads, setForm470Leads] = useState<Form470Lead[]>([]);
   const [form470Loading, setForm470Loading] = useState(false);
@@ -193,6 +226,39 @@ function VendorPortalPage() {
   
   // Payment guard - check if user needs to complete payment setup
   const [checkingPayment, setCheckingPayment] = useState(true);
+
+  // Sorted Form 470 leads for table display
+  const sortedForm470Leads = useMemo(() => {
+    if (!form470Leads.length || !form470Sort) return form470Leads;
+    return [...form470Leads].sort((a, b) => {
+      const aVal = (a.entity_name || '').toString().toLowerCase();
+      const bVal = (b.entity_name || '').toString().toLowerCase();
+      const cmp = aVal.localeCompare(bVal);
+      return form470Sort.dir === 'asc' ? cmp : -cmp;
+    });
+  }, [form470Leads, form470Sort]);
+
+  // Sorted search results for table display
+  const sortedSearchResults = useMemo(() => {
+    if (!searchResults.length || !schoolSearchSort) return searchResults;
+    return [...searchResults].sort((a, b) => {
+      const aVal = (a.name || '').toString().toLowerCase();
+      const bVal = (b.name || '').toString().toLowerCase();
+      const cmp = aVal.localeCompare(bVal);
+      return schoolSearchSort.dir === 'asc' ? cmp : -cmp;
+    });
+  }, [searchResults, schoolSearchSort]);
+
+  // Sorted serviced entities for table display
+  const sortedServicedEntities = useMemo(() => {
+    if (!servicedEntities.length || !servicedEntitiesSort) return servicedEntities;
+    return [...servicedEntities].sort((a, b) => {
+      const aVal = (a.organization_name || '').toString().toLowerCase();
+      const bVal = (b.organization_name || '').toString().toLowerCase();
+      const cmp = aVal.localeCompare(bVal);
+      return servicedEntitiesSort.dir === 'asc' ? cmp : -cmp;
+    });
+  }, [servicedEntities, servicedEntitiesSort]);
 
   useEffect(() => {
     const checkPaymentStatus = async () => {
@@ -2090,7 +2156,20 @@ function VendorPortalPage() {
                             className="w-4 h-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
                           />
                         </th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Entity</th>
+                        <th 
+                          className="px-4 py-3 text-left text-sm font-medium text-slate-600 cursor-pointer hover:bg-slate-100 transition-colors"
+                          onClick={() => toggleForm470Sort('entity_name')}
+                        >
+                          <span className="flex items-center gap-1">
+                            Entity
+                            {form470Sort?.field === 'entity_name' && (
+                              <span className="text-blue-600">{form470Sort.dir === 'asc' ? '↑' : '↓'}</span>
+                            )}
+                            {form470Sort?.field !== 'entity_name' && (
+                              <span className="text-slate-300">↕</span>
+                            )}
+                          </span>
+                        </th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Location</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Year</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Manufacturers</th>
@@ -2100,7 +2179,7 @@ function VendorPortalPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {form470Leads.map((lead) => (
+                      {sortedForm470Leads.map((lead) => (
                         <tr key={lead.application_number} className={`hover:bg-slate-50 transition-colors ${selectedForm470Leads.has(lead.application_number) ? 'bg-orange-50' : ''}`}>
                           <td className="px-4 py-3">
                             <input
@@ -2623,7 +2702,20 @@ function VendorPortalPage() {
                           />
                         </th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">BEN</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">School Name</th>
+                        <th 
+                          className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors"
+                          onClick={() => toggleSchoolSearchSort('name')}
+                        >
+                          <span className="flex items-center gap-1">
+                            School Name
+                            {schoolSearchSort?.field === 'name' && (
+                              <span className="text-blue-600">{schoolSearchSort.dir === 'asc' ? '↑' : '↓'}</span>
+                            )}
+                            {schoolSearchSort?.field !== 'name' && (
+                              <span className="text-slate-300">↕</span>
+                            )}
+                          </span>
+                        </th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">State</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Funding</th>
@@ -2631,7 +2723,7 @@ function VendorPortalPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                      {searchResults.map((school) => (
+                      {sortedSearchResults.map((school) => (
                         <tr key={school.ben} className="hover:bg-slate-50 transition-colors">
                           <td className="px-4 py-3">
                             <input
@@ -3071,7 +3163,20 @@ function VendorPortalPage() {
                     <table className="w-full">
                       <thead className="bg-slate-50">
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Entity Name</th>
+                          <th 
+                            className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors"
+                            onClick={() => toggleServicedEntitiesSort('organization_name')}
+                          >
+                            <span className="flex items-center gap-1">
+                              Entity Name
+                              {servicedEntitiesSort?.field === 'organization_name' && (
+                                <span className="text-blue-600">{servicedEntitiesSort.dir === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                              {servicedEntitiesSort?.field !== 'organization_name' && (
+                                <span className="text-slate-300">↕</span>
+                              )}
+                            </span>
+                          </th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">State</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                             <div className="flex flex-col">
@@ -3091,7 +3196,7 @@ function VendorPortalPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200">
-                        {servicedEntities.slice(0, 50).map((entity) => (
+                        {sortedServicedEntities.slice(0, 50).map((entity) => (
                           <tr 
                             key={entity.ben} 
                             className="hover:bg-purple-50 transition-colors cursor-pointer group"

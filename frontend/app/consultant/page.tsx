@@ -189,6 +189,8 @@ function ConsultantPortalPage() {
   const [selectedFRN, setSelectedFRN] = useState<any>(null);
   const [showFRNDetailModal, setShowFRNDetailModal] = useState(false);
   const [frnTableSort, setFrnTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
+  const [schoolsTableSort, setSchoolsTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
+  const [serviceSearchSort, setServiceSearchSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
   
   // FRN Watch/Monitor state
   const [frnWatches, setFrnWatches] = useState<FRNWatch[]>([]);
@@ -344,6 +346,24 @@ function ConsultantPortalPage() {
     });
   };
 
+  // Toggle schools table sort
+  const toggleSchoolsTableSort = (field: string) => {
+    setSchoolsTableSort(prev => {
+      if (!prev || prev.field !== field) return { field, dir: 'asc' };
+      if (prev.dir === 'asc') return { field, dir: 'desc' };
+      return null;
+    });
+  };
+
+  // Toggle service search sort
+  const toggleServiceSearchSort = (field: string) => {
+    setServiceSearchSort(prev => {
+      if (!prev || prev.field !== field) return { field, dir: 'asc' };
+      if (prev.dir === 'asc') return { field, dir: 'desc' };
+      return null;
+    });
+  };
+
   // Toggle school expand/collapse
   const toggleSchoolExpand = (ben: string) => {
     setExpandedSchools(prev => {
@@ -398,8 +418,29 @@ function ConsultantPortalPage() {
       });
     }
     
+    // Apply school name sorting if active
+    if (schoolsTableSort) {
+      result = [...result].sort((a, b) => {
+        const aVal = (a.school_name || a.name || '').toString().toLowerCase();
+        const bVal = (b.school_name || b.name || '').toString().toLowerCase();
+        const cmp = aVal.localeCompare(bVal);
+        return schoolsTableSort.dir === 'asc' ? cmp : -cmp;
+      });
+    }
+    
     return result;
-  }, [schools, schoolSearchQuery, statusFilter]);
+  }, [schools, schoolSearchQuery, statusFilter, schoolsTableSort]);
+
+  // Sorted service search results
+  const sortedServiceSearchResults = useMemo(() => {
+    if (!serviceSearchResults.length || !serviceSearchSort) return serviceSearchResults;
+    return [...serviceSearchResults].sort((a, b) => {
+      const aVal = (a.name || '').toString().toLowerCase();
+      const bVal = (b.name || '').toString().toLowerCase();
+      const cmp = aVal.localeCompare(bVal);
+      return serviceSearchSort.dir === 'asc' ? cmp : -cmp;
+    });
+  }, [serviceSearchResults, serviceSearchSort]);
 
   // Load query history from localStorage on mount
   useEffect(() => {
@@ -1592,7 +1633,20 @@ function ConsultantPortalPage() {
                 <table className="w-full">
                   <thead className="bg-slate-50">
                     <tr>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase">School</th>
+                      <th 
+                        className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase cursor-pointer hover:bg-slate-100 transition-colors"
+                        onClick={() => toggleSchoolsTableSort('school_name')}
+                      >
+                        <span className="flex items-center gap-1">
+                          School
+                          {schoolsTableSort?.field === 'school_name' && (
+                            <span className="text-blue-600">{schoolsTableSort.dir === 'asc' ? '↑' : '↓'}</span>
+                          )}
+                          {schoolsTableSort?.field !== 'school_name' && (
+                            <span className="text-slate-300">↕</span>
+                          )}
+                        </span>
+                      </th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase w-24">BEN</th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase w-16">State</th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase w-32">Status</th>
@@ -3061,7 +3115,20 @@ function ConsultantPortalPage() {
                       <thead className="bg-slate-50">
                         <tr>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">BEN</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">School Name</th>
+                          <th 
+                            className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors"
+                            onClick={() => toggleServiceSearchSort('name')}
+                          >
+                            <span className="flex items-center gap-1">
+                              School Name
+                              {serviceSearchSort?.field === 'name' && (
+                                <span className="text-blue-600">{serviceSearchSort.dir === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                              {serviceSearchSort?.field !== 'name' && (
+                                <span className="text-slate-300">↕</span>
+                              )}
+                            </span>
+                          </th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">FRN</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Year</th>
                           <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
@@ -3070,7 +3137,7 @@ function ConsultantPortalPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200">
-                        {serviceSearchResults.map((result, idx) => (
+                        {sortedServiceSearchResults.map((result, idx) => (
                           <tr key={`${result.ben}-${result.frn}-${idx}`} className="hover:bg-slate-50 transition-colors">
                             <td className="px-4 py-3 font-mono text-indigo-600">{result.ben}</td>
                             <td className="px-4 py-3 font-medium text-slate-900">{result.name || '-'}</td>
