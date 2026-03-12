@@ -267,6 +267,44 @@ function ConsultantPortalPage() {
     });
   }, [portfolioFrnData?.schools, frnSortBy]);
 
+  // Flattened FRNs from all schools for table view
+  const flattenedFrns = useMemo(() => {
+    if (!portfolioFrnData?.schools) return [];
+    const frns: any[] = [];
+    for (const school of portfolioFrnData.schools) {
+      if (school.frns) {
+        for (const frn of school.frns) {
+          frns.push({
+            frn: frn.funding_request_number || frn.frn,
+            application_number: frn.application_number || frn.frn_number || '',
+            ben: school.ben,
+            entity_name: school.entity_name || school.ben,
+            state: frn.state || '',
+            funding_year: frn.funding_year || '',
+            spin_name: frn.spin_name || frn.service_provider_name || '',
+            service_type: frn.service_type || '',
+            status: frn.frn_status || frn.status || 'Unknown',
+            pending_reason: frn.pending_reason || '',
+            commitment_amount: parseFloat(frn.total_authorized_amount || frn.commitment_amount || frn.amount || 0),
+            disbursed_amount: parseFloat(frn.total_authorized_disbursement || frn.disbursed_amount || 0),
+            discount_rate: parseFloat(frn.discount_rate || frn.discount || 0),
+            award_date: frn.award_date || frn.award_date_frn || '',
+            fcdl_date: frn.fcdl_date || frn.fcdl_date_frn || '',
+            last_invoice_date: frn.last_invoice_date || '',
+            service_start: frn.service_start || frn.service_start_date || '',
+            service_end: frn.service_end || frn.contract_expiry_date || '',
+            invoicing_mode: frn.invoicing_mode || '',
+            invoicing_ready: frn.invoicing_ready || '',
+            f486_status: frn.f486_status || frn.form_486_status || '',
+            wave_number: frn.wave_number || '',
+            fcdl_comment: frn.fcdl_comment || frn.fcdl_comment_frn || '',
+          });
+        }
+      }
+    }
+    return frns;
+  }, [portfolioFrnData?.schools]);
+
   // Toggle school expand/collapse
   const toggleSchoolExpand = (ben: string) => {
     setExpandedSchools(prev => {
@@ -2144,112 +2182,86 @@ function ConsultantPortalPage() {
                 </div>
               )}
 
-              {/* Schools Breakdown — Collapsible with sorting */}
-              {portfolioFrnData?.schools && portfolioFrnData.schools.length > 0 && (
+              {/* FRN Table — Same structure as vendor page */}
+              {flattenedFrns.length > 0 && (
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-                    <h3 className="font-semibold text-slate-900">Schools ({sortedPortfolioSchools.length})</h3>
-                    <div className="flex items-center gap-3">
-                      <label className="text-xs text-slate-500">Sort by:</label>
-                      <select
-                        value={frnSortBy}
-                        onChange={(e) => setFrnSortBy(e.target.value)}
-                        className="text-xs px-2 py-1 border border-slate-200 rounded-lg bg-white"
-                      >
-                        <option value="name">School Name</option>
-                        <option value="frns">FRN Count</option>
-                        <option value="amount">Total Amount</option>
-                      </select>
-                      <button
-                        onClick={toggleAllSchools}
-                        className="text-xs px-3 py-1 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-                      >
-                        {expandedSchools.size === sortedPortfolioSchools.length ? "Collapse All" : "Expand All"}
-                      </button>
-                    </div>
+                  <div className="p-4 border-b border-slate-200">
+                    <h3 className="font-semibold text-slate-900">FRN Details</h3>
+                    <p className="text-sm text-slate-600">Detailed status for each funding request across your portfolio</p>
                   </div>
-                  <div className="divide-y divide-slate-100">
-                    {sortedPortfolioSchools.map((school: any) => {
-                      const isExpanded = expandedSchools.has(school.ben);
-                      return (
-                        <div key={school.ben} className="hover:bg-slate-50/50 transition-colors">
-                          <button
-                            onClick={() => toggleSchoolExpand(school.ben)}
-                            className="w-full px-6 py-4 text-left"
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="text-left px-4 py-3 font-medium text-slate-600">FRN</th>
+                          <th className="text-left px-4 py-3 font-medium text-slate-600">Entity</th>
+                          <th className="text-left px-4 py-3 font-medium text-slate-600">Year</th>
+                          <th className="text-left px-4 py-3 font-medium text-slate-600">Service Type</th>
+                          <th className="text-center px-4 py-3 font-medium text-slate-600">Status</th>
+                          <th className="text-right px-4 py-3 font-medium text-slate-600">Commitment</th>
+                          <th className="text-right px-4 py-3 font-medium text-slate-600">Disbursed</th>
+                          <th className="text-left px-4 py-3 font-medium text-slate-600">Invoicing</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {flattenedFrns.slice(0, 100).map((frn, idx) => (
+                          <tr 
+                            key={`${frn.frn}-${idx}`} 
+                            className="hover:bg-slate-50 cursor-pointer transition-colors"
+                            onClick={() => { setSelectedFRN(frn); setShowFRNDetailModal(true); }}
                           >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className={`text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
-                                <span className="font-medium text-slate-900">{school.entity_name || school.ben}</span>
-                                <span className="text-xs text-slate-500 font-mono">BEN: {school.ben}</span>
+                            <td className="px-4 py-3">
+                              <div className="font-mono text-xs text-slate-900">{frn.frn}</div>
+                              <div className="text-xs text-slate-500">{frn.application_number}</div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="font-medium text-slate-900 truncate max-w-[200px]">{frn.entity_name}</div>
+                              <div className="text-xs text-slate-500">{frn.state} • BEN: {frn.ben}</div>
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">{frn.funding_year}</td>
+                            <td className="px-4 py-3 text-slate-600 truncate max-w-[150px]">{frn.service_type}</td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                frn.status?.toLowerCase().includes('funded') || frn.status?.toLowerCase().includes('committed')
+                                  ? 'bg-green-100 text-green-700'
+                                  : frn.status?.toLowerCase().includes('denied')
+                                  ? 'bg-red-100 text-red-700'
+                                  : 'bg-amber-100 text-amber-700'
+                              }`}>
+                                {frn.status || 'Unknown'}
+                              </span>
+                              {frn.pending_reason && (
+                                <div className="text-xs text-slate-500 mt-1">{frn.pending_reason}</div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right font-medium text-slate-900">
+                              ${frn.commitment_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <span className={frn.disbursed_amount > 0 ? 'text-green-600 font-medium' : 'text-slate-400'}>
+                                ${frn.disbursed_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-1">
+                                <span className={`w-2 h-2 rounded-full ${
+                                  frn.invoicing_ready === 'Yes' ? 'bg-green-500' : 'bg-slate-300'
+                                }`}></span>
+                                <span className="text-xs text-slate-600">{frn.invoicing_mode || 'N/A'}</span>
                               </div>
-                              <div className="flex items-center gap-3">
-                                <span className="text-sm text-slate-500">{school.total_frns} FRNs</span>
-                                <span className="text-sm font-medium text-slate-700">{formatAmount(school.total_amount || 0)}</span>
-                              </div>
-                            </div>
-                            <div className="flex gap-3 text-xs mt-2 ml-6">
-                              <span className="px-2 py-1 bg-green-50 text-green-700 rounded-full">{school.funded} Funded</span>
-                              <span className="px-2 py-1 bg-amber-50 text-amber-700 rounded-full">{school.pending} Pending</span>
-                              <span className="px-2 py-1 bg-red-50 text-red-700 rounded-full">{school.denied} Denied</span>
-                            </div>
-                          </button>
-                          {/* FRN details — visible only when expanded */}
-                          {isExpanded && school.frns && school.frns.length > 0 && (
-                            <div className="px-6 pb-4 space-y-1 ml-6">
-                              {school.frns.map((frn: any, i: number) => (
-                                <button
-                                  key={i}
-                                  className="flex items-center justify-between text-xs text-slate-600 bg-slate-50 rounded px-3 py-1.5 cursor-pointer hover:bg-slate-100 transition-colors w-full"
-                                  onClick={() => {
-                                    const normalizedFrn = {
-                                      frn: frn.funding_request_number || frn.frn,
-                                      application_number: frn.application_number || frn.frn_number || '',
-                                      ben: school.ben,
-                                      entity_name: school.entity_name || school.ben,
-                                      state: frn.state || '',
-                                      funding_year: frn.funding_year || '',
-                                      spin_name: frn.spin_name || frn.service_provider_name || '',
-                                      service_type: frn.service_type || '',
-                                      status: frn.frn_status || frn.status || 'Unknown',
-                                      pending_reason: frn.pending_reason || '',
-                                      commitment_amount: parseFloat(frn.total_authorized_amount || frn.commitment_amount || frn.amount || 0),
-                                      disbursed_amount: parseFloat(frn.total_authorized_disbursement || frn.disbursed_amount || 0),
-                                      discount_rate: parseFloat(frn.discount_rate || frn.discount || 0),
-                                      award_date: frn.award_date || frn.award_date_frn || '',
-                                      fcdl_date: frn.fcdl_date || frn.fcdl_date_frn || '',
-                                      last_invoice_date: frn.last_invoice_date || '',
-                                      service_start: frn.service_start || frn.service_start_date || '',
-                                      service_end: frn.service_end || frn.contract_expiry_date || '',
-                                      invoicing_mode: frn.invoicing_mode || '',
-                                      invoicing_ready: frn.invoicing_ready || '',
-                                      f486_status: frn.f486_status || frn.form_486_status || '',
-                                      wave_number: frn.wave_number || '',
-                                      fcdl_comment: frn.fcdl_comment || frn.fcdl_comment_frn || '',
-                                    };
-                                    setSelectedFRN(normalizedFrn);
-                                    setShowFRNDetailModal(true);
-                                  }}
-                                >
-                                  <span className="font-mono">FRN: {frn.funding_request_number || frn.frn}</span>
-                                  <span className={`px-2 py-0.5 rounded-full ${
-                                    (frn.frn_status || frn.status || '').toLowerCase().includes('funded') ? 'bg-green-100 text-green-700' :
-                                    (frn.frn_status || frn.status || '').toLowerCase().includes('denied') ? 'bg-red-100 text-red-700' :
-                                    'bg-amber-100 text-amber-700'
-                                  }`}>
-                                    {frn.frn_status || frn.status || 'Unknown'}
-                                  </span>
-                                  {frn.pending_reason && (
-                                    <span className="text-amber-600 truncate max-w-[200px]">{frn.pending_reason}</span>
-                                  )}
-                                  <span className="text-slate-400">${parseFloat(frn.total_authorized_amount || frn.amount || 0).toLocaleString()}</span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                              {frn.f486_status && (
+                                <div className="text-xs text-slate-500">486: {frn.f486_status}</div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {flattenedFrns.length > 100 && (
+                      <div className="p-4 text-center text-sm text-slate-500 bg-slate-50 border-t border-slate-200">
+                        Showing first 100 of {flattenedFrns.length} FRNs
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

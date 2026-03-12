@@ -296,3 +296,121 @@ class DenialAnalyzer:
             steps.append("Check for any system issues or deadline extension notices")
         
         return steps
+    
+    def fetch_denial_details(self, frn: str) -> Optional[Dict[str, Any]]:
+        """
+        Fetch denial details for a specific FRN from USAC data.
+        
+        This method retrieves FRN status data, parses FCDL comments,
+        and calculates appeal deadlines.
+        
+        Args:
+            frn: Funding Request Number
+            
+        Returns:
+            Dictionary containing denial details or None if not found
+        """
+        if not self.usac_client:
+            logger.error("USAC client not initialized")
+            return None
+        
+        try:
+            from datetime import datetime, timedelta
+            
+            # Fetch FRN status data using the client
+            df = self.usac_client.fetch_data(
+                filters={"funding_request_number": frn},
+                limit=10
+            )
+            
+            if df.empty:
+                logger.warning(f"No data found for FRN {frn}")
+                return None
+            
+            record = df.iloc[0].to_dict()
+            
+            # Get FCDL comment - check multiple possible field names
+            fcdl_comment = (
+                record.get("fcdl_comment") or
+                record.get("fcdl_comment_frn") or
+                record.get("fcdl_comments") or
+                ""
+            )
+            
+            # Parse denial reasons from FCDL comment
+            denial_reasons = []
+            if fcdl_comment:
+                parsed_reasons = self.parse_fcdl_comments(fcdl_comment)
+                denial_reasons = [r.to_dict() for r in parsed_reasons]
+            
+            # Get FCDL date and calculate appeal deadline (60 days from FCDL)
+            fcdl_date_raw = record.get("fcdl_date") or record.get("fcdl_letter_date")
+            fcdl_date = None
+            appeal_deadline = None
+            days_remaining = None
+            
+            if fcdl_date_raw:
+                try:
+                    # Try parsing various date formats
+                    for fmt in ["%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%d", "%m/%d/%Y"]:
+                        try:
+                            fcdl_date = datetime.strptime(str(fcdl_date_raw).split("T")[0], fmt.split("T")[0])
+                            break
+                        except ValueError:
+                            continue
+                    
+                    if fcdl_date:
+                        # Appeal deadline is 60 days from FCDL date
+                        appeal_deadline_dt = fcdl_date + timedelta(days=60)
+                        appeal_deadline = appeal_deadline_dt.strftime("%Y-%m-%d")
+                        
+                        # Calculate days remaining
+                        today = datetime.now()
+                        days_remaining = (appeal_deadline_dt - today).days
+                        
+                        fcdl_date = fcdl_date.strftime("%Y-%m-%d")
+                except Exception as e:
+                    logger.warning(f"Error parsing FCDL date '{fcdl_date_raw}': {e}")
+            
+            # Calculate denied amount
+            total_denied_amount = float(record.get("original_total_pre_discount_costs") or 0)
+            if not total_denied_amount:
+                total_denied_amount = float(record.get("funding_commitment_request") or 0)
+            
+            return {
+                "success": True,
+                "frn": frn,
+                "organization_name": record.get("organization_name") or record.get("applicant_name"),
+                "application_number": record.get("application_number"),
+                "ben": record.get("ben") or record.get("billed_entity_number"),
+                "funding_year": record.get("funding_year"),
+                "service_type": record.get("service_type") or record.get("form_471_service_type_name"),
+                "frn_status": record.get("frn_status") or record.get("form_471_frn_status_name"),
+                "frn_count": 1,
+                "total_denied_amount": total_denied_amount,
+                "fcdl_date": fcdl_date,
+                "fcdl_comment": fcdl_comment,
+                "appeal_deadline": appeal_deadline,
+                "days_remaining": days_remaining,
+                "denial_reasons": denial_reasons,
+                "overall_appealability": self._calculate_overall_appealability(denial_reasons),
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching denial details for FRN {frn}: {e}")
+            return None
+    
+    def _calculate_overall_appealability(self, denial_reasons: List[Dict]) -> str:
+        """Calculate overall appealability from denial reasons."""
+        if not denial_reasons:
+            return "unknown"
+        
+        scores = {"high": 3, "medium": 2, "low": 1}
+        total = sum(scores.get(r.get("appealability", "medium"), 2) for r in denial_reasons)
+        avg = total / len(denial_reasons)
+        
+        if avg >= 2.5:
+            return "high"
+        elif avg >= 1.5:
+            return "medium"
+        return "low"
