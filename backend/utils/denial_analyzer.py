@@ -316,29 +316,59 @@ class DenialAnalyzer:
         
         try:
             from datetime import datetime, timedelta
+            import pandas as pd
             
             # Fetch FRN status data using the frn_status dataset (qdmp-ygft)
             # This dataset contains fcdl_comment_frn with denial reasons
+            # Get multiple records as an FRN may have different statuses
             df = self.usac_client.fetch_data(
                 dataset='frn_status',  # Critical: must use frn_status, not default form_471
                 filters={"funding_request_number": frn},
-                limit=10
+                limit=20
             )
             
             if df.empty:
                 logger.warning(f"No data found for FRN {frn}")
                 return None
             
-            record = df.iloc[0].to_dict()
-            logger.info(f"FRN {frn} - Available fields: {list(record.keys())}")
+            logger.info(f"Found {len(df)} records for FRN {frn}")
+            
+            # Prioritize records: 1) Denied with FCDL comment, 2) Any with FCDL comment, 3) Denied, 4) First record
+            record = None
+            for _, row in df.iterrows():
+                row_dict = row.to_dict()
+                status = row_dict.get("form_471_frn_status_name", "")
+                fcdl = row_dict.get("fcdl_comment_frn")
+                has_fcdl = fcdl and not pd.isna(fcdl) and str(fcdl).strip()
+                
+                if status == "Denied" and has_fcdl:
+                    record = row_dict
+                    logger.info(f"Found Denied record with FCDL comment for FRN {frn}")
+                    break
+                elif has_fcdl and record is None:
+                    record = row_dict
+                    logger.info(f"Found record with FCDL comment (status: {status}) for FRN {frn}")
+                elif status == "Denied" and record is None:
+                    record = row_dict
+            
+            if record is None:
+                record = df.iloc[0].to_dict()
+                logger.info(f"Using first record for FRN {frn} (no denied or FCDL found)")
+            
+            logger.info(f"FRN {frn} - Final status: {record.get('form_471_frn_status_name')}")
             
             # Get FCDL comment - frn_status dataset uses 'fcdl_comment_frn'
-            fcdl_comment = (
-                record.get("fcdl_comment_frn") or  # frn_status dataset field name
-                record.get("fcdl_comment") or
-                record.get("fcdl_comments") or
-                ""
-            )
+            # Handle NaN values from pandas (they come as float)
+            fcdl_raw = record.get("fcdl_comment_frn")
+            if pd.isna(fcdl_raw):
+                fcdl_raw = None
+            fcdl_comment = str(fcdl_raw) if fcdl_raw else ""
+            
+            if not fcdl_comment:
+                fcdl_raw = record.get("fcdl_comment")
+                if not pd.isna(fcdl_raw) and fcdl_raw:
+                    fcdl_comment = str(fcdl_raw)
+            
             logger.info(f"FRN {frn} - FCDL comment found: {bool(fcdl_comment)}, content preview: {fcdl_comment[:200] if fcdl_comment else 'EMPTY'}")
             
             # Parse denial reasons from FCDL comment
@@ -381,15 +411,21 @@ class DenialAnalyzer:
             if not total_denied_amount:
                 total_denied_amount = float(record.get("funding_commitment_request") or 0)
             
+            # Helper to safely get string values (handle NaN from pandas)
+            def safe_str(val):
+                if pd.isna(val) or val is None:
+                    return None
+                return str(val)
+            
             return {
                 "success": True,
                 "frn": frn,
-                "organization_name": record.get("organization_name") or record.get("applicant_name"),
-                "application_number": record.get("application_number"),
-                "ben": record.get("ben") or record.get("billed_entity_number"),
-                "funding_year": record.get("funding_year"),
-                "service_type": record.get("service_type") or record.get("form_471_service_type_name"),
-                "frn_status": record.get("frn_status") or record.get("form_471_frn_status_name"),
+                "organization_name": safe_str(record.get("organization_name")) or safe_str(record.get("applicant_name")),
+                "application_number": safe_str(record.get("application_number")),
+                "ben": safe_str(record.get("ben")) or safe_str(record.get("billed_entity_number")),
+                "funding_year": safe_str(record.get("funding_year")),
+                "service_type": safe_str(record.get("service_type")) or safe_str(record.get("form_471_service_type_name")),
+                "frn_status": safe_str(record.get("frn_status")) or safe_str(record.get("form_471_frn_status_name")),
                 "frn_count": 1,
                 "total_denied_amount": total_denied_amount,
                 "fcdl_date": fcdl_date,
