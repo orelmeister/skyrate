@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
-import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse, FRNStatusResponse, FRNStatusSummaryResponse, FRNStatusRecord, Form470Lead, Form470LeadsResponse, Form470DetailResponse, SavedLead, EnrichedContactData } from "@/lib/api";
+import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse, FRNStatusResponse, FRNStatusSummaryResponse, FRNStatusRecord, Form470Lead, Form470LeadsResponse, Form470DetailResponse, SavedLead, EnrichedContactData, FRNWatch, CreateWatchRequest, FRNReportHistory } from "@/lib/api";
 import { useTabParam } from "@/hooks/useTabParam";
 import PredictedLeadsTab from "@/components/PredictedLeadsTab";
 
@@ -104,6 +104,11 @@ function VendorPortalPage() {
   const [frnPendingReason, setFrnPendingReason] = useState<string>("");
   const [selectedFRN, setSelectedFRN] = useState<FRNStatusRecord | null>(null);
   const [showFRNDetailModal, setShowFRNDetailModal] = useState(false);
+  const [frnWatches, setFrnWatches] = useState<FRNWatch[]>([]);
+  const [showCreateWatch, setShowCreateWatch] = useState(false);
+  const [watchLoading, setWatchLoading] = useState(false);
+  const [reportHistory, setReportHistory] = useState<FRNReportHistory[]>([]);
+  const [selectedReport, setSelectedReport] = useState<{html: string; name: string} | null>(null);
   
   // Form 470 Lead Generation state (Sprint 3)
   const [form470Leads, setForm470Leads] = useState<Form470Lead[]>([]);
@@ -190,6 +195,10 @@ function VendorPortalPage() {
   useEffect(() => {
     if (activeTab === "leads" && savedLeads.length === 0 && !savedLeadsLoading) {
       loadSavedLeads();
+    }
+    if (activeTab === 'frn-status') {
+      loadFRNWatches();
+      loadReportHistory();
     }
   }, [activeTab]);
 
@@ -374,6 +383,28 @@ function VendorPortalPage() {
       console.error("Failed to load FRN status:", error);
     } finally {
       setFrnStatusLoading(false);
+    }
+  };
+
+  const loadFRNWatches = async () => {
+    try {
+      const response = await api.getFRNWatches();
+      if (response?.data?.watches) {
+        setFrnWatches(response.data.watches);
+      }
+    } catch (error) {
+      console.error('Failed to load FRN watches:', error);
+    }
+  };
+
+  const loadReportHistory = async () => {
+    try {
+      const response = await api.getFRNReportHistory(10);
+      if (response?.data?.reports) {
+        setReportHistory(response.data.reports);
+      }
+    } catch (error) {
+      console.error('Failed to load report history:', error);
     }
   };
 
@@ -896,7 +927,9 @@ function VendorPortalPage() {
             <img src="/images/logos/logo-icon-transparent.png" alt="SkyRate AI" width={36} height={36} className="rounded-lg" />
             <div>
               <span className="font-bold text-slate-900">SkyRate AI</span>
-              <span className="block text-xs text-slate-500">Vendor Portal</span>
+              <span className="block text-xs text-slate-500">
+                Vendor Portal{(user?.role === 'super' || user?.role === 'admin') ? ` (${user.role})` : ''}
+              </span>
             </div>
           </Link>
         </div>
@@ -921,6 +954,31 @@ function VendorPortalPage() {
             </button>
           ))}
         </nav>
+
+        {/* Portal Switcher (super/admin only) */}
+        {(user?.role === 'super' || user?.role === 'admin') && (
+          <div className="px-4 pb-3">
+            <div className="border-t border-slate-200 pt-3">
+              <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold px-4 mb-2">Switch Portal</p>
+              <Link
+                href="/consultant"
+                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-slate-600 hover:bg-indigo-50 hover:text-indigo-700 transition-all text-sm"
+              >
+                <span className="text-lg">📊</span>
+                <span>Consultant Portal</span>
+                <svg className="w-4 h-4 ml-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </Link>
+              <Link
+                href="/super"
+                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-slate-600 hover:bg-yellow-50 hover:text-yellow-700 transition-all text-sm"
+              >
+                <span className="text-lg">⭐</span>
+                <span>Super Dashboard</span>
+                <svg className="w-4 h-4 ml-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* Subscription Card */}
         <div className="absolute bottom-20 left-4 right-4">
@@ -1481,6 +1539,237 @@ function VendorPortalPage() {
                 )}
               </>
             )}
+
+              {/* FRN Report Monitors Section */}
+              <div className="mt-8 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Report Monitors</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Set up automated email reports for your FRN portfolio</p>
+                  </div>
+                  <button
+                    onClick={() => setShowCreateWatch(!showCreateWatch)}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium transition-colors"
+                  >
+                    {showCreateWatch ? 'Cancel' : '+ Create Monitor'}
+                  </button>
+                </div>
+
+                {/* Create Watch Form */}
+                {showCreateWatch && (
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      setWatchLoading(true);
+                      const formData = new FormData(e.currentTarget);
+                      try {
+                        const response = await api.createFRNWatch({
+                          name: formData.get('name') as string,
+                          watch_type: (formData.get('watch_type') as any) || 'portfolio',
+                          target_id: (formData.get('target_id') as string) || undefined,
+                          frequency: (formData.get('frequency') as any) || 'weekly',
+                          recipient_email: formData.get('recipient_email') as string,
+                          delivery_mode: (formData.get('delivery_mode') as any) || 'full_email',
+                          notify_sms: formData.get('notify_sms') === 'on',
+                          sms_phone: (formData.get('sms_phone') as string) || undefined,
+                          include_funded: formData.get('include_funded') === 'on',
+                          include_pending: formData.get('include_pending') === 'on',
+                          include_denied: formData.get('include_denied') === 'on',
+                          include_changes: formData.get('include_changes') === 'on',
+                        });
+                        if (response?.data?.success) {
+                          setShowCreateWatch(false);
+                          loadFRNWatches();
+                        }
+                      } catch (error) {
+                        console.error('Failed to create watch:', error);
+                      } finally {
+                        setWatchLoading(false);
+                      }
+                    }}
+                    className="mb-6 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 space-y-4"
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Monitor Name</label>
+                        <input name="name" required placeholder="e.g., Weekly SPIN Report" className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Recipient Email</label>
+                        <input name="recipient_email" type="email" required placeholder="you@example.com" className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Watch Type</label>
+                        <select name="watch_type" className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent">
+                          <option value="portfolio">Entire Portfolio</option>
+                          <option value="ben">Specific BEN</option>
+                          <option value="frn">Specific FRN</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Frequency</label>
+                        <select name="frequency" className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent">
+                          <option value="weekly">Weekly</option>
+                          <option value="daily">Daily</option>
+                          <option value="biweekly">Bi-Weekly</option>
+                          <option value="monthly">Monthly</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">BEN or FRN (if applicable)</label>
+                        <input name="target_id" placeholder="e.g., 123456" className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Delivery Mode</label>
+                        <select name="delivery_mode" className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent">
+                          <option value="full_email">Full Email Report</option>
+                          <option value="notification_only">Notification Only (link to dashboard)</option>
+                          <option value="in_app_only">In-App Only (no email)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
+                      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input type="checkbox" name="notify_sms" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                        <span className="font-medium">SMS Notification</span>
+                        <span className="text-xs text-gray-500">(get a text when report is ready)</span>
+                      </label>
+                      <input name="sms_phone" type="tel" placeholder="Phone (optional, uses profile)" className="flex-1 max-w-[220px] px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xs focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                    </div>
+
+                    <div className="flex flex-wrap gap-4">
+                      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input type="checkbox" name="include_funded" defaultChecked className="rounded border-gray-300 text-teal-600 focus:ring-teal-500" /> Include Funded
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input type="checkbox" name="include_pending" defaultChecked className="rounded border-gray-300 text-teal-600 focus:ring-teal-500" /> Include Pending
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input type="checkbox" name="include_denied" defaultChecked className="rounded border-gray-300 text-teal-600 focus:ring-teal-500" /> Include Denied
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input type="checkbox" name="include_changes" defaultChecked className="rounded border-gray-300 text-teal-600 focus:ring-teal-500" /> Highlight Changes
+                      </label>
+                    </div>
+
+                    <div className="flex justify-end gap-3">
+                      <button type="button" onClick={() => setShowCreateWatch(false)} className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">Cancel</button>
+                      <button type="submit" disabled={watchLoading} className="px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors">
+                        {watchLoading ? 'Creating...' : 'Create Monitor'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* Watch List */}
+                {frnWatches.length > 0 ? (
+                  <div className="space-y-3">
+                    {frnWatches.map((watch) => (
+                      <div key={watch.id} className={`flex items-center justify-between p-4 rounded-lg border ${watch.is_active ? 'border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/20' : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 opacity-60'}`}>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-gray-900 dark:text-white text-sm truncate">{watch.name}</span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${watch.is_active ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}>
+                              {watch.is_active ? 'Active' : 'Paused'}
+                            </span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">{watch.frequency}</span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300">{watch.watch_type}</span>
+                            {watch.delivery_mode && watch.delivery_mode !== 'full_email' && (
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${watch.delivery_mode === 'notification_only' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}>
+                                {watch.delivery_mode === 'notification_only' ? 'notify only' : 'in-app only'}
+                              </span>
+                            )}
+                            {watch.notify_sms && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">SMS</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-4 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            <span>To: {watch.recipient_email}</span>
+                            {watch.send_count > 0 && <span>Sent: {watch.send_count}x</span>}
+                            {watch.next_send_at && <span>Next: {new Date(watch.next_send_at).toLocaleDateString()}</span>}
+                            {watch.last_error && <span className="text-red-500">Error: {watch.last_error}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 ml-4">
+                          <button onClick={async () => { try { await api.sendFRNWatchNow(watch.id); loadFRNWatches(); } catch (e) { console.error(e); } }} className="p-1.5 text-gray-500 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-900/30 rounded-lg transition-colors" title="Send report now">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/></svg>
+                          </button>
+                          <button onClick={async () => { try { await api.toggleFRNWatch(watch.id); loadFRNWatches(); } catch (e) { console.error(e); } }} className="p-1.5 text-gray-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg transition-colors" title={watch.is_active ? 'Pause' : 'Resume'}>
+                            {watch.is_active ? (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"/></svg>
+                            ) : (
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd"/></svg>
+                            )}
+                          </button>
+                          <button onClick={async () => { if (confirm('Delete this monitor?')) { try { await api.deleteFRNWatch(watch.id); loadFRNWatches(); } catch (e) { console.error(e); } } }} className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors" title="Delete">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"/></svg>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : !showCreateWatch ? (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                    <p className="text-sm font-medium">No report monitors yet</p>
+                    <p className="text-xs mt-1">Create a monitor to receive periodic FRN status reports via email</p>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Report History */}
+              {reportHistory.length > 0 && (
+                <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Recent Reports</h3>
+                  <div className="space-y-2">
+                    {reportHistory.map((report) => (
+                      <div key={report.id} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{report.report_name}</span>
+                            {report.changes_detected > 0 && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-300">{report.changes_detected} changes</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            <span>{report.total_frns} FRNs</span>
+                            <span className="text-green-600">{report.funded_count} funded</span>
+                            <span className="text-amber-600">{report.pending_count} pending</span>
+                            <span className="text-red-600">{report.denied_count} denied</span>
+                            {report.email_sent && <span className="text-blue-500">emailed</span>}
+                            {report.sms_sent && <span className="text-blue-500">SMS sent</span>}
+                            <span>{new Date(report.generated_at).toLocaleString()}</span>
+                          </div>
+                        </div>
+                        {report.has_html && (
+                          <button onClick={async () => { try { const res = await api.getFRNReport(report.id); if (res?.data?.html) { setSelectedReport({ html: res.data.html, name: report.report_name }); } } catch (e) { console.error(e); } }} className="ml-3 px-3 py-1.5 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 dark:text-teal-300 dark:bg-teal-900/30 dark:hover:bg-teal-900/50 rounded-lg transition-colors">
+                            View Report
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Report Viewer Modal */}
+              {selectedReport && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setSelectedReport(null)}>
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{selectedReport.name}</h3>
+                      <button onClick={() => setSelectedReport(null)} className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
+                      </button>
+                    </div>
+                    <div className="flex-1 overflow-auto p-1">
+                      <iframe srcDoc={selectedReport.html} className="w-full h-full min-h-[600px] border-0 rounded-lg" title="FRN Report" sandbox="allow-same-origin" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
           </div>
         )}
 

@@ -1053,7 +1053,9 @@ function ConsultantPortalPage() {
             <img src="/images/logos/logo-icon-transparent.png" alt="SkyRate AI" width={36} height={36} className="rounded-lg" />
             <div>
               <span className="font-bold text-slate-900">SkyRate AI</span>
-              <span className="block text-xs text-slate-500">Consultant Portal</span>
+              <span className="block text-xs text-slate-500">
+                Consultant Portal{(user?.role === 'super' || user?.role === 'admin') ? ` (${user.role})` : ''}
+              </span>
             </div>
           </Link>
         </div>
@@ -1078,6 +1080,31 @@ function ConsultantPortalPage() {
             </button>
           ))}
         </nav>
+
+        {/* Portal Switcher (super/admin only) */}
+        {(user?.role === 'super' || user?.role === 'admin') && (
+          <div className="px-4 pb-3">
+            <div className="border-t border-slate-200 pt-3">
+              <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold px-4 mb-2">Switch Portal</p>
+              <Link
+                href="/vendor"
+                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-slate-600 hover:bg-purple-50 hover:text-purple-700 transition-all text-sm"
+              >
+                <span className="text-lg">🎯</span>
+                <span>Vendor Portal</span>
+                <svg className="w-4 h-4 ml-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </Link>
+              <Link
+                href="/super"
+                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-slate-600 hover:bg-yellow-50 hover:text-yellow-700 transition-all text-sm"
+              >
+                <span className="text-lg">⭐</span>
+                <span>Super Dashboard</span>
+                <svg className="w-4 h-4 ml-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* Subscription Card */}
         <div className="absolute bottom-20 left-4 right-4">
