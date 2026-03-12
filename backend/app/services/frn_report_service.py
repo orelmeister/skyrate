@@ -1,14 +1,17 @@
 """
-FRN Report Service
-Generates and sends FRN status email reports for watch monitors
+FRN Report Service (v2 - Consolidated)
+Generates consolidated email reports and stores them for in-app viewing.
+Groups all due watches per user into a single email.
 """
 
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from sqlalchemy.orm import Session
+from collections import defaultdict
 
-from ..models.frn_watch import FRNWatch, WatchType, WatchFrequency
+from ..models.frn_watch import FRNWatch, WatchType, WatchFrequency, DeliveryMode
+from ..models.frn_report_history import FRNReportHistory
 from ..models.user import User
 from ..models.consultant import ConsultantProfile, ConsultantSchool
 from ..models.vendor import VendorProfile
@@ -17,13 +20,19 @@ logger = logging.getLogger(__name__)
 
 
 class FRNReportService:
-    """Service for generating and sending FRN status reports"""
+    """Service for generating consolidated FRN status reports"""
     
     def __init__(self, db: Session):
         self.db = db
     
+    # ==================== PUBLIC API ====================
+    
     def process_due_watches(self) -> Dict[str, Any]:
-        """Process all watches that are due to send. Called by scheduler."""
+        """
+        Process all watches that are due to send.
+        Groups by user_id so each user gets at most ONE email + ONE SMS.
+        Called by the scheduler every hour.
+        """
         now = datetime.utcnow()
         
         due_watches = self.db.query(FRNWatch).filter(
@@ -32,94 +41,236 @@ class FRNReportService:
         ).all()
         
         if not due_watches:
-            return {"processed": 0, "sent": 0, "errors": 0}
+            return {"processed": 0, "users": 0, "emails_sent": 0, "sms_sent": 0, "errors": 0}
         
-        sent = 0
+        # Group watches by user_id
+        user_watches = defaultdict(list)
+        for watch in due_watches:
+            user_watches[watch.user_id].append(watch)
+        
+        emails_sent = 0
+        sms_sent = 0
         errors = 0
         
-        for watch in due_watches:
+        for user_id, watches in user_watches.items():
             try:
-                result = self.process_single_watch(watch)
-                if result.get("success"):
-                    sent += 1
-                else:
-                    errors += 1
+                user = self.db.query(User).filter(User.id == user_id).first()
+                if not user:
+                    logger.error(f"User {user_id} not found, skipping {len(watches)} watches")
+                    errors += len(watches)
+                    continue
+                
+                result = self._process_user_batch(user, watches)
+                if result.get("email_sent"):
+                    emails_sent += 1
+                if result.get("sms_sent"):
+                    sms_sent += 1
+                if result.get("errors"):
+                    errors += result["errors"]
+                    
             except Exception as e:
-                logger.error(f"Error processing watch {watch.id}: {e}")
-                watch.last_error = str(e)
-                errors += 1
+                logger.error(f"Error processing watches for user {user_id}: {e}")
+                for w in watches:
+                    w.last_error = str(e)
+                errors += len(watches)
         
         self.db.commit()
         
         return {
             "processed": len(due_watches),
-            "sent": sent,
+            "users": len(user_watches),
+            "emails_sent": emails_sent,
+            "sms_sent": sms_sent,
             "errors": errors
         }
     
     def process_single_watch(self, watch: FRNWatch) -> Dict[str, Any]:
-        """Process a single watch: fetch data, generate report, send email"""
+        """
+        Process a single watch (used by 'send now' button).
+        Still generates a proper report and stores in history.
+        """
+        user = self.db.query(User).filter(User.id == watch.user_id).first()
+        if not user:
+            return {"success": False, "message": "User not found", "frn_count": 0}
+        
+        return self._process_user_batch(user, [watch], is_manual=True)
+    
+    def get_report_html(self, report_id: int, user_id: int) -> Optional[str]:
+        """Get full HTML of a stored report (for in-app viewing)"""
+        report = self.db.query(FRNReportHistory).filter(
+            FRNReportHistory.id == report_id,
+            FRNReportHistory.user_id == user_id
+        ).first()
+        
+        if not report:
+            return None
+        
+        # Mark as viewed
+        if not report.viewed_at:
+            report.viewed_at = datetime.utcnow()
+            self.db.commit()
+        
+        return report.html_content
+    
+    # ==================== BATCH PROCESSING ====================
+    
+    def _process_user_batch(self, user: User, watches: List[FRNWatch], is_manual: bool = False) -> Dict[str, Any]:
+        """
+        Process a batch of watches for a single user.
+        Generates ONE consolidated report, ONE email, ONE SMS.
+        """
         try:
-            # Fetch FRN data based on watch type
-            frn_data = self._fetch_frn_data(watch)
+            from utils.usac_client import USACDataClient
+            client = USACDataClient()
             
-            if not frn_data:
-                watch.last_error = "No FRN data found"
+            watch_sections = []
+            total_frn_count = 0
+            total_changes = 0
+            all_funded = 0
+            all_denied = 0
+            all_pending = 0
+            all_amount = 0
+            any_email_needed = False
+            any_sms_needed = False
+            watch_errors = 0
+            
+            for watch in watches:
+                try:
+                    # Fetch data
+                    frn_data = self._fetch_frn_data(watch, user, client)
+                    filtered = self._apply_filters(frn_data, watch)
+                    changes = self._detect_changes(filtered, watch.last_snapshot or {})
+                    
+                    # Calculate stats
+                    funded = sum(1 for f in filtered if "funded" in (f.get("status") or "").lower() or "committed" in (f.get("status") or "").lower())
+                    denied = sum(1 for f in filtered if "denied" in (f.get("status") or "").lower())
+                    pending = sum(1 for f in filtered if "pending" in (f.get("status") or "").lower())
+                    amount = sum(float(f.get("commitment_amount", 0) or 0) for f in filtered)
+                    
+                    watch_sections.append({
+                        "watch": watch,
+                        "frns": filtered,
+                        "changes": changes,
+                        "funded": funded,
+                        "denied": denied,
+                        "pending": pending,
+                        "amount": amount,
+                    })
+                    
+                    total_frn_count += len(filtered)
+                    total_changes += len(changes)
+                    all_funded += funded
+                    all_denied += denied
+                    all_pending += pending
+                    all_amount += amount
+                    
+                    if watch.delivery_mode != DeliveryMode.IN_APP_ONLY.value:
+                        any_email_needed = True
+                    if watch.notify_sms:
+                        any_sms_needed = True
+                    
+                    # Update watch state
+                    watch.last_sent_at = datetime.utcnow()
+                    watch.next_send_at = watch.calculate_next_send()
+                    watch.send_count = (watch.send_count or 0) + 1
+                    watch.last_error = None
+                    watch.last_snapshot = {f["frn"]: f.get("status", "") for f in filtered if f.get("frn")}
+                    
+                except Exception as e:
+                    logger.error(f"Error processing watch {watch.id}: {e}")
+                    watch.last_error = str(e)
+                    watch_errors += 1
+            
+            if not watch_sections:
                 self.db.commit()
-                return {"success": False, "message": "No FRN data found", "frn_count": 0}
+                return {"success": False, "message": "No data for any watch", "frn_count": 0, "errors": watch_errors}
             
-            # Apply filters
-            filtered = self._apply_filters(frn_data, watch)
+            # Generate HTML (always — needed for in-app storage)
+            html = self._generate_consolidated_html(user, watch_sections)
             
-            # Detect changes from last snapshot
-            changes = self._detect_changes(filtered, watch.last_snapshot or {})
+            # Determine primary recipient email (from the first watch that wants email)
+            recipient_email = None
+            cc_set = set()
+            for section in watch_sections:
+                w = section["watch"]
+                if w.delivery_mode != DeliveryMode.IN_APP_ONLY.value:
+                    if not recipient_email:
+                        recipient_email = w.recipient_email
+                    elif w.recipient_email != recipient_email:
+                        cc_set.add(w.recipient_email)
+                    for cc in (w.cc_emails or []):
+                        cc_set.add(cc)
             
-            # Generate HTML report
-            html = self._generate_html_report(watch, filtered, changes)
+            # Store in history
+            report_name = self._generate_report_name(watches)
+            history = FRNReportHistory(
+                user_id=user.id,
+                report_name=report_name,
+                watch_ids=[w.id for w in watches],
+                watch_names=[w.name for w in watches],
+                html_content=html,
+                total_frns=total_frn_count,
+                funded_count=all_funded,
+                denied_count=all_denied,
+                pending_count=all_pending,
+                total_amount=int(all_amount * 100),  # Store as cents
+                changes_detected=total_changes,
+                delivery_modes=list({s["watch"].delivery_mode for s in watch_sections}),
+                recipient_email=recipient_email or user.email,
+            )
+            self.db.add(history)
+            self.db.flush()  # Get the ID
             
-            # Send email
-            self._send_report_email(watch, html, len(filtered))
+            email_sent = False
+            sms_sent = False
             
-            # Update watch state
-            watch.last_sent_at = datetime.utcnow()
-            watch.next_send_at = watch.calculate_next_send()
-            watch.send_count = (watch.send_count or 0) + 1
-            watch.last_error = None
-            watch.last_snapshot = {frn["frn"]: frn.get("status", "") for frn in filtered}
+            # Send consolidated email if any watch wants it
+            if any_email_needed and recipient_email:
+                try:
+                    self._send_consolidated_email(
+                        user, watch_sections, html, total_frn_count,
+                        recipient_email, list(cc_set), history.id
+                    )
+                    history.email_sent = True
+                    email_sent = True
+                except Exception as e:
+                    logger.error(f"Failed to send consolidated email for user {user.id}: {e}")
+            
+            # Send SMS notification if any watch opted in
+            if any_sms_needed:
+                try:
+                    sms_sent = self._send_sms_notification(user, watches, history.id, total_frn_count)
+                    history.sms_sent = sms_sent
+                except Exception as e:
+                    logger.error(f"Failed to send SMS for user {user.id}: {e}")
             
             self.db.commit()
             
             return {
                 "success": True,
-                "message": f"Report sent to {watch.recipient_email}",
-                "frn_count": len(filtered),
-                "changes_detected": len(changes)
+                "message": f"Report generated with {total_frn_count} FRNs across {len(watch_sections)} monitors",
+                "frn_count": total_frn_count,
+                "changes_detected": total_changes,
+                "email_sent": email_sent,
+                "sms_sent": sms_sent,
+                "report_id": history.id,
+                "errors": watch_errors,
             }
             
         except Exception as e:
-            logger.error(f"Error processing watch {watch.id}: {e}")
-            watch.last_error = str(e)
+            logger.error(f"Error in batch processing for user {user.id}: {e}")
             self.db.commit()
-            return {"success": False, "message": str(e), "frn_count": 0}
+            return {"success": False, "message": str(e), "frn_count": 0, "errors": len(watches)}
     
-    def _fetch_frn_data(self, watch: FRNWatch) -> List[Dict]:
+    # ==================== DATA FETCHING ====================
+    
+    def _fetch_frn_data(self, watch: FRNWatch, user: User, client) -> List[Dict]:
         """Fetch FRN data based on watch type"""
-        from utils.usac_client import USACDataClient
-        client = USACDataClient()
-        
-        user = self.db.query(User).filter(User.id == watch.user_id).first()
-        if not user:
-            return []
-        
         if watch.watch_type == WatchType.FRN.value:
-            # Single FRN — look it up by BEN or batch
-            # We don't have a direct FRN lookup, so use the portfolio approach
-            # and filter to just this FRN
             all_frns = self._fetch_portfolio_frns(user, client, watch.funding_year)
             return [f for f in all_frns if f.get("frn") == watch.target_id]
         
         elif watch.watch_type == WatchType.BEN.value:
-            # Single BEN
             result = client.get_frn_status_by_ben(
                 watch.target_id,
                 year=watch.funding_year
@@ -137,7 +288,6 @@ class FRNReportService:
         """Fetch all FRNs across a user's portfolio"""
         all_frns = []
         
-        # Check consultant profile
         profile = self.db.query(ConsultantProfile).filter(
             ConsultantProfile.user_id == user.id
         ).first()
@@ -149,10 +299,7 @@ class FRNReportService:
             bens = [s.ben for s in schools if s.ben]
             
             if bens:
-                result = client.get_frn_status_batch(
-                    bens,
-                    year=funding_year
-                )
+                result = client.get_frn_status_batch(bens, year=funding_year)
                 if result.get("success"):
                     for ben, ben_data in result.get("results", {}).items():
                         for frn in ben_data.get("frns", []):
@@ -160,16 +307,12 @@ class FRNReportService:
                             frn["ben"] = str(ben)
                             all_frns.append(frn)
         
-        # Check vendor profile
         vendor_profile = self.db.query(VendorProfile).filter(
             VendorProfile.user_id == user.id
         ).first()
         
         if vendor_profile and vendor_profile.spin:
-            result = client.get_frn_status_by_spin(
-                vendor_profile.spin,
-                year=funding_year
-            )
+            result = client.get_frn_status_by_spin(vendor_profile.spin, year=funding_year)
             if result.get("success"):
                 for frn in result.get("frns", []):
                     all_frns.append(frn)
@@ -179,11 +322,8 @@ class FRNReportService:
     def _apply_filters(self, frns: List[Dict], watch: FRNWatch) -> List[Dict]:
         """Apply watch filters to FRN list"""
         filtered = []
-        
         for frn in frns:
             status = (frn.get("status") or "").lower()
-            
-            # Status inclusion filters
             if "funded" in status or "committed" in status:
                 if not watch.include_funded:
                     continue
@@ -193,25 +333,22 @@ class FRNReportService:
             elif "pending" in status:
                 if not watch.include_pending:
                     continue
-            
-            # Status text filter
-            if watch.status_filter:
-                if watch.status_filter.lower() not in status:
-                    continue
+            if watch.status_filter and watch.status_filter.lower() not in status:
+                continue
             
             filtered.append(frn)
-        
         return filtered
     
     def _detect_changes(self, current_frns: List[Dict], last_snapshot: Dict) -> List[Dict]:
         """Compare current FRNs with last snapshot to detect changes"""
         changes = []
-        
         if not last_snapshot:
-            return []  # First report — no changes to detect
+            return []
         
+        current_frn_numbers = set()
         for frn in current_frns:
             frn_num = frn.get("frn", "")
+            current_frn_numbers.add(frn_num)
             current_status = frn.get("status", "")
             old_status = last_snapshot.get(frn_num)
             
@@ -224,13 +361,9 @@ class FRNReportService:
                     "amount": float(frn.get("commitment_amount", 0) or 0),
                 })
         
-        # Check for new FRNs not in previous snapshot
-        current_frn_numbers = {f.get("frn") for f in current_frns}
         old_frn_numbers = set(last_snapshot.keys())
-        
-        new_frns = current_frn_numbers - old_frn_numbers
         for frn in current_frns:
-            if frn.get("frn") in new_frns:
+            if frn.get("frn") in (current_frn_numbers - old_frn_numbers):
                 changes.append({
                     "frn": frn.get("frn", ""),
                     "entity_name": frn.get("entity_name", ""),
@@ -241,161 +374,128 @@ class FRNReportService:
         
         return changes
     
-    def _generate_html_report(self, watch: FRNWatch, frns: List[Dict], changes: List[Dict]) -> str:
-        """Generate HTML email for the FRN status report"""
+    # ==================== REPORT NAME ====================
+    
+    def _generate_report_name(self, watches: List[FRNWatch]) -> str:
+        """Generate a human-readable report name"""
+        now = datetime.utcnow()
+        date_str = now.strftime('%b %d, %Y')
+        
+        if len(watches) == 1:
+            return f"{watches[0].name} - {date_str}"
+        else:
+            return f"Consolidated Report ({len(watches)} monitors) - {date_str}"
+    
+    # ==================== HTML GENERATION ====================
+    
+    def _generate_consolidated_html(self, user: User, watch_sections: List[Dict]) -> str:
+        """Generate ONE HTML email with sections for each watch"""
         now = datetime.utcnow()
         
-        # Calculate summary
-        funded_count = sum(1 for f in frns if "funded" in (f.get("status") or "").lower() or "committed" in (f.get("status") or "").lower())
-        denied_count = sum(1 for f in frns if "denied" in (f.get("status") or "").lower())
-        pending_count = sum(1 for f in frns if "pending" in (f.get("status") or "").lower())
-        total_amount = sum(float(f.get("commitment_amount", 0) or 0) for f in frns)
-        funded_amount = sum(float(f.get("commitment_amount", 0) or 0) for f in frns if "funded" in (f.get("status") or "").lower() or "committed" in (f.get("status") or "").lower())
+        # Grand totals
+        grand_funded = sum(s["funded"] for s in watch_sections)
+        grand_denied = sum(s["denied"] for s in watch_sections)
+        grand_pending = sum(s["pending"] for s in watch_sections)
+        grand_total = sum(len(s["frns"]) for s in watch_sections)
+        grand_amount = sum(s["amount"] for s in watch_sections)
+        grand_funded_amount = sum(
+            sum(float(f.get("commitment_amount", 0) or 0) for f in s["frns"]
+                if "funded" in (f.get("status") or "").lower() or "committed" in (f.get("status") or "").lower())
+            for s in watch_sections
+        )
+        grand_changes = sum(len(s["changes"]) for s in watch_sections)
         
-        html = f"""
-<!DOCTYPE html>
+        multi = len(watch_sections) > 1
+        
+        html = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FRN Status Report — {watch.name}</title>
+    <title>FRN Status Report</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
     <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f1f5f9; padding: 20px 0;">
         <tr>
             <td align="center">
-                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                <table width="640" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
                     <!-- Header -->
                     <tr>
                         <td style="background: linear-gradient(135deg, #0f766e, #0d9488); padding: 30px; text-align: center;">
                             <h1 style="color: #ffffff; margin: 0; font-size: 24px;">FRN Status Report</h1>
-                            <p style="color: #99f6e4; margin: 8px 0 0 0; font-size: 14px;">{watch.name}</p>
-                            <p style="color: #99f6e4; margin: 4px 0 0 0; font-size: 12px;">{now.strftime('%B %d, %Y')}</p>
+                            <p style="color: #99f6e4; margin: 8px 0 0 0; font-size: 14px;">{now.strftime('%B %d, %Y')}</p>
+                            <p style="color: #99f6e4; margin: 4px 0 0 0; font-size: 12px;">{len(watch_sections)} monitor{'s' if multi else ''} | {grand_total} FRNs{f' | {grand_changes} changes' if grand_changes else ''}</p>
                         </td>
                     </tr>
 """
         
-        # Changes section
-        if watch.include_changes and changes:
-            html += """
+        # Grand summary (always shown)
+        html += f"""
                     <tr>
                         <td style="padding: 24px 30px 0 30px;">
-                            <h2 style="color: #be185d; font-size: 16px; margin: 0 0 12px 0; border-bottom: 2px solid #fce7f3; padding-bottom: 8px;">Changes Since Last Report</h2>
-                            <table width="100%" cellpadding="8" cellspacing="0" style="border: 1px solid #e2e8f0; border-radius: 8px; border-collapse: collapse; font-size: 13px;">
-                                <tr style="background-color: #f8fafc;">
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">FRN</th>
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Entity</th>
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Previous</th>
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Current</th>
-                                </tr>
-"""
-            for change in changes:
-                old_color = "#64748b"
-                new_color = "#059669" if "funded" in change["new_status"].lower() else "#dc2626" if "denied" in change["new_status"].lower() else "#d97706"
-                html += f"""
-                                <tr>
-                                    <td style="font-family: monospace; border-bottom: 1px solid #f1f5f9;">{change['frn']}</td>
-                                    <td style="border-bottom: 1px solid #f1f5f9;">{change['entity_name'][:30]}</td>
-                                    <td style="color: {old_color}; border-bottom: 1px solid #f1f5f9;">{change['old_status']}</td>
-                                    <td style="color: {new_color}; font-weight: 600; border-bottom: 1px solid #f1f5f9;">{change['new_status']}</td>
-                                </tr>
-"""
-            html += """
-                            </table>
-                        </td>
-                    </tr>
-"""
-        
-        # Summary section
-        if watch.include_summary:
-            html += f"""
-                    <tr>
-                        <td style="padding: 24px 30px 0 30px;">
-                            <h2 style="color: #334155; font-size: 16px; margin: 0 0 12px 0; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">Summary</h2>
                             <table width="100%" cellpadding="0" cellspacing="0">
                                 <tr>
-                                    <td width="25%" style="padding: 12px; text-align: center; background-color: #f0fdf4; border-radius: 8px;">
-                                        <div style="color: #15803d; font-size: 28px; font-weight: 700;">{funded_count}</div>
-                                        <div style="color: #16a34a; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Funded</div>
+                                    <td width="24%" style="padding: 10px; text-align: center; background-color: #f0fdf4; border-radius: 8px;">
+                                        <div style="color: #15803d; font-size: 26px; font-weight: 700;">{grand_funded}</div>
+                                        <div style="color: #16a34a; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Funded</div>
                                     </td>
-                                    <td width="4%"></td>
-                                    <td width="25%" style="padding: 12px; text-align: center; background-color: #fffbeb; border-radius: 8px;">
-                                        <div style="color: #a16207; font-size: 28px; font-weight: 700;">{pending_count}</div>
-                                        <div style="color: #ca8a04; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Pending</div>
+                                    <td width="2%"></td>
+                                    <td width="24%" style="padding: 10px; text-align: center; background-color: #fffbeb; border-radius: 8px;">
+                                        <div style="color: #a16207; font-size: 26px; font-weight: 700;">{grand_pending}</div>
+                                        <div style="color: #ca8a04; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Pending</div>
                                     </td>
-                                    <td width="4%"></td>
-                                    <td width="25%" style="padding: 12px; text-align: center; background-color: #fef2f2; border-radius: 8px;">
-                                        <div style="color: #b91c1c; font-size: 28px; font-weight: 700;">{denied_count}</div>
-                                        <div style="color: #dc2626; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Denied</div>
+                                    <td width="2%"></td>
+                                    <td width="24%" style="padding: 10px; text-align: center; background-color: #fef2f2; border-radius: 8px;">
+                                        <div style="color: #b91c1c; font-size: 26px; font-weight: 700;">{grand_denied}</div>
+                                        <div style="color: #dc2626; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Denied</div>
                                     </td>
-                                    <td width="4%"></td>
-                                    <td width="25%" style="padding: 12px; text-align: center; background-color: #f0f9ff; border-radius: 8px;">
-                                        <div style="color: #1e40af; font-size: 28px; font-weight: 700;">{len(frns)}</div>
-                                        <div style="color: #2563eb; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;">Total</div>
+                                    <td width="2%"></td>
+                                    <td width="24%" style="padding: 10px; text-align: center; background-color: #f0f9ff; border-radius: 8px;">
+                                        <div style="color: #1e40af; font-size: 26px; font-weight: 700;">{grand_total}</div>
+                                        <div style="color: #2563eb; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Total</div>
                                     </td>
                                 </tr>
                             </table>
-                            <p style="color: #64748b; font-size: 13px; margin: 12px 0 0 0;">
-                                Total Committed: <strong style="color: #334155;">${total_amount:,.0f}</strong> |
-                                Funded Amount: <strong style="color: #15803d;">${funded_amount:,.0f}</strong>
+                            <p style="color: #64748b; font-size: 12px; margin: 10px 0 0 0; text-align: center;">
+                                Total: <strong style="color: #334155;">${grand_amount:,.0f}</strong> | Funded: <strong style="color: #15803d;">${grand_funded_amount:,.0f}</strong>
                             </p>
                         </td>
                     </tr>
 """
         
-        # Details section
-        if watch.include_details and frns:
-            html += """
+        # Per-watch sections
+        for section in watch_sections:
+            watch = section["watch"]
+            frns = section["frns"]
+            changes = section["changes"]
+            
+            if watch.delivery_mode == DeliveryMode.NOTIFICATION_ONLY.value:
+                html += self._generate_notification_section_html(watch, frns, changes)
+            elif watch.delivery_mode == DeliveryMode.IN_APP_ONLY.value:
+                # Skip entirely in email (but still in the stored HTML)
+                html += self._generate_inapp_only_section_html(watch, frns)
+            else:
+                html += self._generate_watch_section_html(watch, frns, changes)
+        
+        # View in dashboard link
+        html += f"""
                     <tr>
-                        <td style="padding: 24px 30px 0 30px;">
-                            <h2 style="color: #334155; font-size: 16px; margin: 0 0 12px 0; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">FRN Details</h2>
-                            <table width="100%" cellpadding="8" cellspacing="0" style="border: 1px solid #e2e8f0; border-radius: 8px; border-collapse: collapse; font-size: 12px;">
-                                <tr style="background-color: #f8fafc;">
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">FRN</th>
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Entity</th>
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Status</th>
-                                    <th style="text-align: right; color: #64748b; border-bottom: 1px solid #e2e8f0;">Amount</th>
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Year</th>
-                                </tr>
-"""
-            for frn in frns[:50]:  # Limit to 50 FRNs in email
-                status = frn.get("status", "Unknown")
-                status_color = "#059669" if "funded" in status.lower() else "#dc2626" if "denied" in status.lower() else "#d97706"
-                amount = float(frn.get("commitment_amount", 0) or 0)
-                html += f"""
-                                <tr>
-                                    <td style="font-family: monospace; border-bottom: 1px solid #f1f5f9;">{frn.get('frn', 'N/A')}</td>
-                                    <td style="border-bottom: 1px solid #f1f5f9; max-width: 150px; overflow: hidden; text-overflow: ellipsis;">{(frn.get('entity_name') or 'N/A')[:35]}</td>
-                                    <td style="color: {status_color}; font-weight: 600; border-bottom: 1px solid #f1f5f9;">{status}</td>
-                                    <td style="text-align: right; border-bottom: 1px solid #f1f5f9;">${amount:,.0f}</td>
-                                    <td style="border-bottom: 1px solid #f1f5f9;">{frn.get('funding_year', 'N/A')}</td>
-                                </tr>
-"""
-            
-            if len(frns) > 50:
-                html += f"""
-                                <tr>
-                                    <td colspan="5" style="text-align: center; color: #94a3b8; padding: 12px;">
-                                        ...and {len(frns) - 50} more FRNs. View all in your <a href="https://skyrate.ai/consultant" style="color: #0d9488;">SkyRate dashboard</a>.
-                                    </td>
-                                </tr>
-"""
-            
-            html += """
-                            </table>
+                        <td style="padding: 20px 30px; text-align: center;">
+                            <a href="https://skyrate.ai/consultant" style="display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #0f766e, #0d9488); color: #ffffff; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600;">View Full Report in Dashboard</a>
                         </td>
                     </tr>
 """
         
         # Footer
+        watch_names = ", ".join(s["watch"].name for s in watch_sections)
         html += f"""
                     <tr>
-                        <td style="padding: 24px 30px; border-top: 1px solid #e2e8f0; margin-top: 24px;">
+                        <td style="padding: 20px 30px; border-top: 1px solid #e2e8f0;">
                             <p style="color: #94a3b8; font-size: 11px; text-align: center; margin: 0;">
-                                This report was generated by <a href="https://skyrate.ai" style="color: #0d9488;">SkyRate AI</a> for watch "{watch.name}" ({watch.frequency}).
-                                <br>Report #{watch.send_count + 1} | Next report: {watch.calculate_next_send().strftime('%B %d, %Y')}
+                                This consolidated report was generated by <a href="https://skyrate.ai" style="color: #0d9488;">SkyRate AI</a>
+                                <br>Monitors: {watch_names}
                                 <br><br>
-                                To manage your report settings, visit your <a href="https://skyrate.ai/consultant" style="color: #0d9488;">dashboard</a>.
+                                To manage your report monitors, visit your <a href="https://skyrate.ai/consultant" style="color: #0d9488;">dashboard</a>.
                             </p>
                         </td>
                     </tr>
@@ -404,34 +504,191 @@ class FRNReportService:
         </tr>
     </table>
 </body>
-</html>
+</html>"""
+        return html
+    
+    def _generate_watch_section_html(self, watch: FRNWatch, frns: List[Dict], changes: List[Dict]) -> str:
+        """Generate full detail section for a watch (delivery_mode = full_email)"""
+        html = f"""
+                    <tr>
+                        <td style="padding: 24px 30px 0 30px;">
+                            <div style="background-color: #f8fafc; border-radius: 8px; border-left: 4px solid #0d9488; padding: 16px; margin-bottom: 16px;">
+                                <h2 style="color: #0f766e; font-size: 16px; margin: 0;">{watch.name}</h2>
+                                <p style="color: #64748b; font-size: 12px; margin: 4px 0 0 0;">
+                                    {watch.watch_type.upper()} watch{f' | Target: {watch.target_name or watch.target_id}' if watch.target_id else ' | Full Portfolio'} | {len(frns)} FRNs
+                                </p>
+                            </div>
+"""
+        
+        # Changes
+        if watch.include_changes and changes:
+            html += """
+                            <h3 style="color: #be185d; font-size: 14px; margin: 0 0 8px 0;">Changes Detected</h3>
+                            <table width="100%" cellpadding="6" cellspacing="0" style="border: 1px solid #e2e8f0; border-radius: 6px; border-collapse: collapse; font-size: 12px; margin-bottom: 16px;">
+                                <tr style="background-color: #fdf2f8;">
+                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">FRN</th>
+                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Entity</th>
+                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Previous</th>
+                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Current</th>
+                                </tr>
+"""
+            for c in changes[:20]:
+                new_color = "#059669" if "funded" in c["new_status"].lower() else "#dc2626" if "denied" in c["new_status"].lower() else "#d97706"
+                html += f"""
+                                <tr>
+                                    <td style="font-family: monospace; border-bottom: 1px solid #f1f5f9;">{c['frn']}</td>
+                                    <td style="border-bottom: 1px solid #f1f5f9;">{c['entity_name'][:28]}</td>
+                                    <td style="color: #64748b; border-bottom: 1px solid #f1f5f9;">{c['old_status']}</td>
+                                    <td style="color: {new_color}; font-weight: 600; border-bottom: 1px solid #f1f5f9;">{c['new_status']}</td>
+                                </tr>
+"""
+            html += """
+                            </table>
+"""
+        
+        # FRN details
+        if watch.include_details and frns:
+            html += """
+                            <table width="100%" cellpadding="6" cellspacing="0" style="border: 1px solid #e2e8f0; border-radius: 6px; border-collapse: collapse; font-size: 11px;">
+                                <tr style="background-color: #f8fafc;">
+                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">FRN</th>
+                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Entity</th>
+                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Status</th>
+                                    <th style="text-align: right; color: #64748b; border-bottom: 1px solid #e2e8f0;">Amount</th>
+                                </tr>
+"""
+            for frn in frns[:30]:
+                s = frn.get("status", "Unknown")
+                sc = "#059669" if "funded" in s.lower() else "#dc2626" if "denied" in s.lower() else "#d97706"
+                amt = float(frn.get("commitment_amount", 0) or 0)
+                html += f"""
+                                <tr>
+                                    <td style="font-family: monospace; border-bottom: 1px solid #f1f5f9;">{frn.get('frn', 'N/A')}</td>
+                                    <td style="border-bottom: 1px solid #f1f5f9;">{(frn.get('entity_name') or 'N/A')[:30]}</td>
+                                    <td style="color: {sc}; font-weight: 600; border-bottom: 1px solid #f1f5f9;">{s}</td>
+                                    <td style="text-align: right; border-bottom: 1px solid #f1f5f9;">${amt:,.0f}</td>
+                                </tr>
+"""
+            if len(frns) > 30:
+                html += f"""
+                                <tr>
+                                    <td colspan="4" style="text-align: center; color: #94a3b8; padding: 8px; font-size: 11px;">
+                                        ...and {len(frns) - 30} more. View all in your dashboard.
+                                    </td>
+                                </tr>
+"""
+            html += """
+                            </table>
+"""
+        
+        html += """
+                        </td>
+                    </tr>
 """
         return html
     
-    def _send_report_email(self, watch: FRNWatch, html: str, frn_count: int):
-        """Send the report email"""
-        from .email_service import EmailService
+    def _generate_notification_section_html(self, watch: FRNWatch, frns: List[Dict], changes: List[Dict]) -> str:
+        """Brief summary section for notification_only delivery mode"""
+        funded = sum(1 for f in frns if "funded" in (f.get("status") or "").lower() or "committed" in (f.get("status") or "").lower())
+        denied = sum(1 for f in frns if "denied" in (f.get("status") or "").lower())
+        pending = sum(1 for f in frns if "pending" in (f.get("status") or "").lower())
         
+        html = f"""
+                    <tr>
+                        <td style="padding: 12px 30px;">
+                            <div style="background-color: #f0fdfa; border-radius: 8px; border-left: 4px solid #14b8a6; padding: 14px;">
+                                <strong style="color: #0f766e; font-size: 14px;">{watch.name}</strong>
+                                <span style="color: #64748b; font-size: 12px; margin-left: 8px;">{len(frns)} FRNs</span>
+                                {f'<span style="color: #be185d; font-size: 12px; margin-left: 8px;">{len(changes)} changes</span>' if changes else ''}
+                                <p style="color: #475569; font-size: 12px; margin: 6px 0 0 0;">
+                                    <span style="color: #15803d;">{funded} funded</span> |
+                                    <span style="color: #d97706;">{pending} pending</span> |
+                                    <span style="color: #dc2626;">{denied} denied</span>
+                                    &mdash; <a href="https://skyrate.ai/consultant" style="color: #0d9488; font-weight: 600;">View full details</a>
+                                </p>
+                            </div>
+                        </td>
+                    </tr>
+"""
+        return html
+    
+    def _generate_inapp_only_section_html(self, watch: FRNWatch, frns: List[Dict]) -> str:
+        """Minimal marker for in_app_only watches (only in the stored HTML, not in email)"""
+        return f"""
+                    <!-- in_app_only: {watch.name} ({len(frns)} FRNs) — full details available in dashboard -->
+"""
+    
+    # ==================== EMAIL & SMS DELIVERY ====================
+    
+    def _send_consolidated_email(self, user: User, watch_sections: List[Dict], html: str, 
+                                  total_frns: int, recipient_email: str, cc_emails: List[str],
+                                  report_id: int):
+        """Send ONE consolidated email for all watches"""
+        from .email_service import EmailService
         email_service = EmailService()
         
-        subject = f"FRN Status Report: {watch.name} ({frn_count} FRNs)"
+        # Filter out in_app_only sections from the email HTML
+        # We strip the <!-- in_app_only --> comments for email (they're only in stored HTML)
+        email_html = html
         
-        # Send to primary recipient
+        num_watches = len(watch_sections)
+        if num_watches == 1:
+            subject = f"FRN Status Report: {watch_sections[0]['watch'].name} ({total_frns} FRNs)"
+        else:
+            subject = f"FRN Status Report: {num_watches} monitors, {total_frns} FRNs"
+        
         email_service.send_email(
-            to_email=watch.recipient_email,
+            to_email=recipient_email,
             subject=subject,
-            html_content=html,
+            html_content=email_html,
             email_type='report'
         )
         
-        # Send to CC recipients
-        for cc in (watch.cc_emails or []):
+        for cc in cc_emails:
             try:
                 email_service.send_email(
                     to_email=cc,
                     subject=subject,
-                    html_content=html,
+                    html_content=email_html,
                     email_type='report'
                 )
             except Exception as e:
                 logger.error(f"Failed to send CC report to {cc}: {e}")
+    
+    def _send_sms_notification(self, user: User, watches: List[FRNWatch], 
+                                report_id: int, total_frns: int) -> bool:
+        """Send ONE SMS notification that the report is ready"""
+        from .sms_service import SMSService
+        sms_service = SMSService()
+        
+        if not sms_service.is_configured:
+            logger.warning("SMS service not configured, skipping SMS notification")
+            return False
+        
+        # Get phone number — check watch sms_phone overrides first, then user's phone
+        phone = None
+        for w in watches:
+            if w.notify_sms and w.sms_phone:
+                phone = w.sms_phone
+                break
+        
+        if not phone:
+            phone = user.phone
+        
+        if not phone:
+            logger.warning(f"No phone number for user {user.id}, skipping SMS notification")
+            return False
+        
+        # Check user SMS opt-in
+        if not user.sms_opt_in:
+            logger.info(f"User {user.id} has not opted in for SMS, skipping")
+            return False
+        
+        num_watches = sum(1 for w in watches if w.notify_sms)
+        message = (
+            f"SkyRate: Your FRN Status Report is ready! "
+            f"{total_frns} FRNs across {num_watches} monitor{'s' if num_watches != 1 else ''}. "
+            f"View it at https://skyrate.ai/consultant"
+        )
+        
+        return sms_service.send_sms(phone, message)

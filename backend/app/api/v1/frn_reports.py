@@ -13,6 +13,7 @@ from ...core.database import get_db
 from ...core.security import get_current_user
 from ...models.user import User
 from ...models.frn_watch import FRNWatch, WatchType, WatchFrequency
+from ...models.frn_report_history import FRNReportHistory
 
 router = APIRouter(prefix="/frn-reports", tags=["FRN Reports"])
 
@@ -27,6 +28,9 @@ class CreateWatchRequest(BaseModel):
     frequency: str = WatchFrequency.WEEKLY.value
     recipient_email: str
     cc_emails: Optional[List[str]] = None
+    delivery_mode: str = "full_email"
+    notify_sms: bool = False
+    sms_phone: Optional[str] = None
     funding_year: Optional[int] = None
     status_filter: Optional[str] = None
     include_funded: bool = True
@@ -42,6 +46,9 @@ class UpdateWatchRequest(BaseModel):
     frequency: Optional[str] = None
     recipient_email: Optional[str] = None
     cc_emails: Optional[List[str]] = None
+    delivery_mode: Optional[str] = None
+    notify_sms: Optional[bool] = None
+    sms_phone: Optional[str] = None
     funding_year: Optional[int] = None
     status_filter: Optional[str] = None
     include_funded: Optional[bool] = None
@@ -123,6 +130,9 @@ async def create_watch(
         frequency=data.frequency,
         recipient_email=data.recipient_email,
         cc_emails=data.cc_emails or [],
+        delivery_mode=data.delivery_mode,
+        notify_sms=data.notify_sms,
+        sms_phone=data.sms_phone,
         funding_year=data.funding_year,
         status_filter=data.status_filter,
         include_funded=data.include_funded,
@@ -287,4 +297,52 @@ async def toggle_watch(
         "success": True,
         "watch": watch.to_dict(),
         "message": f"Watch {'activated' if watch.is_active else 'paused'}"
+    }
+
+
+# ==================== REPORT HISTORY ====================
+
+@router.get("/history/list")
+async def list_report_history(
+    limit: int = Query(default=20, le=50),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """List past reports for the current user"""
+    reports = db.query(FRNReportHistory).filter(
+        FRNReportHistory.user_id == current_user.id
+    ).order_by(FRNReportHistory.generated_at.desc()).limit(limit).all()
+    
+    return {
+        "success": True,
+        "reports": [r.to_dict() for r in reports],
+        "total": len(reports)
+    }
+
+
+@router.get("/history/{report_id}")
+async def get_report(
+    report_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get a specific report with full HTML content"""
+    from ...services.frn_report_service import FRNReportService
+    report_service = FRNReportService(db)
+    
+    report = db.query(FRNReportHistory).filter(
+        FRNReportHistory.id == report_id,
+        FRNReportHistory.user_id == current_user.id
+    ).first()
+    
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    # Mark as viewed
+    html = report_service.get_report_html(report_id, current_user.id)
+    
+    return {
+        "success": True,
+        "report": report.to_dict(),
+        "html": html
     }

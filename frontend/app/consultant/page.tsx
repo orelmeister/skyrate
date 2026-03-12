@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
-import { api, ConsultantSchool, ConsultantProfile, AppealRecord, FRNWatch } from "@/lib/api";
+import { api, ConsultantSchool, ConsultantProfile, AppealRecord, FRNWatch, FRNReportHistory } from "@/lib/api";
 import { SearchResultsTable } from "@/components/SearchResultsTable";
 import { AppealChat } from "@/components/AppealChat";
 import { useTabParam } from "@/hooks/useTabParam";
@@ -192,6 +192,8 @@ function ConsultantPortalPage() {
   // FRN Watch/Monitor state
   const [frnWatches, setFrnWatches] = useState<FRNWatch[]>([]);
   const [showCreateWatch, setShowCreateWatch] = useState(false);
+  const [reportHistory, setReportHistory] = useState<FRNReportHistory[]>([]);
+  const [selectedReport, setSelectedReport] = useState<{html: string; name: string} | null>(null);
   const [watchLoading, setWatchLoading] = useState(false);
   
   // Service Search state
@@ -490,6 +492,17 @@ function ConsultantPortalPage() {
     }
   };
 
+  const loadReportHistory = async () => {
+    try {
+      const response = await api.getFRNReportHistory(10);
+      if (response?.data?.reports) {
+        setReportHistory(response.data.reports);
+      }
+    } catch (error) {
+      console.error('Failed to load report history:', error);
+    }
+  };
+
   // Load appeals and denied applications when switching to appeals tab
   useEffect(() => {
     if (activeTab === "appeals") {
@@ -499,6 +512,7 @@ function ConsultantPortalPage() {
     }
     if (activeTab === "frn-status") {
       loadFRNWatches();
+      loadReportHistory();
     }
     // FRN status is NOT auto-loaded — user must click "Search" to prevent
     // slow loading (87+ sequential USAC API calls for large portfolios)
@@ -2273,6 +2287,9 @@ function ConsultantPortalPage() {
                           include_pending: formData.get('include_pending') === 'on',
                           include_denied: formData.get('include_denied') === 'on',
                           include_changes: formData.get('include_changes') === 'on',
+                          delivery_mode: (formData.get('delivery_mode') as any) || 'full_email',
+                          notify_sms: formData.get('notify_sms') === 'on',
+                          sms_phone: (formData.get('sms_phone') as string) || undefined,
                         });
                         if (response?.data?.success) {
                           setShowCreateWatch(false);
@@ -2337,6 +2354,31 @@ function ConsultantPortalPage() {
                           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                         />
                       </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Delivery Mode</label>
+                        <select
+                          name="delivery_mode"
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                        >
+                          <option value="full_email">Full Email Report</option>
+                          <option value="notification_only">Notification Only (link to dashboard)</option>
+                          <option value="in_app_only">In-App Only (no email)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
+                      <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                        <input type="checkbox" name="notify_sms" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                        <span className="font-medium">SMS Notification</span>
+                        <span className="text-xs text-gray-500">(get a text when report is ready)</span>
+                      </label>
+                      <input
+                        name="sms_phone"
+                        type="tel"
+                        placeholder="Phone (optional, uses profile)"
+                        className="flex-1 max-w-[220px] px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-xs focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
                     </div>
 
                     <div className="flex flex-wrap gap-4">
@@ -2399,6 +2441,20 @@ function ConsultantPortalPage() {
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300">
                               {watch.watch_type}
                             </span>
+                            {watch.delivery_mode && watch.delivery_mode !== 'full_email' && (
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                watch.delivery_mode === 'notification_only' 
+                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300'
+                                  : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                              }`}>
+                                {watch.delivery_mode === 'notification_only' ? 'notify only' : 'in-app only'}
+                              </span>
+                            )}
+                            {watch.notify_sms && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
+                                SMS
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-4 mt-1 text-xs text-gray-500 dark:text-gray-400">
                             <span>To: {watch.recipient_email}</span>
@@ -2464,6 +2520,81 @@ function ConsultantPortalPage() {
                   </div>
                 ) : null}
               </div>
+
+              {/* Report History */}
+              {reportHistory.length > 0 && (
+                <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Recent Reports</h3>
+                  <div className="space-y-2">
+                    {reportHistory.map((report) => (
+                      <div
+                        key={report.id}
+                        className="flex items-center justify-between p-3 rounded-lg border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{report.report_name}</span>
+                            {report.changes_detected > 0 && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-300">
+                                {report.changes_detected} changes
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            <span>{report.total_frns} FRNs</span>
+                            <span className="text-green-600">{report.funded_count} funded</span>
+                            <span className="text-amber-600">{report.pending_count} pending</span>
+                            <span className="text-red-600">{report.denied_count} denied</span>
+                            {report.email_sent && <span className="text-blue-500">emailed</span>}
+                            {report.sms_sent && <span className="text-blue-500">SMS sent</span>}
+                            <span>{new Date(report.generated_at).toLocaleString()}</span>
+                          </div>
+                        </div>
+                        {report.has_html && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await api.getFRNReport(report.id);
+                                if (res?.data?.html) {
+                                  setSelectedReport({ html: res.data.html, name: report.report_name });
+                                }
+                              } catch (e) { console.error(e); }
+                            }}
+                            className="ml-3 px-3 py-1.5 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 dark:text-teal-300 dark:bg-teal-900/30 dark:hover:bg-teal-900/50 rounded-lg transition-colors"
+                          >
+                            View Report
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Report Viewer Modal */}
+              {selectedReport && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setSelectedReport(null)}>
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{selectedReport.name}</h3>
+                      <button
+                        onClick={() => setSelectedReport(null)}
+                        className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
+                      </button>
+                    </div>
+                    <div className="flex-1 overflow-auto p-1">
+                      <iframe
+                        srcDoc={selectedReport.html}
+                        className="w-full h-full min-h-[600px] border-0 rounded-lg"
+                        title="FRN Report"
+                        sandbox="allow-same-origin"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
             </div>
           )}

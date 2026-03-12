@@ -27,6 +27,13 @@ class WatchFrequency(str, enum.Enum):
     MONTHLY = "monthly"
 
 
+class DeliveryMode(str, enum.Enum):
+    """How to deliver the report"""
+    FULL_EMAIL = "full_email"          # Include full report in consolidated email
+    NOTIFICATION_ONLY = "notification_only"  # Just a summary + link in email
+    IN_APP_ONLY = "in_app_only"        # No email, only viewable in dashboard
+
+
 class FRNWatch(Base):
     """
     FRN Watch/Monitor record.
@@ -47,6 +54,11 @@ class FRNWatch(Base):
     frequency = Column(String(20), nullable=False, default=WatchFrequency.WEEKLY.value)
     recipient_email = Column(String(255), nullable=False)  # Where to send reports
     cc_emails = Column(JSON, default=list)  # Optional CC recipients
+    
+    # Delivery preferences
+    delivery_mode = Column(String(30), nullable=False, default=DeliveryMode.FULL_EMAIL.value)
+    notify_sms = Column(Boolean, default=False)  # Send SMS notification when report is ready
+    sms_phone = Column(String(50))  # Override phone number for SMS (uses user's phone if null)
     
     # Filters (optional — narrow down what's included in the report)
     funding_year = Column(Integer)  # Only include this funding year
@@ -88,6 +100,9 @@ class FRNWatch(Base):
             "frequency": self.frequency,
             "recipient_email": self.recipient_email,
             "cc_emails": self.cc_emails or [],
+            "delivery_mode": self.delivery_mode,
+            "notify_sms": self.notify_sms,
+            "sms_phone": self.sms_phone,
             "funding_year": self.funding_year,
             "status_filter": self.status_filter,
             "include_funded": self.include_funded,

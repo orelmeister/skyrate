@@ -489,6 +489,7 @@ async def lifespan(app: FastAPI):
     )
     from app.models.admin_frn_snapshot import AdminFRNSnapshot
     from app.models.frn_watch import FRNWatch
+    from app.models.frn_report_history import FRNReportHistory
     from app.models.promo_invite import PromoInvite
     from app.models.push_subscription import PushSubscription
     from app.models.support_ticket import SupportTicket, TicketMessage

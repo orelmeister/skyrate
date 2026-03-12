@@ -298,6 +298,9 @@ export interface FRNWatch {
   frequency: 'daily' | 'weekly' | 'biweekly' | 'monthly';
   recipient_email: string;
   cc_emails: string[];
+  delivery_mode: 'full_email' | 'notification_only' | 'in_app_only';
+  notify_sms: boolean;
+  sms_phone: string | null;
   funding_year: number | null;
   status_filter: string | null;
   include_funded: boolean;
@@ -323,6 +326,9 @@ export interface CreateWatchRequest {
   frequency?: 'daily' | 'weekly' | 'biweekly' | 'monthly';
   recipient_email: string;
   cc_emails?: string[];
+  delivery_mode?: 'full_email' | 'notification_only' | 'in_app_only';
+  notify_sms?: boolean;
+  sms_phone?: string;
   funding_year?: number;
   status_filter?: string;
   include_funded?: boolean;
@@ -338,6 +344,9 @@ export interface UpdateWatchRequest {
   frequency?: string;
   recipient_email?: string;
   cc_emails?: string[];
+  delivery_mode?: 'full_email' | 'notification_only' | 'in_app_only';
+  notify_sms?: boolean;
+  sms_phone?: string;
   funding_year?: number;
   status_filter?: string;
   include_funded?: boolean;
@@ -359,6 +368,39 @@ export interface FRNWatchResponse {
   success: boolean;
   watch: FRNWatch;
   message?: string;
+}
+
+export interface FRNReportHistory {
+  id: number;
+  user_id: number;
+  report_name: string;
+  watch_ids: number[];
+  watch_names: string[];
+  total_frns: number;
+  funded_count: number;
+  denied_count: number;
+  pending_count: number;
+  total_amount: number;
+  changes_detected: number;
+  email_sent: boolean;
+  sms_sent: boolean;
+  delivery_modes: string[];
+  recipient_email: string;
+  viewed_at: string | null;
+  generated_at: string;
+  has_html: boolean;
+}
+
+export interface FRNReportHistoryListResponse {
+  success: boolean;
+  reports: FRNReportHistory[];
+  total: number;
+}
+
+export interface FRNReportDetailResponse {
+  success: boolean;
+  report: FRNReportHistory;
+  html: string;
 }
 
 export interface FRNStatusSummaryResponse {
@@ -2810,6 +2852,20 @@ class ApiClient {
     return this.request(`/api/v1/frn-reports/${watchId}/toggle`, {
       method: 'POST',
     });
+  }
+
+  /**
+   * List past FRN report history
+   */
+  async getFRNReportHistory(limit: number = 20): Promise<ApiResponse<FRNReportHistoryListResponse>> {
+    return this.request(`/api/v1/frn-reports/history/list?limit=${limit}`);
+  }
+
+  /**
+   * Get a specific FRN report with HTML content
+   */
+  async getFRNReport(reportId: number): Promise<ApiResponse<FRNReportDetailResponse>> {
+    return this.request(`/api/v1/frn-reports/history/${reportId}`);
   }
 }
 
