@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
@@ -104,6 +104,45 @@ function VendorPortalPage() {
   const [frnPendingReason, setFrnPendingReason] = useState<string>("");
   const [selectedFRN, setSelectedFRN] = useState<FRNStatusRecord | null>(null);
   const [showFRNDetailModal, setShowFRNDetailModal] = useState(false);
+  const [frnTableSort, setFrnTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
+
+  // Sorted and filtered FRN data for table display
+  const sortedFrnData = useMemo(() => {
+    if (!frnStatusData?.frns?.length) return [];
+    
+    // First filter by status if a filter is selected
+    let filtered = frnStatusData.frns;
+    if (frnStatusFilter) {
+      filtered = frnStatusData.frns.filter(frn => {
+        const status = (frn.status || '').toLowerCase();
+        const filter = frnStatusFilter.toLowerCase();
+        if (filter === 'funded') return status.includes('funded') || status.includes('committed');
+        if (filter === 'denied') return status.includes('denied');
+        if (filter === 'pending') return status.includes('pending') || status.includes('review') || status.includes('wave');
+        return true;
+      });
+    }
+    
+    // Then sort if sorting is active
+    if (!frnTableSort) return filtered;
+    
+    const sorted = [...filtered].sort((a, b) => {
+      const aVal = ((a as any)[frnTableSort.field] || '').toString().toLowerCase();
+      const bVal = ((b as any)[frnTableSort.field] || '').toString().toLowerCase();
+      const cmp = aVal.localeCompare(bVal);
+      return frnTableSort.dir === 'asc' ? cmp : -cmp;
+    });
+    return sorted;
+  }, [frnStatusData?.frns, frnTableSort, frnStatusFilter]);
+
+  // Toggle FRN table sort
+  const toggleFrnTableSort = (field: string) => {
+    setFrnTableSort(prev => {
+      if (!prev || prev.field !== field) return { field, dir: 'asc' };
+      if (prev.dir === 'asc') return { field, dir: 'desc' };
+      return null;
+    });
+  };
   const [frnWatches, setFrnWatches] = useState<FRNWatch[]>([]);
   const [showCreateWatch, setShowCreateWatch] = useState(false);
   const [watchLoading, setWatchLoading] = useState(false);
@@ -1423,7 +1462,7 @@ function VendorPortalPage() {
                 )}
 
                 {/* FRN Table */}
-                {frnStatusData && frnStatusData.frns && frnStatusData.frns.length > 0 && (
+                {frnStatusData && sortedFrnData.length > 0 && (
                   <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div className="p-4 border-b border-slate-200">
                       <h3 className="font-semibold text-slate-900">FRN Details</h3>
@@ -1434,7 +1473,20 @@ function VendorPortalPage() {
                         <thead className="bg-slate-50 border-b border-slate-200">
                           <tr>
                             <th className="text-left px-4 py-3 font-medium text-slate-600">FRN</th>
-                            <th className="text-left px-4 py-3 font-medium text-slate-600">Entity</th>
+                            <th 
+                              className="text-left px-4 py-3 font-medium text-slate-600 cursor-pointer hover:bg-slate-100 select-none"
+                              onClick={() => toggleFrnTableSort('entity_name')}
+                            >
+                              <span className="inline-flex items-center gap-1">
+                                Entity
+                                {frnTableSort?.field === 'entity_name' && (
+                                  <span className="text-blue-600">{frnTableSort.dir === 'asc' ? '↑' : '↓'}</span>
+                                )}
+                                {frnTableSort?.field !== 'entity_name' && (
+                                  <span className="text-slate-300">↕</span>
+                                )}
+                              </span>
+                            </th>
                             <th className="text-left px-4 py-3 font-medium text-slate-600">Year</th>
                             <th className="text-left px-4 py-3 font-medium text-slate-600">Service Type</th>
                             <th className="text-center px-4 py-3 font-medium text-slate-600">Status</th>
@@ -1444,7 +1496,7 @@ function VendorPortalPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {frnStatusData.frns.slice(0, 100).map((frn, idx) => (
+                          {sortedFrnData.slice(0, 100).map((frn, idx) => (
                             <tr 
                               key={`${frn.frn}-${idx}`} 
                               className="hover:bg-slate-50 cursor-pointer transition-colors"
@@ -1497,9 +1549,9 @@ function VendorPortalPage() {
                           ))}
                         </tbody>
                       </table>
-                      {frnStatusData.frns.length > 100 && (
+                      {sortedFrnData.length > 100 && (
                         <div className="p-4 text-center text-sm text-slate-500 bg-slate-50 border-t border-slate-200">
-                          Showing first 100 of {frnStatusData.frns.length} FRNs
+                          Showing first 100 of {sortedFrnData.length} FRNs{frnStatusFilter && ` (filtered from ${frnStatusData?.frns?.length || 0} total)`}
                         </div>
                       )}
                     </div>
@@ -1507,7 +1559,7 @@ function VendorPortalPage() {
                 )}
 
                 {/* Empty State */}
-                {frnStatusData && frnStatusData.frns && frnStatusData.frns.length === 0 && (
+                {frnStatusData && sortedFrnData.length === 0 && (
                   <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
                     <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
                       <span className="text-3xl">📭</span>

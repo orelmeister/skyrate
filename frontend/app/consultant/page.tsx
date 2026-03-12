@@ -188,6 +188,7 @@ function ConsultantPortalPage() {
   const [frnSortBy, setFrnSortBy] = useState<string>("name");
   const [selectedFRN, setSelectedFRN] = useState<any>(null);
   const [showFRNDetailModal, setShowFRNDetailModal] = useState(false);
+  const [frnTableSort, setFrnTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
   
   // FRN Watch/Monitor state
   const [frnWatches, setFrnWatches] = useState<FRNWatch[]>([]);
@@ -304,6 +305,44 @@ function ConsultantPortalPage() {
     }
     return frns;
   }, [portfolioFrnData?.schools]);
+
+  // Sorted flattened FRNs for table display
+  const sortedFlattenedFrns = useMemo(() => {
+    if (!flattenedFrns.length) return [];
+    
+    // First filter by status if a filter is selected
+    let filtered = flattenedFrns;
+    if (portfolioFrnStatusFilter) {
+      filtered = flattenedFrns.filter(frn => {
+        const status = (frn.status || '').toLowerCase();
+        const filter = portfolioFrnStatusFilter.toLowerCase();
+        if (filter === 'funded') return status.includes('funded') || status.includes('committed');
+        if (filter === 'denied') return status.includes('denied');
+        if (filter === 'pending') return status.includes('pending') || status.includes('review') || status.includes('wave');
+        return true;
+      });
+    }
+    
+    // Then sort if sorting is active
+    if (!frnTableSort) return filtered;
+    
+    const sorted = [...filtered].sort((a, b) => {
+      const aVal = (a[frnTableSort.field] || '').toString().toLowerCase();
+      const bVal = (b[frnTableSort.field] || '').toString().toLowerCase();
+      const cmp = aVal.localeCompare(bVal);
+      return frnTableSort.dir === 'asc' ? cmp : -cmp;
+    });
+    return sorted;
+  }, [flattenedFrns, frnTableSort, portfolioFrnStatusFilter]);
+
+  // Toggle FRN table sort
+  const toggleFrnTableSort = (field: string) => {
+    setFrnTableSort(prev => {
+      if (!prev || prev.field !== field) return { field, dir: 'asc' };
+      if (prev.dir === 'asc') return { field, dir: 'desc' };
+      return null;
+    });
+  };
 
   // Toggle school expand/collapse
   const toggleSchoolExpand = (ben: string) => {
@@ -2183,7 +2222,7 @@ function ConsultantPortalPage() {
               )}
 
               {/* FRN Table — Same structure as vendor page */}
-              {flattenedFrns.length > 0 && (
+              {sortedFlattenedFrns.length > 0 && (
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                   <div className="p-4 border-b border-slate-200">
                     <h3 className="font-semibold text-slate-900">FRN Details</h3>
@@ -2194,7 +2233,20 @@ function ConsultantPortalPage() {
                       <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
                           <th className="text-left px-4 py-3 font-medium text-slate-600">FRN</th>
-                          <th className="text-left px-4 py-3 font-medium text-slate-600">Entity</th>
+                          <th 
+                            className="text-left px-4 py-3 font-medium text-slate-600 cursor-pointer hover:bg-slate-100 select-none"
+                            onClick={() => toggleFrnTableSort('entity_name')}
+                          >
+                            <span className="inline-flex items-center gap-1">
+                              Entity
+                              {frnTableSort?.field === 'entity_name' && (
+                                <span className="text-blue-600">{frnTableSort.dir === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                              {frnTableSort?.field !== 'entity_name' && (
+                                <span className="text-slate-300">↕</span>
+                              )}
+                            </span>
+                          </th>
                           <th className="text-left px-4 py-3 font-medium text-slate-600">Year</th>
                           <th className="text-left px-4 py-3 font-medium text-slate-600">Service Type</th>
                           <th className="text-center px-4 py-3 font-medium text-slate-600">Status</th>
@@ -2204,7 +2256,7 @@ function ConsultantPortalPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {flattenedFrns.slice(0, 100).map((frn, idx) => (
+                        {sortedFlattenedFrns.slice(0, 100).map((frn, idx) => (
                           <tr 
                             key={`${frn.frn}-${idx}`} 
                             className="hover:bg-slate-50 cursor-pointer transition-colors"
@@ -2257,9 +2309,9 @@ function ConsultantPortalPage() {
                         ))}
                       </tbody>
                     </table>
-                    {flattenedFrns.length > 100 && (
+                    {sortedFlattenedFrns.length > 100 && (
                       <div className="p-4 text-center text-sm text-slate-500 bg-slate-50 border-t border-slate-200">
-                        Showing first 100 of {flattenedFrns.length} FRNs
+                        Showing first 100 of {sortedFlattenedFrns.length} FRNs{portfolioFrnStatusFilter && ` (filtered from ${flattenedFrns.length} total)`}
                       </div>
                     )}
                   </div>
