@@ -18,6 +18,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { BreadcrumbJsonLd } from "@/components/seo/BreadcrumbJsonLd";
 
 interface DynamicPost {
   id: number;
@@ -146,6 +147,13 @@ export default function BlogPage() {
   const safePosts = Array.isArray(dynamicPosts) ? dynamicPosts : [];
 
   return (
+    <>
+    <BreadcrumbJsonLd
+      items={[
+        { name: "Home", url: "https://skyrate.ai" },
+        { name: "Blog", url: "https://skyrate.ai/blog" },
+      ]}
+    />
     <div className="min-h-screen bg-white">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
@@ -552,5 +560,6 @@ export default function BlogPage() {
         </div>
       </footer>
     </div>
+    </>
   );
 }

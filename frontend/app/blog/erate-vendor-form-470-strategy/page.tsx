@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { SafeEmail } from "@/components/SafeEmail";
+import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowRight, ArrowLeft, Clock, Sparkles, BookOpen, Target, MapPin, Zap, Filter, Users, TrendingUp, FileText, CheckCircle, AlertTriangle, Search, DollarSign, BarChart3, Globe } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -20,6 +21,13 @@ export const metadata: Metadata = {
 
 export default function ErateVendorForm470StrategyPage() {
   return (
+    <>
+    <BlogPostJsonLd
+      title="E-Rate Vendor Strategy: Finding Form 470 Opportunities"
+      description="Learn proven strategies for E-Rate vendors to find and win Form 470 opportunities. Discover how to track postings, filter by manufacturer, and win more bids."
+      slug="erate-vendor-form-470-strategy"
+      datePublished="2026-02-16T00:00:00Z"
+    />
     <div className="min-h-screen bg-white">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
@@ -507,5 +515,6 @@ export default function ErateVendorForm470StrategyPage() {
         </div>
       </footer>
     </div>
+    </>
   );
 }

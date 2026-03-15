@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { SafeEmail } from "@/components/SafeEmail";
+import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowRight, ArrowLeft, Clock, Sparkles, BookOpen, Monitor, BarChart3, Zap, Shield, Users, Brain, FileText, CheckCircle, AlertTriangle, Search, TrendingUp } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -20,6 +21,13 @@ export const metadata: Metadata = {
 
 export default function ErateConsultantSoftwareGuidePage() {
   return (
+    <>
+    <BlogPostJsonLd
+      title="E-Rate Consultant Software: What to Look For"
+      description="Find the best E-Rate consultant software. Compare features like FRN tracking, denial analysis, appeal generation, and portfolio management to grow your practice."
+      slug="erate-consultant-software-guide"
+      datePublished="2026-02-16T00:00:00Z"
+    />
     <div className="min-h-screen bg-white">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
@@ -497,5 +505,6 @@ export default function ErateConsultantSoftwareGuidePage() {
         </div>
       </footer>
     </div>
+    </>
   );
 }

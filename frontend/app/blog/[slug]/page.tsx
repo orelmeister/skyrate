@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, notFound } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import {
   ArrowRight,
   ArrowLeft,
@@ -72,6 +73,15 @@ export default function DynamicBlogPost() {
   }
 
   return (
+    <>
+      <BlogPostJsonLd
+        title={post.title}
+        description={post.meta_description || post.title}
+        slug={slug}
+        datePublished={post.published_at || new Date().toISOString()}
+        dateModified={post.updated_at || post.published_at || new Date().toISOString()}
+        imageUrl={post.has_hero_image ? `${apiBaseUrl}/api/v1/blog/posts/${slug}/hero-image` : undefined}
+      />
     <div className="min-h-screen bg-white">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
@@ -223,5 +233,6 @@ export default function DynamicBlogPost() {
         </div>
       </footer>
     </div>
+    </>
   );
 }

@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { SafeEmail } from "@/components/SafeEmail";
+import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowRight, ArrowLeft, FileText, AlertTriangle, Search, Clock, CheckCircle, Sparkles, BookOpen, Shield, XCircle, Ban, Calendar, DollarSign } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -20,6 +21,13 @@ export const metadata: Metadata = {
 
 export default function TopErateDenialReasonsPage() {
   return (
+    <>
+    <BlogPostJsonLd
+      title="Top 10 E-Rate Denial Reasons and How to Fix Them"
+      description="Discover the top 10 reasons E-Rate applications get denied and learn actionable strategies to fix each one. Prevent future denials and recover lost funding."
+      slug="top-erate-denial-reasons"
+      datePublished="2026-02-16T00:00:00Z"
+    />
     <div className="min-h-screen bg-white">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
@@ -481,5 +489,6 @@ export default function TopErateDenialReasonsPage() {
         </div>
       </footer>
     </div>
+    </>
   );
 }

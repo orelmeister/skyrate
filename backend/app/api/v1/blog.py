@@ -11,11 +11,14 @@ from sqlalchemy import desc
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
+import logging
 
 from ...core.database import get_db
 from ...core.security import get_current_user, require_role
 from ...models.blog import BlogPost, BlogStatus
 from ...models.user import User
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/blog", tags=["Blog"])
 
@@ -28,6 +31,8 @@ class BlogGenerateRequest(BaseModel):
     additional_instructions: Optional[str] = ""
     preferred_model: Optional[str] = "gemini"
     auto_publish: Optional[bool] = True
+    use_gsc_data: Optional[bool] = False
+    site_url: Optional[str] = None
 
 
 class BlogCreateRequest(BaseModel):
@@ -322,12 +327,27 @@ async def admin_generate_blog(
     """Generate a blog post using AI (admin). Creates as draft for review."""
     from ...services.blog_service import generate_blog_with_ai, slugify
     
+    # Fetch GSC SEO brief if requested
+    seo_brief = ""
+    if data.use_gsc_data:
+        try:
+            from ...services.gsc_service import generate_seo_brief
+            brief = generate_seo_brief(
+                site_url=data.site_url or "sc-domain:skyrate.ai",
+                topic=data.topic,
+            )
+            if brief.get("available"):
+                seo_brief = brief["brief_text"]
+        except Exception as e:
+            logger.warning(f"GSC data fetch failed, proceeding without SEO brief: {e}")
+    
     try:
         result = await generate_blog_with_ai(
             topic=data.topic,
             target_keyword=data.target_keyword,
             additional_instructions=data.additional_instructions or "",
             preferred_model=data.preferred_model or "gemini",
+            seo_brief=seo_brief,
         )
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))

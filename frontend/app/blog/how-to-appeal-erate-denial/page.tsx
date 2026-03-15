@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { SafeEmail } from "@/components/SafeEmail";
+import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowRight, ArrowLeft, FileText, AlertTriangle, Search, Clock, CheckCircle, Sparkles, BookOpen, Scale } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -20,6 +21,13 @@ export const metadata: Metadata = {
 
 export default function HowToAppealErateDenialPage() {
   return (
+    <>
+    <BlogPostJsonLd
+      title="How to Appeal an E-Rate Denial: Step-by-Step Guide"
+      description="Learn how to appeal an E-Rate denial with our comprehensive guide. Understand denial codes, build your case, cite FCC orders, and submit a winning appeal letter."
+      slug="how-to-appeal-erate-denial"
+      datePublished="2026-02-16T00:00:00Z"
+    />
     <div className="min-h-screen bg-white">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
@@ -486,5 +494,6 @@ export default function HowToAppealErateDenialPage() {
         </div>
       </footer>
     </div>
+    </>
   );
 }

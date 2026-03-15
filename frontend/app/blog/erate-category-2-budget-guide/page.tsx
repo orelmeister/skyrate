@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { SafeEmail } from "@/components/SafeEmail";
+import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowRight, ArrowLeft, Clock, Sparkles, BookOpen, DollarSign, Calculator, Laptop, Wifi, Server, CheckCircle, AlertTriangle, TrendingUp, Users } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -20,6 +21,13 @@ export const metadata: Metadata = {
 
 export default function ErateCategory2BudgetGuidePage() {
   return (
+    <>
+    <BlogPostJsonLd
+      title="E-Rate Category 2 Budget: Everything You Need to Know"
+      description="Master E-Rate Category 2 budgets. Learn how C2 budgets are calculated, which equipment qualifies, budget cycles, and how to maximize your funding allocation."
+      slug="erate-category-2-budget-guide"
+      datePublished="2026-02-16T00:00:00Z"
+    />
     <div className="min-h-screen bg-white">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
@@ -519,5 +527,6 @@ export default function ErateCategory2BudgetGuidePage() {
         </div>
       </footer>
     </div>
+    </>
   );
 }

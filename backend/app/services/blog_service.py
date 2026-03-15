@@ -83,13 +83,14 @@ Do NOT include any markdown — output pure HTML only.
 """
 
 
-def generate_blog_prompt(topic: str, target_keyword: str, additional_instructions: str = "") -> str:
+def generate_blog_prompt(topic: str, target_keyword: str, additional_instructions: str = "", seo_brief: str = "") -> str:
     """Build the user prompt for blog generation."""
+    seo_section = f"\n\n{seo_brief}\n" if seo_brief else ""
     return f"""Write a blog post for SkyRate AI's website.
 
 **Topic:** {topic}
 **Target SEO Keyword:** {target_keyword}
-{f"**Additional Instructions:** {additional_instructions}" if additional_instructions else ""}
+{f"**Additional Instructions:** {additional_instructions}" if additional_instructions else ""}{seo_section}
 
 Remember:
 - 800-1200 words of HTML content
@@ -122,7 +123,8 @@ async def generate_blog_with_ai(
     topic: str,
     target_keyword: str,
     additional_instructions: str = "",
-    preferred_model: str = "gemini"
+    preferred_model: str = "gemini",
+    seo_brief: str = "",
 ) -> Dict[str, Any]:
     """
     Generate a blog post using AI.
@@ -133,7 +135,7 @@ async def generate_blog_with_ai(
     from utils.ai_models import AIModelManager
     
     manager = AIModelManager()
-    user_prompt = generate_blog_prompt(topic, target_keyword, additional_instructions)
+    user_prompt = generate_blog_prompt(topic, target_keyword, additional_instructions, seo_brief)
     
     # Also ask AI to suggest title and meta description
     full_prompt = f"""{user_prompt}

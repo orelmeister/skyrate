@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { SafeEmail } from "@/components/SafeEmail";
+import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowRight, ArrowLeft, FileText, Search, Clock, CheckCircle, Sparkles, BookOpen, Users, ShoppingCart, Target, BarChart3, Filter } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -20,6 +21,13 @@ export const metadata: Metadata = {
 
 export default function ErateForm470GuidePage() {
   return (
+    <>
+    <BlogPostJsonLd
+      title="E-Rate Form 470 Guide 2026 [Process & Exact Deadlines]"
+      description="Complete 2026 guide to E-Rate Form 470. Learn the exact deadlines, how to search filings, respond to opportunities, and win new E-Rate business."
+      slug="erate-form-470-guide"
+      datePublished="2026-02-16T00:00:00Z"
+    />
     <div className="min-h-screen bg-white">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
@@ -512,5 +520,6 @@ export default function ErateForm470GuidePage() {
         </div>
       </footer>
     </div>
+    </>
   );
 }
