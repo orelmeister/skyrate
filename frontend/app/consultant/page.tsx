@@ -8,6 +8,8 @@ import { useVerificationGuard } from "@/lib/use-verification-guard";
 import { api, ConsultantSchool, ConsultantProfile, AppealRecord, FRNWatch, FRNReportHistory } from "@/lib/api";
 import { SearchResultsTable } from "@/components/SearchResultsTable";
 import { AppealChat } from "@/components/AppealChat";
+import { TableExportBar } from "@/components/TableExportBar";
+import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { useTabParam } from "@/hooks/useTabParam";
 
 const CONSULTANT_TABS = ["dashboard", "schools", "funding", "frn-status", "appeals", "service-search", "settings"] as const;
@@ -209,6 +211,13 @@ function ConsultantPortalPage() {
   const [serviceSearchResults, setServiceSearchResults] = useState<any[]>([]);
   const [serviceSearchLoading, setServiceSearchLoading] = useState(false);
   const [serviceSearchBensSearched, setServiceSearchBensSearched] = useState(0);
+
+  // Row selection for CSV export
+  const [selectedSchoolBens, setSelectedSchoolBens] = useState<Set<string>>(new Set());
+  const [selectedConsultantFrns, setSelectedConsultantFrns] = useState<Set<string>>(new Set());
+  const [selectedServiceSearchRows, setSelectedServiceSearchRows] = useState<Set<string>>(new Set());
+  const [selectedDeniedFrns, setSelectedDeniedFrns] = useState<Set<string>>(new Set());
+  const [selectedPortfolioFrns, setSelectedPortfolioFrns] = useState<Set<string>>(new Set());
 
   // Query state
   const [queryInput, setQueryInput] = useState("");
@@ -843,6 +852,61 @@ function ConsultantPortalPage() {
       a.click();
       URL.revokeObjectURL(url);
     }
+  };
+
+  // CSV export handlers
+  const handleExportSchools = () => {
+    const source = selectedSchoolBens.size > 0
+      ? filteredSchools.filter(s => selectedSchoolBens.has(s.ben))
+      : filteredSchools;
+    const rows = source.map(s => ({
+      ben: s.ben,
+      name: s.school_name || s.name || '',
+      state: s.state || '',
+      city: s.city || '',
+      status: s.status || '',
+      entity_type: s.entity_type || '',
+      discount_rate: s.discount_rate ?? '',
+    }));
+    downloadCsv(csvFilename('my_schools'), ['ben', 'name', 'state', 'city', 'status', 'entity_type', 'discount_rate'], rows);
+  };
+
+  const handleExportDeniedApps = () => {
+    const visible = deniedApplications.filter(app => !app.has_appeal);
+    const source = selectedDeniedFrns.size > 0
+      ? visible.filter(app => selectedDeniedFrns.has(app.frn))
+      : visible;
+    const rows = source.map(app => ({
+      frn: app.frn,
+      ben: app.ben,
+      school_name: app.school_name,
+      funding_year: app.funding_year,
+      status: app.status,
+      service_type: app.service_type,
+      amount: app.amount_requested,
+      denial_reason: app.denial_reason || '',
+      appeal_deadline: app.appeal_deadline || '',
+      days_remaining: app.days_remaining ?? '',
+    }));
+    downloadCsv(csvFilename('denied_applications'), ['frn', 'ben', 'school_name', 'funding_year', 'status', 'service_type', 'amount', 'denial_reason', 'appeal_deadline', 'days_remaining'], rows);
+  };
+
+  const handleExportPortfolioFrns = () => {
+    const source = selectedPortfolioFrns.size > 0
+      ? sortedFlattenedFrns.filter(f => selectedPortfolioFrns.has(f.frn))
+      : sortedFlattenedFrns;
+    const rows = source.map(f => ({
+      frn: f.frn,
+      entity: f.entity_name,
+      ben: f.ben,
+      state: f.state,
+      year: f.funding_year,
+      service_type: f.service_type,
+      status: f.status,
+      commitment_amount: f.commitment_amount,
+      disbursed_amount: f.disbursed_amount,
+    }));
+    downloadCsv(csvFilename('portfolio_frns'), ['frn', 'entity', 'ben', 'state', 'year', 'service_type', 'status', 'commitment_amount', 'disbursed_amount'], rows);
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1629,10 +1693,30 @@ function ConsultantPortalPage() {
               </div>
 
               {/* Schools Table */}
-              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+              <TableExportBar
+                selectedCount={selectedSchoolBens.size}
+                totalCount={filteredSchools.length}
+                onExportCsv={handleExportSchools}
+                onClearSelection={() => setSelectedSchoolBens(new Set())}
+              />
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden mt-2">
                 <table className="w-full">
                   <thead className="bg-slate-50">
                     <tr>
+                      <th className="px-3 py-4 w-10">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 rounded border-slate-300"
+                          checked={filteredSchools.length > 0 && selectedSchoolBens.size === filteredSchools.length}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedSchoolBens(new Set(filteredSchools.map(s => s.ben)));
+                            } else {
+                              setSelectedSchoolBens(new Set());
+                            }
+                          }}
+                        />
+                      </th>
                       <th 
                         className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase cursor-pointer hover:bg-slate-100 transition-colors"
                         onClick={() => toggleSchoolsTableSort('school_name')}
@@ -1667,6 +1751,21 @@ function ConsultantPortalPage() {
                       
                       return (
                         <tr key={school.id} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => openSchoolDetail(school)}>
+                          <td className="px-3 py-4 w-10" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4 rounded border-slate-300"
+                              checked={selectedSchoolBens.has(school.ben)}
+                              onChange={() => {
+                                setSelectedSchoolBens(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(school.ben)) next.delete(school.ben);
+                                  else next.add(school.ben);
+                                  return next;
+                                });
+                              }}
+                            />
+                          </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">🏫</div>
@@ -1901,6 +2000,12 @@ function ConsultantPortalPage() {
                     </div>
                   ) : (
                     <div className="space-y-3">
+                      <TableExportBar
+                        selectedCount={selectedDeniedFrns.size}
+                        totalCount={deniedApplications.filter(app => !app.has_appeal).length}
+                        onExportCsv={handleExportDeniedApps}
+                        onClearSelection={() => setSelectedDeniedFrns(new Set())}
+                      />
                       {deniedApplications.filter(app => !app.has_appeal).map((app) => {
                         // Urgency badge colors
                         const urgencyStyles = {
@@ -1916,7 +2021,21 @@ function ConsultantPortalPage() {
                           key={app.frn}
                           className="flex items-center justify-between p-4 bg-gradient-to-r from-red-50 to-white border border-red-100 rounded-xl hover:shadow-md transition-all"
                         >
-                          <div className="flex-1">
+                          <div className="flex items-center gap-3 flex-1">
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4 rounded border-slate-300 flex-shrink-0"
+                              checked={selectedDeniedFrns.has(app.frn)}
+                              onChange={() => {
+                                setSelectedDeniedFrns(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(app.frn)) next.delete(app.frn);
+                                  else next.add(app.frn);
+                                  return next;
+                                });
+                              }}
+                            />
+                            <div className="flex-1">
                             <div className="flex items-center gap-3 mb-1">
                               <span className="font-mono text-sm font-medium text-slate-700">FRN: {app.frn}</span>
                               <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full font-medium">
@@ -2009,6 +2128,7 @@ function ConsultantPortalPage() {
                               </>
                             )}
                           </button>
+                          </div>
                         </div>
                       )})}
                       
@@ -2277,7 +2397,14 @@ function ConsultantPortalPage() {
 
               {/* FRN Table — Same structure as vendor page */}
               {sortedFlattenedFrns.length > 0 && (
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <>
+                <TableExportBar
+                  selectedCount={selectedPortfolioFrns.size}
+                  totalCount={sortedFlattenedFrns.length}
+                  onExportCsv={handleExportPortfolioFrns}
+                  onClearSelection={() => setSelectedPortfolioFrns(new Set())}
+                />
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mt-2">
                   <div className="p-4 border-b border-slate-200">
                     <h3 className="font-semibold text-slate-900">FRN Details</h3>
                     <p className="text-sm text-slate-600">Detailed status for each funding request across your portfolio</p>
@@ -2286,6 +2413,20 @@ function ConsultantPortalPage() {
                     <table className="w-full text-sm">
                       <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
+                          <th className="px-3 py-3 w-10">
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4 rounded border-slate-300"
+                              checked={sortedFlattenedFrns.length > 0 && selectedPortfolioFrns.size === sortedFlattenedFrns.slice(0, 100).length}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedPortfolioFrns(new Set(sortedFlattenedFrns.slice(0, 100).map(f => f.frn)));
+                                } else {
+                                  setSelectedPortfolioFrns(new Set());
+                                }
+                              }}
+                            />
+                          </th>
                           <th className="text-left px-4 py-3 font-medium text-slate-600">FRN</th>
                           <th 
                             className="text-left px-4 py-3 font-medium text-slate-600 cursor-pointer hover:bg-slate-100 select-none"
@@ -2316,6 +2457,21 @@ function ConsultantPortalPage() {
                             className="hover:bg-slate-50 cursor-pointer transition-colors"
                             onClick={() => { setSelectedFRN(frn); setShowFRNDetailModal(true); }}
                           >
+                            <td className="px-3 py-3 w-10" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                className="w-4 h-4 rounded border-slate-300"
+                                checked={selectedPortfolioFrns.has(frn.frn)}
+                                onChange={() => {
+                                  setSelectedPortfolioFrns(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(frn.frn)) next.delete(frn.frn);
+                                    else next.add(frn.frn);
+                                    return next;
+                                  });
+                                }}
+                              />
+                            </td>
                             <td className="px-4 py-3">
                               <div className="font-mono text-xs text-slate-900">{frn.frn}</div>
                               <div className="text-xs text-slate-500">{frn.application_number}</div>
@@ -2370,9 +2526,8 @@ function ConsultantPortalPage() {
                     )}
                   </div>
                 </div>
+                </>
               )}
-
-              {/* Empty State — Prompt user to search */}
               {!portfolioFrnLoading && !portfolioFrnData && (
                 <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
                   <span className="text-4xl mb-4 block">📈</span>

@@ -8,6 +8,8 @@ import { useVerificationGuard } from "@/lib/use-verification-guard";
 import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse, FRNStatusResponse, FRNStatusSummaryResponse, FRNStatusRecord, Form470Lead, Form470LeadsResponse, Form470DetailResponse, SavedLead, EnrichedContactData, FRNWatch, CreateWatchRequest, FRNReportHistory } from "@/lib/api";
 import { useTabParam } from "@/hooks/useTabParam";
 import PredictedLeadsTab from "@/components/PredictedLeadsTab";
+import { TableExportBar } from "@/components/TableExportBar";
+import { downloadCsv, csvFilename } from "@/lib/csv-export";
 
 const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "470-leads", "predicted-leads", "competitive", "search", "leads", "settings"] as const;
 type VendorTab = typeof VENDOR_TABS[number];
@@ -223,6 +225,15 @@ function VendorPortalPage() {
   
   // Form 470 Leads selection for export
   const [selectedForm470Leads, setSelectedForm470Leads] = useState<Set<string>>(new Set());
+  
+  // FRN Status selection for export
+  const [selectedFrns, setSelectedFrns] = useState<Set<string>>(new Set());
+  
+  // Serviced Entities selection for export
+  const [selectedServicedEntities, setSelectedServicedEntities] = useState<Set<string>>(new Set());
+  
+  // Form 471 Records selection for export
+  const [selectedForm471Records, setSelectedForm471Records] = useState<Set<string>>(new Set());
   
   // Payment guard - check if user needs to complete payment setup
   const [checkingPayment, setCheckingPayment] = useState(true);
@@ -748,20 +759,27 @@ function VendorPortalPage() {
       ? form470Leads.filter(l => selectedForm470Leads.has(l.application_number))
       : form470Leads;
     
-    const csv = [
-      "Application #,Funding Year,BEN,Entity Name,State,City,Type,Status,Contact Name,Contact Email,Contact Phone,Posted Date,Contract Date,Categories,Services,Manufacturers",
-      ...leadsToExport.map(l => 
-        `"${l.application_number}","${l.funding_year}","${l.ben}","${l.entity_name?.replace(/"/g, '""') || ''}","${l.state}","${l.city}","${l.applicant_type}","${l.status}","${l.contact_name?.replace(/"/g, '""') || ''}","${l.contact_email || ''}","${l.contact_phone || ''}","${l.posting_date || ''}","${l.allowable_contract_date || ''}","${l.categories?.join('; ') || ''}","${l.service_types?.join('; ') || ''}","${l.manufacturers?.join('; ') || ''}"`
-      )
-    ].join("\n");
+    const columns = ['application_number', 'funding_year', 'ben', 'entity_name', 'state', 'city', 'applicant_type', 'status', 'contact_name', 'contact_email', 'contact_phone', 'posting_date', 'allowable_contract_date', 'categories', 'service_types', 'manufacturers'];
+    const rows = leadsToExport.map(l => ({
+      application_number: l.application_number,
+      funding_year: l.funding_year,
+      ben: l.ben,
+      entity_name: l.entity_name || '',
+      state: l.state,
+      city: l.city,
+      applicant_type: l.applicant_type,
+      status: l.status,
+      contact_name: l.contact_name || '',
+      contact_email: l.contact_email || '',
+      contact_phone: l.contact_phone || '',
+      posting_date: l.posting_date || '',
+      allowable_contract_date: l.allowable_contract_date || '',
+      categories: l.categories?.join('; ') || '',
+      service_types: l.service_types?.join('; ') || '',
+      manufacturers: l.manufacturers?.join('; ') || '',
+    }));
     
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `form470_leads_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadCsv(csvFilename('form470_leads'), columns, rows);
   };
 
   const exportSavedLeads = async () => {
@@ -942,26 +960,89 @@ function VendorPortalPage() {
   };
 
   const handleExport = async () => {
-    if (selectedSchools.size === 0) {
-      alert("Please select at least one school to export");
-      return;
-    }
+    const selected = selectedSchools.size > 0
+      ? searchResults.filter(s => selectedSchools.has(s.ben))
+      : searchResults;
     
-    // For now, just download as CSV
-    const selected = searchResults.filter(s => selectedSchools.has(s.ben));
-    const csv = [
-      "BEN,Name,State,City,Status,Funding Amount,Service Type",
-      ...selected.map(s => 
-        `${s.ben},"${s.name}",${s.state},"${s.city || ''}",${s.status},${s.funding_amount},${s.service_type}`
-      )
-    ].join("\n");
+    if (selected.length === 0) return;
     
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `leads_export_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
+    const columns = ['ben', 'name', 'state', 'city', 'status', 'funding_amount', 'service_type'];
+    const rows = selected.map(s => ({
+      ben: s.ben,
+      name: s.name,
+      state: s.state,
+      city: s.city || '',
+      status: s.status,
+      funding_amount: s.funding_amount,
+      service_type: s.service_type,
+    }));
+    
+    downloadCsv(csvFilename('leads_export'), columns, rows);
+  };
+
+  // FRN Status export
+  const exportFrnData = () => {
+    const data = selectedFrns.size > 0
+      ? sortedFrnData.filter(f => selectedFrns.has(f.frn))
+      : sortedFrnData;
+    
+    const columns = ['frn', 'entity_name', 'ben', 'state', 'funding_year', 'service_type', 'status', 'commitment_amount', 'disbursed_amount', 'invoicing_mode'];
+    const rows = data.map(f => ({
+      frn: f.frn,
+      entity_name: f.entity_name,
+      ben: f.ben,
+      state: f.state,
+      funding_year: f.funding_year,
+      service_type: f.service_type,
+      status: f.status || '',
+      commitment_amount: f.commitment_amount,
+      disbursed_amount: f.disbursed_amount,
+      invoicing_mode: f.invoicing_mode || '',
+    }));
+    
+    downloadCsv(csvFilename('frn_status'), columns, rows);
+  };
+
+  // Serviced Entities export
+  const exportServicedEntities = () => {
+    const data = selectedServicedEntities.size > 0
+      ? sortedServicedEntities.filter(e => selectedServicedEntities.has(e.ben))
+      : sortedServicedEntities;
+    
+    const columns = ['ben', 'organization_name', 'state', 'current_cat1', 'current_cat2', 'total_amount', 'frn_count'];
+    const rows = data.map(e => ({
+      ben: e.ben,
+      organization_name: e.organization_name,
+      state: e.state,
+      current_cat1: e.current_cat1 || 0,
+      current_cat2: e.current_cat2 || 0,
+      total_amount: e.total_amount || 0,
+      frn_count: e.frn_count,
+    }));
+    
+    downloadCsv(csvFilename('serviced_entities'), columns, rows);
+  };
+
+  // Form 471 Records export
+  const exportForm471Records = () => {
+    if (!form471Data?.records) return;
+    const data = selectedForm471Records.size > 0
+      ? form471Data.records.filter(r => selectedForm471Records.has(r.frn))
+      : form471Data.records;
+    
+    const columns = ['funding_year', 'frn', 'service_provider_name', 'service_provider_spin', 'service_type', 'category', 'committed_amount', 'frn_status'];
+    const rows = data.map(r => ({
+      funding_year: r.funding_year,
+      frn: r.frn,
+      service_provider_name: r.service_provider_name,
+      service_provider_spin: r.service_provider_spin,
+      service_type: r.service_type,
+      category: r.category,
+      committed_amount: r.committed_amount,
+      frn_status: r.frn_status || '',
+    }));
+    
+    downloadCsv(csvFilename('form471_records'), columns, rows);
   };
 
   const handleLogout = () => {
@@ -1529,6 +1610,13 @@ function VendorPortalPage() {
 
                 {/* FRN Table */}
                 {frnStatusData && sortedFrnData.length > 0 && (
+                  <div className="space-y-2">
+                    <TableExportBar
+                      selectedCount={selectedFrns.size}
+                      totalCount={sortedFrnData.length}
+                      onExportCsv={exportFrnData}
+                      onClearSelection={() => setSelectedFrns(new Set())}
+                    />
                   <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div className="p-4 border-b border-slate-200">
                       <h3 className="font-semibold text-slate-900">FRN Details</h3>
@@ -1538,6 +1626,20 @@ function VendorPortalPage() {
                       <table className="w-full text-sm">
                         <thead className="bg-slate-50 border-b border-slate-200">
                           <tr>
+                            <th className="px-4 py-3 w-10">
+                              <input
+                                type="checkbox"
+                                checked={selectedFrns.size === sortedFrnData.length && sortedFrnData.length > 0}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedFrns(new Set(sortedFrnData.map(f => f.frn)));
+                                  } else {
+                                    setSelectedFrns(new Set());
+                                  }
+                                }}
+                                className="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                              />
+                            </th>
                             <th className="text-left px-4 py-3 font-medium text-slate-600">FRN</th>
                             <th 
                               className="text-left px-4 py-3 font-medium text-slate-600 cursor-pointer hover:bg-slate-100 select-none"
@@ -1565,9 +1667,24 @@ function VendorPortalPage() {
                           {sortedFrnData.slice(0, 100).map((frn, idx) => (
                             <tr 
                               key={`${frn.frn}-${idx}`} 
-                              className="hover:bg-slate-50 cursor-pointer transition-colors"
+                              className={`hover:bg-slate-50 cursor-pointer transition-colors ${selectedFrns.has(frn.frn) ? 'bg-teal-50' : ''}`}
                               onClick={() => { setSelectedFRN(frn); setShowFRNDetailModal(true); }}
                             >
+                              <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedFrns.has(frn.frn)}
+                                  onChange={() => {
+                                    setSelectedFrns(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(frn.frn)) next.delete(frn.frn);
+                                      else next.add(frn.frn);
+                                      return next;
+                                    });
+                                  }}
+                                  className="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                                />
+                              </td>
                               <td className="px-4 py-3">
                                 <div className="font-mono text-xs text-slate-900">{frn.frn}</div>
                                 <div className="text-xs text-slate-500">{frn.application_number}</div>
@@ -1621,6 +1738,7 @@ function VendorPortalPage() {
                         </div>
                       )}
                     </div>
+                  </div>
                   </div>
                 )}
 
@@ -2094,49 +2212,27 @@ function VendorPortalPage() {
 
             {/* Results Summary */}
             {form470TotalLeads > 0 && (
-              <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">✅</span>
-                  <div>
-                    <div className="font-medium text-green-800">Found {form470TotalLeads} Form 470 Leads</div>
-                    <div className="text-sm text-green-600">
-                      {form470Filters.manufacturer && `Manufacturer: ${form470Filters.manufacturer} • `}
-                      {form470Filters.state && `State: ${form470Filters.state} • `}
-                      {form470Filters.category && `Category ${form470Filters.category}`}
-                      {selectedForm470Leads.size > 0 && ` • ${selectedForm470Leads.size} selected`}
-                    </div>
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
+                <div>
+                  <div className="font-medium text-green-800">Found {form470TotalLeads} Form 470 Leads</div>
+                  <div className="text-sm text-green-600">
+                    {form470Filters.manufacturer && `Manufacturer: ${form470Filters.manufacturer} • `}
+                    {form470Filters.state && `State: ${form470Filters.state} • `}
+                    {form470Filters.category && `Category ${form470Filters.category}`}
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {selectedForm470Leads.size > 0 && selectedForm470Leads.size < form470Leads.length && (
-                    <button
-                      onClick={selectAllForm470Leads}
-                      className="px-3 py-1.5 text-sm text-green-700 hover:bg-green-100 rounded-lg transition-colors"
-                    >
-                      Select All
-                    </button>
-                  )}
-                  {selectedForm470Leads.size > 0 && (
-                    <button
-                      onClick={clearForm470Selection}
-                      className="px-3 py-1.5 text-sm text-green-700 hover:bg-green-100 rounded-lg transition-colors"
-                    >
-                      Clear Selection
-                    </button>
-                  )}
-                  <button
-                    onClick={exportSelectedForm470Leads}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-                  >
-                    <span>📥</span>
-                    {selectedForm470Leads.size > 0 ? `Export (${selectedForm470Leads.size})` : 'Export All'}
-                  </button>
                 </div>
               </div>
             )}
 
             {/* Results Table */}
             {form470Leads.length > 0 && (
+              <div className="space-y-2">
+              <TableExportBar
+                selectedCount={selectedForm470Leads.size}
+                totalCount={form470Leads.length}
+                onExportCsv={exportSelectedForm470Leads}
+                onClearSelection={clearForm470Selection}
+              />
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -2251,6 +2347,7 @@ function VendorPortalPage() {
                     </tbody>
                   </table>
                 </div>
+              </div>
               </div>
             )}
 
@@ -2429,6 +2526,13 @@ function VendorPortalPage() {
 
                 {/* FRN Details */}
                 {form471Data.records && form471Data.records.length > 0 && (
+                  <div className="space-y-2">
+                  <TableExportBar
+                    selectedCount={selectedForm471Records.size}
+                    totalCount={form471Data.records.length}
+                    onExportCsv={exportForm471Records}
+                    onClearSelection={() => setSelectedForm471Records(new Set())}
+                  />
                   <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div className="p-4 border-b border-slate-200">
                       <h3 className="font-semibold text-slate-900">FRN Details</h3>
@@ -2438,6 +2542,20 @@ function VendorPortalPage() {
                       <table className="w-full text-sm">
                         <thead className="bg-slate-50 border-b border-slate-200">
                           <tr>
+                            <th className="px-4 py-3 w-10">
+                              <input
+                                type="checkbox"
+                                checked={selectedForm471Records.size === form471Data.records.length && form471Data.records.length > 0}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedForm471Records(new Set(form471Data!.records.map(r => r.frn)));
+                                  } else {
+                                    setSelectedForm471Records(new Set());
+                                  }
+                                }}
+                                className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                              />
+                            </th>
                             <th className="text-left px-4 py-3 font-medium text-slate-600">Year</th>
                             <th className="text-left px-4 py-3 font-medium text-slate-600">FRN</th>
                             <th className="text-left px-4 py-3 font-medium text-slate-600">Vendor</th>
@@ -2449,7 +2567,22 @@ function VendorPortalPage() {
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {form471Data.records.slice(0, 50).map((record, idx) => (
-                            <tr key={idx} className="hover:bg-slate-50">
+                            <tr key={idx} className={`hover:bg-slate-50 ${selectedForm471Records.has(record.frn) ? 'bg-purple-50' : ''}`}>
+                              <td className="px-4 py-3">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedForm471Records.has(record.frn)}
+                                  onChange={() => {
+                                    setSelectedForm471Records(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(record.frn)) next.delete(record.frn);
+                                      else next.add(record.frn);
+                                      return next;
+                                    });
+                                  }}
+                                  className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                                />
+                              </td>
                               <td className="px-4 py-3 text-slate-900">{record.funding_year}</td>
                               <td className="px-4 py-3 font-mono text-xs text-slate-600">{record.frn}</td>
                               <td className="px-4 py-3">
@@ -2666,21 +2799,18 @@ function VendorPortalPage() {
 
             {/* Search Results */}
             {searchResults.length > 0 && (
+              <div className="space-y-2">
+              <TableExportBar
+                selectedCount={selectedSchools.size}
+                totalCount={searchResults.length}
+                onExportCsv={handleExport}
+                onClearSelection={() => setSelectedSchools(new Set())}
+              />
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+                <div className="p-4 border-b border-slate-200">
                   <h2 className="text-lg font-semibold text-slate-900">
                     Results ({searchResults.length})
                   </h2>
-                  <button
-                    onClick={handleExport}
-                    disabled={selectedSchools.size === 0}
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:shadow-lg hover:shadow-purple-200 transition-all disabled:opacity-50 font-medium"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                    Export ({selectedSchools.size})
-                  </button>
                 </div>
                 
                 <div className="overflow-x-auto">
@@ -2763,6 +2893,7 @@ function VendorPortalPage() {
                     </tbody>
                   </table>
                 </div>
+              </div>
               </div>
             )}
 
@@ -3143,6 +3274,13 @@ function VendorPortalPage() {
 
             {/* Serviced Entities Table */}
             {profile?.spin && (
+              <div className="space-y-2">
+              <TableExportBar
+                selectedCount={selectedServicedEntities.size}
+                totalCount={servicedEntities.length}
+                onExportCsv={exportServicedEntities}
+                onClearSelection={() => setSelectedServicedEntities(new Set())}
+              />
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="p-4 border-b border-slate-200">
                   <h2 className="text-lg font-semibold text-slate-900">
@@ -3163,6 +3301,20 @@ function VendorPortalPage() {
                     <table className="w-full">
                       <thead className="bg-slate-50">
                         <tr>
+                          <th className="px-4 py-3 text-left w-10">
+                            <input
+                              type="checkbox"
+                              checked={selectedServicedEntities.size === sortedServicedEntities.length && sortedServicedEntities.length > 0}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedServicedEntities(new Set(sortedServicedEntities.map(e => e.ben)));
+                                } else {
+                                  setSelectedServicedEntities(new Set());
+                                }
+                              }}
+                              className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                            />
+                          </th>
                           <th 
                             className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors"
                             onClick={() => toggleServicedEntitiesSort('organization_name')}
@@ -3199,9 +3351,24 @@ function VendorPortalPage() {
                         {sortedServicedEntities.slice(0, 50).map((entity) => (
                           <tr 
                             key={entity.ben} 
-                            className="hover:bg-purple-50 transition-colors cursor-pointer group"
+                            className={`hover:bg-purple-50 transition-colors cursor-pointer group ${selectedServicedEntities.has(entity.ben) ? 'bg-teal-50' : ''}`}
                             onClick={() => loadEntityDetail(entity)}
                           >
+                            <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={selectedServicedEntities.has(entity.ben)}
+                                onChange={() => {
+                                  setSelectedServicedEntities(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(entity.ben)) next.delete(entity.ben);
+                                    else next.add(entity.ben);
+                                    return next;
+                                  });
+                                }}
+                                className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                              />
+                            </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2">
                                 <div>
@@ -3285,6 +3452,7 @@ function VendorPortalPage() {
                     </p>
                   </div>
                 )}
+              </div>
               </div>
             )}
           </div>

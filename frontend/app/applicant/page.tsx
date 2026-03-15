@@ -7,6 +7,8 @@ import { useAuthStore } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
 import { api } from "@/lib/api";
 import { useTabParam } from "@/hooks/useTabParam";
+import { downloadCsv, csvFilename } from "@/lib/csv-export";
+import { TableExportBar } from "@/components/TableExportBar";
 
 const APPLICANT_TABS = ["overview", "frns", "appeals", "changes", "frn-status", "disbursements"] as const;
 type ApplicantTab = typeof APPLICANT_TABS[number];
@@ -173,6 +175,7 @@ function ApplicantDashboard() {
   const [disbursementData, setDisbursementData] = useState<any>(null);
   const [disbursementLoading, setDisbursementLoading] = useState(false);
   const [disbursementYear, setDisbursementYear] = useState<number | undefined>(undefined);
+  const [selectedFrnIds, setSelectedFrnIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     // Wait for Zustand hydration before checking auth
@@ -355,6 +358,14 @@ function ApplicantDashboard() {
   if (!data) return null;
 
   const { profile, frns, appeals, recent_changes, summary } = data;
+
+  const handleExportFrns = () => {
+    const rowsToExport = selectedFrnIds.size > 0
+      ? frns.filter(f => selectedFrnIds.has(f.id))
+      : frns;
+    const columns = ['frn', 'application_number', 'funding_year', 'status', 'service_type', 'amount_requested', 'amount_funded', 'is_denied', 'denial_reason', 'appeal_deadline'];
+    downloadCsv(csvFilename('my_frns'), columns, rowsToExport as unknown as Record<string, unknown>[]);
+  };
 
   const navItems = [
     { id: 'overview', label: 'Dashboard', icon: '📊' },
@@ -798,10 +809,30 @@ function ApplicantDashboard() {
 
         {selectedTab === 'frns' && (
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <TableExportBar
+              selectedCount={selectedFrnIds.size}
+              totalCount={frns.length}
+              onExportCsv={handleExportFrns}
+              onClearSelection={() => setSelectedFrnIds(new Set())}
+            />
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
+                    <th className="px-4 py-3 w-12">
+                      <input
+                        type="checkbox"
+                        checked={selectedFrnIds.size === frns.length && frns.length > 0}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedFrnIds(new Set(frns.map(f => f.id)));
+                          } else {
+                            setSelectedFrnIds(new Set());
+                          }
+                        }}
+                        className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                      />
+                    </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">FRN</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Year</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Status</th>
@@ -818,6 +849,21 @@ function ApplicantDashboard() {
                       onClick={() => fetchFrnDetail(frn.id)}
                       className={`hover:bg-slate-50 cursor-pointer transition-colors ${selectedFrnId === frn.id ? 'bg-purple-50 border-l-4 border-l-purple-500' : ''}`}
                     >
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedFrnIds.has(frn.id)}
+                          onChange={() => {
+                            setSelectedFrnIds(prev => {
+                              const next = new Set(prev);
+                              if (next.has(frn.id)) next.delete(frn.id);
+                              else next.add(frn.id);
+                              return next;
+                            });
+                          }}
+                          className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <span className={`text-xs transition-transform ${selectedFrnId === frn.id ? 'rotate-90' : ''}`}>▶</span>
@@ -862,7 +908,7 @@ function ApplicantDashboard() {
                     {/* FRN Detail Panel */}
                     {selectedFrnId === frn.id && (
                       <tr key={`detail-${frn.id}`}>
-                        <td colSpan={6} className="px-0 py-0">
+                        <td colSpan={7} className="px-0 py-0">
                           <div className="bg-gradient-to-br from-purple-50 to-slate-50 border-t border-b border-purple-200 px-6 py-5">
                             {loadingFrnDetail ? (
                               <div className="flex items-center justify-center py-8">

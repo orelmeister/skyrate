@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { api } from '@/lib/api';
+import { downloadCsv, csvFilename } from '@/lib/csv-export';
 
 interface SearchResultsTableProps {
   data: any[];
@@ -159,6 +160,13 @@ export function SearchResultsTable({
     }
   };
 
+  const handleExportCsv = () => {
+    const rowsToExport = selectedRows.size > 0
+      ? sortedData.filter(r => selectedRows.has(r.ben || r.BEN))
+      : sortedData;
+    downloadCsv(csvFilename('search_results'), displayColumns, rowsToExport);
+  };
+
   // Format cell value
   const formatValue = (val: any, columnKey?: string) => {
     if (val === null || val === undefined) return '-';
@@ -226,6 +234,16 @@ export function SearchResultsTable({
             </button>
           )}
 
+          <button
+            onClick={handleExportCsv}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            {selectedRows.size > 0 ? `Download CSV (${selectedRows.size})` : 'Download CSV'}
+          </button>
+
           {/* Rows Per Page */}
           <div className="flex items-center gap-2 text-sm text-slate-600">
             <span>Show</span>
@@ -261,16 +279,14 @@ export function SearchResultsTable({
             <thead className="bg-slate-50 border-b border-slate-200 sticky top-0">
               <tr>
                 {/* Checkbox column */}
-                {showAddButton && onAddSchool && (
-                  <th className="w-12 px-4 py-3">
-                    <input
-                      type="checkbox"
-                      checked={selectedRows.size === paginatedData.length && paginatedData.length > 0}
-                      onChange={toggleAllRows}
-                      className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                  </th>
-                )}
+                <th className="w-12 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedRows.size === paginatedData.length && paginatedData.length > 0}
+                    onChange={toggleAllRows}
+                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                </th>
                 
                 {displayColumns.map((key) => (
                   <th
@@ -315,18 +331,16 @@ export function SearchResultsTable({
                     className={`hover:bg-slate-50 transition-colors ${isAdded ? 'bg-green-50/50' : ''}`}
                   >
                     {/* Checkbox */}
-                    {showAddButton && onAddSchool && (
-                      <td className="px-4 py-3">
-                        {ben && !isAdded && (
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleRowSelection(ben)}
-                            className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                          />
-                        )}
-                      </td>
-                    )}
+                    <td className="px-4 py-3">
+                      {ben && (
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleRowSelection(ben)}
+                          className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                      )}
+                    </td>
                     
                     {displayColumns.map((key) => (
                       <td key={key} className="px-4 py-3 text-sm text-slate-600">
