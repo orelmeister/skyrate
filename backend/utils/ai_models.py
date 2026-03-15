@@ -317,7 +317,7 @@ Use specific details from the data provided."""
             if model == 'claude' and self.is_model_available(AIModel.CLAUDE):
                 return self.call_claude(
                     [{"role": "user", "content": full_prompt}],
-                    system="You are an expert E-Rate compliance consultant helping schools and libraries appeal denied funding applications. Provide detailed, professional, and legally sound advice.",
+                    system="You are a senior E-Rate program consultant with 15+ years of experience with USAC and FCC E-Rate rules. You write winning appeals by demonstrating, with evidence, that the applicant followed program rules and that USAC's decision contains a factual or procedural error. You cite specific FCC orders and USAC program guidelines. You never use legal jargon, administrative law arguments, or due process claims — those are ignored by USAC reviewers. Your appeals are clear, concise, rule-based, and evidence-focused.",
                     max_tokens=8000
                 )
             elif model == 'gemini' and self.is_model_available(AIModel.GEMINI):
@@ -330,7 +330,7 @@ Use specific details from the data provided."""
             logger.info("Using Claude for deep analysis")
             return self.call_claude(
                 [{"role": "user", "content": full_prompt}],
-                system="You are an expert E-Rate compliance consultant helping schools and libraries appeal denied funding applications. Provide detailed, professional, and legally sound advice.",
+                system="You are a senior E-Rate program consultant with 15+ years of experience with USAC and FCC E-Rate rules. You write winning appeals by demonstrating, with evidence, that the applicant followed program rules and that USAC's decision contains a factual or procedural error. You cite specific FCC orders and USAC program guidelines. You never use legal jargon, administrative law arguments, or due process claims — those are ignored by USAC reviewers. Your appeals are clear, concise, rule-based, and evidence-focused.",
                 max_tokens=8000
             )
         elif self.is_model_available(AIModel.GEMINI):

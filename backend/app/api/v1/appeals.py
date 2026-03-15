@@ -316,31 +316,62 @@ def _generate_appeal_letter(strategy: Dict[str, Any], denial_details: Dict[str, 
         amount_label = "Amount Denied"
         action_verb = "reversal of the denial decision"
 
-    # Simplified prompt following OpenData's successful approach
-    appeal_prompt = f"""Generate a formal E-Rate appeal letter for the following {action_desc}:
+    # Expert-based appeal prompt — writes like a senior E-Rate program consultant, not a lawyer
+    appeal_prompt = f"""You are a senior E-Rate program consultant with 15+ years of experience helping schools and libraries win appeals with USAC and the FCC. You are NOT a lawyer — you are a program expert who knows USAC rules, FCC orders for the E-Rate program, and the application/appeal process inside and out.
 
-Organization: {org_name}
-Application Number: {app_number}
-Funding Request Number: {frn}
-Funding Year: {funding_year}
-{amount_label}: ${amount:,.2f}
-Service Type: {denial_details.get('service_type', 'E-Rate services')}
+Write an appeal letter for the following {action_desc}:
 
-Reason for Adverse Action (FCDL Comment):
-{fcdl_comment or 'No specific reason provided'}
+CASE DETAILS:
+- Organization: {org_name}
+- Application Number: {app_number}
+- Funding Request Number (FRN): {frn}
+- Funding Year: {funding_year}
+- {amount_label}: ${amount:,.2f}
+- Service Type: {denial_details.get('service_type', 'E-Rate services')}
 
-Violation Types: {', '.join(violation_types) if violation_types else 'General procedural'}
+USAC'S STATED REASON FOR {action_desc.upper()} (from FCDL):
+{fcdl_comment or 'No specific reason provided by USAC'}
 
-Appeal Strategy Recommendations:
+Identified Issue Categories: {', '.join(violation_types) if violation_types else 'General procedural'}
+
+Strategy Notes:
 {json.dumps(strategy.get('recommendations', []), indent=2, default=str)}
 
-Write a professional, comprehensive appeal letter that:
-1. Addresses the USAC Appeals Committee formally
-2. Includes Introduction, Background, Grounds for Appeal, Supporting Documentation, and Conclusion sections
-3. Cites relevant FCC regulations (47 C.F.R. § 54.xxx) and precedents
-4. Directly addresses each reason for the {action_desc} with specific counter-arguments
-5. Argues for {action_verb}
-6. Is ready to submit (at least 1500 words)"""
+INSTRUCTIONS FOR WRITING THE APPEAL:
+
+1. IDENTIFY THE EXACT DENIAL REASON from the FCDL comment above and address it directly and specifically. Do not write a generic appeal.
+
+2. ORGANIZE THE APPEAL AS FOLLOWS:
+   a) WHAT USAC SAID — Quote or paraphrase the specific FCDL denial reason
+   b) WHAT THE RULES ACTUALLY REQUIRE — Cite the specific FCC order or USAC program rule that governs this situation (e.g., "The FCC's Fifth Report and Order established the 28-day competitive bidding window" or "Per the FCC's Sixth Report and Order, applicants must...")
+   c) EVIDENCE THE APPLICANT MET THE RULES — Present specific factual evidence showing compliance (use actual dates, form numbers, and amounts from the case details above)
+   d) WHY USAC'S CONCLUSION IS INCORRECT — Explain the specific factual or procedural error USAC made
+
+3. CITE SPECIFIC FCC ORDERS AND USAC PROGRAM RULES, such as:
+   - FCC Fifth Report and Order (competitive bidding rules)
+   - FCC Sixth Report and Order (program procedures)
+   - FCC's Modernization Orders (2014)
+   - Eligible Services List for the applicable funding year
+   - USAC's Applicant Process guides
+   Reference these as the SOURCE of the rule, not as legal arguments.
+
+4. DO NOT USE:
+   - Legal jargon (due process, administrative law, constitutional rights, burden of proof)
+   - Broad legal arguments ("FCC has consistently held...", "Under principles of administrative law...")
+   - Generic 47 C.F.R. citations without connecting to a specific rule the applicant followed
+   - Placeholder brackets like [INSERT DATE] or [APPLICANT NAME] — use the actual data provided above
+
+5. USE CLEAR, PLAIN LANGUAGE — professional but not legalese. Write as a knowledgeable program expert, not a lawyer.
+
+6. KEEP IT FOCUSED AND CONCISE — 800 to 1500 words. USAC reviewers use checklists. A shorter, targeted appeal beats a long, generic one.
+
+7. FORMAT:
+   - Address to "USAC Appeals Committee" or "Schools and Libraries Division"
+   - Include FRN, Funding Year, and amount in the header
+   - End with a clear, specific request for {action_verb}
+   - Include a signature block
+
+Generate the complete appeal letter now:"""
 
     try:
         # Use deep_analysis for comprehensive appeal generation
@@ -363,7 +394,7 @@ Write a professional, comprehensive appeal letter that:
 
 
 def _generate_appeal_letter_template(strategy: Dict[str, Any], denial_details: Dict[str, Any]) -> str:
-    """Template-based appeal letter generation (fallback)"""
+    """Template-based appeal letter generation (fallback) — rule-based expert style"""
     
     frn = denial_details.get("frn", "Unknown")
     funding_year = denial_details.get("funding_year", "Unknown")
@@ -374,175 +405,168 @@ def _generate_appeal_letter_template(strategy: Dict[str, Any], denial_details: D
     violation_types = denial_details.get("violation_types", [])
     usac_context = denial_details.get("usac_context", {})
     form_470_data = denial_details.get("form_470_data", {})
+    appeal_type = denial_details.get("appeal_type", "denial")
     
     # Get strategy components
     violation_analysis = strategy.get("violation_analysis", [])
     success = strategy.get("success_assessment", {})
-    executive_summary = strategy.get("executive_summary", {})
     recommendations = strategy.get("recommendations", [])
     
+    # Determine action language based on appeal type
+    if appeal_type == "commitment_adjustment":
+        action_request = "reverse the commitment adjustment and reinstate the original funding commitment"
+    elif appeal_type == "rescission":
+        action_request = "reinstate the funding commitment"
+    else:
+        action_request = "reverse the denial and approve the funding request"
+    
+    from datetime import datetime
+    today = datetime.now().strftime("%B %d, %Y")
+    org_name = usac_context.get("organization_name", "the applicant")
+    
     # Build appeal letter header
-    letter = f"""APPEAL OF FUNDING COMMITMENT DECISION LETTER (FCDL)
+    letter = f"""APPEAL OF FUNDING COMMITMENT DECISION
 
-Date: [INSERT DATE]
+Date: {today}
 
-E-Rate Program
 Schools and Libraries Division
 Universal Service Administrative Company
 700 12th Street NW, Suite 900
 Washington, DC 20005
 
-Re: Appeal of Funding Commitment Decision
-    Funding Request Number (FRN): {frn}
+Re: Appeal of FCDL for FRN {frn}
     Funding Year: {funding_year}
     Service Type: {service_type or service}
-    Amount Requested: ${amount:,.2f}
+    Amount at Issue: ${amount:,.2f}
 
 Dear USAC Appeals Committee:
 
-INTRODUCTION
+I. WHAT USAC DECIDED
 
-We hereby submit this formal appeal of the Funding Commitment Decision Letter (FCDL) issued for the above-referenced Funding Request Number (FRN). We respectfully request that the Universal Service Administrative Company (USAC) reverse the denial decision and approve funding for this request.
+USAC issued a Funding Commitment Decision Letter (FCDL) regarding FRN {frn} for Funding Year {funding_year}, affecting ${amount:,.2f} in requested E-Rate support for {service or 'E-Rate eligible services'}.
 
-BACKGROUND
+USAC's stated reason:
 
-This funding request was submitted for {service or 'E-Rate eligible services'} for Funding Year {funding_year}. The total amount requested was ${amount:,.2f}.
+"{fcdl_comment or 'No specific reason was provided in the FCDL.'}"
 
-SUMMARY OF DENIAL
+II. WHY THIS DECISION SHOULD BE REVERSED
 
-The FCDL stated the following reason(s) for denial:
-
-"{fcdl_comment or 'No specific denial reason provided in the FCDL.'}"
-
-GROUNDS FOR APPEAL
-
-We respectfully disagree with this denial decision for the following reasons:
+The applicant followed the applicable E-Rate program rules, and USAC's decision is based on a factual or procedural error. The specific grounds are detailed below.
 
 """
 
-    # Add violation-specific arguments based on violation types
-    violation_counter = 1
+    # Add rule-specific arguments based on violation types
+    section_counter = 1
     
     if "competitive_bidding" in violation_types:
-        form_470_num = form_470_data.get("form_470_number", usac_context.get("establishing_fcc_form470_number", "[Form 470 Number]"))
-        posting_date = form_470_data.get("posting_date", "[Posting Date]")
-        contract_date = form_470_data.get("allowable_contract_date", "[Contract Date]")
+        form_470_num = form_470_data.get("form_470_number", usac_context.get("establishing_fcc_form470_number", "on file"))
+        posting_date = form_470_data.get("posting_date", "on file")
+        contract_date = form_470_data.get("allowable_contract_date", "on file")
         
-        letter += f"""
-{violation_counter}. COMPETITIVE BIDDING COMPLIANCE
+        letter += f"""A. COMPETITIVE BIDDING COMPLIANCE
 
-The applicant fully complied with the competitive bidding requirements under 47 C.F.R. § 54.503. 
+What the rules require: The FCC's Fifth Report and Order (FCC 04-190) established that applicants must post an FCC Form 470 and wait at least 28 days before signing a contract or selecting a service provider. During this window, the applicant must evaluate all bids received using price of the eligible goods and services as the primary factor, per USAC's competitive bidding guidelines.
 
-Specifically:
-- FCC Form 470 Number: {form_470_num}
-- Form 470 Posting Date: {posting_date}
-- The required 28-day waiting period was observed before selecting a service provider
-- All bids received were evaluated based on price of the eligible goods and services as the primary factor
-- The selection process was documented and conducted in accordance with applicable state and local procurement rules
+What the applicant did:
+- Filed FCC Form 470 (Number: {form_470_num}) on {posting_date}
+- Waited the required 28-day period before making a vendor selection
+- Evaluated all responses received with price as the primary factor
+- Contract/selection date: {contract_date}
+- Documented the bid evaluation process
 
-We respectfully submit that any perceived deficiency in the competitive bidding process was either:
-(a) A technical or clerical error that did not affect the substance of the competitive bidding process, or
-(b) Based on a misunderstanding of the facts that can be clarified with the attached documentation.
+Why USAC's conclusion is incorrect: The record shows the applicant satisfied each step of the competitive bidding process as defined in the FCC's Fifth Report and Order and USAC's Applicant Process guide. Any perceived deficiency is either a ministerial/clerical issue that did not affect the outcome or is based on a misreading of the applicant's documentation.
 
 """
-        violation_counter += 1
+        section_counter += 1
 
     if "documentation" in violation_types:
-        letter += f"""
-{violation_counter}. DOCUMENTATION
+        letter += f"""{'B' if section_counter == 2 else 'A'}. DOCUMENTATION
 
-The applicant submitted all required documentation in accordance with program requirements. If any documentation appeared to be missing or incomplete, we respectfully request the opportunity to provide clarification or supplemental documentation.
+What the rules require: USAC requires applicants to maintain documentation supporting their E-Rate applications, including technology plans, bid evaluation records, and contracts. Per the FCC's Sixth Report and Order and USAC program guidelines, applicants must retain records for 10 years from the last date of service.
 
-The FCC has consistently held that technical or ministerial errors that do not affect program integrity should not result in denial of otherwise valid funding requests. See, e.g., Schools and Libraries Universal Service Support Mechanism, CC Docket No. 02-6, Order, 18 FCC Rcd 9202 (2003).
+What the applicant did: The applicant submitted and retained all required documentation for FRN {frn}. If USAC found any documents to be missing or unclear, the applicant is prepared to provide the specific documents identified and requests the opportunity to do so.
+
+Why USAC's conclusion is incorrect: The FCC has recognized that denials based on document deficiencies should give applicants an opportunity to cure, particularly when the underlying documentation exists and the applicant made a good-faith effort to comply. A ministerial gap in paperwork does not indicate a program integrity violation.
 
 """
-        violation_counter += 1
+        section_counter += 1
 
     if "eligibility" in violation_types:
-        letter += f"""
-{violation_counter}. ELIGIBILITY
+        letter += f"""{'C' if section_counter == 3 else 'B' if section_counter == 2 else 'A'}. SERVICE OR ENTITY ELIGIBILITY
 
-The applicant is an eligible entity under 47 U.S.C. § 254(h)(7) and 47 C.F.R. § 54.501. The services requested are eligible for E-Rate support as they fall within the categories of supported services under 47 C.F.R. § 54.502.
+What the rules require: The Eligible Services List (ESL) for Funding Year {funding_year} defines which services qualify for E-Rate support under Category 1 (telecommunications/internet access) and Category 2 (internal connections). Eligible entities include schools, libraries, and consortia as defined in the program rules.
 
-We have attached documentation confirming the eligibility of both the applicant entity and the requested services.
+What the applicant did: The services requested under FRN {frn} ({service_type or service}) fall within the eligible service categories for Funding Year {funding_year} as published in the ESL. The applicant is an eligible entity that has been participating in the E-Rate program.
+
+Why USAC's conclusion is incorrect: The services and the entity both meet the eligibility requirements defined in the ESL and program rules. If there is a question about a specific line item or service classification, the applicant can provide additional detail to clarify eligibility.
 
 """
-        violation_counter += 1
+        section_counter += 1
 
     if "timing" in violation_types:
-        letter += f"""
-{violation_counter}. TIMING AND DEADLINES
+        letter += f"""{'ABCD'[min(section_counter-1, 3)]}. FILING DEADLINES AND TIMING
 
-Regarding any timing concerns, we respectfully submit that:
-- All forms were submitted within the applicable filing windows
-- Any perceived delay was due to circumstances beyond the applicant's control
-- The applicant acted with due diligence throughout the application process
+What the rules require: The FCC sets annual filing windows for Form 471, and applicants must file within the announced window. USAC publishes specific opening and closing dates each year. Form 486 must be filed within 120 days of the FCDL date or the service start date, whichever is later.
 
-The FCC has established that inadvertent timing issues that do not evidence a willful disregard of program rules should be treated with leniency, particularly when the applicant has demonstrated good faith compliance. See Schools and Libraries Universal Service Support Mechanism, CC Docket No. 02-6, Fifth Report and Order and Order, 19 FCC Rcd 15808 (2004).
+What the applicant did: The applicant filed all required forms within the applicable windows for Funding Year {funding_year}. If USAC identified a timing issue, the applicant notes that any delay was unintentional and did not reflect disregard of program rules.
+
+Why USAC's conclusion is incorrect: The FCC's Modernization Orders (2014) emphasized that the E-Rate program should focus on getting connectivity to schools and libraries, and that inadvertent timing issues that do not indicate waste, fraud, or abuse should not be grounds for denial when the applicant acted in good faith.
 
 """
-        violation_counter += 1
+        section_counter += 1
 
     if "cost_allocation" in violation_types:
-        letter += f"""
-{violation_counter}. COST ALLOCATION
+        letter += f"""{'ABCDE'[min(section_counter-1, 4)]}. COST ALLOCATION
 
-The cost allocation methodology used for this funding request complies with FCC rules and accurately reflects the eligible portion of the services requested. 
+What the rules require: When E-Rate-funded services also serve ineligible locations or purposes, applicants must allocate costs so that only the eligible portion is funded. USAC's program guidelines describe acceptable cost allocation methods.
 
-We have documented our cost allocation approach and are prepared to provide any additional detail required to demonstrate compliance with 47 C.F.R. § 54.504(e).
+What the applicant did: The applicant used a reasonable cost allocation methodology for FRN {frn} that accurately reflects the eligible portion of the services. The methodology and supporting calculations are documented and available for review.
+
+Why USAC's conclusion is incorrect: The cost allocation approach used is consistent with methods accepted by USAC in similar situations. If USAC identified a specific concern with the methodology, the applicant requests the opportunity to provide additional detail or adjust the allocation.
 
 """
-        violation_counter += 1
+        section_counter += 1
 
     # If no specific violations identified, add general argument
-    if violation_counter == 1:
-        letter += """
-1. PROCEDURAL COMPLIANCE
+    if section_counter == 1:
+        letter += f"""A. THE APPLICANT FOLLOWED PROGRAM RULES
 
-The applicant followed all required procedures in submitting this funding request. We have acted in good faith throughout the application process and believe this denial was issued in error.
+The applicant followed all applicable E-Rate program procedures in submitting FRN {frn} for Funding Year {funding_year}. This includes filing the required forms within the applicable windows, conducting a proper competitive bidding process, and maintaining required documentation.
 
-We respectfully request that USAC review the facts of this case and reverse the denial decision.
+If USAC identified a specific procedural deficiency, the applicant requests clarification so that it can provide evidence of compliance or cure any ministerial error. The applicant acted in good faith throughout the process.
 
 """
 
     # Add conclusion
     probability = success.get("overall", "MEDIUM") if success else "MEDIUM"
     
-    letter += f"""
-SUPPORTING DOCUMENTATION
+    letter += f"""III. REQUESTED RELIEF
 
-The following documents are attached in support of this appeal:
-- Copy of the original funding request and supporting documentation
+Based on the above, the applicant respectfully requests that USAC {action_request} for FRN {frn} in the amount of ${amount:,.2f}.
+
+IV. SUPPORTING DOCUMENTATION
+
+The following documents are provided in support of this appeal:
 - Copy of the FCDL being appealed
 - FCC Form 470 and bid evaluation documentation
-- Evidence of compliance with applicable program rules
-- [Additional supporting documentation as applicable]
+- Relevant contracts and service agreements
+- Any additional evidence demonstrating compliance with the specific rule at issue
 
-CONCLUSION
+Please contact the undersigned if any additional information is needed.
 
-For the reasons stated above, we respectfully request that USAC reverse the denial decision and approve funding for FRN {frn} in the amount of ${amount:,.2f}.
-
-We have made a good faith effort to comply with all E-Rate program requirements and believe that any issues identified in the FCDL can be adequately addressed through this appeal. The applicant remains committed to providing high-quality educational and library services to its community, and E-Rate funding is essential to achieving this mission.
-
-If you require any additional information or documentation, please do not hesitate to contact the undersigned.
-
-Respectfully submitted,
+Respectfully,
 
 
 _______________________________
-[Authorized Representative Name]
-[Title]
-[Organization Name]
-[Address]
-[Phone Number]
-[Email Address]
-[Date]
+Authorized Representative
+Organization
+Phone / Email
 
 ---
 INTERNAL NOTES (Remove before submission):
-- Appeal Success Assessment: {probability}
-- Key Areas to Strengthen: {', '.join(violation_types) if violation_types else 'General procedural review'}
-- Recommended actions: Gather all supporting documentation before submitting
+- Estimated appeal strength: {probability}
+- Key areas to document: {', '.join(violation_types) if violation_types else 'General procedural review'}
+- Action items: Gather specific evidence addressing the FCDL denial reason before submitting
 """
     
     return letter
@@ -911,7 +935,8 @@ def _generate_chat_response(
                 strategy_summary += f"Deadline: {timeline.get('appeal_deadline', 'Not specified')}\n"
         
         # Craft the AI prompt to modify the appeal
-        prompt = f"""You are an expert E-Rate appeal consultant helping refine an appeal letter.
+        prompt = f"""You are a senior E-Rate program consultant helping refine an appeal letter. You write appeals based on USAC program rules and FCC orders — not legal arguments. Your tone is professional and clear, but never uses legalese.
+
 The user has asked you to make changes to their appeal. You must:
 
 1. UNDERSTAND what the user wants changed
@@ -941,7 +966,9 @@ INSTRUCTIONS:
 
 - The UPDATED_LETTER must be the COMPLETE letter, not just the changed section
 - If the user asks a question rather than requesting a change, still provide the current letter unchanged
-- Maintain the formal, professional tone appropriate for USAC submissions
+- Keep the appeal focused on program rules and evidence, not legal arguments
+- Cite specific FCC orders and USAC program guidelines where relevant
+- Do NOT add legal jargon, due process arguments, or administrative law language
 - Keep all factual details (dates, FRN numbers, amounts) accurate"""
 
         data_context = f"Appeal Letter Length: {len(appeal_text)} chars\nStrategy: {json.dumps(strategy, default=str)[:500]}"

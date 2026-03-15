@@ -173,22 +173,44 @@ class AIService:
         Returns:
             Structured analysis of denial reasons
         """
-        prompt = f"""Analyze this E-Rate FCDL (Funding Commitment Decision Letter) denial comment.
+        prompt = f"""You are a senior E-Rate program consultant. Analyze this FCDL (Funding Commitment Decision Letter) denial comment and identify exactly what went wrong.
         
         FCDL Comment:
         {fcdl_comments}
         
-        Extract and return:
-        1. List of specific violations (e.g., DR1, DR2)
-        2. For each violation:
-           - Rule type (competitive bidding, documentation, etc.)
-           - Key dates mentioned
-           - Vendors or forms referenced
-           - Potential remediation approach
-        3. Overall appealability assessment (High/Medium/Low)
-        4. Recommended next steps
+        Analyze the denial and return a structured JSON object with:
         
-        Format as structured JSON.
+        1. "denial_category": One of these specific categories:
+           - "competitive_bidding" (28-day rule, bid evaluation, Form 470 issues, vendor selection)
+           - "documentation" (missing forms, incomplete records, unsigned documents)
+           - "eligibility" (ineligible entity, ineligible service, wrong category)
+           - "late_filing" (missed filing window, late Form 471, late Form 486)
+           - "cost_allocation" (ineligible cost included, incorrect allocation method)
+           - "spin_change" (unauthorized SPIN change, contract issues)
+           - "ministerial_error" (clerical mistake, typo, data entry error)
+           - "duplicate_request" (overlapping FRNs, duplicate services)
+           - "contract_issues" (contract expired, unsigned, not matching Form 470)
+           - "other" (if none of the above fit)
+        
+        2. "specific_rule_cited": The specific USAC program rule or FCC order that was allegedly violated (e.g., "28-day competitive bidding window per Fifth Report and Order", "Form 486 120-day filing deadline")
+        
+        3. "usac_error_type": What type of error USAC may have made:
+           - "factual_error" (USAC misread the facts or missed documentation)
+           - "procedural_error" (USAC didn't follow proper review procedures)
+           - "interpretation_error" (USAC applied the rule incorrectly)
+           - "unclear" (need more information to determine)
+        
+        4. "required_evidence": List of specific documents or evidence that would rebut this denial (e.g., ["Signed Form 470 with posting date", "Bid evaluation matrix showing price as primary factor", "28-day timeline documentation"])
+        
+        5. "appealability": "High", "Medium", or "Low" with brief reasoning
+        
+        6. "violation_types": List of violation category strings for internal use (e.g., ["competitive_bidding", "documentation"])
+        
+        7. "key_dates": Any dates mentioned in the denial
+        
+        8. "recommended_next_steps": List of 2-4 specific actions the applicant should take
+        
+        Return ONLY valid JSON, no markdown formatting.
         """
         
         response = self._manager.call_gemini(prompt)
@@ -227,20 +249,20 @@ class AIService:
         form_470_data = denial_details.get("form_470_data", {})
         
         # Enhanced system prompt for consistency
-        system_prompt = """You are an expert E-Rate compliance consultant with 15+ years of experience successfully appealing denied funding applications. Your appeals have an 85% success rate because you:
+        system_prompt = """You are a senior E-Rate program consultant with 15+ years of experience winning appeals for schools and libraries. You are NOT a lawyer. You win appeals because you:
 
-1. Write in formal, professional legal language suitable for government submissions
-2. Always include specific FCC regulation citations (47 C.F.R.)
-3. Reference relevant FCC orders and precedents
-4. Address each denial reason with specific counter-arguments
-5. Demonstrate the applicant's good faith compliance effort
-6. Follow proper legal brief structure with clear sections
-7. Include specific dates, amounts, and documentation references
+1. Know USAC program rules, FCC orders, and the Eligible Services List inside and out
+2. Identify the exact denial reason and address it head-on with evidence
+3. Cite specific FCC orders (Fifth Report and Order, Sixth Report and Order, Modernization Orders) as the source of rules
+4. Show with factual evidence that USAC made a factual or procedural error
+5. Write in clear, professional language that USAC reviewers can follow against their checklists
+6. Never use legal jargon, administrative law arguments, or due process claims
+7. Keep appeals focused, concise, and organized around the specific denial reason
 
-Your appeals are known for being thorough, persuasive, and ready for immediate submission to USAC."""
+Your appeals are known for being targeted, evidence-based, and effective because they speak USAC's language — program rules, not courtroom arguments."""
 
         # Enhanced prompt with better structure and examples
-        prompt = f"""Generate a comprehensive, professional E-Rate appeal letter for this denied funding application. This must be a complete, submission-ready formal appeal.
+        prompt = f"""Generate a focused, evidence-based E-Rate appeal letter for this denied funding application. This must be a complete, submission-ready appeal written from the perspective of an E-Rate program expert (not a lawyer).
 
 ## CASE INFORMATION
 - **FRN:** {frn}
@@ -253,7 +275,7 @@ Your appeals are known for being thorough, persuasive, and ready for immediate s
 ## DENIAL REASON FROM USAC
 **FCDL Comment:** "{fcdl_comment}"
 
-**Violation Categories:** {', '.join(violation_types) if violation_types else 'General procedural'}
+**Issue Categories:** {', '.join(violation_types) if violation_types else 'General procedural'}
 
 ## USAC DATA CONTEXT
 Service Provider: {usac_context.get('service_provider_name', 'Not specified')}
@@ -265,34 +287,33 @@ Form 470 Number: {usac_context.get('establishing_fcc_form470_number', 'Not speci
 ## REQUIRED APPEAL STRUCTURE
 
 **HEADER:**
-- Formal government letter format with USAC address
+- Formal letter format addressed to Schools and Libraries Division / USAC
 - Clear subject line with FRN, funding year, amount
-- Professional salutation ("Dear USAC Appeals Committee:")
 
-**BODY SECTIONS:**
-1. **INTRODUCTION** - Brief summary requesting reversal of denial
-2. **BACKGROUND** - Application details and timeline  
-3. **DENIAL SUMMARY** - Quote the exact FCDL language
-4. **GROUNDS FOR APPEAL** - Numbered counter-arguments addressing each violation:
-   - Cite specific FCC regulations (47 C.F.R. §54.503, etc.)
-   - Reference relevant FCC orders and precedents
-   - Provide specific dates, amounts, and facts
-   - Address competitive bidding, documentation, eligibility, or procedural issues
-5. **GOOD FAITH COMPLIANCE** - Demonstrate intent to follow program rules
-6. **SUPPORTING DOCUMENTATION** - List attachments being provided
-7. **CONCLUSION** - Professional closing requesting specific relief
-8. **SIGNATURE BLOCK** - Formal signature line with contact information
+**BODY SECTIONS (organize around the denial reason):**
+1. **WHAT USAC DECIDED** — Briefly state what the FCDL says and the specific reason for denial
+2. **WHAT THE PROGRAM RULES REQUIRE** — Cite the specific FCC order or USAC program rule that governs this situation:
+   - For competitive bidding: FCC Fifth Report and Order (28-day rule, bid evaluation requirements)
+   - For documentation: USAC document retention guidelines, Sixth Report and Order
+   - For eligibility: Eligible Services List for the funding year, program rules
+   - For timing: Filing window rules, Form 486 120-day deadline
+   - For cost allocation: USAC cost allocation guidelines
+3. **EVIDENCE THE APPLICANT COMPLIED** — Present specific facts (dates, form numbers, amounts) showing the applicant followed the rules
+4. **WHY USAC'S DECISION CONTAINS AN ERROR** — Identify the specific factual or procedural error in USAC's analysis
+5. **REQUESTED RELIEF** — Specific request to reverse the denial and approve funding
+6. **SUPPORTING DOCUMENTATION** — List of attachments
+7. **SIGNATURE BLOCK**
 
 **CRITICAL REQUIREMENTS:**
-- Use formal legal language throughout
-- Include specific regulation citations for each argument
-- Reference actual FCC orders where similar appeals succeeded
-- Address the specific denial reasons with factual counter-arguments
-- Maintain respectful, professional tone
-- Be thorough but concise (aim for 4-6 pages when printed)
-- Make it ready for immediate submission with minimal editing
+- Write as a program expert, NOT a lawyer. No legal jargon, no due process arguments, no administrative law language.
+- Cite FCC orders by name (e.g., "Fifth Report and Order") as the source of rules, not as legal precedent.
+- Do NOT use generic 47 C.F.R. citations unless directly tied to a specific rule the applicant followed.
+- Use clear, plain language. USAC reviewers use checklists, not legal analysis.
+- Be concise and focused (800-1500 words). Shorter and targeted beats long and generic.
+- Use actual data from the case — no placeholder brackets like [INSERT DATE].
+- Address the specific denial reason, not generic boilerplate.
 
-Generate the complete formal appeal letter now:"""
+Generate the complete appeal letter now:"""
 
         # Try Claude first (best for formal legal writing)
         try:
@@ -302,10 +323,10 @@ Generate the complete formal appeal letter now:"""
                 max_tokens=8000
             )
             # Enhanced quality check
-            if (result and len(result) > 1000 and 
-                "dear usac" in result.lower() and 
+            if (result and len(result) > 800 and 
+                "dear" in result.lower() and 
                 "respectfully" in result.lower() and
-                "47 c.f.r" in result.lower() and
+                ("fcc" in result.lower() or "usac" in result.lower()) and
                 str(frn) in result and
                 "unavailable" not in result.lower()):
                 return result
@@ -317,18 +338,19 @@ Generate the complete formal appeal letter now:"""
             
         # Fallback to Gemini with similar enhanced prompt
         try:
-            gemini_prompt = f"""Write a formal E-Rate appeal letter for FRN {frn} denied for ${amount:,.2f} in funding year {funding_year}.
+            gemini_prompt = f"""Write an E-Rate appeal letter for FRN {frn} denied for ${amount:,.2f} in funding year {funding_year}.
 
 DENIAL REASON: {fcdl_comment}
 
-Create a professional appeal letter that:
-- Starts with "Dear USAC Appeals Committee:"
-- Uses formal legal language with FCC regulation citations
-- Addresses each specific denial reason with counter-arguments
-- Ends with "Respectfully submitted,"
-- Is ready for submission to USAC
-
-Make it comprehensive and persuasive (minimum 2000 words)."""
+Write as a senior E-Rate program consultant (not a lawyer). The appeal should:
+- Start with "Dear USAC Appeals Committee:"
+- Identify the specific denial reason and address it directly
+- Cite the relevant FCC order or USAC program rule the applicant complied with
+- Present factual evidence of compliance
+- Explain why USAC's conclusion is incorrect
+- End with "Respectfully,"
+- Use clear, plain language — no legal jargon or administrative law arguments
+- Be concise and focused (800-1500 words)."""
             
             result = self._manager.call_gemini(gemini_prompt)
             if (result and len(result) > 1000 and 
@@ -342,12 +364,12 @@ Make it comprehensive and persuasive (minimum 2000 words)."""
         # Last resort - try DeepSeek
         try:
             deepseek_result = self._manager.call_deepseek([
-                {"role": "system", "content": "You are an expert E-Rate legal consultant."},
-                {"role": "user", "content": f"""Write a formal appeal letter for denied E-Rate FRN {frn} (${amount:,.2f}). 
+                {"role": "system", "content": "You are a senior E-Rate program consultant who writes rule-based, evidence-focused appeals. Never use legal jargon."},
+                {"role": "user", "content": f"""Write an appeal letter for denied E-Rate FRN {frn} (${amount:,.2f}). 
                 
 Denial reason: {fcdl_comment}
 
-Format as a professional legal document ready for USAC submission. Include specific FCC regulations and be comprehensive."""}
+Write as a program expert: identify the denial reason, cite the specific FCC order or USAC rule the applicant followed, present evidence of compliance, and explain USAC's error. Be concise (800-1500 words)."""}
             ])
             if deepseek_result and len(deepseek_result) > 500:
                 return deepseek_result
@@ -470,7 +492,7 @@ Return ONLY valid JSON, no markdown formatting."""
         fcc_citations = strategy.get('fcc_citations', [])
         denial_category = strategy.get('denial_category', 'Procedural')
         
-        prompt = f"""Generate a formal E-Rate appeal letter ready for submission to USAC.
+        prompt = f"""Generate an E-Rate appeal letter ready for submission to USAC. Write as a senior E-Rate program consultant, not a lawyer.
 
 CASE DETAILS:
 - FRN: {frn}
@@ -483,20 +505,20 @@ DENIAL REASON FROM USAC:
 "{denial_reason}"
 
 APPEAL STRATEGY:
-Key Arguments: {', '.join(key_arguments) if key_arguments else 'Address procedural compliance'}
-FCC Citations: {', '.join(fcc_citations) if fcc_citations else '47 C.F.R. §54.503'}
+Key Arguments: {', '.join(key_arguments) if key_arguments else 'Address procedural compliance with evidence'}
+Relevant FCC Orders/Rules: {', '.join(fcc_citations) if fcc_citations else 'Identify applicable FCC order for denial category'}
 
 REQUIREMENTS:
 1. Start with "Dear USAC Appeals Committee:"
-2. Include formal header with FRN and funding year reference
-3. Summarize the denial clearly
-4. Present 3-5 specific arguments addressing the denial
-5. Cite relevant FCC regulations (47 C.F.R.)
-6. Demonstrate good faith compliance efforts
+2. Include header with FRN and funding year reference
+3. Structure as: What USAC said -> What the rules require -> Evidence of compliance -> Why USAC is incorrect
+4. Cite specific FCC orders (Fifth Report and Order, Sixth Report and Order, Modernization Orders) as rule sources
+5. Present factual evidence showing the applicant followed program rules
+6. Identify the specific error in USAC's decision
 7. List supporting documentation to be attached
-8. End with "Respectfully submitted," and signature block
-9. Keep professional and persuasive tone
-10. Make it ready for immediate submission
+8. End with "Respectfully," and signature block
+9. Use clear, plain language — no legal jargon, no due process arguments, no administrative law
+10. Be concise and focused (800-1500 words)
 
 Generate the complete appeal letter now:"""
 
@@ -504,7 +526,7 @@ Generate the complete appeal letter now:"""
             # Try Claude first for best formal writing
             result = self._manager.call_claude(
                 [{"role": "user", "content": prompt}],
-                system="You are an expert E-Rate appeals consultant. Generate formal, professional appeal letters.",
+                system="You are a senior E-Rate program consultant who writes concise, rule-based appeals focused on evidence and program rules. Never use legal jargon.",
                 max_tokens=6000
             )
             if result and len(result) > 500:
@@ -534,38 +556,46 @@ Generate the complete appeal letter now:"""
         
         return f"""Dear USAC Appeals Committee:
 
-RE: Appeal of Funding Denial - FRN {frn}, Funding Year {funding_year}
+RE: Appeal of Funding Decision - FRN {frn}, Funding Year {funding_year}
     Amount: ${amount:,.2f}
 
-I am writing to formally appeal the denial of funding for the above-referenced Funding Request Number (FRN).
+I. WHAT USAC DECIDED
 
-BACKGROUND:
-The applicant submitted Form 471 for funding year {funding_year}, requesting E-Rate support in the amount of ${amount:,.2f}.
+USAC denied funding for FRN {frn} for Funding Year {funding_year}, affecting ${amount:,.2f} in requested E-Rate support.
 
-DENIAL REASON:
-The application was denied with the following reason:
+USAC's stated reason:
 "{denial_reason}"
 
-GROUNDS FOR APPEAL:
-The applicant respectfully requests reconsideration of this denial for the following reasons:
+II. WHAT THE PROGRAM RULES REQUIRE
 
-1. Good Faith Compliance: The applicant made every reasonable effort to comply with all applicable E-Rate program rules and regulations.
+The E-Rate program rules, as established by FCC orders and USAC program guidelines, set specific requirements that applicants must follow. For the issue identified in the denial above, the applicable rule is defined in the relevant FCC order (Fifth Report and Order for competitive bidding, Sixth Report and Order for procedural requirements, or the Eligible Services List for service eligibility).
 
-2. Procedural Compliance: To the extent any procedural requirements were not met, the applicant believes such non-compliance was technical in nature and did not undermine the competitive bidding process or program integrity.
+III. EVIDENCE THE APPLICANT FOLLOWED THE RULES
 
-3. Program Intent: The denial does not serve the underlying purpose of the E-Rate program, which is to ensure that schools and libraries have affordable access to telecommunications and information services.
+The applicant followed the applicable E-Rate program rules for FRN {frn}:
 
-SUPPORTING DOCUMENTATION:
-The following documents are attached in support of this appeal:
-- Copy of Form 470
-- Copy of Form 471
-- Bid evaluation documentation
-- Contract documentation
+1. All required forms (Form 470, Form 471) were filed within the applicable windows
+2. The competitive bidding process was conducted in accordance with the 28-day rule
+3. Required documentation was maintained and is available for review
+4. The requested services are eligible under the Eligible Services List for Funding Year {funding_year}
 
-CONCLUSION:
-For the foregoing reasons, the applicant respectfully requests that USAC reverse the denial of funding for FRN {frn} and commit the requested amount of ${amount:,.2f}.
+IV. WHY USAC'S DECISION SHOULD BE REVERSED
 
-Respectfully submitted,
+The denial is based on a factual or procedural error. The applicant can demonstrate compliance with the specific rule at issue, and any perceived deficiency is either a ministerial error or a misunderstanding of the applicant's documentation.
+
+V. REQUESTED RELIEF
+
+The applicant respectfully requests that USAC reverse the denial and approve funding for FRN {frn} in the amount of ${amount:,.2f}.
+
+VI. SUPPORTING DOCUMENTATION
+
+The following documents are attached:
+- Copy of the FCDL being appealed
+- Form 470 and bid evaluation documentation
+- Relevant contracts and service agreements
+- Additional evidence addressing the specific denial reason
+
+Respectfully,
 
 [Applicant Name]
 [Title]
