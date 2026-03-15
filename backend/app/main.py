@@ -449,6 +449,33 @@ def _run_schema_migrations(engine):
         ("saved_leads", "source_data", "JSON DEFAULT NULL", None),
         # Multi-CRN: track which CRN imported each school
         ("consultant_schools", "source_crn", "VARCHAR(50) DEFAULT NULL", None),
+        # FRN watches — columns added after initial table creation
+        ("frn_watches", "target_name", "VARCHAR(255) DEFAULT NULL", None),
+        ("frn_watches", "cc_emails", "JSON DEFAULT NULL", None),
+        ("frn_watches", "delivery_mode", "VARCHAR(30) NOT NULL DEFAULT 'full_email'", None),
+        ("frn_watches", "notify_sms", "TINYINT(1) DEFAULT 0", None),
+        ("frn_watches", "sms_phone", "VARCHAR(50) DEFAULT NULL", None),
+        ("frn_watches", "status_filter", "VARCHAR(50) DEFAULT NULL", None),
+        ("frn_watches", "include_funded", "TINYINT(1) DEFAULT 1", None),
+        ("frn_watches", "include_pending", "TINYINT(1) DEFAULT 1", None),
+        ("frn_watches", "include_denied", "TINYINT(1) DEFAULT 1", None),
+        ("frn_watches", "include_summary", "TINYINT(1) DEFAULT 1", None),
+        ("frn_watches", "include_details", "TINYINT(1) DEFAULT 1", None),
+        ("frn_watches", "include_changes", "TINYINT(1) DEFAULT 1", None),
+        ("frn_watches", "last_error", "TEXT DEFAULT NULL", None),
+        ("frn_watches", "last_snapshot", "JSON DEFAULT NULL", None),
+        ("frn_watches", "send_count", "INT DEFAULT 0", None),
+        # FRN report history — columns added after initial table creation
+        ("frn_report_history", "watch_names", "JSON DEFAULT NULL", None),
+        ("frn_report_history", "funded_count", "INT DEFAULT 0", None),
+        ("frn_report_history", "denied_count", "INT DEFAULT 0", None),
+        ("frn_report_history", "pending_count", "INT DEFAULT 0", None),
+        ("frn_report_history", "total_amount", "INT DEFAULT 0", None),
+        ("frn_report_history", "changes_detected", "INT DEFAULT 0", None),
+        ("frn_report_history", "sms_sent", "TINYINT(1) DEFAULT 0", None),
+        ("frn_report_history", "delivery_modes", "JSON DEFAULT NULL", None),
+        ("frn_report_history", "recipient_email", "VARCHAR(255) DEFAULT NULL", None),
+        ("frn_report_history", "viewed_at", "DATETIME DEFAULT NULL", None),
     ]
     
     try:

@@ -797,7 +797,8 @@ def process_frn_watch_reports():
         
         logger.info(
             f"FRN watch processing complete. "
-            f"Processed: {result['processed']}, Sent: {result['sent']}, Errors: {result['errors']}"
+            f"Processed: {result['processed']}, Emails: {result.get('emails_sent', 0)}, "
+            f"SMS: {result.get('sms_sent', 0)}, Errors: {result['errors']}"
         )
     except Exception as e:
         logger.error(f"FRN watch report processing failed: {e}")
