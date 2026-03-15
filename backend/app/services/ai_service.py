@@ -218,7 +218,13 @@ class AIService:
         # Try to parse as JSON, otherwise return as text analysis
         try:
             import json
-            return json.loads(response)
+            # Strip markdown code blocks if present
+            cleaned = response.strip()
+            if cleaned.startswith('```'):
+                cleaned = cleaned.split('\n', 1)[1] if '\n' in cleaned else cleaned[3:]
+            if cleaned.endswith('```'):
+                cleaned = cleaned.rsplit('```', 1)[0]
+            return json.loads(cleaned.strip())
         except:
             return {"raw_analysis": response}
     
