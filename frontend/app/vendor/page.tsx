@@ -2622,6 +2622,7 @@ function VendorPortalPage() {
                       )}
                     </div>
                   </div>
+                  </div>
                 )}
               </div>
             )}
