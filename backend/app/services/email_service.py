@@ -76,9 +76,9 @@ class EmailService:
             
             msg = MIMEMultipart('alternative')
             msg['Subject'] = subject
-            msg['From'] = f"{from_name} <{from_email}>"
+            msg['From'] = f"{from_name} <{self.smtp_user}>"
             msg['To'] = to_email
-            msg['Reply-To'] = f"SkyRate AI Support <support@skyrate.ai>"
+            msg['Reply-To'] = f"{from_name} <{from_email}>"
             
             # Plain text version
             if text_content:
@@ -97,7 +97,8 @@ class EmailService:
                     server.sendmail(self.smtp_user, to_email, msg.as_string())
                 logger.info(f"Email sent to {to_email} from {from_email} (envelope: {self.smtp_user}): {subject}")
             else:
-                logger.info(f"Email would be sent to {to_email} from {from_email}: {subject} (SMTP not configured)")
+                logger.warning(f"Email would be sent to {to_email} from {from_email}: {subject} (SMTP not configured)")
+                return False
             
             return True
             
