@@ -552,7 +552,7 @@ async def send_email_verification(
                     <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">If you didn't request this code, you can safely ignore this email.</p>
                 </div>
                 """,
-                from_alias="noreply@skyrate.ai"
+                email_type="noreply"
             )
         except Exception as e:
             logger.error(f"Failed to send verification email to {email}: {e}")
