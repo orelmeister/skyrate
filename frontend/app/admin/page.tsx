@@ -6,6 +6,8 @@ import { useAuthStore } from "@/lib/auth-store";
 import { api } from "@/lib/api";
 import { requestNotificationPermission, subscribeToPush, isPushSupported, getNotificationPermission } from "@/lib/notifications";
 import { useTabParam } from "@/hooks/useTabParam";
+import { downloadCsv, csvFilename } from "@/lib/csv-export";
+import { TableExportBar } from "@/components/TableExportBar";
 
 const ADMIN_TABS = ["overview", "users", "tickets", "frn", "promo", "communications", "blog"] as const;
 type AdminTab = typeof ADMIN_TABS[number];
@@ -520,6 +522,22 @@ function UsersTab({
   users: any[]; total: number; search: string; setSearch: (s: string) => void;
   roleFilter: string; setRoleFilter: (r: string) => void; onEmailUser: (id: number) => void;
 }) {
+  const [selectedUsers, setSelectedUsers] = useState<Set<number>>(new Set());
+
+  function handleExportUsers() {
+    const cols = ["Email", "Name", "Role", "Company", "Status", "Joined"];
+    const source = selectedUsers.size > 0 ? users.filter(u => selectedUsers.has(u.id)) : users;
+    const rows = source.map(u => ({
+      Email: u.email || "",
+      Name: u.full_name || u.first_name || "",
+      Role: u.role || "",
+      Company: u.company_name || "",
+      Status: u.is_active ? "Active" : "Inactive",
+      Joined: u.created_at ? new Date(u.created_at).toLocaleDateString() : "",
+    }));
+    downloadCsv(csvFilename("admin-users"), cols, rows);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 flex-wrap">
@@ -544,10 +562,25 @@ function UsersTab({
         <span className="text-sm text-slate-500">{total} users</span>
       </div>
 
+      <TableExportBar
+        selectedCount={selectedUsers.size}
+        totalCount={users.length}
+        onExportCsv={handleExportUsers}
+        onClearSelection={() => setSelectedUsers(new Set())}
+      />
+
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 border-b">
             <tr>
+              <th className="w-10 px-3 py-3">
+                <input
+                  type="checkbox"
+                  checked={users.length > 0 && selectedUsers.size === users.length}
+                  onChange={(e) => { if (e.target.checked) setSelectedUsers(new Set(users.map(u => u.id))); else setSelectedUsers(new Set()); }}
+                  className="rounded border-slate-300"
+                />
+              </th>
               <th className="text-left px-4 py-3 font-medium text-slate-600">Email</th>
               <th className="text-left px-4 py-3 font-medium text-slate-600">Name</th>
               <th className="text-left px-4 py-3 font-medium text-slate-600">Role</th>
@@ -561,6 +594,14 @@ function UsersTab({
           <tbody>
             {users.map((u) => (
               <tr key={u.id} className="border-b last:border-0 hover:bg-slate-50">
+                <td className="px-3 py-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedUsers.has(u.id)}
+                    onChange={() => { const s = new Set(selectedUsers); if (s.has(u.id)) s.delete(u.id); else s.add(u.id); setSelectedUsers(s); }}
+                    className="rounded border-slate-300"
+                  />
+                </td>
                 <td className="px-4 py-3 text-slate-900">{u.email}</td>
                 <td className="px-4 py-3">{u.full_name || u.first_name || "—"}</td>
                 <td className="px-4 py-3">
@@ -746,6 +787,7 @@ function FRNMonitorTab({ frns, summary, onRefresh }: { frns: any[]; summary: any
   const [sortField, setSortField] = useState<string>("org");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(new Set());
+  const [selectedFrns, setSelectedFrns] = useState<Set<number>>(new Set());
 
   // USAC open data link for an FRN
   const getUSACLink = (frn: string) =>
@@ -953,6 +995,27 @@ function FRNMonitorTab({ frns, summary, onRefresh }: { frns: any[]; summary: any
       </div>
 
       {/* Results count + expand/collapse */}
+      <TableExportBar
+        selectedCount={selectedFrns.size}
+        totalCount={filteredFRNs.length}
+        onExportCsv={() => {
+          const cols = ["Organization", "BEN", "FRN", "Status", "Funding Year", "Amount", "User Email", "Source"];
+          const source = selectedFrns.size > 0 ? filteredFRNs.filter(f => selectedFrns.has(f.id ?? f.frn)) : filteredFRNs;
+          const rows = source.map((f: any) => ({
+            Organization: f.organization_name || "",
+            BEN: f.ben || "",
+            FRN: f.frn || "",
+            Status: f.status || "",
+            "Funding Year": f.funding_year || "",
+            Amount: f.amount_requested || "",
+            "User Email": f.user_email || "",
+            Source: f.source || "",
+          }));
+          downloadCsv(csvFilename("admin-frn-monitor"), cols, rows);
+        }}
+        onClearSelection={() => setSelectedFrns(new Set())}
+      />
+
       <div className="flex items-center justify-between">
         <div className="text-sm text-slate-500">
           {sortedGroups.length} organization{sortedGroups.length !== 1 ? "s" : ""} ·{" "}
@@ -981,6 +1044,14 @@ function FRNMonitorTab({ frns, summary, onRefresh }: { frns: any[]; summary: any
         <table className="w-full text-sm">
           <thead className="bg-slate-50 border-b">
             <tr>
+              <th className="w-10 px-3 py-3">
+                <input
+                  type="checkbox"
+                  checked={filteredFRNs.length > 0 && selectedFrns.size === filteredFRNs.length}
+                  onChange={(e) => { if (e.target.checked) setSelectedFrns(new Set(filteredFRNs.map((f: any) => f.id ?? f.frn))); else setSelectedFrns(new Set()); }}
+                  className="rounded border-slate-300"
+                />
+              </th>
               <th className="w-8 px-3 py-3"></th>
               <th
                 className="text-left px-4 py-3 font-medium text-slate-600 cursor-pointer select-none hover:text-purple-700"
@@ -1023,7 +1094,7 @@ function FRNMonitorTab({ frns, summary, onRefresh }: { frns: any[]; summary: any
           <tbody>
             {sortedGroups.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
                   {searchQuery
                     ? "No organizations match your search."
                     : "No FRNs being tracked."}
@@ -1037,6 +1108,18 @@ function FRNMonitorTab({ frns, summary, onRefresh }: { frns: any[]; summary: any
                     className="border-b hover:bg-purple-50/50 cursor-pointer transition-colors"
                     onClick={() => toggleOrg(org.name)}
                   >
+                    <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={org.frns.every((f: any) => selectedFrns.has(f.id ?? f.frn))}
+                        onChange={(e) => {
+                          const s = new Set(selectedFrns);
+                          org.frns.forEach((f: any) => { const k = f.id ?? f.frn; if (e.target.checked) s.add(k); else s.delete(k); });
+                          setSelectedFrns(s);
+                        }}
+                        className="rounded border-slate-300"
+                      />
+                    </td>
                     <td className="px-3 py-3 text-slate-400">
                       <span
                         className="text-xs transition-transform duration-200 inline-block"
@@ -1107,6 +1190,14 @@ function FRNMonitorTab({ frns, summary, onRefresh }: { frns: any[]; summary: any
                         key={`${org.name}-${idx}`}
                         className="bg-slate-50/70 border-b last:border-b-0"
                       >
+                        <td className="px-3 py-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedFrns.has(f.id ?? f.frn)}
+                            onChange={() => { const s = new Set(selectedFrns); const k = f.id ?? f.frn; if (s.has(k)) s.delete(k); else s.add(k); setSelectedFrns(s); }}
+                            className="rounded border-slate-300"
+                          />
+                        </td>
                         <td className="px-3 py-2"></td>
                         <td className="px-4 py-2 pl-8">
                           <a
@@ -1562,6 +1653,7 @@ function BlogManagerTab() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
+  const [selectedPosts, setSelectedPosts] = useState<Set<number>>(new Set());
 
   // Generator state
   const [showGenerator, setShowGenerator] = useState(false);
@@ -2053,10 +2145,36 @@ function BlogManagerTab() {
           <p className="text-sm">Use the AI Generator to create your first post.</p>
         </div>
       ) : (
+        <div className="space-y-2">
+        <TableExportBar
+          selectedCount={selectedPosts.size}
+          totalCount={posts.length}
+          onExportCsv={() => {
+            const cols = ["Title", "Slug", "Category", "Status", "Created"];
+            const source = selectedPosts.size > 0 ? posts.filter(p => selectedPosts.has(p.id)) : posts;
+            const rows = source.map(p => ({
+              Title: p.title || "",
+              Slug: p.slug || "",
+              Category: p.category || "",
+              Status: p.status || "",
+              Created: p.created_at ? new Date(p.created_at).toLocaleDateString() : "",
+            }));
+            downloadCsv(csvFilename("admin-blog-posts"), cols, rows);
+          }}
+          onClearSelection={() => setSelectedPosts(new Set())}
+        />
         <div className="bg-white border rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b">
               <tr>
+                <th className="w-10 px-3 py-3">
+                  <input
+                    type="checkbox"
+                    checked={posts.length > 0 && selectedPosts.size === posts.length}
+                    onChange={(e) => { if (e.target.checked) setSelectedPosts(new Set(posts.map(p => p.id))); else setSelectedPosts(new Set()); }}
+                    className="rounded border-slate-300"
+                  />
+                </th>
                 <th className="text-left px-4 py-3 font-medium text-slate-600">Title</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-600">Category</th>
                 <th className="text-left px-4 py-3 font-medium text-slate-600">Status</th>
@@ -2067,6 +2185,14 @@ function BlogManagerTab() {
             <tbody className="divide-y">
               {posts.map((post) => (
                 <tr key={post.id} className="hover:bg-slate-50">
+                  <td className="px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedPosts.has(post.id)}
+                      onChange={() => { const s = new Set(selectedPosts); if (s.has(post.id)) s.delete(post.id); else s.add(post.id); setSelectedPosts(s); }}
+                      className="rounded border-slate-300"
+                    />
+                  </td>
                   <td className="px-4 py-3">
                     <button onClick={() => loadPostForEdit(post.id)} className="text-purple-600 hover:underline font-medium text-left">
                       {post.title}
@@ -2120,6 +2246,7 @@ function BlogManagerTab() {
             </tbody>
           </table>
         </div>
+        </div>
       )}
     </div>
   );
@@ -2135,6 +2262,7 @@ function PromoInvitesTab() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [selectedInvites, setSelectedInvites] = useState<Set<number>>(new Set());
 
   // Form state
   const [email, setEmail] = useState("");
@@ -2320,6 +2448,23 @@ function PromoInvitesTab() {
       </div>
 
       {/* Invites Table */}
+      <TableExportBar
+        selectedCount={selectedInvites.size}
+        totalCount={invites.length}
+        onExportCsv={() => {
+          const cols = ["Email", "Role", "Trial Days", "Status", "Created"];
+          const source = selectedInvites.size > 0 ? invites.filter(inv => selectedInvites.has(inv.id)) : invites;
+          const rows = source.map((inv: any) => ({
+            Email: inv.email || "",
+            Role: inv.role || "",
+            "Trial Days": inv.trial_days || "",
+            Status: inv.status || "",
+            Created: inv.created_at ? new Date(inv.created_at).toLocaleDateString() : "",
+          }));
+          downloadCsv(csvFilename("admin-promo-invites"), cols, rows);
+        }}
+        onClearSelection={() => setSelectedInvites(new Set())}
+      />
       <div className="bg-white rounded-lg border overflow-hidden">
         <div className="px-6 py-4 border-b">
           <h3 className="text-lg font-semibold text-slate-800">All Promo Invites</h3>
@@ -2333,6 +2478,14 @@ function PromoInvitesTab() {
             <table className="w-full">
               <thead className="bg-slate-50 border-b">
                 <tr>
+                  <th className="w-10 px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={invites.length > 0 && selectedInvites.size === invites.length}
+                      onChange={(e) => { if (e.target.checked) setSelectedInvites(new Set(invites.map((inv: any) => inv.id))); else setSelectedInvites(new Set()); }}
+                      className="rounded border-slate-300"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Email</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Role</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Trial</th>
@@ -2344,6 +2497,14 @@ function PromoInvitesTab() {
               <tbody className="divide-y">
                 {invites.map((inv: any) => (
                   <tr key={inv.id} className="hover:bg-slate-50">
+                    <td className="px-3 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedInvites.has(inv.id)}
+                        onChange={() => { const s = new Set(selectedInvites); if (s.has(inv.id)) s.delete(inv.id); else s.add(inv.id); setSelectedInvites(s); }}
+                        className="rounded border-slate-300"
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <div className="text-sm font-medium text-slate-800">{inv.email}</div>
                       {inv.used_by_name && (
