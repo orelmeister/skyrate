@@ -554,11 +554,15 @@ def _notify_admins_of_denial(
     amount: float,
 ):
     """
-    Notify all admin users when ANY user's FRN is denied.
+    Notify all admin and super users when ANY user's FRN is denied.
     This gives admins visibility into denials across the entire platform.
     """
     try:
-        admin_users = db.query(User).filter(User.role == "admin", User.is_active == True).all()
+        # Include both 'admin' and 'super' roles for notifications
+        admin_users = db.query(User).filter(
+            User.role.in_(["admin", "super"]),
+            User.is_active == True
+        ).all()
         
         for admin in admin_users:
             from ..models.alert import Alert, AlertType, AlertPriority
@@ -581,34 +585,43 @@ def _notify_admins_of_denial(
             db.add(admin_alert)
         
         db.commit()
-        logger.info(f"Notified {len(admin_users)} admin(s) about denial of FRN {frn}")
+        logger.info(f"Notified {len(admin_users)} admin/super user(s) about denial of FRN {frn}")
         
-        # Also send email to admin
+        # Send email to each admin/super user
         try:
             from .email_service import EmailService
             email_service = EmailService()
-            email_service.send_email(
-                to_email="admin@skyrate.ai",
-                subject=f"🚨 FRN Denial Alert: {frn} ({school_name})",
-                html_content=f"""
-                <div style="font-family: Arial, sans-serif; max-width: 600px;">
-                    <h2 style="color: #dc2626;">FRN Denial Detected</h2>
-                    <table style="width: 100%; border-collapse: collapse;">
-                        <tr><td style="padding: 8px; font-weight: bold;">FRN:</td><td style="padding: 8px;">{frn}</td></tr>
-                        <tr><td style="padding: 8px; font-weight: bold;">School:</td><td style="padding: 8px;">{school_name}</td></tr>
-                        <tr><td style="padding: 8px; font-weight: bold;">User:</td><td style="padding: 8px;">{user_email}</td></tr>
-                        <tr><td style="padding: 8px; font-weight: bold;">Reason:</td><td style="padding: 8px;">{denial_reason}</td></tr>
-                        <tr><td style="padding: 8px; font-weight: bold;">Amount:</td><td style="padding: 8px;">${amount:,.2f}</td></tr>
-                    </table>
-                    <p style="margin-top: 16px;">
-                        <a href="https://skyrate.ai/admin" style="color: #7c3aed;">View in Admin Dashboard</a>
-                    </p>
-                </div>
-                """,
-                email_type='alert'
-            )
+            
+            html_content = f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px;">
+                <h2 style="color: #dc2626;">FRN Denial Detected</h2>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr><td style="padding: 8px; font-weight: bold;">FRN:</td><td style="padding: 8px;">{frn}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">School:</td><td style="padding: 8px;">{school_name}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">User:</td><td style="padding: 8px;">{user_email}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Reason:</td><td style="padding: 8px;">{denial_reason}</td></tr>
+                    <tr><td style="padding: 8px; font-weight: bold;">Amount:</td><td style="padding: 8px;">${amount:,.2f}</td></tr>
+                </table>
+                <p style="margin-top: 16px;">
+                    <a href="https://skyrate.ai/admin" style="color: #7c3aed;">View in Admin Dashboard</a>
+                </p>
+            </div>
+            """
+            
+            for admin in admin_users:
+                try:
+                    email_service.send_email(
+                        to_email=admin.email,
+                        subject=f"[ALERT] FRN Denial: {frn} ({school_name})",
+                        html_content=html_content,
+                        email_type='alert'
+                    )
+                    logger.info(f"Sent denial email to {admin.email}")
+                except Exception as e:
+                    logger.error(f"Failed to send admin denial email to {admin.email}: {e}")
+                    
         except Exception as e:
-            logger.error(f"Failed to send admin denial email: {e}")
+            logger.error(f"Failed to initialize email service for admin denial: {e}")
     
     except Exception as e:
         logger.error(f"Failed to notify admins of denial: {e}")

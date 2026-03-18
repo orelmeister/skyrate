@@ -76,6 +76,7 @@ def seed_demo_accounts():
     from app.models.applicant import ApplicantBEN
     from app.models.vendor import VendorProfile
     from app.models.consultant import ConsultantProfile, ConsultantCRN
+    from app.models.alert import AlertConfig
     from sqlalchemy.orm import Session
     from app.models.user import User, UserRole
     from app.models.applicant import ApplicantProfile
@@ -327,6 +328,47 @@ def seed_demo_accounts():
         
         db.commit()
         logger.info("Demo accounts seeded")
+        
+        # Seed AlertConfig for admin and super users with daily_digest=True
+        # This ensures they receive all reports and notifications
+        admin_super_users = db.query(User).filter(
+            User.role.in_(["admin", "super"]),
+            User.is_active == True
+        ).all()
+        
+        for admin_user in admin_super_users:
+            existing_config = db.query(AlertConfig).filter(
+                AlertConfig.user_id == admin_user.id
+            ).first()
+            
+            if not existing_config:
+                alert_config = AlertConfig(
+                    user_id=admin_user.id,
+                    alert_on_denial=True,
+                    alert_on_status_change=True,
+                    alert_on_deadline=True,
+                    alert_on_disbursement=True,
+                    alert_on_funding_approved=True,
+                    alert_on_form_470=True,  # Admin/super see all form 470s
+                    alert_on_competitor=True,  # Admin/super monitor competitors
+                    deadline_warning_days=14,
+                    min_alert_amount=0,  # See all amounts
+                    email_notifications=True,
+                    in_app_notifications=True,
+                    daily_digest=True,  # Enable daily digest for admin/super
+                    notification_email=admin_user.email,
+                    alert_filters={}
+                )
+                db.add(alert_config)
+                logger.info(f"Created AlertConfig with daily_digest=True for {admin_user.email}")
+            else:
+                # Ensure daily_digest is enabled for existing admin/super configs
+                if not existing_config.daily_digest:
+                    existing_config.daily_digest = True
+                    logger.info(f"Enabled daily_digest for existing admin/super user {admin_user.email}")
+        
+        db.commit()
+        logger.info("Admin/super alert configs seeded")
         
         # Migrate existing CRN data to consultant_crns table
         # This runs on every startup to ensure consistency
