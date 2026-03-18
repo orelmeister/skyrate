@@ -226,6 +226,19 @@ function ConsultantPortalPage() {
   const [queryError, setQueryError] = useState<string | null>(null);
   const [queryHistory, setQueryHistory] = useState<Array<{query: string; timestamp: Date; resultCount: number}>>([]);
 
+  // Funding overview state
+  const [fundingSummary, setFundingSummary] = useState<{
+    total_schools: number;
+    total_frns: number;
+    summary: {
+      funded: { count: number; amount: number };
+      denied: { count: number; amount: number };
+      pending: { count: number; amount: number };
+    };
+  } | null>(null);
+  const [fundingSummaryLoading, setFundingSummaryLoading] = useState(false);
+  const [fundingYear, setFundingYear] = useState<number | undefined>(undefined);
+
   // CRN verification state
   const [crnInput, setCrnInput] = useState("");
   const [isVerifyingCRN, setIsVerifyingCRN] = useState(false);
@@ -607,6 +620,21 @@ function ConsultantPortalPage() {
     }
   };
 
+  // Load Funding Summary (lightweight endpoint for funding tab)
+  const loadFundingSummary = async (year?: number) => {
+    setFundingSummaryLoading(true);
+    try {
+      const response = await api.getConsultantFRNStatusSummary(year);
+      if (response.success && response.data) {
+        setFundingSummary(response.data);
+      }
+    } catch (error) {
+      console.error("Failed to load funding summary:", error);
+    } finally {
+      setFundingSummaryLoading(false);
+    }
+  };
+
   // Load FRN watches for the report monitors section
   const loadFRNWatches = async () => {
     try {
@@ -630,16 +658,18 @@ function ConsultantPortalPage() {
     }
   };
 
-  // Load appeals and denied applications when switching to appeals tab
+  // Load data when switching tabs
   useEffect(() => {
     if (activeTab === "appeals") {
-      // Always load both when switching to appeals tab
       loadAppeals();
       loadDeniedApplications();
     }
     if (activeTab === "frn-status") {
       loadFRNWatches();
       loadReportHistory();
+    }
+    if (activeTab === "funding") {
+      loadFundingSummary(fundingYear);
     }
     // FRN status is NOT auto-loaded — user must click "Search" to prevent
     // slow loading (87+ sequential USAC API calls for large portfolios)
@@ -1842,73 +1872,297 @@ function ConsultantPortalPage() {
 
           {activeTab === "funding" && (
             <div className="space-y-6">
-              <div className="bg-white rounded-2xl border border-slate-200 p-8">
-                <div className="text-center mb-8">
-                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center mx-auto mb-6">
-                    <span className="text-4xl">🔍</span>
+              {/* Header Banner */}
+              <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-violet-600 rounded-2xl p-6 text-white shadow-lg">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
+                      <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h1 className="text-2xl font-bold">Funding Overview</h1>
+                      <p className="text-indigo-100 mt-1">Portfolio funding summary across all your schools</p>
+                    </div>
                   </div>
-                  <h2 className="text-xl font-semibold text-slate-900 mb-2">AI-Powered Funding Analysis</h2>
-                  <p className="text-slate-500 mb-6 max-w-md mx-auto">Query E-Rate funding data using natural language.</p>
+                  <div className="flex items-center gap-3">
+                    <select
+                      value={fundingYear || ""}
+                      onChange={(e) => {
+                        const year = e.target.value ? parseInt(e.target.value) : undefined;
+                        setFundingYear(year);
+                        loadFundingSummary(year);
+                      }}
+                      className="px-3 py-2 bg-white/20 border border-white/30 rounded-xl text-white text-sm [&>option]:text-slate-900"
+                    >
+                      <option value="">All Years</option>
+                      {[2026, 2025, 2024, 2023, 2022, 2021, 2020].map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => loadFundingSummary(fundingYear)}
+                      disabled={fundingSummaryLoading}
+                      className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {fundingSummaryLoading ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      )}
+                      Refresh
+                    </button>
+                  </div>
                 </div>
-                <form onSubmit={handleQuery} className="max-w-xl mx-auto mb-8">
+
+                {/* Summary Stats in Header */}
+                {fundingSummary && (
+                  <div className="grid grid-cols-4 gap-6 mt-6 pt-6 border-t border-white/20">
+                    <div>
+                      <div className="text-3xl font-bold">{fundingSummary.total_frns}</div>
+                      <div className="text-sm text-indigo-200 mt-1">Total FRNs</div>
+                    </div>
+                    <div>
+                      <div className="text-3xl font-bold">{formatAmount(fundingSummary.summary?.funded?.amount || 0)}</div>
+                      <div className="text-sm text-indigo-200 mt-1">Funded</div>
+                    </div>
+                    <div>
+                      <div className="text-3xl font-bold">{formatAmount(fundingSummary.summary?.pending?.amount || 0)}</div>
+                      <div className="text-sm text-indigo-200 mt-1">Pending</div>
+                    </div>
+                    <div>
+                      <div className="text-3xl font-bold">{formatAmount(fundingSummary.summary?.denied?.amount || 0)}</div>
+                      <div className="text-sm text-indigo-200 mt-1">Denied</div>
+                    </div>
+                  </div>
+                )}
+                {fundingSummaryLoading && !fundingSummary && (
+                  <div className="mt-6 pt-6 border-t border-white/20 text-center">
+                    <div className="animate-spin w-6 h-6 border-3 border-white border-t-transparent rounded-full mx-auto mb-2"></div>
+                    <p className="text-sm text-indigo-200">Loading funding data from USAC...</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Funding Summary Cards */}
+              {fundingSummary && (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <span className="text-xs text-slate-500 font-medium px-2 py-1 bg-slate-50 rounded-full">
+                        {fundingSummary.total_schools} schools
+                      </span>
+                    </div>
+                    <div className="text-3xl font-bold text-slate-900">{fundingSummary.total_frns}</div>
+                    <div className="text-sm text-slate-500 mt-1">Total FRNs</div>
+                  </div>
+
+                  <div className="bg-white rounded-2xl border border-green-200 p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <span className="text-xs text-green-600 font-medium px-2 py-1 bg-green-50 rounded-full">
+                        {fundingSummary.summary?.funded?.count || 0} FRNs
+                      </span>
+                    </div>
+                    <div className="text-3xl font-bold text-green-700">{formatAmount(fundingSummary.summary?.funded?.amount || 0)}</div>
+                    <div className="text-sm text-green-600 mt-1">Funded</div>
+                  </div>
+
+                  <div className="bg-white rounded-2xl border border-amber-200 p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <span className="text-xs text-amber-600 font-medium px-2 py-1 bg-amber-50 rounded-full">
+                        {fundingSummary.summary?.pending?.count || 0} FRNs
+                      </span>
+                    </div>
+                    <div className="text-3xl font-bold text-amber-700">{formatAmount(fundingSummary.summary?.pending?.amount || 0)}</div>
+                    <div className="text-sm text-amber-600 mt-1">Pending</div>
+                  </div>
+
+                  <div className="bg-white rounded-2xl border border-red-200 p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center">
+                        <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <span className="text-xs text-red-600 font-medium px-2 py-1 bg-red-50 rounded-full">
+                        {fundingSummary.summary?.denied?.count || 0} FRNs
+                      </span>
+                    </div>
+                    <div className="text-3xl font-bold text-red-700">{formatAmount(fundingSummary.summary?.denied?.amount || 0)}</div>
+                    <div className="text-sm text-red-600 mt-1">Denied</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Per-School Funding Table */}
+              {schools.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="p-6 border-b border-slate-200">
+                    <h3 className="font-semibold text-slate-900">School Funding Breakdown</h3>
+                    <p className="text-sm text-slate-500 mt-1">Funding data per school in your portfolio</p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">School</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">BEN</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">State</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Committed</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Requested</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Funding Years</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {schools.map((school) => (
+                          <tr key={school.ben} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-4 py-3">
+                              <div className="font-medium text-slate-900">{school.school_name || school.name || 'Unknown'}</div>
+                              {school.entity_type && (
+                                <span className="text-xs text-slate-400">{school.entity_type}</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 font-mono text-xs text-slate-600">{school.ben}</td>
+                            <td className="px-4 py-3 text-slate-600">{school.state || '-'}</td>
+                            <td className="px-4 py-3 text-right font-medium text-green-700">
+                              {school.total_funding_committed ? formatAmount(school.total_funding_committed) : '-'}
+                            </td>
+                            <td className="px-4 py-3 text-right text-slate-600">
+                              {school.total_funding_requested ? formatAmount(school.total_funding_requested) : '-'}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              {school.funding_years && school.funding_years.length > 0 ? (
+                                <div className="flex flex-wrap gap-1 justify-center">
+                                  {school.funding_years.slice(0, 3).map(y => (
+                                    <span key={y} className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 text-xs rounded">{y}</span>
+                                  ))}
+                                  {school.funding_years.length > 3 && (
+                                    <span className="text-xs text-slate-400">+{school.funding_years.length - 3}</span>
+                                  )}
+                                </div>
+                              ) : '-'}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <button
+                                onClick={() => {
+                                  setActiveTab("frn-status");
+                                  loadPortfolioFRNStatus(undefined, undefined, undefined, false);
+                                }}
+                                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                              >
+                                View FRNs
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {schools.length === 0 && (
+                    <div className="p-8 text-center text-slate-500">
+                      <p>No schools in your portfolio yet.</p>
+                      <button onClick={() => setActiveTab("schools")} className="text-indigo-600 hover:underline mt-2 text-sm">
+                        Add schools to get started
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Dashboard Quick Stats from dashboardStats */}
+              {dashboardStats && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border border-blue-200 p-6">
+                    <div className="text-sm text-blue-600 mb-1">Category 1 Funding</div>
+                    <div className="text-2xl font-bold text-blue-900">{formatAmount(dashboardStats.total_c1_funding)}</div>
+                  </div>
+                  <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border border-purple-200 p-6">
+                    <div className="text-sm text-purple-600 mb-1">Category 2 Funding</div>
+                    <div className="text-2xl font-bold text-purple-900">{formatAmount(dashboardStats.total_c2_funding)}</div>
+                  </div>
+                  <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl border border-emerald-200 p-6">
+                    <div className="text-sm text-emerald-600 mb-1">Total Portfolio Funding</div>
+                    <div className="text-2xl font-bold text-emerald-900">{formatAmount(dashboardStats.total_funding)}</div>
+                  </div>
+                </div>
+              )}
+
+              {/* AI-Powered Search Section */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                <div className="mb-4">
+                  <h3 className="font-semibold text-slate-900">AI-Powered Funding Search</h3>
+                  <p className="text-sm text-slate-500">Query E-Rate funding data using natural language</p>
+                </div>
+                <form onSubmit={handleQuery} className="mb-4">
                   <div className="relative">
                     <input 
                       type="text" 
                       value={queryInput}
                       onChange={(e) => setQueryInput(e.target.value)}
                       placeholder="Ask anything about E-Rate funding..." 
-                      className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 pr-28" 
+                      className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 pr-24" 
                     />
                     <button 
                       type="submit"
                       disabled={isQuerying}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl disabled:opacity-50"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 px-5 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg text-sm disabled:opacity-50"
                     >
                       {isQuerying ? "..." : "Search"}
                     </button>
                   </div>
                 </form>
 
-                {/* Query History */}
                 {queryHistory.length > 0 && (
-                  <div className="max-w-xl mx-auto">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-medium text-slate-600">Recent Queries</h3>
-                      <button 
-                        onClick={clearQueryHistory}
-                        className="text-xs text-slate-400 hover:text-red-500"
-                      >
-                        Clear History
-                      </button>
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-slate-500">Recent Queries</span>
+                      <button onClick={clearQueryHistory} className="text-xs text-slate-400 hover:text-red-500">Clear</button>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {queryHistory.slice(0, 8).map((item, idx) => (
+                      {queryHistory.slice(0, 6).map((item, idx) => (
                         <button
                           key={idx}
                           onClick={() => loadQueryFromHistory(item.query)}
-                          className="px-3 py-1.5 bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-700 rounded-lg text-sm transition-colors flex items-center gap-2 max-w-xs truncate"
-                          title={`${item.query} (${item.resultCount} results)`}
+                          className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-700 rounded-lg text-xs transition-colors truncate max-w-xs"
+                          title={item.query}
                         >
-                          <span className="truncate">{item.query}</span>
-                          <span className="text-xs text-slate-400">({item.resultCount})</span>
+                          {item.query}
                         </button>
                       ))}
                     </div>
                   </div>
                 )}
-              
               </div>
 
               {queryError && (
-                <div className="max-w-2xl mx-auto mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700">
+                <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
                   {queryError}
                 </div>
               )}
               
               {queryResults && (
-                <div className="max-w-6xl mx-auto">
+                <div>
                   {queryResults.summary && (
-                    <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6 mb-6">
+                    <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6 mb-4">
                       <h3 className="font-semibold text-slate-900 mb-2">Summary</h3>
                       <p className="text-slate-700">{queryResults.summary}</p>
                     </div>
@@ -1929,6 +2183,25 @@ function ConsultantPortalPage() {
                       Found {queryResults.count.toLocaleString()} matching records
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Empty state when no schools and no summary */}
+              {schools.length === 0 && !fundingSummary && !fundingSummaryLoading && (
+                <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-indigo-100 flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">No Schools in Portfolio</h3>
+                  <p className="text-slate-500 mb-4">Add schools to your portfolio to see funding data</p>
+                  <button
+                    onClick={() => setActiveTab("schools")}
+                    className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl text-sm font-medium"
+                  >
+                    Add Schools
+                  </button>
                 </div>
               )}
             </div>
