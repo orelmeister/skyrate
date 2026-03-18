@@ -672,9 +672,16 @@ class PredictionService:
             if entity_types:
                 et_conditions = []
                 for et in entity_types:
-                    et_conditions.append(
-                        func.lower(PredictedLead.entity_type).contains(et.lower())
-                    )
+                    if et.lower() == "charter school":
+                        # Charter schools often have entity_type="School" with "charter" in name
+                        et_conditions.append(or_(
+                            func.lower(PredictedLead.entity_type).contains("charter"),
+                            func.lower(PredictedLead.organization_name).contains("charter")
+                        ))
+                    else:
+                        et_conditions.append(
+                            func.lower(PredictedLead.entity_type).contains(et.lower())
+                        )
                 query = query.filter(or_(*et_conditions))
             
             if min_confidence > 0:
