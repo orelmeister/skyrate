@@ -1682,7 +1682,7 @@ class USACDataClient:
                 where_conditions.append(f"UPPER(function) LIKE UPPER('%{equipment_type}%')")
             
             if service_function:
-                where_conditions.append(f"UPPER(function) LIKE UPPER('%{service_function}%')")
+                where_conditions.append(f"UPPER(service_type) LIKE UPPER('%{service_function}%')")
             
             # NEW: Speed/capacity range filter (Item 8)
             if min_speed:
