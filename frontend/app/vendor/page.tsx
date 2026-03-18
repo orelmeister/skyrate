@@ -550,7 +550,11 @@ function VendorPortalPage() {
       if (response.success && response.data) {
         setForm470Leads(response.data.leads || []);
         setForm470TotalLeads(response.data.total_leads || 0);
-        setForm470Filters(response.data.filters_applied || {});
+        // Clean null values from filters_applied to avoid null contamination in state
+        const cleanFilters = Object.fromEntries(
+          Object.entries(response.data.filters_applied || {}).filter(([_, v]) => v != null)
+        );
+        setForm470Filters(cleanFilters);
       } else {
         setForm470Error(response.error || "Failed to fetch 470 leads");
         setForm470Leads([]);
@@ -2089,6 +2093,7 @@ function VendorPortalPage() {
                     type="text"
                     value={form470Filters.manufacturer || ""}
                     onChange={(e) => setForm470Filters({ ...form470Filters, manufacturer: e.target.value || undefined })}
+                    onKeyDown={(e) => { if (e.key === 'Enter') load470Leads(form470Filters); }}
                     placeholder="e.g., Cisco, Meraki, Aruba"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                   />
@@ -2101,6 +2106,7 @@ function VendorPortalPage() {
                     type="text"
                     value={form470Filters.equipment_type || ""}
                     onChange={(e) => setForm470Filters({ ...form470Filters, equipment_type: e.target.value || undefined })}
+                    onKeyDown={(e) => { if (e.key === 'Enter') load470Leads(form470Filters); }}
                     placeholder="e.g., Switches, Routers, Cabling"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                   />

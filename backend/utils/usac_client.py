@@ -1667,22 +1667,26 @@ class USACDataClient:
             # Build WHERE clause for services dataset
             where_conditions = [year_filter]
             
+            # Sanitize text inputs to prevent SOQL injection (escape single quotes)
+            def _sanitize(val: str) -> str:
+                return val.replace("'", "''")
+            
             if category:
                 cat_name = f"Category {category}" if category in ['1', '2'] else category
-                where_conditions.append(f"service_category = '{cat_name}'")
+                where_conditions.append(f"service_category = '{_sanitize(cat_name)}'")
             
             if service_type:
-                where_conditions.append(f"service_type LIKE '%{service_type}%'")
+                where_conditions.append(f"UPPER(service_type) LIKE UPPER('%{_sanitize(service_type)}%')")
             
             if manufacturer:
-                where_conditions.append(f"UPPER(manufacturer) LIKE UPPER('%{manufacturer}%')")
+                where_conditions.append(f"UPPER(manufacturer) LIKE UPPER('%{_sanitize(manufacturer)}%')")
             
             # NEW: Equipment type / function filter (Items 6, 7)
             if equipment_type:
-                where_conditions.append(f"UPPER(function) LIKE UPPER('%{equipment_type}%')")
+                where_conditions.append(f"UPPER(function) LIKE UPPER('%{_sanitize(equipment_type)}%')")
             
             if service_function:
-                where_conditions.append(f"UPPER(service_type) LIKE UPPER('%{service_function}%')")
+                where_conditions.append(f"UPPER(service_type) LIKE UPPER('%{_sanitize(service_function)}%')")
             
             # NEW: Speed/capacity range filter (Item 8)
             if min_speed:
