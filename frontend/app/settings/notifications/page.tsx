@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   Bell, Mail, AlertTriangle, Clock, DollarSign, Building, 
@@ -78,6 +78,18 @@ function formatTimeAgo(dateString: string): string {
 }
 
 export default function NotificationSettingsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600" />
+      </div>
+    }>
+      <NotificationSettingsContent />
+    </Suspense>
+  );
+}
+
+function NotificationSettingsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, user, token, _hasHydrated } = useAuthStore();

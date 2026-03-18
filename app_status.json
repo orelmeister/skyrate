@@ -1,0 +1,880 @@
+﻿[
+  {
+    "id": "8f201fb9-f0f1-4b58-a329-e1fb41ef9f69",
+    "owner_uuid": "83f0f261-2d6f-46c8-81d2-e1b6c8954bb2",
+    "spec": {
+      "name": "skyrate",
+      "services": [
+        {
+          "name": "backend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "pip install -r requirements.txt",
+          "run_command": "uvicorn app.main:app --host 0.0.0.0 --port 8000",
+          "source_dir": "backend",
+          "environment_slug": "python",
+          "envs": [
+            {
+              "key": "SECRET_KEY",
+              "value": "WvFKVgkDWd4KVcfz1mUOkuSx_oXXZO57cgYl71P7A0c",
+              "scope": "RUN_AND_BUILD_TIME"
+            },
+            {
+              "key": "DATABASE_URL",
+              "value": "EV[1:x/80iKwauVdrfpYdxRMgJwYcyMlw4+g6:+tb4v6DncMZ5PjgQPVFuZwzh8E3dD5NsPGltJ/d4G2DbPN9WOYyVhN6cvoCalAO+PhTrYESQ0YmgNQMvWJ5DgcVTuC00VespMv3uiSGQyAIRtbBWev2c9Vw9iwTpqg==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "ENVIRONMENT",
+              "value": "production",
+              "scope": "RUN_AND_BUILD_TIME"
+            },
+            {
+              "key": "DEBUG",
+              "value": "false",
+              "scope": "RUN_AND_BUILD_TIME"
+            },
+            {
+              "key": "OPENAI_API_KEY",
+              "value": "EV[1:gVyUTfVbI6H/fsfIKhFm0Pxav68V9BZ9:lQvrxNUFvYRlz2ScEVPy2A==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_SECRET_KEY",
+              "value": "EV[1:46gOzbB0RRaOmUQDasEhPea26PBT/cKj:ruGIQumLy83RsBWaLFbxFA==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "STRIPE_WEBHOOK_SECRET",
+              "value": "EV[1:MJBaHSJc+CQtiOs6aqHXHdQy4Dk8coj+:aXFMl2Yp30BmgMZoC+ne8g==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "VAPID_PRIVATE_KEY",
+              "value": "EV[1:TXNVu9waf96oto7q02tE10dcyQivsN0c:rBEhKsguZUPtFsd5FA+Ueg==]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "VAPID_PUBLIC_KEY",
+              "value": "BOQ_1ePgEdPmLcqMCOwM1XGJakthkvFnt3AuCJaGZMs-gm71tz7QorrUdZzBwK-6XWX_SwaRlnO02jyZZNzM-8I",
+              "scope": "RUN_AND_BUILD_TIME"
+            },
+            {
+              "key": "VAPID_CONTACT_EMAIL",
+              "value": "alerts@skyrate.ai",
+              "scope": "RUN_AND_BUILD_TIME"
+            },
+            {
+              "key": "SMTP_HOST",
+              "value": "smtp.gmail.com",
+              "scope": "RUN_AND_BUILD_TIME"
+            },
+            {
+              "key": "SMTP_PORT",
+              "value": "587",
+              "scope": "RUN_AND_BUILD_TIME"
+            },
+            {
+              "key": "SMTP_USER",
+              "value": "david@skyrate.ai",
+              "scope": "RUN_AND_BUILD_TIME"
+            },
+            {
+              "key": "SMTP_PASSWORD",
+              "value": "EV[1:yTpP7puLmW7OM+0Ycii04bYxHjrNIqF1:fgbzq2jUPq4eToJ4BuHGVabOE4EYSby8FLJY6e72jV8=]",
+              "scope": "RUN_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "FROM_EMAIL",
+              "value": "alerts@skyrate.ai",
+              "scope": "RUN_AND_BUILD_TIME"
+            },
+            {
+              "key": "FRONTEND_URL",
+              "value": "https://skyrate.ai",
+              "scope": "RUN_AND_BUILD_TIME"
+            },
+            {
+              "key": "DEEPSEEK_API_KEY",
+              "value": "EV[1:9KZ6RKrQTzFt9ucjQu4x686vKr8souRj:gKpX0BctrwE6nV3EVnCmMglFLnWnxqJpmBsuJ0odNl+r8RudIEBXM1NTzj8icE4NoTxZ]",
+              "scope": "RUN_AND_BUILD_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "GEMINI_API_KEY",
+              "value": "EV[1:q+K82J7mIydbE+AzuRc0kf3yLASqe3u2:NvPDiB1++gVfQRIuPtz1nFI921PyIprf9UgPG0eaoWG+GOVfDRTYodIbub66MDPAovnF3Dv5JQ==]",
+              "scope": "RUN_AND_BUILD_TIME",
+              "type": "SECRET"
+            },
+            {
+              "key": "ANTHROPIC_API_KEY",
+              "value": "EV[1:F6JcklycrJZDGtu7TWW+ZjNwdhQKr1QM:7jbWVD2wJfVZCkqc3F/qvDUHi47eGvBjvqppmhyQpAKx6NP/GlxsR7fdwmJMNpURYS4TucLNzgscJnvTTSOIQFQonOcnwDnN9C1dz8hyCdsTr27dDi6bePCwqZ24YG3nqkXAGckfSJSyNLwPOMyM+p3oZ4Zl4fWVZ2TYpw==]",
+              "scope": "RUN_AND_BUILD_TIME",
+              "type": "SECRET"
+            }
+          ],
+          "instance_size_slug": "apps-s-2vcpu-4gb",
+          "instance_count": 1,
+          "http_port": 8000
+        },
+        {
+          "name": "frontend",
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main",
+            "deploy_on_push": true
+          },
+          "build_command": "npm install \u0026\u0026 npm run build",
+          "run_command": "npm start",
+          "source_dir": "frontend",
+          "environment_slug": "node-js",
+          "envs": [
+            {
+              "key": "NEXT_PUBLIC_API_URL",
+              "value": "https://skyrate.ai",
+              "scope": "BUILD_TIME"
+            },
+            {
+              "key": "NEXT_PUBLIC_VAPID_KEY",
+              "value": "BOQ_1ePgEdPmLcqMCOwM1XGJakthkvFnt3AuCJaGZMs-gm71tz7QorrUdZzBwK-6XWX_SwaRlnO02jyZZNzM-8I",
+              "scope": "BUILD_TIME"
+            }
+          ],
+          "instance_size_slug": "apps-s-2vcpu-4gb",
+          "instance_count": 1,
+          "http_port": 3000
+        }
+      ],
+      "domains": [
+        {
+          "domain": "skyrate.ai",
+          "type": "PRIMARY"
+        },
+        {
+          "domain": "www.skyrate.ai",
+          "type": "ALIAS"
+        }
+      ],
+      "region": "fra",
+      "ingress": {
+        "rules": [
+          {
+            "match": {
+              "path": {
+                "prefix": "/api"
+              }
+            },
+            "component": {
+              "name": "backend"
+            }
+          },
+          {
+            "match": {
+              "path": {
+                "prefix": "/"
+              }
+            },
+            "component": {
+              "name": "frontend"
+            }
+          }
+        ]
+      }
+    },
+    "last_deployment_active_at": "2026-03-18T17:21:56Z",
+    "default_ingress": "https://skyrate-unox7.ondigitalocean.app",
+    "created_at": "2026-02-02T03:16:11Z",
+    "updated_at": "2026-03-18T17:48:52Z",
+    "active_deployment": {
+      "id": "14ba3a73-a24e-49fb-9e36-b0d85368f2b1",
+      "spec": {
+        "name": "skyrate",
+        "services": [
+          {
+            "name": "backend",
+            "github": {
+              "repo": "orelmeister/skyrate",
+              "branch": "main",
+              "deploy_on_push": true
+            },
+            "build_command": "pip install -r requirements.txt",
+            "run_command": "uvicorn app.main:app --host 0.0.0.0 --port 8000",
+            "source_dir": "backend",
+            "environment_slug": "python",
+            "envs": [
+              {
+                "key": "SECRET_KEY",
+                "value": "WvFKVgkDWd4KVcfz1mUOkuSx_oXXZO57cgYl71P7A0c",
+                "scope": "RUN_AND_BUILD_TIME"
+              },
+              {
+                "key": "DATABASE_URL",
+                "value": "EV[1:x/80iKwauVdrfpYdxRMgJwYcyMlw4+g6:+tb4v6DncMZ5PjgQPVFuZwzh8E3dD5NsPGltJ/d4G2DbPN9WOYyVhN6cvoCalAO+PhTrYESQ0YmgNQMvWJ5DgcVTuC00VespMv3uiSGQyAIRtbBWev2c9Vw9iwTpqg==]",
+                "scope": "RUN_TIME",
+                "type": "SECRET"
+              },
+              {
+                "key": "ENVIRONMENT",
+                "value": "production",
+                "scope": "RUN_AND_BUILD_TIME"
+              },
+              {
+                "key": "DEBUG",
+                "value": "false",
+                "scope": "RUN_AND_BUILD_TIME"
+              },
+              {
+                "key": "OPENAI_API_KEY",
+                "value": "EV[1:gVyUTfVbI6H/fsfIKhFm0Pxav68V9BZ9:lQvrxNUFvYRlz2ScEVPy2A==]",
+                "scope": "RUN_TIME",
+                "type": "SECRET"
+              },
+              {
+                "key": "STRIPE_SECRET_KEY",
+                "value": "EV[1:46gOzbB0RRaOmUQDasEhPea26PBT/cKj:ruGIQumLy83RsBWaLFbxFA==]",
+                "scope": "RUN_TIME",
+                "type": "SECRET"
+              },
+              {
+                "key": "STRIPE_WEBHOOK_SECRET",
+                "value": "EV[1:MJBaHSJc+CQtiOs6aqHXHdQy4Dk8coj+:aXFMl2Yp30BmgMZoC+ne8g==]",
+                "scope": "RUN_TIME",
+                "type": "SECRET"
+              },
+              {
+                "key": "VAPID_PRIVATE_KEY",
+                "value": "EV[1:TXNVu9waf96oto7q02tE10dcyQivsN0c:rBEhKsguZUPtFsd5FA+Ueg==]",
+                "scope": "RUN_TIME",
+                "type": "SECRET"
+              },
+              {
+                "key": "VAPID_PUBLIC_KEY",
+                "value": "BOQ_1ePgEdPmLcqMCOwM1XGJakthkvFnt3AuCJaGZMs-gm71tz7QorrUdZzBwK-6XWX_SwaRlnO02jyZZNzM-8I",
+                "scope": "RUN_AND_BUILD_TIME"
+              },
+              {
+                "key": "VAPID_CONTACT_EMAIL",
+                "value": "alerts@skyrate.ai",
+                "scope": "RUN_AND_BUILD_TIME"
+              },
+              {
+                "key": "SMTP_HOST",
+                "value": "smtp.gmail.com",
+                "scope": "RUN_AND_BUILD_TIME"
+              },
+              {
+                "key": "SMTP_PORT",
+                "value": "587",
+                "scope": "RUN_AND_BUILD_TIME"
+              },
+              {
+                "key": "SMTP_USER",
+                "value": "david@skyrate.ai",
+                "scope": "RUN_AND_BUILD_TIME"
+              },
+              {
+                "key": "SMTP_PASSWORD",
+                "value": "EV[1:yTpP7puLmW7OM+0Ycii04bYxHjrNIqF1:fgbzq2jUPq4eToJ4BuHGVabOE4EYSby8FLJY6e72jV8=]",
+                "scope": "RUN_TIME",
+                "type": "SECRET"
+              },
+              {
+                "key": "FROM_EMAIL",
+                "value": "alerts@skyrate.ai",
+                "scope": "RUN_AND_BUILD_TIME"
+              },
+              {
+                "key": "FRONTEND_URL",
+                "value": "https://skyrate.ai",
+                "scope": "RUN_AND_BUILD_TIME"
+              },
+              {
+                "key": "DEEPSEEK_API_KEY",
+                "value": "EV[1:9KZ6RKrQTzFt9ucjQu4x686vKr8souRj:gKpX0BctrwE6nV3EVnCmMglFLnWnxqJpmBsuJ0odNl+r8RudIEBXM1NTzj8icE4NoTxZ]",
+                "scope": "RUN_AND_BUILD_TIME",
+                "type": "SECRET"
+              },
+              {
+                "key": "GEMINI_API_KEY",
+                "value": "EV[1:q+K82J7mIydbE+AzuRc0kf3yLASqe3u2:NvPDiB1++gVfQRIuPtz1nFI921PyIprf9UgPG0eaoWG+GOVfDRTYodIbub66MDPAovnF3Dv5JQ==]",
+                "scope": "RUN_AND_BUILD_TIME",
+                "type": "SECRET"
+              },
+              {
+                "key": "ANTHROPIC_API_KEY",
+                "value": "EV[1:F6JcklycrJZDGtu7TWW+ZjNwdhQKr1QM:7jbWVD2wJfVZCkqc3F/qvDUHi47eGvBjvqppmhyQpAKx6NP/GlxsR7fdwmJMNpURYS4TucLNzgscJnvTTSOIQFQonOcnwDnN9C1dz8hyCdsTr27dDi6bePCwqZ24YG3nqkXAGckfSJSyNLwPOMyM+p3oZ4Zl4fWVZ2TYpw==]",
+                "scope": "RUN_AND_BUILD_TIME",
+                "type": "SECRET"
+              }
+            ],
+            "instance_size_slug": "apps-s-2vcpu-4gb",
+            "instance_count": 1,
+            "http_port": 8000
+          },
+          {
+            "name": "frontend",
+            "github": {
+              "repo": "orelmeister/skyrate",
+              "branch": "main",
+              "deploy_on_push": true
+            },
+            "build_command": "npm install \u0026\u0026 npm run build",
+            "run_command": "npm start",
+            "source_dir": "frontend",
+            "environment_slug": "node-js",
+            "envs": [
+              {
+                "key": "NEXT_PUBLIC_API_URL",
+                "value": "https://skyrate.ai",
+                "scope": "BUILD_TIME"
+              },
+              {
+                "key": "NEXT_PUBLIC_VAPID_KEY",
+                "value": "BOQ_1ePgEdPmLcqMCOwM1XGJakthkvFnt3AuCJaGZMs-gm71tz7QorrUdZzBwK-6XWX_SwaRlnO02jyZZNzM-8I",
+                "scope": "BUILD_TIME"
+              }
+            ],
+            "instance_size_slug": "apps-s-2vcpu-4gb",
+            "instance_count": 1,
+            "http_port": 3000
+          }
+        ],
+        "domains": [
+          {
+            "domain": "skyrate.ai",
+            "type": "PRIMARY"
+          },
+          {
+            "domain": "www.skyrate.ai",
+            "type": "ALIAS"
+          }
+        ],
+        "region": "fra",
+        "ingress": {
+          "rules": [
+            {
+              "match": {
+                "path": {
+                  "prefix": "/api"
+                }
+              },
+              "component": {
+                "name": "backend"
+              }
+            },
+            {
+              "match": {
+                "path": {
+                  "prefix": "/"
+                }
+              },
+              "component": {
+                "name": "frontend"
+              }
+            }
+          ]
+        }
+      },
+      "services": [
+        {
+          "name": "backend",
+          "source_commit_hash": "ab6d1611188f753d6cff8dbfb753165004a36c32",
+          "buildpacks": [
+            {
+              "id": "heroku/python",
+              "version": "4.322.5",
+              "major_version": 4,
+              "latest": true,
+              "name": "Python",
+              "docs_link": "https://docs.digitalocean.com/products/app-platform/languages-frameworks/python/"
+            },
+            {
+              "id": "digitalocean/procfile",
+              "version": "0.1.0",
+              "latest": true,
+              "name": "Procfile",
+              "description": [
+                "Configure default run commands from the Procfile if one exists"
+              ]
+            },
+            {
+              "id": "digitalocean/custom",
+              "version": "0.2.0",
+              "latest": true,
+              "name": "Custom Build Command",
+              "description": [
+                "Run the provided custom build command"
+              ],
+              "docs_link": "https://docs.digitalocean.com/products/app-platform/how-to/build-run-commands/"
+            }
+          ]
+        },
+        {
+          "name": "frontend",
+          "source_commit_hash": "ab6d1611188f753d6cff8dbfb753165004a36c32",
+          "buildpacks": [
+            {
+              "id": "heroku/nodejs",
+              "version": "0.325.5",
+              "latest": true,
+              "name": "Node.js",
+              "description": [
+                "Install dependencies using NPM, PNPM or Yarn"
+              ],
+              "docs_link": "https://docs.digitalocean.com/products/app-platform/languages-frameworks/nodejs/"
+            },
+            {
+              "id": "digitalocean/procfile",
+              "version": "0.1.0",
+              "latest": true,
+              "name": "Procfile",
+              "description": [
+                "Configure default run commands from the Procfile if one exists"
+              ]
+            },
+            {
+              "id": "digitalocean/custom",
+              "version": "0.2.0",
+              "latest": true,
+              "name": "Custom Build Command",
+              "description": [
+                "Run the provided custom build command"
+              ],
+              "docs_link": "https://docs.digitalocean.com/products/app-platform/how-to/build-run-commands/"
+            }
+          ]
+        }
+      ],
+      "phase_last_updated_at": "2026-03-18T17:21:56Z",
+      "created_at": "2026-03-18T17:16:57Z",
+      "updated_at": "2026-03-18T17:21:56Z",
+      "cause": "commit ab6d161 pushed to github.com/orelmeister/skyrate/tree/main",
+      "progress": {
+        "success_steps": 9,
+        "total_steps": 9,
+        "steps": [
+          {
+            "name": "build",
+            "status": "SUCCESS",
+            "steps": [
+              {
+                "name": "initialize",
+                "status": "SUCCESS",
+                "started_at": "2026-03-18T17:17:03.724810225Z",
+                "ended_at": "2026-03-18T17:17:04.873936535Z"
+              },
+              {
+                "name": "components",
+                "status": "SUCCESS",
+                "steps": [
+                  {
+                    "name": "backend",
+                    "status": "SUCCESS",
+                    "started_at": "0001-01-01T00:00:00Z",
+                    "ended_at": "0001-01-01T00:00:00Z",
+                    "component_name": "backend",
+                    "message_base": "Building service"
+                  },
+                  {
+                    "name": "frontend",
+                    "status": "SUCCESS",
+                    "started_at": "0001-01-01T00:00:00Z",
+                    "ended_at": "0001-01-01T00:00:00Z",
+                    "component_name": "frontend",
+                    "message_base": "Building service"
+                  }
+                ],
+                "started_at": "2026-03-18T17:17:04.874002172Z",
+                "ended_at": "2026-03-18T17:19:52.740854351Z"
+              }
+            ],
+            "started_at": "2026-03-18T17:17:03.724642539Z",
+            "ended_at": "2026-03-18T17:19:53.885783928Z"
+          },
+          {
+            "name": "deploy",
+            "status": "SUCCESS",
+            "steps": [
+              {
+                "name": "initialize",
+                "status": "SUCCESS",
+                "started_at": "2026-03-18T17:19:56.92404298Z",
+                "ended_at": "2026-03-18T17:19:58.775564058Z"
+              },
+              {
+                "name": "components",
+                "status": "SUCCESS",
+                "steps": [
+                  {
+                    "name": "backend",
+                    "status": "SUCCESS",
+                    "steps": [
+                      {
+                        "name": "deploy",
+                        "status": "SUCCESS",
+                        "started_at": "0001-01-01T00:00:00Z",
+                        "ended_at": "0001-01-01T00:00:00Z",
+                        "component_name": "backend",
+                        "message_base": "Deploying service"
+                      },
+                      {
+                        "name": "wait",
+                        "status": "SUCCESS",
+                        "started_at": "0001-01-01T00:00:00Z",
+                        "ended_at": "0001-01-01T00:00:00Z",
+                        "component_name": "backend",
+                        "message_base": "Waiting for service"
+                      }
+                    ],
+                    "started_at": "0001-01-01T00:00:00Z",
+                    "ended_at": "0001-01-01T00:00:00Z",
+                    "component_name": "backend"
+                  },
+                  {
+                    "name": "frontend",
+                    "status": "SUCCESS",
+                    "steps": [
+                      {
+                        "name": "deploy",
+                        "status": "SUCCESS",
+                        "started_at": "0001-01-01T00:00:00Z",
+                        "ended_at": "0001-01-01T00:00:00Z",
+                        "component_name": "frontend",
+                        "message_base": "Deploying service"
+                      },
+                      {
+                        "name": "wait",
+                        "status": "SUCCESS",
+                        "started_at": "0001-01-01T00:00:00Z",
+                        "ended_at": "0001-01-01T00:00:00Z",
+                        "component_name": "frontend",
+                        "message_base": "Waiting for service"
+                      }
+                    ],
+                    "started_at": "0001-01-01T00:00:00Z",
+                    "ended_at": "0001-01-01T00:00:00Z",
+                    "component_name": "frontend"
+                  }
+                ],
+                "started_at": "2026-03-18T17:19:58.77561035Z",
+                "ended_at": "2026-03-18T17:21:53.417986419Z"
+              },
+              {
+                "name": "finalize",
+                "status": "SUCCESS",
+                "started_at": "2026-03-18T17:21:54.651454627Z",
+                "ended_at": "2026-03-18T17:21:55.628890641Z"
+              }
+            ],
+            "started_at": "2026-03-18T17:19:56.923989348Z",
+            "ended_at": "2026-03-18T17:21:55.62909237Z"
+          }
+        ]
+      },
+      "phase": "ACTIVE",
+      "tier_slug": "professional",
+      "previous_deployment_id": "90632ead-c039-4ff4-ad16-3483591a450a",
+      "cause_details": {
+        "git_push": {
+          "github": {
+            "repo": "orelmeister/skyrate",
+            "branch": "main"
+          },
+          "username": "orelmeister",
+          "commit_sha": "ab6d1611188f753d6cff8dbfb753165004a36c32",
+          "commit_message": "fix: improve notification system - test alerts now also send test email, immediate emails work with daily digest"
+        },
+        "type": "DEPLOY_ON_PUSH"
+      },
+      "timing": {
+        "pending": "6.724810225s",
+        "build_total": "170.160973703s",
+        "build_billable": "98.973234330s",
+        "components": [
+          {
+            "name": "backend",
+            "build_billable": "14.124354830s"
+          },
+          {
+            "name": "frontend",
+            "build_billable": "84.848879500s"
+          }
+        ]
+      }
+    },
+    "last_deployment_created_at": "2026-03-18T17:46:45Z",
+    "live_url": "https://skyrate.ai",
+    "region": {
+      "slug": "fra",
+      "label": "Frankfurt",
+      "flag": "germany",
+      "continent": "Europe",
+      "data_centers": [
+        "fra1"
+      ]
+    },
+    "tier_slug": "professional",
+    "live_url_base": "https://skyrate.ai",
+    "live_domain": "skyrate.ai",
+    "domains": [
+      {
+        "id": "b2a03b38-4b2c-4d02-90b9-fe86664c7c3a",
+        "spec": {
+          "domain": "skyrate.ai",
+          "type": "PRIMARY"
+        },
+        "phase": "ACTIVE",
+        "progress": {
+          "steps": [
+            {
+              "name": "default-ingress-ready",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:52.913626034Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "ensure-zone",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:52.913753803Z",
+              "ended_at": "2026-02-20T11:53:34.599561337Z"
+            },
+            {
+              "name": "ensure-ns-records",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:52.913871698Z",
+              "ended_at": "2026-02-15T18:19:22.709167892Z"
+            },
+            {
+              "name": "verify-nameservers",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:52.913982964Z",
+              "ended_at": "2026-02-20T11:53:34.599651173Z"
+            },
+            {
+              "name": "ensure-record",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:52.914080401Z",
+              "ended_at": "2026-02-15T18:21:20.758789883Z"
+            },
+            {
+              "name": "ensure-alias-record",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:52.914174038Z",
+              "ended_at": "2026-02-20T11:53:34.59971404Z"
+            },
+            {
+              "name": "ensure-wildcard-record",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:52.914269385Z",
+              "ended_at": "2026-02-15T18:21:45.570682161Z"
+            },
+            {
+              "name": "verify-cname",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:52.91437579Z",
+              "ended_at": "2026-02-15T18:21:45.570772361Z"
+            },
+            {
+              "name": "ensure-ssl-txt-record-saved",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:52.914462968Z",
+              "ended_at": "2026-02-15T18:21:45.988433081Z"
+            },
+            {
+              "name": "ensure-ssl-txt-record",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:52.914551506Z",
+              "ended_at": "2026-02-15T18:21:45.988554739Z"
+            },
+            {
+              "name": "ensure-renewal-email",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:52.914643868Z",
+              "ended_at": "2026-02-15T18:21:45.988642554Z"
+            },
+            {
+              "name": "ensure-CA-authorization",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:52.914737949Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "ensure-certificate",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:52.933373977Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "create-deployment",
+              "status": "SUCCESS",
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "2026-02-15T18:25:16.839778242Z"
+            },
+            {
+              "name": "configuration-alert",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:59.206583451Z",
+              "ended_at": "2026-02-15T18:19:23.018095962Z"
+            }
+          ]
+        },
+        "validation": {},
+        "certificate_expires_at": "2026-05-16T18:21:46Z"
+      },
+      {
+        "id": "82ac477f-94b8-46ae-bace-9051f22350a7",
+        "spec": {
+          "domain": "www.skyrate.ai",
+          "type": "ALIAS"
+        },
+        "phase": "ACTIVE",
+        "progress": {
+          "steps": [
+            {
+              "name": "default-ingress-ready",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:59.458182423Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "ensure-zone",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:59.458235986Z",
+              "ended_at": "2026-02-20T11:53:35.091399308Z"
+            },
+            {
+              "name": "ensure-ns-records",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:59.458279076Z",
+              "ended_at": "2026-02-20T11:53:35.091428733Z"
+            },
+            {
+              "name": "verify-nameservers",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:59.458313908Z",
+              "ended_at": "2026-02-20T11:53:35.091460542Z"
+            },
+            {
+              "name": "ensure-record",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:59.458349768Z",
+              "ended_at": "2026-02-20T11:53:35.091489285Z"
+            },
+            {
+              "name": "ensure-alias-record",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:59.458386274Z",
+              "ended_at": "2026-02-20T11:53:35.091517918Z"
+            },
+            {
+              "name": "ensure-wildcard-record",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:59.458417997Z",
+              "ended_at": "2026-02-20T11:53:35.091548664Z"
+            },
+            {
+              "name": "verify-cname",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:59.458461615Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "ensure-ssl-txt-record-saved",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:59.517097309Z",
+              "ended_at": "2026-02-20T11:53:35.210433681Z"
+            },
+            {
+              "name": "ensure-ssl-txt-record",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:59.517164626Z",
+              "ended_at": "2026-02-20T11:53:35.210515983Z"
+            },
+            {
+              "name": "ensure-renewal-email",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:59.517217585Z",
+              "ended_at": "2026-02-20T11:53:35.21055778Z"
+            },
+            {
+              "name": "ensure-CA-authorization",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:59.517271773Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "ensure-certificate",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:46:59.54577238Z",
+              "ended_at": "0001-01-01T00:00:00Z"
+            },
+            {
+              "name": "create-deployment",
+              "status": "SUCCESS",
+              "started_at": "0001-01-01T00:00:00Z",
+              "ended_at": "2026-02-20T11:54:19.048895177Z"
+            },
+            {
+              "name": "configuration-alert",
+              "status": "SUCCESS",
+              "started_at": "2026-03-18T17:47:00.257854136Z",
+              "ended_at": "2026-02-20T11:53:36.235080116Z"
+            }
+          ]
+        },
+        "validation": {},
+        "certificate_expires_at": "2026-05-21T11:53:39Z"
+      }
+    ],
+    "build_config": {
+      "cnb_versioning": {
+        "buildpacks": [
+          {
+            "id": "digitalocean/custom",
+            "latest": true,
+            "name": "Custom Build Command",
+            "description": [
+              "Run the provided custom build command"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/how-to/build-run-commands/"
+          },
+          {
+            "id": "digitalocean/procfile",
+            "latest": true,
+            "name": "Procfile",
+            "description": [
+              "Configure default run commands from the Procfile if one exists"
+            ]
+          },
+          {
+            "id": "heroku/nodejs",
+            "latest": true,
+            "name": "Node.js",
+            "description": [
+              "Install dependencies using NPM, PNPM or Yarn"
+            ],
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/languages-frameworks/nodejs/"
+          },
+          {
+            "id": "heroku/python",
+            "major_version": 4,
+            "latest": true,
+            "name": "Python",
+            "docs_link": "https://docs.digitalocean.com/products/app-platform/languages-frameworks/python/"
+          }
+        ],
+        "stack_id": "heroku-22"
+      }
+    },
+    "project_id": "c24d1d76-6c3d-4295-b3ce-480ad7341f87"
+  }
+]
