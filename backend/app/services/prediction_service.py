@@ -636,6 +636,7 @@ class PredictionService:
         prediction_type: Optional[PredictionType] = None,
         states: Optional[List[str]] = None,
         manufacturers: Optional[List[str]] = None,
+        entity_types: Optional[List[str]] = None,
         min_confidence: float = 0.0,
         min_deal_value: float = 0.0,
         status_filter: Optional[List[PredictionStatus]] = None,
@@ -667,6 +668,14 @@ class PredictionService:
                         func.lower(PredictedLead.manufacturer).contains(mfr.lower())
                     )
                 query = query.filter(or_(*mfr_conditions))
+            
+            if entity_types:
+                et_conditions = []
+                for et in entity_types:
+                    et_conditions.append(
+                        func.lower(PredictedLead.entity_type).contains(et.lower())
+                    )
+                query = query.filter(or_(*et_conditions))
             
             if min_confidence > 0:
                 query = query.filter(PredictedLead.confidence_score >= min_confidence)

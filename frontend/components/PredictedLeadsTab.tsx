@@ -165,6 +165,7 @@ export default function PredictedLeadsTab() {
   const [filterType, setFilterType] = useState<string>("");
   const [filterState, setFilterState] = useState<string>("");
   const [filterManufacturer, setFilterManufacturer] = useState<string>("");
+  const [filterEntityType, setFilterEntityType] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("confidence_score");
   const [sortOrder, setSortOrder] = useState<string>("desc");
   const [offset, setOffset] = useState(0);
@@ -177,6 +178,7 @@ export default function PredictedLeadsTab() {
       if (filterType) params.append("prediction_type", filterType);
       if (filterState) params.append("state", filterState);
       if (filterManufacturer) params.append("manufacturer", filterManufacturer);
+      if (filterEntityType) params.append("entity_type", filterEntityType);
       params.append("sort_by", sortBy);
       params.append("sort_order", sortOrder);
       params.append("limit", String(limit));
@@ -196,7 +198,7 @@ export default function PredictedLeadsTab() {
     } finally {
       setIsLoading(false);
     }
-  }, [filterType, filterState, filterManufacturer, sortBy, sortOrder]);
+  }, [filterType, filterState, filterManufacturer, filterEntityType, sortBy, sortOrder]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -437,6 +439,22 @@ export default function PredictedLeadsTab() {
             <option value="contract_expiry">⏰ Contract Expiring</option>
             <option value="equipment_refresh">🔄 Equipment Refresh</option>
             <option value="c2_budget_reset">💰 C2 Budget</option>
+          </select>
+
+          <select
+            value={filterEntityType}
+            onChange={(e) => { setFilterEntityType(e.target.value); setOffset(0); }}
+            className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          >
+            <option value="">All School Types</option>
+            <option value="School District">School District</option>
+            <option value="Library">Library</option>
+            <option value="Library System">Library System</option>
+            <option value="Consortium">Consortium</option>
+            <option value="School">School</option>
+            <option value="Charter School">Charter School</option>
+            <option value="Private School">Private School</option>
+            <option value="State Agency">State Agency</option>
           </select>
 
           <select

@@ -2211,6 +2211,7 @@ async def get_predicted_leads(
     prediction_type: Optional[str] = None,
     state: Optional[str] = None,
     manufacturer: Optional[str] = None,
+    entity_type: Optional[str] = None,
     min_confidence: float = 0.0,
     min_deal_value: float = 0.0,
     sort_by: str = "confidence_score",
@@ -2246,6 +2247,7 @@ async def get_predicted_leads(
     # Parse filters
     states = [s.strip() for s in state.split(',')] if state else None
     manufacturers_list = [m.strip() for m in manufacturer.split(',')] if manufacturer else None
+    entity_types_list = [e.strip() for e in entity_type.split(',')] if entity_type else None
     
     result = prediction_service.get_predictions(
         db=db,
@@ -2253,6 +2255,7 @@ async def get_predicted_leads(
         prediction_type=ptype,
         states=states,
         manufacturers=manufacturers_list,
+        entity_types=entity_types_list,
         min_confidence=min_confidence,
         min_deal_value=min_deal_value,
         sort_by=sort_by,
