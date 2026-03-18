@@ -593,10 +593,10 @@ function ConsultantPortalPage() {
   };
 
   // Load Portfolio FRN Status
-  const loadPortfolioFRNStatus = async (year?: number, statusFilter?: string, pendingReason?: string) => {
+  const loadPortfolioFRNStatus = async (year?: number, statusFilter?: string, pendingReason?: string, refresh?: boolean) => {
     setPortfolioFrnLoading(true);
     try {
-      const response = await api.getConsultantFRNStatus(year, statusFilter || undefined, 500, pendingReason || undefined);
+      const response = await api.getConsultantFRNStatus(year, statusFilter || undefined, 500, pendingReason || undefined, refresh);
       if (response.success && response.data) {
         setPortfolioFrnData(response.data);
       }
@@ -2267,17 +2267,23 @@ function ConsultantPortalPage() {
                     <div>
                       <h1 className="text-2xl font-bold">Portfolio FRN Status</h1>
                       <p className="text-teal-100 mt-1">Track FRN status across all your schools</p>
+                      {portfolioFrnData?.from_cache && (
+                        <p className="text-xs text-teal-200 mt-1">Data from cache - click Refresh to get latest</p>
+                      )}
                     </div>
                   </div>
                   <button
-                    onClick={() => loadPortfolioFRNStatus(portfolioFrnYear, portfolioFrnStatusFilter, portfolioFrnPendingReason)}
+                    onClick={() => loadPortfolioFRNStatus(portfolioFrnYear, portfolioFrnStatusFilter, portfolioFrnPendingReason, true)}
                     disabled={portfolioFrnLoading}
                     className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+                    title="Bypass cache and fetch fresh data from USAC"
                   >
                     {portfolioFrnLoading ? (
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    ) : null}
-                    Refresh Data
+                    ) : (
+                      <span>🔄</span>
+                    )}
+                    Refresh from USAC
                   </button>
                 </div>
               </div>

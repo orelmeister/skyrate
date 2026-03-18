@@ -2360,6 +2360,7 @@ async def get_portfolio_frn_status(
     status_filter: Optional[str] = None,
     pending_reason: Optional[str] = None,
     limit: int = 500,
+    refresh: bool = False,
     profile: ConsultantProfile = Depends(get_consultant_profile),
     db: Session = Depends(get_db),
 ):
@@ -2376,6 +2377,7 @@ async def get_portfolio_frn_status(
         year: Optional funding year filter
         status_filter: Optional status filter ('Funded', 'Denied', 'Pending')
         limit: Maximum records per school (default 500)
+        refresh: If True, bypass cache and fetch fresh data from USAC
     """
     # Get all BENs in portfolio
     school_bens = [s.ben for s in profile.schools]
@@ -2389,13 +2391,16 @@ async def get_portfolio_frn_status(
             "schools": []
         }
     
-    # Check DB cache first
+    # Check DB cache first (unless refresh is requested)
+    cache_key = None
     try:
         from app.services.cache_service import get_cached, set_cached, make_frn_cache_key
         cache_key = make_frn_cache_key(school_bens, year, status_filter, pending_reason)
-        cached_result = get_cached(db, cache_key)
-        if cached_result:
-            return cached_result
+        if not refresh:
+            cached_result = get_cached(db, cache_key)
+            if cached_result:
+                cached_result["from_cache"] = True
+                return cached_result
     except Exception:
         cache_key = None  # Cache unavailable, proceed without it
     
