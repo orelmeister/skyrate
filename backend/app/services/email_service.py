@@ -299,13 +299,38 @@ View all in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000
     ) -> bool:
         """Send weekly summary email"""
         
+        # Group alerts by type for better summary
+        denials_list = [a for a in top_alerts if a.alert_type == 'new_denial']
+        status_changes_list = [a for a in top_alerts if a.alert_type == 'frn_status_change']
+        deadlines_list = [a for a in top_alerts if a.alert_type == 'deadline_approaching']
+        other_alerts = [a for a in top_alerts if a.alert_type not in ['new_denial', 'frn_status_change', 'deadline_approaching']]
+        
+        # Color mapping for alert types
+        alert_colors = {
+            'new_denial': '#dc2626',
+            'frn_status_change': '#2563eb',
+            'deadline_approaching': '#ea580c',
+            'funding_approved': '#16a34a',
+            'disbursement_received': '#16a34a',
+        }
+        
         alerts_html = ""
         for alert in top_alerts:
+            color = alert_colors.get(alert.alert_type, '#6b7280')
+            entity_info = ""
+            if alert.entity_id:
+                entity_type_label = alert.entity_type.upper() if alert.entity_type else 'ID'
+                entity_info = f"<span style='color: #6b7280; font-size: 11px; background: #f3f4f6; padding: 2px 6px; border-radius: 3px; margin-left: 8px;'>{entity_type_label}: {alert.entity_id}</span>"
+            entity_name_html = f"<div style='color: #374151; font-size: 13px; margin-top: 4px;'>{alert.entity_name}</div>" if alert.entity_name else ""
             alerts_html += f"""
-            <div style="background: white; border-left: 3px solid #2563eb; padding: 10px 15px; margin: 10px 0; border-radius: 4px;">
-                <strong>{alert.title}</strong>
-                <span style="color: #6b7280; font-size: 12px; float: right;">{alert.created_at.strftime('%b %d')}</span>
-                <p style="margin: 5px 0 0 0; color: #6b7280; font-size: 14px;">{alert.message[:100]}{'...' if len(alert.message) > 100 else ''}</p>
+            <div style="background: white; border-left: 3px solid {color}; padding: 10px 15px; margin: 10px 0; border-radius: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <strong style="color: #1f2937;">{alert.title}</strong>
+                    <span style="color: #6b7280; font-size: 12px; white-space: nowrap;">{alert.created_at.strftime('%b %d')}</span>
+                </div>
+                {entity_name_html}
+                <p style="margin: 5px 0 0 0; color: #6b7280; font-size: 14px;">{alert.message[:150]}{'...' if len(alert.message) > 150 else ''}</p>
+                {entity_info}
             </div>
             """
         
@@ -357,11 +382,13 @@ View all in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000
                     </div>
                     
                     <h3 style="color: #1f2937; margin: 20px 0 10px 0;">Recent Activity</h3>
-                    {alerts_html}
+                    {alerts_html if alerts_html else '<p style="color: #6b7280;">No alerts this week</p>'}
                     
-                    <a href="{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/dashboard" class="cta-button">
-                        View Dashboard
-                    </a>
+                    <div style="text-align: center; margin-top: 20px;">
+                        <a href="{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/settings/notifications?view=alerts" class="cta-button">
+                            View All Alerts
+                        </a>
+                    </div>
                 </div>
                 <div class="footer">
                     <p>You're receiving this weekly summary because you opted in.</p>
@@ -372,6 +399,12 @@ View all in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000
         </body>
         </html>
         """
+        
+        # Build detailed text summary
+        text_alerts = ""
+        for alert in top_alerts:
+            entity_info = f" ({alert.entity_type.upper()}: {alert.entity_id})" if alert.entity_id else ""
+            text_alerts += f"- {alert.title}{entity_info}\n  {alert.message[:100]}{'...' if len(alert.message) > 100 else ''}\n\n"
         
         text_content = f"""
 Weekly Summary - Week of {datetime.now().strftime('%B %d, %Y')}
@@ -385,7 +418,10 @@ Denials: {summary.get('denials', 0)}
 Status Changes: {summary.get('status_changes', 0)}
 Deadlines: {summary.get('deadlines', 0)}
 
-View Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/dashboard
+Recent Activity:
+{text_alerts if text_alerts else 'No alerts this week'}
+
+View All Alerts: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/settings/notifications?view=alerts
         """
         
         return self.send_email(

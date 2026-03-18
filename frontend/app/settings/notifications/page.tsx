@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   Bell, Mail, AlertTriangle, Clock, DollarSign, Building, 
   Users, Calendar, Save, CheckCircle, XCircle, ArrowLeft,
-  Loader2, Smartphone
+  Loader2, Smartphone, Eye, Trash2, ChevronDown, ChevronUp,
+  History, RefreshCw
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/auth-store';
 import { api } from '@/lib/api';
@@ -29,14 +30,70 @@ interface AlertConfig {
   notification_phone: string | null;
 }
 
+interface Alert {
+  id: number;
+  alert_type: string;
+  priority: string;
+  title: string;
+  message: string;
+  entity_type?: string;
+  entity_id?: string;
+  entity_name?: string;
+  is_read: boolean;
+  is_dismissed: boolean;
+  created_at: string;
+}
+
+const priorityColors: Record<string, string> = {
+  critical: 'border-red-500 bg-red-50',
+  high: 'border-orange-500 bg-orange-50',
+  medium: 'border-yellow-500 bg-yellow-50',
+  low: 'border-blue-500 bg-blue-50',
+};
+
+const alertTypeIcons: Record<string, string> = {
+  'new_denial': '🚨',
+  'frn_status_change': '🔄',
+  'deadline_approaching': '📅',
+  'disbursement_received': '💰',
+  'funding_approved': '✅',
+  'form_470_match': '📋',
+  'appeal_deadline': '⏰',
+  'pending_too_long': '⚠️',
+};
+
+function formatTimeAgo(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
+}
+
 export default function NotificationSettingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { isAuthenticated, user, token, _hasHydrated } = useAuthStore();
   const [config, setConfig] = useState<AlertConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  
+  // Alert History State
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [alertsLoading, setAlertsLoading] = useState(false);
+  const [showAlerts, setShowAlerts] = useState(searchParams.get('view') === 'alerts');
+  const [alertsPage, setAlertsPage] = useState(0);
+  const [hasMoreAlerts, setHasMoreAlerts] = useState(true);
+  const ALERTS_PER_PAGE = 20;
 
   useEffect(() => {
     if (!_hasHydrated) return;
@@ -45,7 +102,37 @@ export default function NotificationSettingsPage() {
       return;
     }
     fetchConfig();
-  }, [_hasHydrated, isAuthenticated, router]);
+    // If view=alerts, fetch alerts immediately
+    if (searchParams.get('view') === 'alerts') {
+      setShowAlerts(true);
+      fetchAlerts(true);
+    }
+  }, [_hasHydrated, isAuthenticated, router, searchParams]);
+
+  const fetchAlerts = async (reset = false) => {
+    try {
+      setAlertsLoading(true);
+      const offset = reset ? 0 : alertsPage * ALERTS_PER_PAGE;
+      const response = await api.get<{ success: boolean; alerts: Alert[]; total: number }>(
+        `/alerts?limit=${ALERTS_PER_PAGE}&offset=${offset}&include_dismissed=false`
+      );
+      const data = response.data;
+      if (response.success && data && data.success) {
+        if (reset) {
+          setAlerts(data.alerts);
+          setAlertsPage(1);
+        } else {
+          setAlerts(prev => [...prev, ...data.alerts]);
+          setAlertsPage(prev => prev + 1);
+        }
+        setHasMoreAlerts(data.alerts.length === ALERTS_PER_PAGE);
+      }
+    } catch (err) {
+      console.error('Failed to fetch alerts:', err);
+    } finally {
+      setAlertsLoading(false);
+    }
+  };
 
   const fetchConfig = async () => {
     try {
@@ -156,6 +243,108 @@ export default function NotificationSettingsPage() {
             <span className="text-red-800">{error}</span>
           </div>
         )}
+
+        {/* Alert History Section */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
+          <div 
+            className="px-6 py-4 border-b border-gray-200 cursor-pointer flex items-center justify-between"
+            onClick={() => {
+              setShowAlerts(!showAlerts);
+              if (!showAlerts && alerts.length === 0) {
+                fetchAlerts(true);
+              }
+            }}
+          >
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <History className="h-5 w-5 text-blue-600" />
+              Alert History
+              {alerts.length > 0 && (
+                <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full">
+                  {alerts.length}
+                </span>
+              )}
+            </h2>
+            <div className="flex items-center gap-2">
+              {showAlerts && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    fetchAlerts(true);
+                  }}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  title="Refresh alerts"
+                >
+                  <RefreshCw className={`h-4 w-4 text-gray-500 ${alertsLoading ? 'animate-spin' : ''}`} />
+                </button>
+              )}
+              {showAlerts ? (
+                <ChevronUp className="h-5 w-5 text-gray-400" />
+              ) : (
+                <ChevronDown className="h-5 w-5 text-gray-400" />
+              )}
+            </div>
+          </div>
+          
+          {showAlerts && (
+            <div className="p-6">
+              {alertsLoading && alerts.length === 0 ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                </div>
+              ) : alerts.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Bell className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <p>No alerts yet</p>
+                  <p className="text-sm">Alerts about your FRNs and BENs will appear here</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {alerts.map((alert) => (
+                    <div 
+                      key={alert.id}
+                      className={`border-l-4 p-4 rounded-lg ${priorityColors[alert.priority] || 'border-gray-300 bg-gray-50'} ${!alert.is_read ? 'ring-1 ring-blue-200' : ''}`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3">
+                          <span className="text-xl">{alertTypeIcons[alert.alert_type] || '📢'}</span>
+                          <div>
+                            <h4 className="font-medium text-gray-900">{alert.title}</h4>
+                            {alert.entity_name && (
+                              <p className="text-sm text-gray-600 mt-0.5">{alert.entity_name}</p>
+                            )}
+                            <p className="text-sm text-gray-600 mt-1">{alert.message}</p>
+                            {alert.entity_id && (
+                              <span className="inline-block mt-2 px-2 py-0.5 text-xs bg-gray-200 text-gray-700 rounded">
+                                {alert.entity_type?.toUpperCase()}: {alert.entity_id}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-xs text-gray-500 whitespace-nowrap ml-4">
+                          {formatTimeAgo(alert.created_at)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {hasMoreAlerts && (
+                    <button
+                      onClick={() => fetchAlerts(false)}
+                      disabled={alertsLoading}
+                      className="w-full py-3 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-2"
+                    >
+                      {alertsLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        'Load More Alerts'
+                      )}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Delivery Methods Section */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
