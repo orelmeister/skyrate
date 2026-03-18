@@ -526,20 +526,29 @@ class FRNReportService:
                             <h3 style="color: #be185d; font-size: 14px; margin: 0 0 8px 0;">Changes Detected</h3>
                             <table width="100%" cellpadding="6" cellspacing="0" style="border: 1px solid #e2e8f0; border-radius: 6px; border-collapse: collapse; font-size: 12px; margin-bottom: 16px;">
                                 <tr style="background-color: #fdf2f8;">
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">FRN</th>
+                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">BEN</th>
                                     <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Entity</th>
+                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">FRN</th>
+                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Year</th>
                                     <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Previous</th>
                                     <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Current</th>
+                                    <th style="text-align: right; color: #64748b; border-bottom: 1px solid #e2e8f0;">Award</th>
+                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Provider</th>
                                 </tr>
 """
             for c in changes[:20]:
                 new_color = "#059669" if "funded" in c["new_status"].lower() else "#dc2626" if "denied" in c["new_status"].lower() else "#d97706"
+                amt = float(c.get("commitment_amount", 0) or 0)
                 html += f"""
                                 <tr>
+                                    <td style="font-family: monospace; border-bottom: 1px solid #f1f5f9; font-size: 11px;">{c.get('ben', '')}</td>
+                                    <td style="border-bottom: 1px solid #f1f5f9;">{(c.get('entity_name', '') or '')[:25]}</td>
                                     <td style="font-family: monospace; border-bottom: 1px solid #f1f5f9;">{c['frn']}</td>
-                                    <td style="border-bottom: 1px solid #f1f5f9;">{c['entity_name'][:28]}</td>
+                                    <td style="border-bottom: 1px solid #f1f5f9;">{c.get('funding_year', '')}</td>
                                     <td style="color: #64748b; border-bottom: 1px solid #f1f5f9;">{c['old_status']}</td>
                                     <td style="color: {new_color}; font-weight: 600; border-bottom: 1px solid #f1f5f9;">{c['new_status']}</td>
+                                    <td style="text-align: right; font-family: monospace; border-bottom: 1px solid #f1f5f9;">${amt:,.0f}</td>
+                                    <td style="border-bottom: 1px solid #f1f5f9; font-size: 11px;">{(c.get('spin_name', '') or c.get('service_provider', '') or '')[:20]}</td>
                                 </tr>
 """
             html += """
@@ -551,22 +560,31 @@ class FRNReportService:
             html += """
                             <table width="100%" cellpadding="6" cellspacing="0" style="border: 1px solid #e2e8f0; border-radius: 6px; border-collapse: collapse; font-size: 11px;">
                                 <tr style="background-color: #f8fafc;">
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">FRN</th>
+                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">BEN</th>
                                     <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Entity</th>
+                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">FRN</th>
+                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Year</th>
                                     <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Status</th>
-                                    <th style="text-align: right; color: #64748b; border-bottom: 1px solid #e2e8f0;">Amount</th>
+                                    <th style="text-align: right; color: #64748b; border-bottom: 1px solid #e2e8f0;">Award</th>
+                                    <th style="text-align: right; color: #64748b; border-bottom: 1px solid #e2e8f0;">Disbursed</th>
+                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Provider</th>
                                 </tr>
 """
             for frn in frns[:30]:
                 s = frn.get("status", "Unknown")
                 sc = "#059669" if "funded" in s.lower() else "#dc2626" if "denied" in s.lower() else "#d97706"
                 amt = float(frn.get("commitment_amount", 0) or 0)
+                dis = float(frn.get("disbursed_amount", 0) or 0)
                 html += f"""
                                 <tr>
+                                    <td style="font-family: monospace; border-bottom: 1px solid #f1f5f9;">{frn.get('ben', '')}</td>
+                                    <td style="border-bottom: 1px solid #f1f5f9;">{(frn.get('entity_name') or 'N/A')[:25]}</td>
                                     <td style="font-family: monospace; border-bottom: 1px solid #f1f5f9;">{frn.get('frn', 'N/A')}</td>
-                                    <td style="border-bottom: 1px solid #f1f5f9;">{(frn.get('entity_name') or 'N/A')[:30]}</td>
+                                    <td style="border-bottom: 1px solid #f1f5f9;">{frn.get('funding_year', '')}</td>
                                     <td style="color: {sc}; font-weight: 600; border-bottom: 1px solid #f1f5f9;">{s}</td>
-                                    <td style="text-align: right; border-bottom: 1px solid #f1f5f9;">${amt:,.0f}</td>
+                                    <td style="text-align: right; font-family: monospace; border-bottom: 1px solid #f1f5f9;">${amt:,.0f}</td>
+                                    <td style="text-align: right; font-family: monospace; border-bottom: 1px solid #f1f5f9;">${dis:,.0f}</td>
+                                    <td style="border-bottom: 1px solid #f1f5f9; font-size: 10px;">{(frn.get('spin_name') or frn.get('service_provider') or '')[:20]}</td>
                                 </tr>
 """
             if len(frns) > 30:

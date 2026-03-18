@@ -150,7 +150,7 @@ class AlertService:
             user_id=user_id,
             alert_type=AlertType.NEW_DENIAL,
             priority=AlertPriority.HIGH,
-            title=f"🚨 Denial Detected: {school_name}",
+            title=f"Denial Detected: {school_name}",
             message=f"FRN {frn} has been denied. Reason: {denial_reason}. "
                     f"Amount at risk: ${amount:,.2f}. "
                     f"You have 60 days to file an appeal.",
@@ -259,7 +259,7 @@ class AlertService:
                 user_id=user.id,
                 alert_type=AlertType.FRN_STATUS_CHANGE,
                 priority=AlertPriority.MEDIUM,
-                title="📝 Appeal Letter Generated",
+                title="Appeal Letter Generated",
                 message=f"We've automatically drafted an appeal letter for FRN {frn}. "
                         f"Review and customize it in your dashboard. "
                         f"Deadline: {appeal_deadline.strftime('%B %d, %Y')}",
@@ -285,41 +285,48 @@ class AlertService:
         school_name: str,
         old_status: str,
         new_status: str,
-        amount: float = 0
+        amount: float = 0,
+        frn_details: list = None,
+        extra_metadata: dict = None
     ) -> Optional[Alert]:
         """
         Create alert when FRN status changes.
         Determines priority based on the nature of the change.
+        
+        frn_details: list of dicts with full FRN info (ben, entity_name, frn, 
+                     old_status, new_status, commitment_amount, spin_name, etc.)
         """
-        # Determine priority and emoji based on status
+        # Determine priority based on status
         if "denied" in new_status.lower():
             priority = AlertPriority.HIGH
-            emoji = "🚨"
         elif "funded" in new_status.lower() or "committed" in new_status.lower():
             priority = AlertPriority.MEDIUM
-            emoji = "✅"
         elif "pending" in new_status.lower():
             priority = AlertPriority.LOW
-            emoji = "⏳"
         else:
             priority = AlertPriority.MEDIUM
-            emoji = "🔄"
+        
+        metadata = {
+            "old_status": old_status,
+            "new_status": new_status,
+            "amount": amount,
+        }
+        if frn_details:
+            metadata["frn_details"] = frn_details
+        if extra_metadata:
+            metadata.update(extra_metadata)
         
         return self.create_alert(
             user_id=user_id,
             alert_type=AlertType.FRN_STATUS_CHANGE,
             priority=priority,
-            title=f"{emoji} Status Change: {school_name}",
+            title=f"Status Change: {school_name}",
             message=f"FRN {frn} status changed from '{old_status}' to '{new_status}'. "
                     f"Amount: ${amount:,.2f}",
             entity_type="frn",
             entity_id=frn,
             entity_name=school_name,
-            metadata={
-                "old_status": old_status,
-                "new_status": new_status,
-                "amount": amount,
-            }
+            metadata=metadata
         )
     
     def alert_on_pending_too_long(
@@ -337,19 +344,16 @@ class AlertService:
         """
         if days_pending >= 30:
             priority = AlertPriority.HIGH
-            emoji = "🔴"
         elif days_pending >= 21:
             priority = AlertPriority.MEDIUM
-            emoji = "🟠"
         else:
             priority = AlertPriority.LOW
-            emoji = "🟡"
         
         return self.create_alert(
             user_id=user_id,
             alert_type=AlertType.PENDING_TOO_LONG,
             priority=priority,
-            title=f"{emoji} FRN Pending {days_pending}+ Days: {school_name}",
+            title=f"FRN Pending {days_pending}+ Days: {school_name}",
             message=f"FRN {frn} has been pending for {days_pending} days. "
                     f"Reason: {pending_reason or 'Not specified'}. "
                     f"Amount: ${amount:,.2f}. Consider following up with USAC.",
@@ -372,39 +376,47 @@ class AlertService:
         entity_name: str,
         deadline_type: str,
         deadline_date: datetime,
-        days_remaining: int
+        days_remaining: int,
+        frn_details: list = None,
+        extra_metadata: dict = None
     ) -> Optional[Alert]:
         """
-        Create alert for approaching deadline.
+        Create alert for approaching deadline with optional rich FRN details.
+        
+        frn_details: list of dicts with keys like ben, entity_name, frn, status,
+                     funding_year, spin_name, commitment_amount, etc.
+        extra_metadata: additional metadata to include in the alert.
         """
         if days_remaining <= 3:
             priority = AlertPriority.CRITICAL
-            emoji = "🔴"
         elif days_remaining <= 7:
             priority = AlertPriority.HIGH
-            emoji = "🟠"
         elif days_remaining <= 14:
             priority = AlertPriority.MEDIUM
-            emoji = "🟡"
         else:
             priority = AlertPriority.LOW
-            emoji = "📅"
+        
+        metadata = {
+            "deadline_type": deadline_type,
+            "deadline_date": deadline_date.isoformat(),
+            "days_remaining": days_remaining,
+        }
+        if frn_details:
+            metadata["frn_details"] = frn_details
+        if extra_metadata:
+            metadata.update(extra_metadata)
         
         return self.create_alert(
             user_id=user_id,
             alert_type=AlertType.DEADLINE_APPROACHING,
             priority=priority,
-            title=f"{emoji} Deadline in {days_remaining} days: {deadline_type}",
+            title=f"Deadline in {days_remaining} days: {deadline_type}",
             message=f"{deadline_type} deadline for {entity_name} is "
                     f"{deadline_date.strftime('%B %d, %Y')} ({days_remaining} days remaining).",
             entity_type="deadline",
             entity_id=entity_id,
             entity_name=entity_name,
-            metadata={
-                "deadline_type": deadline_type,
-                "deadline_date": deadline_date.isoformat(),
-                "days_remaining": days_remaining,
-            }
+            metadata=metadata
         )
     
     # ==================== FORM 470 ALERTS (VENDORS) ====================
@@ -426,7 +438,7 @@ class AlertService:
             user_id=user_id,
             alert_type=AlertType.FORM_470_MATCH,
             priority=AlertPriority.MEDIUM,
-            title=f"📋 New Form 470: {entity_name}",
+            title=f"New Form 470: {entity_name}",
             message=f"New Form 470 in {state} matching your criteria. "
                     f"Category: {category}. Services: {', '.join(services[:3])}{'...' if len(services) > 3 else ''}",
             entity_type="form_470",
@@ -457,7 +469,7 @@ class AlertService:
             user_id=user_id,
             alert_type=AlertType.COMPETITOR_ACTIVITY,
             priority=AlertPriority.LOW,
-            title=f"👀 Competitor Activity: {competitor_name}",
+            title=f"Competitor Activity: {competitor_name}",
             message=f"{competitor_name} {activity_type} at {entity_name}. {details}",
             entity_type="competitor",
             entity_id=competitor_name,

@@ -19,6 +19,137 @@ logger = logging.getLogger(__name__)
 class EmailService:
     """Service for sending email notifications via Google Workspace"""
     
+    # CSS for FRN detail tables used across all alert emails
+    FRN_TABLE_CSS = """
+        .frn-table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 13px; }
+        .frn-table th { background: #1e3a5f; color: white; padding: 8px 10px; text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .frn-table td { padding: 8px 10px; border-bottom: 1px solid #e5e7eb; color: #374151; }
+        .frn-table tr:nth-child(even) td { background: #f9fafb; }
+        .frn-table tr:hover td { background: #eff6ff; }
+        .status-funded { color: #16a34a; font-weight: 600; }
+        .status-denied { color: #dc2626; font-weight: 600; }
+        .status-pending { color: #ca8a04; font-weight: 600; }
+        .status-committed { color: #2563eb; font-weight: 600; }
+        .deadline-urgent { color: #dc2626; font-weight: 700; }
+        .deadline-warning { color: #ea580c; font-weight: 600; }
+        .deadline-info { color: #2563eb; }
+        .amount { font-family: 'Courier New', monospace; }
+        .category-header { background: #f1f5f9; padding: 10px 15px; margin: 20px 0 5px 0; border-left: 4px solid #2563eb; border-radius: 4px; font-weight: 600; color: #1e3a5f; }
+    """
+    
+    @staticmethod
+    def _build_frn_detail_table(frn_rows: list, columns: list = None) -> str:
+        """Build HTML table with FRN details from alert metadata.
+        
+        frn_rows: list of dicts, each with keys like ben, entity_name, frn, status, etc.
+        columns: optional list of (key, label) tuples to display. Defaults to standard set.
+        """
+        if not frn_rows:
+            return ""
+        
+        if columns is None:
+            columns = [
+                ("ben", "BEN"),
+                ("entity_name", "Entity"),
+                ("frn", "FRN#"),
+                ("funding_year", "Year"),
+                ("status", "Status"),
+                ("deadline_type", "Deadline"),
+                ("days_remaining", "Days Left"),
+                ("commitment_amount", "Award"),
+                ("disbursed_amount", "Disbursed"),
+                ("spin_name", "Service Provider"),
+            ]
+        
+        # Filter columns to only those that have at least one non-empty value
+        active_cols = []
+        for key, label in columns:
+            if any(row.get(key) for row in frn_rows):
+                active_cols.append((key, label))
+        
+        if not active_cols:
+            return ""
+        
+        html = '<table class="frn-table"><thead><tr>'
+        for key, label in active_cols:
+            html += f'<th>{label}</th>'
+        html += '</tr></thead><tbody>'
+        
+        for row in frn_rows:
+            html += '<tr>'
+            for key, label in active_cols:
+                val = row.get(key, "")
+                if val is None:
+                    val = ""
+                
+                # Style status cells
+                css_class = ""
+                if key == "status":
+                    status_lower = str(val).lower()
+                    if "funded" in status_lower or "committed" in status_lower:
+                        css_class = ' class="status-funded"'
+                    elif "denied" in status_lower:
+                        css_class = ' class="status-denied"'
+                    elif "pending" in status_lower:
+                        css_class = ' class="status-pending"'
+                elif key == "days_remaining":
+                    days = int(val) if val else 999
+                    if days <= 7:
+                        css_class = ' class="deadline-urgent"'
+                    elif days <= 14:
+                        css_class = ' class="deadline-warning"'
+                    else:
+                        css_class = ' class="deadline-info"'
+                    if val:
+                        val = f"{val} days"
+                elif key in ("commitment_amount", "disbursed_amount", "remaining_amount"):
+                    css_class = ' class="amount"'
+                    try:
+                        val = f"${float(val):,.2f}" if val else ""
+                    except (ValueError, TypeError):
+                        pass
+                elif key == "old_to_new":
+                    val = str(val) if val else ""
+                
+                html += f'<td{css_class}>{val}</td>'
+            html += '</tr>'
+        
+        html += '</tbody></table>'
+        return html
+    
+    @staticmethod
+    def _build_status_change_table(frn_rows: list) -> str:
+        """Build table specifically for FRN status change alerts."""
+        columns = [
+            ("ben", "BEN"),
+            ("entity_name", "Entity"),
+            ("frn", "FRN#"),
+            ("funding_year", "Year"),
+            ("old_status", "Old Status"),
+            ("new_status", "New Status"),
+            ("commitment_amount", "Award"),
+            ("spin_name", "Service Provider"),
+        ]
+        return EmailService._build_frn_detail_table(frn_rows, columns)
+    
+    @staticmethod
+    def _build_deadline_table(frn_rows: list) -> str:
+        """Build table specifically for deadline alerts."""
+        columns = [
+            ("ben", "BEN"),
+            ("entity_name", "Entity"),
+            ("frn", "FRN#"),
+            ("funding_year", "Year"),
+            ("status", "FRN Status"),
+            ("deadline_type", "Deadline"),
+            ("deadline_date", "Due Date"),
+            ("days_remaining", "Days Left"),
+            ("commitment_amount", "Award"),
+            ("disbursed_amount", "Disbursed"),
+            ("spin_name", "Service Provider"),
+        ]
+        return EmailService._build_frn_detail_table(frn_rows, columns)
+    
     # Sender routing by email type
     SENDER_MAP = {
         'alert': ('alerts@skyrate.ai', 'SkyRate AI Alerts'),
@@ -107,7 +238,7 @@ class EmailService:
             return False
     
     def send_alert_email(self, to_email: str, alert: Alert) -> bool:
-        """Send a single alert notification email"""
+        """Send a single alert notification email with rich FRN detail tables"""
         priority_colors = {
             AlertPriority.CRITICAL.value: '#dc2626',
             AlertPriority.HIGH.value: '#ea580c',
@@ -117,6 +248,47 @@ class EmailService:
         
         color = priority_colors.get(alert.priority, '#6b7280')
         
+        # Build FRN detail table from alert_metadata if available
+        frn_detail_html = ""
+        metadata = alert.alert_metadata or {}
+        
+        if alert.alert_type == AlertType.FRN_STATUS_CHANGE.value:
+            frn_rows = metadata.get("frn_details", [])
+            if not frn_rows and metadata.get("frn"):
+                frn_rows = [metadata]
+            if frn_rows:
+                frn_detail_html = '<div class="category-header">FRN Status Changes</div>' + self._build_status_change_table(frn_rows)
+        
+        elif alert.alert_type in (AlertType.DEADLINE_APPROACHING.value, AlertType.APPEAL_DEADLINE.value):
+            frn_rows = metadata.get("frn_details", [])
+            if not frn_rows and metadata.get("frn"):
+                frn_rows = [metadata]
+            if frn_rows:
+                deadline_type = metadata.get("deadline_type", "Deadline")
+                frn_detail_html = f'<div class="category-header">{deadline_type} Details</div>' + self._build_deadline_table(frn_rows)
+        
+        elif alert.alert_type == AlertType.NEW_DENIAL.value:
+            frn_rows = metadata.get("frn_details", [])
+            if not frn_rows and metadata.get("frn"):
+                frn_rows = [metadata]
+            if frn_rows:
+                frn_detail_html = '<div class="category-header">Denied FRNs</div>' + self._build_frn_detail_table(frn_rows, [
+                    ("ben", "BEN"), ("entity_name", "Entity"), ("frn", "FRN#"),
+                    ("funding_year", "Year"), ("status", "Status"), ("denial_reason", "Reason"),
+                    ("commitment_amount", "Award"), ("spin_name", "Service Provider"),
+                ])
+        
+        elif alert.alert_type == AlertType.PENDING_TOO_LONG.value:
+            frn_rows = metadata.get("frn_details", [])
+            if not frn_rows and metadata.get("frn"):
+                frn_rows = [metadata]
+            if frn_rows:
+                frn_detail_html = '<div class="category-header">Long-Pending FRNs</div>' + self._build_frn_detail_table(frn_rows, [
+                    ("ben", "BEN"), ("entity_name", "Entity"), ("frn", "FRN#"),
+                    ("funding_year", "Year"), ("status", "Status"), ("days_pending", "Days Pending"),
+                    ("commitment_amount", "Award"), ("spin_name", "Service Provider"),
+                ])
+        
         html_content = f"""
         <!DOCTYPE html>
         <html>
@@ -124,19 +296,20 @@ class EmailService:
             <meta charset="utf-8">
             <style>
                 body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }}
-                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .container {{ max-width: 700px; margin: 0 auto; padding: 20px; }}
                 .header {{ background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0; }}
                 .content {{ background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px; }}
                 .alert-box {{ background: white; border-left: 4px solid {color}; padding: 15px; margin: 15px 0; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
                 .priority {{ display: inline-block; background: {color}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; text-transform: uppercase; }}
                 .cta-button {{ display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 15px; }}
                 .footer {{ text-align: center; color: #6b7280; font-size: 12px; margin-top: 20px; }}
+                {self.FRN_TABLE_CSS}
             </style>
         </head>
         <body>
             <div class="container">
                 <div class="header">
-                    <h1 style="margin: 0; font-size: 24px;">\ud83d\udd14 SkyRate AI Alert</h1>
+                    <h1 style="margin: 0; font-size: 24px;">SkyRate AI Alert</h1>
                 </div>
                 <div class="content">
                     <div class="alert-box">
@@ -148,6 +321,8 @@ class EmailService:
                         {f'<p style="margin: 10px 0 0 0; color: #6b7280; font-size: 14px;"><strong>Related:</strong> {alert.entity_name or ""}</p>' if alert.entity_name else ''}
                     </div>
                     
+                    {frn_detail_html}
+                    
                     <a href="{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/dashboard" class="cta-button">
                         View in Dashboard
                     </a>
@@ -155,7 +330,7 @@ class EmailService:
                 <div class="footer">
                     <p>You're receiving this because you have email notifications enabled.</p>
                     <p><a href="{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/settings/notifications">Manage notification preferences</a></p>
-                    <p>\u00a9 {datetime.now().year} SkyRate AI. All rights reserved.</p>
+                    <p>&copy; {datetime.now().year} SkyRate AI. All rights reserved.</p>
                 </div>
             </div>
         </body>
@@ -192,7 +367,7 @@ To manage your notification preferences, visit: {getattr(settings, 'FRONTEND_URL
         user_name: str,
         alerts: List[Alert]
     ) -> bool:
-        """Send daily digest email with multiple alerts"""
+        """Send daily digest email with FRN detail tables grouped by alert type"""
         
         # Group alerts by type
         by_type = {}
@@ -201,22 +376,46 @@ To manage your notification preferences, visit: {getattr(settings, 'FRONTEND_URL
                 by_type[alert.alert_type] = []
             by_type[alert.alert_type].append(alert)
         
-        # Build alerts HTML
+        # Build alerts HTML with FRN detail tables
         alerts_html = ""
         for alert_type, type_alerts in by_type.items():
             type_name = alert_type.replace("_", " ").title()
             alerts_html += f'<h3 style="color: #1f2937; margin: 20px 0 10px 0; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">{type_name} ({len(type_alerts)})</h3>'
             
-            for alert in type_alerts[:5]:  # Limit to 5 per type
-                alerts_html += f"""
-                <div style="background: white; border-left: 3px solid #2563eb; padding: 10px 15px; margin: 10px 0; border-radius: 4px;">
-                    <strong>{alert.title}</strong>
-                    <p style="margin: 5px 0 0 0; color: #6b7280; font-size: 14px;">{alert.message[:150]}{'...' if len(alert.message) > 150 else ''}</p>
-                </div>
-                """
+            # Collect all FRN rows from this alert type for a combined table
+            all_frn_rows = []
+            for alert in type_alerts:
+                metadata = alert.alert_metadata or {}
+                frn_rows = metadata.get("frn_details", [])
+                if not frn_rows and metadata.get("frn"):
+                    frn_rows = [metadata]
+                all_frn_rows.extend(frn_rows)
             
-            if len(type_alerts) > 5:
-                alerts_html += f'<p style="color: #6b7280; font-size: 14px;">...and {len(type_alerts) - 5} more</p>'
+            # Render a combined FRN table if we have data
+            if all_frn_rows:
+                if alert_type == AlertType.FRN_STATUS_CHANGE.value:
+                    alerts_html += self._build_status_change_table(all_frn_rows)
+                elif alert_type in (AlertType.DEADLINE_APPROACHING.value, AlertType.APPEAL_DEADLINE.value):
+                    alerts_html += self._build_deadline_table(all_frn_rows)
+                elif alert_type == AlertType.NEW_DENIAL.value:
+                    alerts_html += self._build_frn_detail_table(all_frn_rows, [
+                        ("ben", "BEN"), ("entity_name", "Entity"), ("frn", "FRN#"),
+                        ("funding_year", "Year"), ("status", "Status"), ("denial_reason", "Reason"),
+                        ("commitment_amount", "Award"), ("spin_name", "Service Provider"),
+                    ])
+                else:
+                    alerts_html += self._build_frn_detail_table(all_frn_rows)
+            else:
+                # Fallback: show title/message cards if no structured FRN data
+                for alert in type_alerts[:5]:
+                    alerts_html += f"""
+                    <div style="background: white; border-left: 3px solid #2563eb; padding: 10px 15px; margin: 10px 0; border-radius: 4px;">
+                        <strong>{alert.title}</strong>
+                        <p style="margin: 5px 0 0 0; color: #6b7280; font-size: 14px;">{alert.message[:150]}{'...' if len(alert.message) > 150 else ''}</p>
+                    </div>
+                    """
+                if len(type_alerts) > 5:
+                    alerts_html += f'<p style="color: #6b7280; font-size: 14px;">...and {len(type_alerts) - 5} more</p>'
         
         html_content = f"""
         <!DOCTYPE html>
@@ -234,12 +433,13 @@ To manage your notification preferences, visit: {getattr(settings, 'FRONTEND_URL
                 .stat {{ text-align: center; }}
                 .stat-number {{ font-size: 32px; font-weight: bold; color: #2563eb; }}
                 .stat-label {{ font-size: 12px; color: #6b7280; }}
+                {self.FRN_TABLE_CSS}
             </style>
         </head>
         <body>
             <div class="container">
                 <div class="header">
-                    <h1 style="margin: 0; font-size: 24px;">📧 Daily Digest</h1>
+                    <h1 style="margin: 0; font-size: 24px;">Daily Digest</h1>
                     <p style="margin: 5px 0 0 0; opacity: 0.8;">{datetime.now().strftime('%B %d, %Y')}</p>
                 </div>
                 <div class="content">
@@ -297,7 +497,7 @@ View all in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000
         summary: Dict[str, Any],
         top_alerts: List[Alert]
     ) -> bool:
-        """Send weekly summary email"""
+        """Send weekly summary email with FRN detail tables"""
         
         # Group alerts by type for better summary
         denials_list = [a for a in top_alerts if a.alert_type == 'new_denial']
@@ -305,34 +505,58 @@ View all in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000
         deadlines_list = [a for a in top_alerts if a.alert_type == 'deadline_approaching']
         other_alerts = [a for a in top_alerts if a.alert_type not in ['new_denial', 'frn_status_change', 'deadline_approaching']]
         
-        # Color mapping for alert types
-        alert_colors = {
-            'new_denial': '#dc2626',
-            'frn_status_change': '#2563eb',
-            'deadline_approaching': '#ea580c',
-            'funding_approved': '#16a34a',
-            'disbursement_received': '#16a34a',
-        }
+        # Build FRN detail sections for each alert type group
+        def _collect_frn_rows(alert_list):
+            rows = []
+            for a in alert_list:
+                md = a.alert_metadata or {}
+                frn_rows = md.get("frn_details", [])
+                if not frn_rows and md.get("frn"):
+                    frn_rows = [md]
+                rows.extend(frn_rows)
+            return rows
         
         alerts_html = ""
-        for alert in top_alerts:
-            color = alert_colors.get(alert.alert_type, '#6b7280')
-            entity_info = ""
-            if alert.entity_id:
-                entity_type_label = alert.entity_type.upper() if alert.entity_type else 'ID'
-                entity_info = f"<span style='color: #6b7280; font-size: 11px; background: #f3f4f6; padding: 2px 6px; border-radius: 3px; margin-left: 8px;'>{entity_type_label}: {alert.entity_id}</span>"
-            entity_name_html = f"<div style='color: #374151; font-size: 13px; margin-top: 4px;'>{alert.entity_name}</div>" if alert.entity_name else ""
-            alerts_html += f"""
-            <div style="background: white; border-left: 3px solid {color}; padding: 10px 15px; margin: 10px 0; border-radius: 4px;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                    <strong style="color: #1f2937;">{alert.title}</strong>
-                    <span style="color: #6b7280; font-size: 12px; white-space: nowrap;">{alert.created_at.strftime('%b %d')}</span>
-                </div>
-                {entity_name_html}
-                <p style="margin: 5px 0 0 0; color: #6b7280; font-size: 14px;">{alert.message[:150]}{'...' if len(alert.message) > 150 else ''}</p>
-                {entity_info}
-            </div>
-            """
+        
+        # Denials section with table
+        if denials_list:
+            alerts_html += '<div class="category-header">Denials This Week</div>'
+            denial_rows = _collect_frn_rows(denials_list)
+            if denial_rows:
+                alerts_html += self._build_frn_detail_table(denial_rows, [
+                    ("ben", "BEN"), ("entity_name", "Entity"), ("frn", "FRN#"),
+                    ("funding_year", "Year"), ("denial_reason", "Reason"),
+                    ("commitment_amount", "Award"), ("spin_name", "Provider"),
+                ])
+            else:
+                for alert in denials_list[:3]:
+                    alerts_html += f'<div style="background: white; border-left: 3px solid #dc2626; padding: 10px 15px; margin: 10px 0; border-radius: 4px;"><strong>{alert.title}</strong><p style="margin: 5px 0 0 0; color: #6b7280; font-size: 14px;">{alert.message[:150]}</p></div>'
+        
+        # Status changes section with table
+        if status_changes_list:
+            alerts_html += '<div class="category-header">Status Changes This Week</div>'
+            sc_rows = _collect_frn_rows(status_changes_list)
+            if sc_rows:
+                alerts_html += self._build_status_change_table(sc_rows)
+            else:
+                for alert in status_changes_list[:3]:
+                    alerts_html += f'<div style="background: white; border-left: 3px solid #2563eb; padding: 10px 15px; margin: 10px 0; border-radius: 4px;"><strong>{alert.title}</strong><p style="margin: 5px 0 0 0; color: #6b7280; font-size: 14px;">{alert.message[:150]}</p></div>'
+        
+        # Deadlines section with table
+        if deadlines_list:
+            alerts_html += '<div class="category-header">Upcoming Deadlines</div>'
+            dl_rows = _collect_frn_rows(deadlines_list)
+            if dl_rows:
+                alerts_html += self._build_deadline_table(dl_rows)
+            else:
+                for alert in deadlines_list[:3]:
+                    alerts_html += f'<div style="background: white; border-left: 3px solid #ea580c; padding: 10px 15px; margin: 10px 0; border-radius: 4px;"><strong>{alert.title}</strong><p style="margin: 5px 0 0 0; color: #6b7280; font-size: 14px;">{alert.message[:150]}</p></div>'
+        
+        # Other alerts (fallback card style)
+        if other_alerts:
+            alerts_html += '<div class="category-header">Other Activity</div>'
+            for alert in other_alerts[:5]:
+                alerts_html += f'<div style="background: white; border-left: 3px solid #6b7280; padding: 10px 15px; margin: 10px 0; border-radius: 4px;"><strong>{alert.title}</strong><p style="margin: 5px 0 0 0; color: #6b7280; font-size: 14px;">{alert.message[:150]}</p></div>'
         
         html_content = f"""
         <!DOCTYPE html>
@@ -350,12 +574,13 @@ View all in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000
                 .stat-label {{ font-size: 12px; color: #6b7280; margin-top: 5px; }}
                 .cta-button {{ display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 15px; }}
                 .footer {{ text-align: center; color: #6b7280; font-size: 12px; margin-top: 20px; }}
+                {self.FRN_TABLE_CSS}
             </style>
         </head>
         <body>
             <div class="container">
                 <div class="header">
-                    <h1 style="margin: 0; font-size: 24px;">📊 Weekly Summary</h1>
+                    <h1 style="margin: 0; font-size: 24px;">Weekly Summary</h1>
                     <p style="margin: 5px 0 0 0; opacity: 0.8;">Week of {datetime.now().strftime('%B %d, %Y')}</p>
                 </div>
                 <div class="content">
