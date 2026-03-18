@@ -96,8 +96,11 @@ class AlertService:
             logger.error(f"Failed to send push notification for alert {alert.id}: {e}")
         
         # Send email if requested
+        # email_notifications: controls immediate email delivery
+        # daily_digest: controls the 8 AM summary (independent of immediate emails)
+        # Both can be enabled - user gets immediate emails AND daily digest
         if send_email is None:
-            send_email = config.email_notifications and not config.daily_digest
+            send_email = config.email_notifications
         
         if send_email:
             self._send_alert_email(alert, config)

@@ -149,14 +149,36 @@ def seed_demo_accounts():
                 contact_name="Super User",
             )
             db.add(super_cp)
+            db.flush()
+            
+            # Add sample schools for super user's consultant profile (for PORTFOLIO FRN watches)
+            sample_bens = [
+                ("16056315", "San Francisco Unified School District", "CA", "San Francisco"),
+                ("16042282", "Los Angeles Unified School District", "CA", "Los Angeles"),
+                ("16003245", "Chicago Public Schools", "IL", "Chicago"),
+            ]
+            for ben, name, state, city in sample_bens:
+                school = ConsultantSchool(
+                    consultant_profile_id=super_cp.id,
+                    ben=ben,
+                    school_name=name,
+                    state=state,
+                    city=city,
+                    entity_type="School District",
+                    status="Unknown",
+                    status_color="gray",
+                )
+                db.add(school)
+            
             super_vp = VendorProfile(
                 user_id=super_user.id,
+                spin="143032945",  # CDW-G SPIN for testing
                 company_name="SkyRate AI (Super)",
                 contact_name="Super User",
             )
             db.add(super_vp)
             db.flush()
-            logger.info(f"Created super account: {super_email} with consultant + vendor profiles")
+            logger.info(f"Created super account: {super_email} with consultant profile (3 schools) + vendor profile (SPIN 143032945)")
         else:
             super_existing.password_hash = super_hashed
             super_existing.role = UserRole.SUPER.value

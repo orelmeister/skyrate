@@ -409,29 +409,100 @@ async def send_test_alert(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Send a test alert to verify notifications are working"""
-    alert = create_alert_for_user(
-        db=db,
+    """
+    Send a test alert to verify notifications are working.
+    Tests both in-app notifications AND email if enabled.
+    """
+    from ...services.alert_service import AlertService
+    from ...services.email_service import EmailService
+    
+    # Get user's alert config
+    config = get_or_create_alert_config(current_user.id, db)
+    
+    # Track what was sent
+    in_app_sent = False
+    email_sent = False
+    push_sent = False
+    email_error = None
+    
+    # Create in-app alert using AlertService for full functionality
+    alert_service = AlertService(db)
+    
+    # Create the test alert (force send_email=False, we'll handle it explicitly)
+    alert = Alert(
         user_id=current_user.id,
         alert_type=AlertType.FRN_STATUS_CHANGE.value,
         priority=AlertPriority.LOW.value,
-        title="🧪 Test Alert",
+        title="Test Alert",
         message="This is a test alert to verify your notification settings are working correctly. "
-                "If you see this, your in-app notifications are configured properly!",
+                "If you receive this in-app and via email, your notifications are configured properly!",
         entity_type="test",
         entity_id="test-123",
-        entity_name="Test Entity"
+        entity_name="Test Entity",
+        is_read=False,
+        is_dismissed=False,
+        email_sent=False
     )
     
-    if alert:
-        return {
-            "success": True,
-            "message": "Test alert sent successfully",
-            "alert_id": alert.id
+    db.add(alert)
+    db.commit()
+    db.refresh(alert)
+    in_app_sent = True
+    
+    # Try to send push notification
+    try:
+        from ...services.push_notification_service import PushNotificationService
+        push_service = PushNotificationService(db)
+        push_service.send_alert_as_push(alert)
+        push_sent = True
+    except Exception as e:
+        pass  # Push is optional
+    
+    # Try to send test email if email notifications are enabled
+    if config.email_notifications:
+        try:
+            email_service = EmailService()
+            email_to = config.notification_email or current_user.email
+            
+            # Send test email
+            success = email_service.send_alert_email(
+                to_email=email_to,
+                alert=alert
+            )
+            
+            if success:
+                email_sent = True
+                alert.email_sent = True
+                alert.email_sent_at = datetime.utcnow()
+                db.commit()
+            else:
+                email_error = "Email send returned False (SMTP may not be configured)"
+        except Exception as e:
+            email_error = str(e)
+    
+    # Build response message
+    messages = []
+    if in_app_sent:
+        messages.append("In-app notification sent")
+    if push_sent:
+        messages.append("Push notification sent")
+    if email_sent:
+        messages.append(f"Email sent to {config.notification_email or current_user.email}")
+    elif config.email_notifications and email_error:
+        messages.append(f"Email FAILED: {email_error}")
+    elif not config.email_notifications:
+        messages.append("Email notifications disabled in your settings")
+    
+    return {
+        "success": True,
+        "message": ". ".join(messages),
+        "alert_id": alert.id,
+        "details": {
+            "in_app_sent": in_app_sent,
+            "email_sent": email_sent,
+            "push_sent": push_sent,
+            "email_enabled": config.email_notifications,
+            "daily_digest": config.daily_digest,
+            "email_error": email_error
         }
-    else:
-        return {
-            "success": False,
-            "message": "Alert was not created (check your notification preferences)",
-            "alert_id": None
-        }
+    }
