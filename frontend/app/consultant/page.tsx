@@ -235,6 +235,22 @@ function ConsultantPortalPage() {
       denied: { count: number; amount: number };
       pending: { count: number; amount: number };
     };
+    schools?: Array<{
+      ben: string;
+      school_name?: string;
+      name?: string;
+      entity_name?: string;
+      entity_type?: string;
+      state?: string;
+      total_frns?: number;
+      total_funding_committed?: number;
+      total_funding_requested?: number;
+      funding_years?: number[];
+      funded?: { count: number; amount: number };
+      denied?: { count: number; amount: number };
+      pending?: { count: number; amount: number };
+    }>;
+    year_filter?: number | null;
   } | null>(null);
   const [fundingSummaryLoading, setFundingSummaryLoading] = useState(false);
   const [fundingYear, setFundingYear] = useState<number | undefined>(undefined);
