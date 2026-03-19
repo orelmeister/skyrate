@@ -8,6 +8,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from collections import defaultdict
 
 from ..models.frn_watch import FRNWatch, WatchType, WatchFrequency, DeliveryMode
@@ -190,6 +191,7 @@ class FRNReportService:
                     watch.send_count = (watch.send_count or 0) + 1
                     watch.last_error = None
                     watch.last_snapshot = {f["frn"]: f.get("status", "") for f in filtered if f.get("frn")}
+                    flag_modified(watch, "last_snapshot")
                     
                 except Exception as e:
                     logger.error(f"Error processing watch {watch.id}: {e}")
