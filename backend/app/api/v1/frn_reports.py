@@ -261,7 +261,9 @@ async def send_report_now(
         return {
             "success": result.get("success", False),
             "message": result.get("message", "Report sent"),
-            "frn_count": result.get("frn_count", 0)
+            "frn_count": result.get("frn_count", 0),
+            "changes_detected": result.get("changes_detected", None),
+            "report_id": result.get("report_id", None),
         }
     except Exception as e:
         raise HTTPException(

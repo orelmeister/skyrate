@@ -145,6 +145,7 @@ class FRNReportService:
             
             for watch in watches:
                 try:
+                    print(f"[SNAPSHOT] Loading watch {watch.id}: last_snapshot={'EMPTY' if not watch.last_snapshot else f'{len(watch.last_snapshot)} entries'}")
                     # Fetch data
                     frn_data = self._fetch_frn_data(watch, user, client)
                     filtered = self._apply_filters(frn_data, watch)
@@ -166,6 +167,7 @@ class FRNReportService:
                     
                     # Build new snapshot for change detection on next run
                     new_snapshot = {f["frn"]: f.get("status", "") for f in filtered if f.get("frn")}
+                    print(f"[SNAPSHOT] Built new_snapshot for watch {watch.id}: {len(new_snapshot)} entries, {len(json.dumps(new_snapshot))} bytes")
                     
                     watch_sections.append({
                         "watch": watch,
@@ -281,23 +283,47 @@ class FRNReportService:
                 except Exception as e:
                     logger.error(f"Failed to send SMS for user {user.id}: {e}")
             
+            print(f"[SNAPSHOT] About to commit. Session dirty: {self.db.dirty}, new: {self.db.new}")
             self.db.commit()
             
-            # Force-persist snapshots via raw SQL (workaround for ORM JSON column issue)
-            try:
-                for section in watch_sections:
-                    w = section["watch"]
-                    snap = section.get("new_snapshot")
-                    if snap:
-                        snap_json = json.dumps(snap)
-                        self.db.execute(
-                            text("UPDATE frn_watches SET last_snapshot = :snap WHERE id = :wid"),
-                            {"snap": snap_json, "wid": w.id}
-                        )
-                        logger.info(f"Watch {w.id}: persisted snapshot ({len(snap)} entries, {len(snap_json)} bytes)")
-                self.db.commit()
-            except Exception as e:
-                logger.error(f"Failed to force-persist snapshots via raw SQL: {e}")
+            # Verify snapshot persistence and fallback to independent connection if needed
+            for section in watch_sections:
+                w = section["watch"]
+                snap = section.get("new_snapshot", {})
+                if not snap:
+                    continue
+                
+                # Check if snapshot actually persisted
+                verify = self.db.execute(
+                    text("SELECT LENGTH(last_snapshot) as snap_len FROM frn_watches WHERE id = :wid"),
+                    {"wid": w.id}
+                ).fetchone()
+                
+                snap_json = json.dumps(snap)
+                expected_len = len(snap_json)
+                actual_len = verify[0] if verify and verify[0] else 0
+                
+                print(f"[SNAPSHOT] watch_id={w.id}: expected={expected_len} bytes, actual_in_db={actual_len} bytes")
+                
+                if actual_len < expected_len * 0.9:  # Less than 90% of expected = failed
+                    print(f"[SNAPSHOT] MISMATCH! Attempting independent connection save...")
+                    try:
+                        from ..core.database import engine
+                        with engine.connect() as conn:
+                            conn.execute(
+                                text("UPDATE frn_watches SET last_snapshot = :snap WHERE id = :wid"),
+                                {"snap": snap_json, "wid": w.id}
+                            )
+                            conn.commit()
+                        # Verify again
+                        verify2 = self.db.execute(
+                            text("SELECT LENGTH(last_snapshot) as snap_len FROM frn_watches WHERE id = :wid"),
+                            {"wid": w.id}
+                        ).fetchone()
+                        actual_len2 = verify2[0] if verify2 and verify2[0] else 0
+                        print(f"[SNAPSHOT] After independent save: actual_in_db={actual_len2} bytes")
+                    except Exception as e2:
+                        print(f"[SNAPSHOT] Independent save FAILED: {e2}")
             
             return {
                 "success": True,

@@ -6,6 +6,7 @@ and receive periodic email reports with status updates.
 
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, ForeignKey, JSON, Text
 from sqlalchemy.orm import relationship
+from sqlalchemy.ext.mutable import MutableDict, MutableList
 from datetime import datetime
 import enum
 
@@ -53,7 +54,7 @@ class FRNWatch(Base):
     # Frequency & delivery
     frequency = Column(String(20), nullable=False, default=WatchFrequency.WEEKLY.value)
     recipient_email = Column(String(255), nullable=False)  # Where to send reports
-    cc_emails = Column(JSON, default=list)  # Optional CC recipients
+    cc_emails = Column(MutableList.as_mutable(JSON), default=list)  # Optional CC recipients
     
     # Delivery preferences
     delivery_mode = Column(String(30), nullable=False, default=DeliveryMode.FULL_EMAIL.value)
@@ -80,7 +81,7 @@ class FRNWatch(Base):
     last_error = Column(Text)  # Last error message if send failed
     
     # Snapshot of last report data (for change detection)
-    last_snapshot = Column(JSON, default=dict)  # {frn: status} from last report
+    last_snapshot = Column(MutableDict.as_mutable(JSON), default=dict)  # {frn: status} from last report
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
