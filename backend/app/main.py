@@ -178,7 +178,28 @@ def seed_demo_accounts():
             )
             db.add(super_vp)
             db.flush()
-            logger.info(f"Created super account: {super_email} with consultant profile (3 schools) + vendor profile (SPIN 143032945)")
+
+            super_ap = ApplicantProfile(
+                user_id=super_user.id,
+                ben="16056315",  # Same BEN as consultant school - San Francisco USD
+                sync_status="pending",
+                is_paid=True,
+            )
+            db.add(super_ap)
+            db.flush()
+
+            super_ap_ben = ApplicantBEN(
+                applicant_profile_id=super_ap.id,
+                ben="16056315",
+                is_primary=True,
+                is_paid=True,
+                subscription_status="active",
+                sync_status="pending",
+            )
+            db.add(super_ap_ben)
+            db.flush()
+            _profiles_to_sync.append(super_ap.id)
+            logger.info(f"Created super account: {super_email} with consultant profile (3 schools) + vendor profile (SPIN 143032945) + applicant profile (BEN 16056315)")
         else:
             super_existing.password_hash = super_hashed
             super_existing.role = UserRole.SUPER.value
@@ -190,6 +211,27 @@ def seed_demo_accounts():
                 db.add(ConsultantProfile(user_id=super_existing.id, company_name="SkyRate AI (Super)", contact_name="Super User"))
             if not db.query(VendorProfile).filter(VendorProfile.user_id == super_existing.id).first():
                 db.add(VendorProfile(user_id=super_existing.id, company_name="SkyRate AI (Super)", contact_name="Super User"))
+            if not db.query(ApplicantProfile).filter(ApplicantProfile.user_id == super_existing.id).first():
+                super_ap = ApplicantProfile(
+                    user_id=super_existing.id,
+                    ben="16056315",
+                    sync_status="pending",
+                    is_paid=True,
+                )
+                db.add(super_ap)
+                db.flush()
+                super_ap_ben = ApplicantBEN(
+                    applicant_profile_id=super_ap.id,
+                    ben="16056315",
+                    is_primary=True,
+                    is_paid=True,
+                    subscription_status="active",
+                    sync_status="pending",
+                )
+                db.add(super_ap_ben)
+                db.flush()
+                _profiles_to_sync.append(super_ap.id)
+                logger.info(f"Created applicant profile for super account with BEN 16056315")
             logger.info(f"Updated super account: {super_email}")
         
         for email, role, password in demo_accounts:
