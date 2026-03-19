@@ -4,9 +4,11 @@ Generates consolidated email reports and stores them for in-app viewing.
 Groups all due watches per user into a single email.
 """
 
+import json
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 from collections import defaultdict
@@ -162,6 +164,9 @@ class FRNReportService:
                     pending = sum(1 for f in filtered if "pending" in (f.get("status") or "").lower())
                     amount = sum(float(f.get("commitment_amount", 0) or 0) for f in filtered)
                     
+                    # Build new snapshot for change detection on next run
+                    new_snapshot = {f["frn"]: f.get("status", "") for f in filtered if f.get("frn")}
+                    
                     watch_sections.append({
                         "watch": watch,
                         "frns": filtered,
@@ -171,6 +176,7 @@ class FRNReportService:
                         "pending": pending,
                         "amount": amount,
                         "is_first_snapshot": is_first_snapshot,
+                        "new_snapshot": new_snapshot,
                     })
                     
                     total_frn_count += len(filtered)
@@ -190,7 +196,7 @@ class FRNReportService:
                     watch.next_send_at = watch.calculate_next_send()
                     watch.send_count = (watch.send_count or 0) + 1
                     watch.last_error = None
-                    watch.last_snapshot = {f["frn"]: f.get("status", "") for f in filtered if f.get("frn")}
+                    watch.last_snapshot = new_snapshot
                     flag_modified(watch, "last_snapshot")
                     
                 except Exception as e:
@@ -276,6 +282,22 @@ class FRNReportService:
                     logger.error(f"Failed to send SMS for user {user.id}: {e}")
             
             self.db.commit()
+            
+            # Force-persist snapshots via raw SQL (workaround for ORM JSON column issue)
+            try:
+                for section in watch_sections:
+                    w = section["watch"]
+                    snap = section.get("new_snapshot")
+                    if snap:
+                        snap_json = json.dumps(snap)
+                        self.db.execute(
+                            text("UPDATE frn_watches SET last_snapshot = :snap WHERE id = :wid"),
+                            {"snap": snap_json, "wid": w.id}
+                        )
+                        logger.info(f"Watch {w.id}: persisted snapshot ({len(snap)} entries, {len(snap_json)} bytes)")
+                self.db.commit()
+            except Exception as e:
+                logger.error(f"Failed to force-persist snapshots via raw SQL: {e}")
             
             return {
                 "success": True,
