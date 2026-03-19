@@ -1488,19 +1488,19 @@ function ApplicantDashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
                     <div className="text-sm text-slate-500">Total Authorized</div>
-                    <div className="text-2xl font-bold text-slate-900">${(disbursementData.grand_total?.total_authorized || 0).toLocaleString()}</div>
+                    <div className="text-2xl font-bold text-slate-900">${(disbursementData.total_authorized || 0).toLocaleString()}</div>
                   </div>
                   <div className="bg-white rounded-xl border border-green-200 shadow-sm p-6">
                     <div className="text-sm text-green-600">Total Disbursed</div>
-                    <div className="text-2xl font-bold text-green-700">${(disbursementData.grand_total?.total_disbursed || 0).toLocaleString()}</div>
+                    <div className="text-2xl font-bold text-green-700">${(disbursementData.total_disbursed || 0).toLocaleString()}</div>
                   </div>
                   <div className="bg-white rounded-xl border border-blue-200 shadow-sm p-6">
                     <div className="text-sm text-blue-600">Disbursement Rate</div>
-                    <div className="text-2xl font-bold text-blue-700">{(disbursementData.grand_total?.disbursement_rate || 0).toFixed(1)}%</div>
+                    <div className="text-2xl font-bold text-blue-700">{(disbursementData.disbursement_rate || 0).toFixed(1)}%</div>
                     <div className="mt-2 w-full bg-slate-200 rounded-full h-2">
                       <div
                         className="bg-blue-600 h-2 rounded-full transition-all"
-                        style={{ width: `${Math.min(disbursementData.grand_total?.disbursement_rate || 0, 100)}%` }}
+                        style={{ width: `${Math.min(disbursementData.disbursement_rate || 0, 100)}%` }}
                       />
                     </div>
                   </div>
@@ -1519,43 +1519,43 @@ function ApplicantDashboard() {
                             </div>
                             <div className="text-right">
                               <div className="text-sm font-medium text-green-600">
-                                ${(ben.summary?.total_disbursed || 0).toLocaleString()} disbursed
+                                ${(ben.total_disbursed || 0).toLocaleString()} disbursed
                               </div>
                               <div className="text-xs text-slate-400">
-                                of ${(ben.summary?.total_authorized || 0).toLocaleString()} authorized
-                                ({(ben.summary?.disbursement_rate || 0).toFixed(1)}%)
+                                of ${(ben.total_authorized || 0).toLocaleString()} authorized
+                                ({(ben.disbursement_rate || 0).toFixed(1)}%)
                               </div>
                             </div>
                           </div>
                           <div className="mt-2 w-full bg-slate-200 rounded-full h-1.5">
                             <div
                               className="bg-green-500 h-1.5 rounded-full transition-all"
-                              style={{ width: `${Math.min(ben.summary?.disbursement_rate || 0, 100)}%` }}
+                              style={{ width: `${Math.min(ben.disbursement_rate || 0, 100)}%` }}
                             />
                           </div>
                         </div>
                         <div className="divide-y divide-slate-50">
-                          {(ben.records || []).slice(0, 10).map((rec: any, rIdx: number) => (
+                          {(ben.disbursements || []).slice(0, 10).map((rec: any, rIdx: number) => (
                             <div key={rIdx} className="px-4 py-3 flex items-center justify-between text-sm">
                               <div>
-                                <span className="font-mono text-slate-700">FRN {rec.frn}</span>
+                                <span className="font-mono text-slate-700">FRN {rec.funding_request_number}</span>
                                 <span className="text-slate-400 ml-2">• {rec.service_type || 'N/A'}</span>
                               </div>
                               <div className="flex items-center gap-4 text-right">
                                 <div>
                                   <div className="text-slate-500">Authorized</div>
-                                  <div className="font-medium">${(rec.total_authorized_disbursement || 0).toLocaleString()}</div>
+                                  <div className="font-medium">${(rec.total_authorized_amount || 0).toLocaleString()}</div>
                                 </div>
                                 <div>
                                   <div className="text-green-500">Disbursed</div>
-                                  <div className="font-medium text-green-700">${(rec.total_disbursed || 0).toLocaleString()}</div>
+                                  <div className="font-medium text-green-700">${(rec.total_authorized_disbursement || 0).toLocaleString()}</div>
                                 </div>
                               </div>
                             </div>
                           ))}
-                          {(ben.records || []).length > 10 && (
+                          {(ben.disbursements || []).length > 10 && (
                             <div className="px-4 py-2 text-center text-xs text-slate-400">
-                              + {(ben.records || []).length - 10} more records
+                              + {(ben.disbursements || []).length - 10} more records
                             </div>
                           )}
                         </div>
