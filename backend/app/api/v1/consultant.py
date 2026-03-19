@@ -2537,6 +2537,7 @@ async def get_school_frn_status(
 @router.get("/frn-status/summary")
 async def get_portfolio_frn_summary(
     year: Optional[int] = None,
+    refresh: bool = False,
     profile: ConsultantProfile = Depends(get_consultant_profile),
     db: Session = Depends(get_db),
 ):
@@ -2563,12 +2564,13 @@ async def get_portfolio_frn_summary(
             }
         }
     
-    # Check cache first
+    # Check cache first (skip if refresh requested)
     from app.services.cache_service import get_cached, set_cached, make_cache_key
     cache_key = make_cache_key("frn_summary", bens=school_bens, year=year)
-    cached = get_cached(db, cache_key)
-    if cached:
-        return cached
+    if not refresh:
+        cached = get_cached(db, cache_key)
+        if cached:
+            return cached
     
     try:
         from utils.usac_client import USACDataClient
@@ -2585,29 +2587,38 @@ async def get_portfolio_frn_summary(
             "pending": {"count": 0, "amount": 0}
         }
         
+        schools_data = []
+        
         if batch_result.get('success'):
             for ben, ben_data in batch_result.get('results', {}).items():
-                if isinstance(ben_data, dict) and ben_data.get('frns'):
-                    for frn in ben_data.get('frns', []):
-                        total_frns += 1
-                        frn_status = (frn.get('status') or '').lower()
-                        amount = float(frn.get('total_authorized_amount') or frn.get('amount') or 0)
-                        
-                        if 'funded' in frn_status or 'committed' in frn_status:
-                            status_counts["funded"]["count"] += 1
-                            status_counts["funded"]["amount"] += amount
-                        elif 'denied' in frn_status:
-                            status_counts["denied"]["count"] += 1
-                            status_counts["denied"]["amount"] += amount
-                        else:
-                            status_counts["pending"]["count"] += 1
-                            status_counts["pending"]["amount"] += amount
+                if isinstance(ben_data, dict):
+                    total_frns += ben_data.get('total_frns', 0)
+                    # Use pre-computed summary from get_frn_status_batch
+                    ben_summary = ben_data.get('summary', {})
+                    for category in ["funded", "denied", "pending"]:
+                        cat_data = ben_summary.get(category, {})
+                        status_counts[category]["count"] += cat_data.get("count", 0)
+                        status_counts[category]["amount"] += cat_data.get("amount", 0)
+                    
+                    # Collect per-school data for the frontend table
+                    ben_funded = ben_summary.get('funded', {}).get('amount', 0)
+                    ben_total = ben_funded + ben_summary.get('pending', {}).get('amount', 0) + ben_summary.get('denied', {}).get('amount', 0)
+                    schools_data.append({
+                        "ben": ben,
+                        "school_name": ben_data.get('entity_name'),
+                        "state": ben_data.get('entity_state'),
+                        "total_funding_committed": ben_funded,
+                        "total_funding_requested": ben_total,
+                        "funding_years": ben_data.get('years', []),
+                        "total_frns": ben_data.get('total_frns', 0)
+                    })
         
         result = {
             "success": True,
             "total_schools": len(school_bens),
             "total_frns": total_frns,
             "summary": status_counts,
+            "schools": schools_data,
             "year_filter": year
         }
         

@@ -1372,7 +1372,7 @@ class ApiClient {
   /**
    * Get FRN status summary for consultant's portfolio
    */
-  async getConsultantFRNStatusSummary(year?: number): Promise<ApiResponse<{
+  async getConsultantFRNStatusSummary(year?: number, refresh?: boolean): Promise<ApiResponse<{
     success: boolean;
     total_schools: number;
     total_frns: number;
@@ -1381,10 +1381,22 @@ class ApiClient {
       denied: { count: number; amount: number };
       pending: { count: number; amount: number };
     };
+    schools?: Array<{
+      ben: string;
+      school_name: string;
+      state: string;
+      total_funding_committed: number;
+      total_funding_requested: number;
+      funding_years: number[];
+      total_frns: number;
+    }>;
     year_filter?: number;
   }>> {
-    const params = year ? `?year=${year}` : '';
-    return this.request(`/api/v1/consultant/frn-status/summary${params}`);
+    const params = new URLSearchParams();
+    if (year) params.set('year', String(year));
+    if (refresh) params.set('refresh', 'true');
+    const qs = params.toString();
+    return this.request(`/api/v1/consultant/frn-status/summary${qs ? '?' + qs : ''}`);
   }
 
   /**

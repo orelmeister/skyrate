@@ -621,10 +621,10 @@ function ConsultantPortalPage() {
   };
 
   // Load Funding Summary (lightweight endpoint for funding tab)
-  const loadFundingSummary = async (year?: number) => {
+  const loadFundingSummary = async (year?: number, refresh?: boolean) => {
     setFundingSummaryLoading(true);
     try {
-      const response = await api.getConsultantFRNStatusSummary(year);
+      const response = await api.getConsultantFRNStatusSummary(year, refresh);
       if (response.success && response.data) {
         setFundingSummary(response.data);
       }
@@ -1902,7 +1902,7 @@ function ConsultantPortalPage() {
                       ))}
                     </select>
                     <button
-                      onClick={() => loadFundingSummary(fundingYear)}
+                      onClick={() => loadFundingSummary(fundingYear, true)}
                       disabled={fundingSummaryLoading}
                       className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
                     >
@@ -2013,7 +2013,7 @@ function ConsultantPortalPage() {
               )}
 
               {/* Per-School Funding Table */}
-              {schools.length > 0 && (
+              {fundingSummary?.schools && fundingSummary.schools.length > 0 && (
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                   <div className="p-6 border-b border-slate-200">
                     <h3 className="font-semibold text-slate-900">School Funding Breakdown</h3>
@@ -2033,7 +2033,7 @@ function ConsultantPortalPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {schools.map((school) => (
+                        {fundingSummary.schools.map((school: any) => (
                           <tr key={school.ben} className="hover:bg-slate-50 transition-colors">
                             <td className="px-4 py-3">
                               <div className="font-medium text-slate-900">{school.school_name || school.name || 'Unknown'}</div>
