@@ -2443,7 +2443,7 @@ class USACDataClient:
         try:
             url = USAC_ENDPOINTS['invoice_disbursements']
             
-            where_conditions = [f"ben = '{ben}'"]
+            where_conditions = [f"billed_entity_number = '{ben}'"]
             if year:
                 where_conditions.append(f"funding_year = '{year}'")
             
@@ -2474,28 +2474,28 @@ class USACDataClient:
             records = []
             
             for record in data:
-                disbursed = float(record.get('total_authorized_disbursement', 0) or 0)
-                authorized = float(record.get('total_authorized_amount', 0) or 0)
+                disbursed = float(record.get('approved_inv_line_amt', 0) or 0)
+                authorized = float(record.get('requested_inv_line_amt', 0) or 0)
                 total_disbursed += disbursed
                 total_authorized += authorized
                 
                 records.append({
                     'funding_request_number': record.get('funding_request_number', ''),
                     'funding_year': record.get('funding_year', ''),
-                    'service_provider_name': record.get('service_provider_name', ''),
+                    'service_provider_name': record.get('inv_service_provider_name', ''),
                     'service_type': record.get('service_type', ''),
                     'total_authorized_amount': authorized,
                     'total_authorized_disbursement': disbursed,
                     'remaining': authorized - disbursed,
-                    'last_date_to_invoice': record.get('last_date_to_invoice', ''),
-                    'frn_status': record.get('frn_status', ''),
-                    'applicant_name': record.get('applicant_name', record.get('ros_entity_name', '')),
+                    'last_date_to_invoice': record.get('invoice_delivery_deadline_dt', ''),
+                    'frn_status': record.get('inv_line_item_status', ''),
+                    'applicant_name': record.get('billed_entity_name', ''),
                 })
             
             return {
                 'success': True,
                 'ben': ben,
-                'entity_name': data[0].get('applicant_name', data[0].get('ros_entity_name', '')) if data else '',
+                'entity_name': data[0].get('billed_entity_name', '') if data else '',
                 'total_records': len(records),
                 'total_disbursed': total_disbursed,
                 'total_authorized': total_authorized,
@@ -2537,7 +2537,7 @@ class USACDataClient:
             
             # Build IN clause for batch query
             ben_list = ", ".join(f"'{b}'" for b in bens)
-            where_conditions = [f"ben IN ({ben_list})"]
+            where_conditions = [f"billed_entity_number IN ({ben_list})"]
             
             if year:
                 where_conditions.append(f"funding_year = '{year}'")
@@ -2545,7 +2545,7 @@ class USACDataClient:
             params = {
                 '$where': ' AND '.join(where_conditions),
                 '$limit': limit,
-                '$order': 'ben ASC, funding_year DESC'
+                '$order': 'billed_entity_number ASC, funding_year DESC'
             }
             
             logger.info(f"Batch fetching disbursements for {len(bens)} BENs in single query")
@@ -2556,7 +2556,7 @@ class USACDataClient:
             # Group results by BEN
             ben_groups: Dict[str, list] = {}
             for record in data:
-                ben = record.get('ben', '')
+                ben = record.get('billed_entity_number', '')
                 if ben not in ben_groups:
                     ben_groups[ben] = []
                 ben_groups[ben].append(record)
@@ -2569,25 +2569,25 @@ class USACDataClient:
                 processed = []
                 
                 for record in records:
-                    disbursed = float(record.get('total_authorized_disbursement', 0) or 0)
-                    authorized = float(record.get('total_authorized_amount', 0) or 0)
+                    disbursed = float(record.get('approved_inv_line_amt', 0) or 0)
+                    authorized = float(record.get('requested_inv_line_amt', 0) or 0)
                     total_disbursed += disbursed
                     total_authorized += authorized
                     
                     processed.append({
                         'funding_request_number': record.get('funding_request_number', ''),
                         'funding_year': record.get('funding_year', ''),
-                        'service_provider_name': record.get('service_provider_name', ''),
+                        'service_provider_name': record.get('inv_service_provider_name', ''),
                         'service_type': record.get('service_type', ''),
                         'total_authorized_amount': authorized,
                         'total_authorized_disbursement': disbursed,
                         'remaining': authorized - disbursed,
-                        'last_date_to_invoice': record.get('last_date_to_invoice', ''),
-                        'frn_status': record.get('frn_status', ''),
-                        'applicant_name': record.get('applicant_name', record.get('ros_entity_name', '')),
+                        'last_date_to_invoice': record.get('invoice_delivery_deadline_dt', ''),
+                        'frn_status': record.get('inv_line_item_status', ''),
+                        'applicant_name': record.get('billed_entity_name', ''),
                     })
                 
-                entity_name = records[0].get('applicant_name', records[0].get('ros_entity_name', '')) if records else ''
+                entity_name = records[0].get('billed_entity_name', '') if records else ''
                 
                 results[ben] = {
                     'success': True,
