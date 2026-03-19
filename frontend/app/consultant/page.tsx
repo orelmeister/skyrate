@@ -2068,7 +2068,7 @@ function ConsultantPortalPage() {
                             <td className="px-4 py-3 text-center">
                               {school.funding_years && school.funding_years.length > 0 ? (
                                 <div className="flex flex-wrap gap-1 justify-center">
-                                  {school.funding_years.slice(0, 3).map(y => (
+                                  {school.funding_years.slice(0, 3).map((y: number) => (
                                     <span key={y} className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 text-xs rounded">{y}</span>
                                   ))}
                                   {school.funding_years.length > 3 && (
