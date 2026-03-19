@@ -18,6 +18,9 @@ from ..models.vendor import VendorProfile
 
 logger = logging.getLogger(__name__)
 
+# Max individual change rows shown in email
+MAX_CHANGES_IN_EMAIL = 20
+
 
 class FRNReportService:
     """Service for generating consolidated FRN status reports"""
@@ -118,6 +121,8 @@ class FRNReportService:
         """
         Process a batch of watches for a single user.
         Generates ONE consolidated report, ONE email, ONE SMS.
+        Delta-only: only reports changes since the last sent report.
+        First run: records initial snapshot without dumping all FRNs.
         """
         try:
             from utils.usac_client import USACDataClient
@@ -133,13 +138,22 @@ class FRNReportService:
             any_email_needed = False
             any_sms_needed = False
             watch_errors = 0
+            any_first_snapshot = False
             
             for watch in watches:
                 try:
                     # Fetch data
                     frn_data = self._fetch_frn_data(watch, user, client)
                     filtered = self._apply_filters(frn_data, watch)
+                    
+                    # Detect if this is the first snapshot (no previous data)
+                    is_first_snapshot = not watch.last_snapshot
+                    
+                    # Detect real changes (returns [] on first run)
                     changes = self._detect_changes(filtered, watch.last_snapshot or {})
+                    
+                    if is_first_snapshot:
+                        any_first_snapshot = True
                     
                     # Calculate stats
                     funded = sum(1 for f in filtered if "funded" in (f.get("status") or "").lower() or "committed" in (f.get("status") or "").lower())
@@ -155,6 +169,7 @@ class FRNReportService:
                         "denied": denied,
                         "pending": pending,
                         "amount": amount,
+                        "is_first_snapshot": is_first_snapshot,
                     })
                     
                     total_frn_count += len(filtered)
@@ -169,7 +184,7 @@ class FRNReportService:
                     if watch.notify_sms:
                         any_sms_needed = True
                     
-                    # Update watch state
+                    # Update watch state — always save snapshot for next comparison
                     watch.last_sent_at = datetime.utcnow()
                     watch.next_send_at = watch.calculate_next_send()
                     watch.send_count = (watch.send_count or 0) + 1
@@ -185,8 +200,22 @@ class FRNReportService:
                 self.db.commit()
                 return {"success": False, "message": "No data for any watch", "frn_count": 0, "errors": watch_errors}
             
+            # Generate AI summary if there are real changes
+            all_changes = []
+            for s in watch_sections:
+                all_changes.extend(s["changes"])
+            
+            ai_summary = ""
+            if all_changes:
+                ai_summary = self._generate_ai_summary(all_changes, user, watch_sections)
+            
             # Generate HTML (always — needed for in-app storage)
-            html = self._generate_consolidated_html(user, watch_sections)
+            html = self._generate_consolidated_html(
+                user, watch_sections,
+                ai_summary=ai_summary,
+                is_first_snapshot=any_first_snapshot,
+                total_changes=total_changes
+            )
             
             # Determine primary recipient email (from the first watch that wants email)
             recipient_email = None
@@ -388,8 +417,10 @@ class FRNReportService:
     
     # ==================== HTML GENERATION ====================
     
-    def _generate_consolidated_html(self, user: User, watch_sections: List[Dict]) -> str:
-        """Generate ONE HTML email with sections for each watch"""
+    def _generate_consolidated_html(self, user: User, watch_sections: List[Dict],
+                                      ai_summary: str = "", is_first_snapshot: bool = False,
+                                      total_changes: int = 0) -> str:
+        """Generate ONE HTML email with sections for each watch — delta-focused"""
         now = datetime.utcnow()
         
         # Grand totals
@@ -398,14 +429,17 @@ class FRNReportService:
         grand_pending = sum(s["pending"] for s in watch_sections)
         grand_total = sum(len(s["frns"]) for s in watch_sections)
         grand_amount = sum(s["amount"] for s in watch_sections)
-        grand_funded_amount = sum(
-            sum(float(f.get("commitment_amount", 0) or 0) for f in s["frns"]
-                if "funded" in (f.get("status") or "").lower() or "committed" in (f.get("status") or "").lower())
-            for s in watch_sections
-        )
         grand_changes = sum(len(s["changes"]) for s in watch_sections)
         
         multi = len(watch_sections) > 1
+        
+        # Determine header subtitle based on report type
+        if is_first_snapshot and grand_changes == 0:
+            header_subtitle = f"Initial snapshot recorded | {grand_total} FRNs tracked"
+        elif grand_changes > 0:
+            header_subtitle = f"{grand_changes} change{'s' if grand_changes != 1 else ''} detected"
+        else:
+            header_subtitle = "No changes since last report"
         
         html = f"""<!DOCTYPE html>
 <html>
@@ -424,15 +458,59 @@ class FRNReportService:
                         <td style="background: linear-gradient(135deg, #0f766e, #0d9488); padding: 30px; text-align: center;">
                             <h1 style="color: #ffffff; margin: 0; font-size: 24px;">FRN Status Report</h1>
                             <p style="color: #99f6e4; margin: 8px 0 0 0; font-size: 14px;">{now.strftime('%B %d, %Y')}</p>
-                            <p style="color: #99f6e4; margin: 4px 0 0 0; font-size: 12px;">{len(watch_sections)} monitor{'s' if multi else ''} | {grand_total} FRNs{f' | {grand_changes} changes' if grand_changes else ''}</p>
+                            <p style="color: #99f6e4; margin: 4px 0 0 0; font-size: 12px;">{header_subtitle}</p>
                         </td>
                     </tr>
 """
         
-        # Grand summary (always shown)
-        html += f"""
+        # First snapshot message
+        if is_first_snapshot and grand_changes == 0:
+            html += f"""
                     <tr>
                         <td style="padding: 24px 30px 0 30px;">
+                            <div style="background-color: #f0f9ff; border-radius: 8px; border: 1px solid #bae6fd; padding: 20px; text-align: center;">
+                                <p style="color: #0369a1; font-size: 16px; font-weight: 600; margin: 0 0 8px 0;">Initial Snapshot Recorded</p>
+                                <p style="color: #475569; font-size: 13px; margin: 0;">We are now tracking <strong>{grand_total} FRNs</strong> across {len(watch_sections)} monitor{'s' if multi else ''}.</p>
+                                <p style="color: #475569; font-size: 13px; margin: 8px 0 0 0;">Future reports will only show <strong>changes</strong> to FRN statuses, funding amounts, and new or removed FRNs.</p>
+                                <p style="color: #64748b; font-size: 12px; margin: 12px 0 0 0;">Portfolio snapshot: {grand_funded} funded | {grand_pending} pending | {grand_denied} denied | Total: ${grand_amount:,.0f}</p>
+                            </div>
+                        </td>
+                    </tr>
+"""
+        
+        # No changes message
+        elif grand_changes == 0:
+            html += f"""
+                    <tr>
+                        <td style="padding: 24px 30px 0 30px;">
+                            <div style="background-color: #f0fdf4; border-radius: 8px; border: 1px solid #bbf7d0; padding: 20px; text-align: center;">
+                                <p style="color: #15803d; font-size: 16px; font-weight: 600; margin: 0 0 8px 0;">All Clear — No Changes</p>
+                                <p style="color: #475569; font-size: 13px; margin: 0;">No FRN status changes detected since your last report.</p>
+                                <p style="color: #64748b; font-size: 12px; margin: 12px 0 0 0;">Monitoring {grand_total} FRNs: {grand_funded} funded | {grand_pending} pending | {grand_denied} denied</p>
+                            </div>
+                        </td>
+                    </tr>
+"""
+        
+        # Changes detected — show AI summary + stats + change details
+        else:
+            # AI Summary block
+            if ai_summary:
+                html += f"""
+                    <tr>
+                        <td style="padding: 24px 30px 8px 30px;">
+                            <div style="background-color: #faf5ff; border-radius: 8px; border-left: 4px solid #7c3aed; padding: 16px;">
+                                <p style="color: #6d28d9; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 6px 0;">AI Summary</p>
+                                <p style="color: #334155; font-size: 13px; line-height: 1.5; margin: 0;">{ai_summary}</p>
+                            </div>
+                        </td>
+                    </tr>
+"""
+            
+            # Compact stats bar
+            html += f"""
+                    <tr>
+                        <td style="padding: 16px 30px 0 30px;">
                             <table width="100%" cellpadding="0" cellspacing="0">
                                 <tr>
                                     <td width="24%" style="padding: 10px; text-align: center; background-color: #f0fdf4; border-radius: 8px;">
@@ -450,38 +528,37 @@ class FRNReportService:
                                         <div style="color: #dc2626; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Denied</div>
                                     </td>
                                     <td width="2%"></td>
-                                    <td width="24%" style="padding: 10px; text-align: center; background-color: #f0f9ff; border-radius: 8px;">
-                                        <div style="color: #1e40af; font-size: 26px; font-weight: 700;">{grand_total}</div>
-                                        <div style="color: #2563eb; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Total</div>
+                                    <td width="24%" style="padding: 10px; text-align: center; background-color: #fdf2f8; border-radius: 8px;">
+                                        <div style="color: #be185d; font-size: 26px; font-weight: 700;">{grand_changes}</div>
+                                        <div style="color: #db2777; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Changes</div>
                                     </td>
                                 </tr>
                             </table>
-                            <p style="color: #64748b; font-size: 12px; margin: 10px 0 0 0; text-align: center;">
-                                Total: <strong style="color: #334155;">${grand_amount:,.0f}</strong> | Funded: <strong style="color: #15803d;">${grand_funded_amount:,.0f}</strong>
-                            </p>
                         </td>
                     </tr>
 """
-        
-        # Per-watch sections
-        for section in watch_sections:
-            watch = section["watch"]
-            frns = section["frns"]
-            changes = section["changes"]
             
-            if watch.delivery_mode == DeliveryMode.NOTIFICATION_ONLY.value:
-                html += self._generate_notification_section_html(watch, frns, changes)
-            elif watch.delivery_mode == DeliveryMode.IN_APP_ONLY.value:
-                # Skip entirely in email (but still in the stored HTML)
-                html += self._generate_inapp_only_section_html(watch, frns)
-            else:
-                html += self._generate_watch_section_html(watch, frns, changes)
+            # Per-watch change sections
+            for section in watch_sections:
+                watch = section["watch"]
+                frns = section["frns"]
+                changes = section["changes"]
+                is_first = section.get("is_first_snapshot", False)
+                
+                if watch.delivery_mode == DeliveryMode.IN_APP_ONLY.value:
+                    html += self._generate_inapp_only_section_html(watch, frns)
+                elif is_first:
+                    html += self._generate_first_snapshot_section_html(watch, frns)
+                elif changes:
+                    html += self._generate_watch_section_html(watch, frns, changes)
+                else:
+                    html += self._generate_no_changes_section_html(watch, frns)
         
         # View in dashboard link
         html += f"""
                     <tr>
                         <td style="padding: 20px 30px; text-align: center;">
-                            <a href="https://skyrate.ai/consultant" style="display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #0f766e, #0d9488); color: #ffffff; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600;">View Full Report in Dashboard</a>
+                            <a href="https://skyrate.ai/consultant" style="display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #0f766e, #0d9488); color: #ffffff; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600;">View Full Details in Dashboard</a>
                         </td>
                     </tr>
 """
@@ -492,7 +569,7 @@ class FRNReportService:
                     <tr>
                         <td style="padding: 20px 30px; border-top: 1px solid #e2e8f0;">
                             <p style="color: #94a3b8; font-size: 11px; text-align: center; margin: 0;">
-                                This consolidated report was generated by <a href="https://skyrate.ai" style="color: #0d9488;">SkyRate AI</a>
+                                This report was generated by <a href="https://skyrate.ai" style="color: #0d9488;">SkyRate AI</a>
                                 <br>Monitors: {watch_names}
                                 <br><br>
                                 To manage your report monitors, visit your <a href="https://skyrate.ai/consultant" style="color: #0d9488;">dashboard</a>.
@@ -508,90 +585,48 @@ class FRNReportService:
         return html
     
     def _generate_watch_section_html(self, watch: FRNWatch, frns: List[Dict], changes: List[Dict]) -> str:
-        """Generate full detail section for a watch (delivery_mode = full_email)"""
+        """Generate changes-focused section for a watch"""
         html = f"""
                     <tr>
                         <td style="padding: 24px 30px 0 30px;">
-                            <div style="background-color: #f8fafc; border-radius: 8px; border-left: 4px solid #0d9488; padding: 16px; margin-bottom: 16px;">
+                            <div style="background-color: #f8fafc; border-radius: 8px; border-left: 4px solid #be185d; padding: 16px; margin-bottom: 16px;">
                                 <h2 style="color: #0f766e; font-size: 16px; margin: 0;">{watch.name}</h2>
                                 <p style="color: #64748b; font-size: 12px; margin: 4px 0 0 0;">
-                                    {watch.watch_type.upper()} watch{f' | Target: {watch.target_name or watch.target_id}' if watch.target_id else ' | Full Portfolio'} | {len(frns)} FRNs
+                                    {len(changes)} change{'s' if len(changes) != 1 else ''} detected | {len(frns)} FRNs monitored
                                 </p>
                             </div>
 """
         
-        # Changes
-        if watch.include_changes and changes:
+        # Changes table (max MAX_CHANGES_IN_EMAIL rows)
+        if changes:
+            display_changes = changes[:MAX_CHANGES_IN_EMAIL]
             html += """
-                            <h3 style="color: #be185d; font-size: 14px; margin: 0 0 8px 0;">Changes Detected</h3>
                             <table width="100%" cellpadding="6" cellspacing="0" style="border: 1px solid #e2e8f0; border-radius: 6px; border-collapse: collapse; font-size: 12px; margin-bottom: 16px;">
                                 <tr style="background-color: #fdf2f8;">
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">BEN</th>
                                     <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Entity</th>
                                     <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">FRN</th>
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Year</th>
                                     <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Previous</th>
                                     <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Current</th>
-                                    <th style="text-align: right; color: #64748b; border-bottom: 1px solid #e2e8f0;">Award</th>
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Provider</th>
+                                    <th style="text-align: right; color: #64748b; border-bottom: 1px solid #e2e8f0;">Amount</th>
                                 </tr>
 """
-            for c in changes[:20]:
+            for c in display_changes:
                 new_color = "#059669" if "funded" in c["new_status"].lower() else "#dc2626" if "denied" in c["new_status"].lower() else "#d97706"
-                amt = float(c.get("commitment_amount", 0) or 0)
+                amt = float(c.get("amount", 0) or 0)
                 html += f"""
                                 <tr>
-                                    <td style="font-family: monospace; border-bottom: 1px solid #f1f5f9; font-size: 11px;">{c.get('ben', '')}</td>
-                                    <td style="border-bottom: 1px solid #f1f5f9;">{(c.get('entity_name', '') or '')[:25]}</td>
+                                    <td style="border-bottom: 1px solid #f1f5f9;">{(c.get('entity_name', '') or '')[:30]}</td>
                                     <td style="font-family: monospace; border-bottom: 1px solid #f1f5f9;">{c['frn']}</td>
-                                    <td style="border-bottom: 1px solid #f1f5f9;">{c.get('funding_year', '')}</td>
                                     <td style="color: #64748b; border-bottom: 1px solid #f1f5f9;">{c['old_status']}</td>
                                     <td style="color: {new_color}; font-weight: 600; border-bottom: 1px solid #f1f5f9;">{c['new_status']}</td>
                                     <td style="text-align: right; font-family: monospace; border-bottom: 1px solid #f1f5f9;">${amt:,.0f}</td>
-                                    <td style="border-bottom: 1px solid #f1f5f9; font-size: 11px;">{(c.get('spin_name', '') or c.get('service_provider', '') or '')[:20]}</td>
                                 </tr>
 """
-            html += """
-                            </table>
-"""
-        
-        # FRN details
-        if watch.include_details and frns:
-            html += """
-                            <table width="100%" cellpadding="6" cellspacing="0" style="border: 1px solid #e2e8f0; border-radius: 6px; border-collapse: collapse; font-size: 11px;">
-                                <tr style="background-color: #f8fafc;">
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">BEN</th>
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Entity</th>
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">FRN</th>
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Year</th>
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Status</th>
-                                    <th style="text-align: right; color: #64748b; border-bottom: 1px solid #e2e8f0;">Award</th>
-                                    <th style="text-align: right; color: #64748b; border-bottom: 1px solid #e2e8f0;">Disbursed</th>
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Provider</th>
-                                </tr>
-"""
-            for frn in frns[:30]:
-                s = frn.get("status", "Unknown")
-                sc = "#059669" if "funded" in s.lower() else "#dc2626" if "denied" in s.lower() else "#d97706"
-                amt = float(frn.get("commitment_amount", 0) or 0)
-                dis = float(frn.get("disbursed_amount", 0) or 0)
+            if len(changes) > MAX_CHANGES_IN_EMAIL:
                 html += f"""
                                 <tr>
-                                    <td style="font-family: monospace; border-bottom: 1px solid #f1f5f9;">{frn.get('ben', '')}</td>
-                                    <td style="border-bottom: 1px solid #f1f5f9;">{(frn.get('entity_name') or 'N/A')[:25]}</td>
-                                    <td style="font-family: monospace; border-bottom: 1px solid #f1f5f9;">{frn.get('frn', 'N/A')}</td>
-                                    <td style="border-bottom: 1px solid #f1f5f9;">{frn.get('funding_year', '')}</td>
-                                    <td style="color: {sc}; font-weight: 600; border-bottom: 1px solid #f1f5f9;">{s}</td>
-                                    <td style="text-align: right; font-family: monospace; border-bottom: 1px solid #f1f5f9;">${amt:,.0f}</td>
-                                    <td style="text-align: right; font-family: monospace; border-bottom: 1px solid #f1f5f9;">${dis:,.0f}</td>
-                                    <td style="border-bottom: 1px solid #f1f5f9; font-size: 10px;">{(frn.get('spin_name') or frn.get('service_provider') or '')[:20]}</td>
-                                </tr>
-"""
-            if len(frns) > 30:
-                html += f"""
-                                <tr>
-                                    <td colspan="4" style="text-align: center; color: #94a3b8; padding: 8px; font-size: 11px;">
-                                        ...and {len(frns) - 30} more. View all in your dashboard.
+                                    <td colspan="5" style="text-align: center; color: #94a3b8; padding: 8px; font-size: 11px;">
+                                        ...and {len(changes) - MAX_CHANGES_IN_EMAIL} more changes. View all in your dashboard.
                                     </td>
                                 </tr>
 """
@@ -604,6 +639,37 @@ class FRNReportService:
                     </tr>
 """
         return html
+    
+    def _generate_first_snapshot_section_html(self, watch: FRNWatch, frns: List[Dict]) -> str:
+        """Section for a watch that just took its initial snapshot"""
+        funded = sum(1 for f in frns if "funded" in (f.get("status") or "").lower() or "committed" in (f.get("status") or "").lower())
+        denied = sum(1 for f in frns if "denied" in (f.get("status") or "").lower())
+        pending = sum(1 for f in frns if "pending" in (f.get("status") or "").lower())
+        return f"""
+                    <tr>
+                        <td style="padding: 12px 30px;">
+                            <div style="background-color: #f0f9ff; border-radius: 8px; border-left: 4px solid #0284c7; padding: 14px;">
+                                <strong style="color: #0369a1; font-size: 14px;">{watch.name}</strong>
+                                <span style="color: #64748b; font-size: 12px; margin-left: 8px;">Initial snapshot</span>
+                                <p style="color: #475569; font-size: 12px; margin: 6px 0 0 0;">Now tracking {len(frns)} FRNs: {funded} funded | {pending} pending | {denied} denied</p>
+                            </div>
+                        </td>
+                    </tr>
+"""
+    
+    def _generate_no_changes_section_html(self, watch: FRNWatch, frns: List[Dict]) -> str:
+        """Section for a watch with no changes since last report"""
+        return f"""
+                    <tr>
+                        <td style="padding: 12px 30px;">
+                            <div style="background-color: #f0fdf4; border-radius: 8px; border-left: 4px solid #16a34a; padding: 14px;">
+                                <strong style="color: #15803d; font-size: 14px;">{watch.name}</strong>
+                                <span style="color: #64748b; font-size: 12px; margin-left: 8px;">{len(frns)} FRNs</span>
+                                <p style="color: #475569; font-size: 12px; margin: 6px 0 0 0;">No changes since last report.</p>
+                            </div>
+                        </td>
+                    </tr>
+"""
     
     def _generate_notification_section_html(self, watch: FRNWatch, frns: List[Dict], changes: List[Dict]) -> str:
         """Brief summary section for notification_only delivery mode"""
@@ -636,6 +702,97 @@ class FRNReportService:
                     <!-- in_app_only: {watch.name} ({len(frns)} FRNs) — full details available in dashboard -->
 """
     
+    # ==================== AI SUMMARY ====================
+    
+    def _generate_ai_summary(self, changes: List[Dict], user: User, watch_sections: List[Dict]) -> str:
+        """
+        Generate an intelligent natural-language summary of FRN changes using AI.
+        Uses Gemini (fast/cheap) as primary, falls back to template if AI fails.
+        """
+        if not changes:
+            return ""
+        
+        # Build a concise change description for the LLM
+        status_transitions = {}
+        entity_changes = {}
+        total_amount = 0
+        denied_entities = []
+        
+        for c in changes:
+            old = c.get("old_status", "Unknown")
+            new = c.get("new_status", "Unknown")
+            key = f"{old} -> {new}"
+            status_transitions[key] = status_transitions.get(key, 0) + 1
+            
+            entity = c.get("entity_name", "Unknown")
+            entity_changes[entity] = entity_changes.get(entity, 0) + 1
+            total_amount += float(c.get("amount", 0) or 0)
+            
+            if "denied" in new.lower():
+                denied_entities.append(entity)
+        
+        # Try AI summary
+        try:
+            from utils.ai_models import AIModelManager
+            ai = AIModelManager()
+            
+            changes_text = "\n".join(
+                f"- FRN {c['frn']} for {c.get('entity_name', 'N/A')}: {c.get('old_status', '?')} -> {c.get('new_status', '?')} (${float(c.get('amount', 0) or 0):,.0f})"
+                for c in changes[:30]  # Cap context sent to AI
+            )
+            
+            prompt = f"""You are writing a brief FRN status change summary for an E-Rate consultant.
+E-Rate is the federal program (managed by USAC/FCC) that provides funding for schools and libraries.
+FRN = Funding Request Number. Key statuses: Funded/Committed (approved), Pending (under review), Denied (rejected - may need appeal).
+
+Here are the changes detected since the last report:
+{changes_text}
+{f"(Plus {len(changes) - 30} more changes not shown)" if len(changes) > 30 else ""}
+
+Write a 2-4 sentence summary. Be specific about entity names, dollar amounts, and status transitions.
+If any FRNs were denied, mention that an appeal should be considered.
+Do NOT use emojis. Use plain professional language. Do NOT include a greeting or sign-off."""
+
+            summary = ai.call_gemini(prompt)
+            
+            # Validate: AI should return reasonable text, not an error stub
+            if summary and len(summary) > 20 and not summary.startswith("[AI"):
+                # Sanitize HTML special chars
+                summary = summary.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                return summary.strip()
+        except Exception as e:
+            logger.warning(f"AI summary generation failed: {e}")
+        
+        # Fallback: template-based summary
+        return self._generate_template_summary(changes, status_transitions, denied_entities, total_amount)
+    
+    def _generate_template_summary(self, changes: List[Dict], status_transitions: Dict[str, int],
+                                    denied_entities: List[str], total_amount: float) -> str:
+        """Generate a simple template-based summary when AI is unavailable."""
+        parts = []
+        
+        funded_count = sum(v for k, v in status_transitions.items() if "funded" in k.lower() or "committed" in k.lower())
+        denied_count = sum(v for k, v in status_transitions.items() if "-> denied" in k.lower() or "-> Denied" in k)
+        new_count = sum(v for k, v in status_transitions.items() if "[new]" in k.lower())
+        other_count = len(changes) - funded_count - denied_count - new_count
+        
+        parts.append(f"{len(changes)} FRN{'s' if len(changes) != 1 else ''} changed status.")
+        
+        if funded_count:
+            parts.append(f"{funded_count} moved to Funded/Committed.")
+        if denied_count:
+            unique_denied = list(set(denied_entities))
+            entity_str = ", ".join(unique_denied[:3])
+            if len(unique_denied) > 3:
+                entity_str += f" and {len(unique_denied) - 3} more"
+            parts.append(f"{denied_count} {'were' if denied_count > 1 else 'was'} Denied ({entity_str}) -- consider filing an appeal.")
+        if new_count:
+            parts.append(f"{new_count} new FRN{'s' if new_count != 1 else ''} appeared.")
+        if total_amount > 0:
+            parts.append(f"Total commitment amount involved: ${total_amount:,.0f}.")
+        
+        return " ".join(parts)
+    
     # ==================== EMAIL & SMS DELIVERY ====================
     
     def _send_consolidated_email(self, user: User, watch_sections: List[Dict], html: str, 
@@ -645,15 +802,18 @@ class FRNReportService:
         from .email_service import EmailService
         email_service = EmailService()
         
-        # Filter out in_app_only sections from the email HTML
-        # We strip the <!-- in_app_only --> comments for email (they're only in stored HTML)
         email_html = html
         
-        num_watches = len(watch_sections)
-        if num_watches == 1:
-            subject = f"FRN Status Report: {watch_sections[0]['watch'].name} ({total_frns} FRNs)"
+        # Build a descriptive subject line
+        total_changes = sum(len(s["changes"]) for s in watch_sections)
+        any_first = any(s.get("is_first_snapshot", False) for s in watch_sections)
+        
+        if any_first and total_changes == 0:
+            subject = "SkyRate: FRN monitoring activated — initial snapshot recorded"
+        elif total_changes > 0:
+            subject = f"SkyRate: {total_changes} FRN change{'s' if total_changes != 1 else ''} detected"
         else:
-            subject = f"FRN Status Report: {num_watches} monitors, {total_frns} FRNs"
+            subject = "SkyRate: No FRN changes to report"
         
         email_service.send_email(
             to_email=recipient_email,
