@@ -1437,7 +1437,7 @@ async def get_live_frn_status(
                 
                 ben_summary = {
                     "ben": ben_record.ben,
-                    "entity_name": result.get('entity_name', ben_record.entity_name or 'Unknown'),
+                    "entity_name": result.get('entity_name', ben_record.organization_name or 'Unknown'),
                     "total_frns": len(frns),
                     "funded": 0,
                     "denied": 0,
@@ -1550,7 +1550,7 @@ async def get_disbursements(
         grand_total_authorized = 0
         
         if batch_result.get('success'):
-            ben_name_map = {ben_record.ben: ben_record.entity_name for ben_record in bens}
+            ben_name_map = {ben_record.ben: ben_record.organization_name for ben_record in bens}
             for ben_id in all_ben_ids:
                 result = batch_result.get('results', {}).get(ben_id, {})
                 if result.get('success', False) or result.get('total_records', 0) > 0:
