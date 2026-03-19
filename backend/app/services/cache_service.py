@@ -96,6 +96,22 @@ def make_cache_key(prefix: str, **kwargs) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+def delete_cached(db: Session, cache_key: str):
+    """Delete a specific cache entry by key."""
+    try:
+        entry = db.query(USACCache).filter(USACCache.cache_key == cache_key).first()
+        if entry:
+            db.delete(entry)
+            db.commit()
+            logger.info(f"Cache DELETE for key {cache_key[:16]}...")
+    except Exception as e:
+        logger.warning(f"Cache delete error (non-fatal): {e}")
+        try:
+            db.rollback()
+        except:
+            pass
+
+
 def cleanup_expired(db: Session, max_delete: int = 100):
     """Delete expired cache entries (call periodically)."""
     try:

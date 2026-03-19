@@ -1497,6 +1497,7 @@ async def get_live_frn_status(
 @router.get("/disbursements")
 async def get_disbursements(
     year: Optional[int] = None,
+    force_refresh: bool = False,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -1531,16 +1532,21 @@ async def get_disbursements(
     
     try:
         from utils.usac_client import USACDataClient
-        from app.services.cache_service import get_cached, set_cached, make_cache_key
+        from app.services.cache_service import get_cached, set_cached, make_cache_key, delete_cached
         client = USACDataClient()
         
         all_ben_ids = [ben_record.ben for ben_record in bens]
         
-        # Check cache first
         cache_key = make_cache_key("disbursements", bens=all_ben_ids, year=year)
-        cached = get_cached(db, cache_key)
-        if cached:
-            return cached
+        
+        # Force refresh: delete stale cache entry first
+        if force_refresh:
+            delete_cached(db, cache_key)
+        else:
+            # Check cache first
+            cached = get_cached(db, cache_key)
+            if cached:
+                return cached
         
         # Batch fetch all BENs in a single USAC API call
         batch_result = client.get_disbursements_batch(all_ben_ids, year=year)
@@ -1575,8 +1581,10 @@ async def get_disbursements(
             "bens": all_bens_data
         }
         
-        # Cache for 6 hours
-        set_cached(db, cache_key, response_data)
+        # Only cache if we got real data (prevent caching $0 when USAC had records)
+        has_any_data = any(b.get('total_records', 0) > 0 for b in all_bens_data)
+        if grand_total_authorized > 0 or not has_any_data:
+            set_cached(db, cache_key, response_data)
         
         return response_data
     

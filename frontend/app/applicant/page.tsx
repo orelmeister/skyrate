@@ -300,10 +300,10 @@ function ApplicantDashboard() {
   };
 
   // Disbursement Data
-  const loadDisbursements = async (year?: number) => {
+  const loadDisbursements = async (year?: number, forceRefresh?: boolean) => {
     setDisbursementLoading(true);
     try {
-      const response = await api.getApplicantDisbursements(year);
+      const response = await api.getApplicantDisbursements(year, forceRefresh);
       if (response.success && response.data) {
         setDisbursementData(response.data);
       }
@@ -1466,6 +1466,13 @@ function ApplicantDashboard() {
                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium"
                 >
                   Load Disbursements
+                </button>
+                <button
+                  onClick={() => loadDisbursements(disbursementYear, true)}
+                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-sm font-medium border border-slate-300"
+                  title="Bypass cache and fetch fresh data from USAC"
+                >
+                  Force Refresh
                 </button>
               </div>
             </div>

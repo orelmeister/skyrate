@@ -2807,9 +2807,12 @@ class ApiClient {
   /**
    * Get disbursement data for applicant BENs
    */
-  async getApplicantDisbursements(year?: number): Promise<ApiResponse<any>> {
-    const params = year ? `?year=${year}` : '';
-    return this.request(`/api/v1/applicant/disbursements${params}`);
+  async getApplicantDisbursements(year?: number, forceRefresh?: boolean): Promise<ApiResponse<any>> {
+    const params = new URLSearchParams();
+    if (year) params.set('year', String(year));
+    if (forceRefresh) params.set('force_refresh', 'true');
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/api/v1/applicant/disbursements${queryString}`);
   }
 
   // ==================== FRN WATCH / REPORT MONITOR ====================
