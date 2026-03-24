@@ -9,7 +9,7 @@ import { api, ConsultantSchool, ConsultantProfile, AppealRecord, FRNWatch, FRNRe
 import { SearchResultsTable } from "@/components/SearchResultsTable";
 import { AppealChat } from "@/components/AppealChat";
 import { TableExportBar } from "@/components/TableExportBar";
-import { FRNDetailModal } from "@/components/FRNDetailModal";
+import FRNDetailModal from "@/components/FRNDetailModal";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { useTabParam } from "@/hooks/useTabParam";
 
