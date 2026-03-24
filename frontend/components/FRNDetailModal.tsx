@@ -160,7 +160,7 @@ export default function FRNDetailModal({ isOpen, onClose, frn, ben, initialData 
   if (!isOpen) return null;
 
   // Use fresh data if available, fall back to initialData
-  const display: Partial<FRNData> & Record<string, unknown> = data || (initialData ? {
+  const display = (data || (initialData ? {
     frn: initialData.frn || frn,
     ben: initialData.ben || ben || '',
     organization_name: initialData.organization_name || '',
@@ -183,7 +183,7 @@ export default function FRNDetailModal({ isOpen, onClose, frn, ben, initialData 
     service_start_date: '',
     award_date: '',
     state: '',
-  } : {});
+  } : {})) as Partial<FRNData> & Record<string, unknown>;
 
   const statusStr = String(display.status || '');
   const isDenied = statusStr.toLowerCase().includes('denied');
