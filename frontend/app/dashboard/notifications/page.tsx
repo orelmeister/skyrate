@@ -116,8 +116,13 @@ function hasInlineDetails(alert: Alert): boolean {
 }
 
 function getAlertUrl(alert: Alert): string {
-  // FRN report summary alerts and individual FRN alerts expand inline
-  if (alert.entity_type === 'frn_report' || alert.entity_type === 'frn') return '';
+  // Individual FRN alerts always expand inline
+  if (alert.entity_type === 'frn') return '';
+  // FRN report summary alerts: expand inline if they have change details, otherwise go to FRN Status Tab
+  if (alert.entity_type === 'frn_report') {
+    if (hasInlineDetails(alert)) return '';
+    return '/consultant?tab=frn-status';
+  }
   switch (alert.alert_type) {
     case 'frn_status_change':
     case 'new_denial':
@@ -386,7 +391,7 @@ export default function NotificationsPage() {
                         {expandedId === alert.id ? (
                           <><ChevronUp className="h-3 w-3" /> Hide details</>
                         ) : alert.entity_type === 'frn_report' ? (
-                          <><ChevronDown className="h-3 w-3" /> View {alert.metadata?.changes?.length} change(s)</>
+                          <><ChevronDown className="h-3 w-3" /> View {alert.metadata?.changes?.length ?? alert.metadata?.change_count ?? alert.metadata?.denial_count ?? ''} change(s)</>
                         ) : (
                           <><ChevronDown className="h-3 w-3" /> View FRN details</>
                         )}
@@ -462,6 +467,11 @@ export default function NotificationsPage() {
                             ))}
                           </tbody>
                         </table>
+                        <div className="px-3 py-2 border-t border-gray-200">
+                          <a href="/consultant?tab=frn-status" className="text-xs text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1">
+                            View FRN Status Tab <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
                       </div>
                     )}
                     {/* Individual FRN alert: detail card */}
