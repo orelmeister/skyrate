@@ -700,6 +700,12 @@ def sync_consultant_frn_statuses():
                         school.last_synced = datetime.utcnow()
                         updated_count += 1
 
+                        # First-run protection: if cached status was never set or unknown,
+                        # just record the baseline without flooding alerts
+                        if old_status in (None, '', 'Unknown'):
+                            logger.info(f"FRN {school.frn}: baseline recorded as '{new_status}' (was '{old_status}')")
+                            continue
+
                         # Resolve the consultant's user_id
                         profile = db.query(ConsultantProfile).filter(
                             ConsultantProfile.id == school.consultant_profile_id

@@ -18,6 +18,7 @@ from ..models.frn_report_history import FRNReportHistory
 from ..models.user import User
 from ..models.consultant import ConsultantProfile, ConsultantSchool
 from ..models.vendor import VendorProfile
+from ..models.alert import AlertType, AlertPriority
 
 logger = logging.getLogger(__name__)
 
@@ -219,6 +220,48 @@ class FRNReportService:
             if all_changes:
                 ai_summary = self._generate_ai_summary(all_changes, user, watch_sections)
             
+            # Bridge FRN Watch changes to Alert system so they appear in notifications page
+            if all_changes:
+                try:
+                    from .alert_service import AlertService
+                    alert_svc = AlertService(self.db)
+                    for change in all_changes:
+                        frn_num = change.get("frn", "")
+                        entity = change.get("entity_name", "")
+                        old_st = change.get("old_status", "")
+                        new_st = change.get("new_status", "")
+                        amt = float(change.get("amount", 0) or 0)
+                        
+                        if "denied" in new_st.lower():
+                            alert_svc.create_alert(
+                                user_id=user.id,
+                                alert_type=AlertType.NEW_DENIAL,
+                                priority=AlertPriority.HIGH,
+                                title=f"Denial Detected: {entity or frn_num}",
+                                message=f"FRN {frn_num} status changed to '{new_st}'. Amount: ${amt:,.2f}",
+                                entity_type="frn",
+                                entity_id=frn_num,
+                                entity_name=entity,
+                                metadata={"old_status": old_st, "new_status": new_st, "amount": amt},
+                                send_email=False  # FRN Watch already sends its own email
+                            )
+                        else:
+                            alert_svc.create_alert(
+                                user_id=user.id,
+                                alert_type=AlertType.FRN_STATUS_CHANGE,
+                                priority=AlertPriority.HIGH if "denied" in new_st.lower() else AlertPriority.MEDIUM if "funded" in new_st.lower() or "committed" in new_st.lower() else AlertPriority.LOW,
+                                title=f"Status Change: {entity or frn_num}",
+                                message=f"FRN {frn_num} changed from '{old_st}' to '{new_st}'. Amount: ${amt:,.2f}",
+                                entity_type="frn",
+                                entity_id=frn_num,
+                                entity_name=entity,
+                                metadata={"old_status": old_st, "new_status": new_st, "amount": amt},
+                                send_email=False  # FRN Watch already sends its own email
+                            )
+                    logger.info(f"Created {len(all_changes)} alert records for user {user.id} from FRN Watch changes")
+                except Exception as e:
+                    logger.error(f"Failed to create alert records for FRN Watch changes: {e}")
+            
             # Generate HTML (always — needed for in-app storage)
             html = self._generate_consolidated_html(
                 user, watch_sections,
@@ -286,44 +329,26 @@ class FRNReportService:
             print(f"[SNAPSHOT] About to commit. Session dirty: {self.db.dirty}, new: {self.db.new}")
             self.db.commit()
             
-            # Verify snapshot persistence and fallback to independent connection if needed
+            # Force-persist snapshots via raw SQL to bypass ORM JSON column issues
+            # This runs ALWAYS (not just as fallback) for maximum reliability
             for section in watch_sections:
                 w = section["watch"]
                 snap = section.get("new_snapshot", {})
                 if not snap:
                     continue
                 
-                # Check if snapshot actually persisted
-                verify = self.db.execute(
-                    text("SELECT LENGTH(last_snapshot) as snap_len FROM frn_watches WHERE id = :wid"),
-                    {"wid": w.id}
-                ).fetchone()
-                
                 snap_json = json.dumps(snap)
-                expected_len = len(snap_json)
-                actual_len = verify[0] if verify and verify[0] else 0
-                
-                print(f"[SNAPSHOT] watch_id={w.id}: expected={expected_len} bytes, actual_in_db={actual_len} bytes")
-                
-                if actual_len < expected_len * 0.9:  # Less than 90% of expected = failed
-                    print(f"[SNAPSHOT] MISMATCH! Attempting independent connection save...")
-                    try:
-                        from ..core.database import engine
-                        with engine.connect() as conn:
-                            conn.execute(
-                                text("UPDATE frn_watches SET last_snapshot = :snap WHERE id = :wid"),
-                                {"snap": snap_json, "wid": w.id}
-                            )
-                            conn.commit()
-                        # Verify again
-                        verify2 = self.db.execute(
-                            text("SELECT LENGTH(last_snapshot) as snap_len FROM frn_watches WHERE id = :wid"),
-                            {"wid": w.id}
-                        ).fetchone()
-                        actual_len2 = verify2[0] if verify2 and verify2[0] else 0
-                        print(f"[SNAPSHOT] After independent save: actual_in_db={actual_len2} bytes")
-                    except Exception as e2:
-                        print(f"[SNAPSHOT] Independent save FAILED: {e2}")
+                try:
+                    from ..core.database import engine
+                    with engine.connect() as conn:
+                        conn.execute(
+                            text("UPDATE frn_watches SET last_snapshot = :snap WHERE id = :wid"),
+                            {"snap": snap_json, "wid": w.id}
+                        )
+                        conn.commit()
+                    print(f"[SNAPSHOT] watch_id={w.id}: raw SQL saved {len(snap_json)} bytes ({len(snap)} entries)")
+                except Exception as e2:
+                    print(f"[SNAPSHOT] Raw SQL save FAILED for watch {w.id}: {e2}")
             
             return {
                 "success": True,
