@@ -220,67 +220,61 @@ class FRNReportService:
             if all_changes:
                 ai_summary = self._generate_ai_summary(all_changes, user, watch_sections)
             
-            # Bridge FRN Watch changes to Alert system so they appear in notifications page
-            # Create ONE summary alert per batch (not one per change) to avoid flooding
+            # Bridge FRN Watch changes to Alert system — per-FRN individual alerts
             if all_changes:
                 try:
                     from .alert_service import AlertService
                     alert_svc = AlertService(self.db)
                     
-                    denials = [c for c in all_changes if "denied" in (c.get("new_status", "") or "").lower()]
-                    other_changes = [c for c in all_changes if c not in denials]
-                    
-                    # Build compact change details for metadata (max 50 entries to avoid DB bloat)
-                    def _change_rows(changes, limit=50):
-                        return [
-                            {
-                                "frn": c.get("frn", ""),
-                                "entity": c.get("entity_name", ""),
-                                "old": c.get("old_status", ""),
-                                "new": c.get("new_status", ""),
-                                "amt": float(c.get("amount", 0) or 0),
-                            }
-                            for c in changes[:limit]
+                    # Flood guard: if > 100 changes, only create individual alerts
+                    # for denials and funded changes; summarize the rest
+                    FLOOD_THRESHOLD = 100
+                    if len(all_changes) > FLOOD_THRESHOLD:
+                        priority_changes = [
+                            c for c in all_changes
+                            if "denied" in (c.get("new_status", "") or "").lower()
+                            or "funded" in (c.get("new_status", "") or "").lower()
+                            or "committed" in (c.get("new_status", "") or "").lower()
                         ]
+                        low_priority = [c for c in all_changes if c not in priority_changes]
+                        
+                        # Create individual alerts for priority changes
+                        self._create_per_frn_alerts(alert_svc, user.id, priority_changes)
+                        
+                        # Create ONE summary for the rest
+                        if low_priority:
+                            alert_svc.create_alert(
+                                user_id=user.id,
+                                alert_type=AlertType.FRN_STATUS_CHANGE,
+                                priority=AlertPriority.LOW,
+                                title=f"{len(low_priority)} Additional FRN Status Changes",
+                                message=f"{len(low_priority)} low-priority FRN status changes detected. Check your FRN Status tab for details.",
+                                entity_type="frn_report",
+                                metadata={
+                                    "change_count": len(low_priority),
+                                    "changes": [
+                                        {"frn": c.get("frn", ""), "entity": c.get("entity_name", ""),
+                                         "old": c.get("old_status", ""), "new": c.get("new_status", ""),
+                                         "amt": float(c.get("amount", 0) or 0)}
+                                        for c in low_priority[:50]
+                                    ],
+                                },
+                                send_email=False
+                            )
+                    else:
+                        # Normal flow: create individual alerts for ALL changes
+                        self._create_per_frn_alerts(alert_svc, user.id, all_changes)
                     
-                    if denials:
-                        denial_names = list(set(c.get("entity_name", c.get("frn", "")) for c in denials))[:5]
-                        total_amt = sum(float(c.get("amount", 0) or 0) for c in denials)
-                        alert_svc.create_alert(
-                            user_id=user.id,
-                            alert_type=AlertType.NEW_DENIAL,
-                            priority=AlertPriority.HIGH,
-                            title=f"{len(denials)} Denial(s) Detected",
-                            message=f"{len(denials)} FRN(s) denied ({', '.join(denial_names[:3])}{'...' if len(denial_names) > 3 else ''}). Total: ${total_amt:,.2f}. Check your FRN report for details.",
-                            entity_type="frn_report",
-                            metadata={
-                                "denial_count": len(denials),
-                                "total_amount": total_amt,
-                                "changes": _change_rows(denials),
-                            },
-                            send_email=False
-                        )
-                    
-                    if other_changes:
-                        change_names = list(set(c.get("entity_name", c.get("frn", "")) for c in other_changes))[:5]
-                        has_funded = any("funded" in (c.get("new_status", "") or "").lower() or "committed" in (c.get("new_status", "") or "").lower() for c in other_changes)
-                        alert_svc.create_alert(
-                            user_id=user.id,
-                            alert_type=AlertType.FRN_STATUS_CHANGE,
-                            priority=AlertPriority.MEDIUM if has_funded else AlertPriority.LOW,
-                            title=f"{len(other_changes)} FRN Status Change(s)",
-                            message=f"{len(other_changes)} FRN(s) changed status ({', '.join(change_names[:3])}{'...' if len(change_names) > 3 else ''}). Check your FRN report for full details.",
-                            entity_type="frn_report",
-                            metadata={
-                                "change_count": len(other_changes),
-                                "changes": _change_rows(other_changes),
-                            },
-                            send_email=False
-                        )
-                    
-                    logger.info(f"Created summary alerts for user {user.id}: {len(denials)} denials, {len(other_changes)} other changes")
+                    logger.info(f"Created per-FRN alerts for user {user.id}: {len(all_changes)} total changes")
                 except Exception as e:
                     logger.error(f"Failed to create alert records for FRN Watch changes: {e}")
+            
+            # Check deadlines for all current FRNs
+            for section in watch_sections:
+                try:
+                    self._check_deadlines(user, section["frns"], section["watch"])
+                except Exception as e:
+                    logger.error(f"Failed to check deadlines for watch {section['watch'].id}: {e}")
             
             # Generate HTML (always — needed for in-app storage)
             html = self._generate_consolidated_html(
@@ -490,6 +484,7 @@ class FRNReportService:
         
         Deduplicates by FRN number first to avoid false changes from
         duplicate entries (e.g. same FRN from BEN + SPIN queries).
+        Returns enriched change dicts with full USAC record fields.
         """
         changes = []
         if not last_snapshot:
@@ -502,33 +497,209 @@ class FRNReportService:
             if frn_num and frn_num not in current_map:
                 current_map[frn_num] = frn
         
-        old_frn_numbers = set(last_snapshot.keys())
-        
         for frn_num, frn in current_map.items():
             current_status = frn.get("status", "")
             old_status = last_snapshot.get(frn_num)
             
             if old_status is not None:
-                # Existing FRN — check for status change
                 if old_status != current_status:
-                    changes.append({
-                        "frn": frn_num,
-                        "entity_name": frn.get("entity_name", ""),
-                        "old_status": old_status,
-                        "new_status": current_status,
-                        "amount": float(frn.get("commitment_amount", 0) or 0),
-                    })
+                    changes.append(self._build_enriched_change(frn_num, frn, old_status, current_status))
             else:
-                # New FRN not in previous snapshot
-                changes.append({
-                    "frn": frn_num,
-                    "entity_name": frn.get("entity_name", ""),
-                    "old_status": "[New]",
-                    "new_status": current_status,
-                    "amount": float(frn.get("commitment_amount", 0) or 0),
-                })
+                changes.append(self._build_enriched_change(frn_num, frn, "[New]", current_status))
         
         return changes
+    
+    def _build_enriched_change(self, frn_num: str, frn: Dict, old_status: str, new_status: str) -> Dict:
+        """Build a change dict enriched with full USAC record fields."""
+        return {
+            "frn": frn_num,
+            "entity_name": frn.get("entity_name", ""),
+            "old_status": old_status,
+            "new_status": new_status,
+            "amount": float(frn.get("commitment_amount", 0) or 0),
+            "ben": frn.get("ben", ""),
+            "funding_year": frn.get("funding_year", ""),
+            "fcdl_comment": frn.get("fcdl_comment", ""),
+            "fcdl_date": frn.get("fcdl_date", ""),
+            "pending_reason": frn.get("pending_reason", ""),
+            "service_type": frn.get("service_type", ""),
+            "spin_name": frn.get("spin_name", ""),
+            "last_date_to_invoice": frn.get("last_invoice_date", frn.get("last_date_to_invoice", "")),
+            "service_delivery_deadline": frn.get("service_end", frn.get("service_delivery_deadline", "")),
+            "discount_rate": frn.get("discount_rate", ""),
+            "disbursed_amount": float(frn.get("disbursed_amount", 0) or 0),
+            "application_number": frn.get("application_number", ""),
+        }
+    
+    # ==================== PER-FRN ALERT CREATION ====================
+    
+    def _create_per_frn_alerts(self, alert_svc, user_id: int, changes: List[Dict]):
+        """Create individual per-FRN alerts for each change."""
+        for change in changes:
+            is_denial = "denied" in (change.get("new_status", "") or "").lower()
+            is_funded = "funded" in (change.get("new_status", "") or "").lower() or "committed" in (change.get("new_status", "") or "").lower()
+            
+            if is_denial:
+                alert_type = AlertType.NEW_DENIAL
+                priority = AlertPriority.HIGH
+            elif is_funded:
+                alert_type = AlertType.FUNDING_APPROVED
+                priority = AlertPriority.MEDIUM
+            else:
+                alert_type = AlertType.FRN_STATUS_CHANGE
+                priority = AlertPriority.MEDIUM
+            
+            alert_svc.create_alert(
+                user_id=user_id,
+                alert_type=alert_type,
+                priority=priority,
+                title=f"FRN {change['frn']} - {change.get('new_status', 'Unknown')}",
+                message=(
+                    f"{change.get('entity_name', 'Unknown')} (BEN {change.get('ben', 'N/A')}): "
+                    f"Status changed from {change.get('old_status', '?')} to {change.get('new_status', '?')}. "
+                    f"Amount: ${float(change.get('amount', 0)):,.2f}"
+                ),
+                entity_type="frn",
+                entity_id=change["frn"],
+                entity_name=change.get("entity_name", ""),
+                metadata={
+                    "frn": change["frn"],
+                    "ben": change.get("ben", ""),
+                    "organization_name": change.get("entity_name", ""),
+                    "old_status": change.get("old_status", ""),
+                    "new_status": change.get("new_status", ""),
+                    "amount": float(change.get("amount", 0) or 0),
+                    "funding_year": change.get("funding_year", ""),
+                    "fcdl_comment": change.get("fcdl_comment", ""),
+                    "fcdl_date": change.get("fcdl_date", ""),
+                    "pending_reason": change.get("pending_reason", ""),
+                    "service_type": change.get("service_type", ""),
+                    "spin_name": change.get("spin_name", ""),
+                    "last_date_to_invoice": change.get("last_date_to_invoice", ""),
+                    "service_delivery_deadline": change.get("service_delivery_deadline", ""),
+                },
+                send_email=False  # Never send individual emails; daily digest handles email
+            )
+    
+    # ==================== DEADLINE DETECTION ====================
+    
+    def _check_deadlines(self, user: User, frns: List[Dict], watch: FRNWatch):
+        """Scan all current FRNs for upcoming deadlines and create alerts.
+        
+        Tracks sent deadline alerts via watch.last_snapshot to prevent duplicates.
+        Uses keys like '{frn}_{type}_{days}' in a 'deadline_alerts_sent' dict.
+        """
+        from .alert_service import AlertService
+        alert_svc = AlertService(self.db)
+        now = datetime.utcnow()
+        
+        # Load previously sent deadline alerts from snapshot metadata
+        snapshot = watch.last_snapshot or {}
+        sent_deadlines = snapshot.get("__deadline_alerts_sent__", {}) if isinstance(snapshot, dict) else {}
+        new_sent = dict(sent_deadlines)  # copy for updates
+        
+        INVOICE_ALERT_DAYS = [30, 14, 7, 3]
+        APPEAL_ALERT_DAYS = [30, 14, 7, 3]
+        SERVICE_ALERT_DAYS = [60, 30, 14]
+        
+        def _urgency(days_remaining: int) -> str:
+            if days_remaining <= 7:
+                return "critical"
+            elif days_remaining <= 14:
+                return "high"
+            elif days_remaining <= 30:
+                return "medium"
+            return "low"
+        
+        def _check_date(date_str: str, frn_dict: Dict, deadline_type: str, alert_type, thresholds: list):
+            if not date_str:
+                return
+            try:
+                deadline = datetime.fromisoformat(date_str.replace("Z", "+00:00").split("T")[0])
+            except (ValueError, TypeError):
+                return
+            days_rem = (deadline - now).days
+            if days_rem <= 0:
+                return  # expired, too late to alert
+            
+            frn_num = frn_dict.get("frn", "")
+            for threshold in thresholds:
+                if days_rem <= threshold:
+                    dedup_key = f"{frn_num}_{deadline_type}_{threshold}"
+                    if dedup_key in sent_deadlines:
+                        continue  # already sent this alert
+                    
+                    urgency = _urgency(days_rem)
+                    priority_map = {
+                        "critical": AlertPriority.CRITICAL,
+                        "high": AlertPriority.HIGH,
+                        "medium": AlertPriority.MEDIUM,
+                        "low": AlertPriority.LOW,
+                    }
+                    
+                    type_labels = {
+                        "invoice": "Invoicing Deadline",
+                        "appeal": "Appeal Deadline",
+                        "service": "Service Delivery Deadline",
+                    }
+                    
+                    alert_svc.create_alert(
+                        user_id=user.id,
+                        alert_type=alert_type,
+                        priority=priority_map.get(urgency, AlertPriority.MEDIUM),
+                        title=f"FRN {frn_num} - {type_labels.get(deadline_type, 'Deadline')} in {days_rem} days",
+                        message=(
+                            f"{frn_dict.get('entity_name', 'Unknown')} (BEN {frn_dict.get('ben', 'N/A')}): "
+                            f"{type_labels.get(deadline_type, 'Deadline')} is {deadline.strftime('%Y-%m-%d')} "
+                            f"({days_rem} days remaining). Status: {frn_dict.get('status', 'Unknown')}."
+                        ),
+                        entity_type="frn",
+                        entity_id=frn_num,
+                        entity_name=frn_dict.get("entity_name", ""),
+                        metadata={
+                            "frn": frn_num,
+                            "ben": frn_dict.get("ben", ""),
+                            "organization_name": frn_dict.get("entity_name", ""),
+                            "deadline_type": deadline_type,
+                            "deadline_date": deadline.strftime("%Y-%m-%d"),
+                            "days_remaining": days_rem,
+                            "urgency": urgency,
+                            "status": frn_dict.get("status", ""),
+                            "amount": float(frn_dict.get("commitment_amount", 0) or 0),
+                            "funding_year": frn_dict.get("funding_year", ""),
+                        },
+                        send_email=False,
+                    )
+                    new_sent[dedup_key] = now.isoformat()
+                    break  # only create alert for the most urgent matching threshold
+        
+        for frn in frns:
+            status = (frn.get("status") or "").lower()
+            
+            # Invoicing deadline
+            invoice_date = frn.get("last_invoice_date") or frn.get("last_date_to_invoice", "")
+            _check_date(invoice_date, frn, "invoice", AlertType.DEADLINE_APPROACHING, INVOICE_ALERT_DAYS)
+            
+            # Appeal deadline (denied FRNs only)
+            if "denied" in status:
+                fcdl_date_str = frn.get("fcdl_date", "")
+                if fcdl_date_str:
+                    try:
+                        fcdl_dt = datetime.fromisoformat(fcdl_date_str.replace("Z", "+00:00").split("T")[0])
+                        appeal_deadline = (fcdl_dt + timedelta(days=60)).strftime("%Y-%m-%d")
+                        _check_date(appeal_deadline, frn, "appeal", AlertType.APPEAL_DEADLINE, APPEAL_ALERT_DAYS)
+                    except (ValueError, TypeError):
+                        pass
+            
+            # Service delivery deadline
+            svc_deadline = frn.get("service_end") or frn.get("service_delivery_deadline", "")
+            _check_date(svc_deadline, frn, "service", AlertType.DEADLINE_APPROACHING, SERVICE_ALERT_DAYS)
+        
+        # Persist updated deadline tracking
+        if new_sent != sent_deadlines:
+            if isinstance(watch.last_snapshot, dict):
+                watch.last_snapshot["__deadline_alerts_sent__"] = new_sent
+                flag_modified(watch, "last_snapshot")
     
     # ==================== REPORT NAME ====================
     

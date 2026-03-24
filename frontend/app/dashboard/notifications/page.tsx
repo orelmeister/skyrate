@@ -4,10 +4,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Bell, Check, CheckCheck, Trash2, ArrowLeft, ChevronLeft,
-  ChevronRight, Filter, Loader2, ChevronDown, ChevronUp, ExternalLink
+  ChevronRight, Filter, Loader2, ChevronDown, ChevronUp, ExternalLink,
+  AlertTriangle, Clock, Calendar
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/auth-store';
 import { api } from '@/lib/api';
+import FRNDetailModal from '@/components/FRNDetailModal';
 
 interface ChangeDetail {
   frn: string;
@@ -26,6 +28,22 @@ interface AlertMetadata {
   old_status?: string;
   new_status?: string;
   amount?: number;
+  // Per-FRN enriched fields
+  frn?: string;
+  ben?: string;
+  organization_name?: string;
+  funding_year?: string;
+  fcdl_comment?: string;
+  fcdl_date?: string;
+  pending_reason?: string;
+  service_type?: string;
+  spin_name?: string;
+  last_date_to_invoice?: string;
+  service_delivery_deadline?: string;
+  deadline_type?: string;
+  deadline_date?: string;
+  days_remaining?: number;
+  urgency?: string;
   [key: string]: unknown;
 }
 
@@ -172,6 +190,12 @@ export default function NotificationsPage() {
   const [page, setPage] = useState(0);
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  
+  // FRN Detail Modal state
+  const [frnModalOpen, setFrnModalOpen] = useState(false);
+  const [selectedFrn, setSelectedFrn] = useState<string>('');
+  const [selectedBen, setSelectedBen] = useState<string | undefined>();
+  const [selectedFrnData, setSelectedFrnData] = useState<Record<string, unknown> | undefined>();
 
   const fetchAlerts = useCallback(async (offset: number) => {
     if (!isAuthenticated || !token) return;
@@ -245,7 +269,15 @@ export default function NotificationsPage() {
     if (!alert.is_read) {
       await markAsRead(alert.id);
     }
-    // If alert has inline change details, toggle expansion
+    // Per-FRN alerts: open FRN Detail Modal
+    if (alert.entity_type === 'frn' && alert.entity_id) {
+      setSelectedFrn(alert.entity_id);
+      setSelectedBen(alert.metadata?.ben as string | undefined);
+      setSelectedFrnData(alert.metadata as Record<string, unknown> | undefined);
+      setFrnModalOpen(true);
+      return;
+    }
+    // Legacy frn_report alerts or alerts with inline change details: toggle expansion
     if (hasInlineDetails(alert)) {
       setExpandedId(prev => prev === alert.id ? null : alert.id);
       return;
@@ -381,19 +413,65 @@ export default function NotificationsPage() {
                     <p className="mt-1 text-sm text-gray-600 line-clamp-2">
                       {alert.message}
                     </p>
-                    {alert.entity_name && (
+                    {/* Per-FRN status badges */}
+                    {alert.entity_type === 'frn' && alert.metadata?.new_status && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        {alert.metadata.old_status && alert.metadata.old_status !== alert.metadata.new_status && (
+                          <>
+                            <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
+                              String(alert.metadata.old_status).toLowerCase().includes('denied') ? 'bg-red-100 text-red-800' :
+                              String(alert.metadata.old_status).toLowerCase().includes('funded') || String(alert.metadata.old_status).toLowerCase().includes('committed') ? 'bg-blue-100 text-blue-800' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>{String(alert.metadata.old_status)}</span>
+                            <ChevronRight className="h-3 w-3 text-gray-400" />
+                          </>
+                        )}
+                        <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
+                          String(alert.metadata.new_status).toLowerCase().includes('denied') ? 'bg-red-100 text-red-800' :
+                          String(alert.metadata.new_status).toLowerCase().includes('funded') || String(alert.metadata.new_status).toLowerCase().includes('committed') ? 'bg-green-100 text-green-800' :
+                          String(alert.metadata.new_status).toLowerCase().includes('pending') ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>{String(alert.metadata.new_status)}</span>
+                        {alert.metadata.amount != null && Number(alert.metadata.amount) > 0 && (
+                          <span className="text-xs text-gray-500 font-medium">
+                            ${Number(alert.metadata.amount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {/* Deadline alert urgency badge */}
+                    {alert.entity_type === 'frn' && alert.metadata?.deadline_type && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <Clock className="h-3.5 w-3.5 text-gray-400" />
+                        <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium capitalize ${
+                          alert.metadata.urgency === 'critical' ? 'bg-red-100 text-red-800' :
+                          alert.metadata.urgency === 'high' ? 'bg-orange-100 text-orange-800' :
+                          alert.metadata.urgency === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-blue-100 text-blue-800'
+                        }`}>{String(alert.metadata.urgency || '')}</span>
+                        {alert.metadata.days_remaining != null && (
+                          <span className="text-xs text-gray-500">{Number(alert.metadata.days_remaining)}d remaining</span>
+                        )}
+                      </div>
+                    )}
+                    {alert.entity_name && !alert.metadata?.new_status && (
                       <p className="mt-1.5 text-xs text-gray-500">
                         {alert.entity_name}
                       </p>
                     )}
-                    {hasInlineDetails(alert) && (
+                    {/* Per-FRN alerts: show "View Details" prompt */}
+                    {alert.entity_type === 'frn' && alert.entity_id && (
+                      <span className="mt-1.5 inline-flex items-center gap-1 text-xs text-teal-600 font-medium">
+                        <ExternalLink className="h-3 w-3" /> View FRN details
+                      </span>
+                    )}
+                    {/* Legacy summary alerts: expandable change list */}
+                    {alert.entity_type === 'frn_report' && hasInlineDetails(alert) && (
                       <span className="mt-1.5 inline-flex items-center gap-1 text-xs text-blue-600 font-medium">
                         {expandedId === alert.id ? (
                           <><ChevronUp className="h-3 w-3" /> Hide details</>
-                        ) : alert.entity_type === 'frn_report' ? (
-                          <><ChevronDown className="h-3 w-3" /> View {alert.metadata?.changes?.length ?? alert.metadata?.change_count ?? alert.metadata?.denial_count ?? ''} change(s)</>
                         ) : (
-                          <><ChevronDown className="h-3 w-3" /> View FRN details</>
+                          <><ChevronDown className="h-3 w-3" /> View {alert.metadata?.changes?.length ?? alert.metadata?.change_count ?? ''} change(s)</>
                         )}
                       </span>
                     )}
@@ -474,57 +552,7 @@ export default function NotificationsPage() {
                         </div>
                       </div>
                     )}
-                    {/* Individual FRN alert: detail card */}
-                    {alert.entity_type === 'frn' && (
-                      <div className="ml-6 bg-gray-50 rounded-lg border border-gray-200 p-4">
-                        <div className="grid grid-cols-2 gap-3 text-sm">
-                          {alert.entity_id && (
-                            <div>
-                              <span className="text-gray-500 text-xs">FRN</span>
-                              <p className="font-mono font-medium text-gray-900">{alert.entity_id}</p>
-                            </div>
-                          )}
-                          {alert.entity_name && (
-                            <div>
-                              <span className="text-gray-500 text-xs">Entity</span>
-                              <p className="font-medium text-gray-900">{alert.entity_name}</p>
-                            </div>
-                          )}
-                          {alert.metadata?.old_status != null && (
-                            <div>
-                              <span className="text-gray-500 text-xs">Previous Status</span>
-                              <p><span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
-                                String(alert.metadata.old_status).toLowerCase().includes('denied') ? 'bg-red-100 text-red-800' :
-                                String(alert.metadata.old_status).toLowerCase().includes('funded') || String(alert.metadata.old_status).toLowerCase().includes('committed') ? 'bg-blue-100 text-blue-800' :
-                                'bg-gray-100 text-gray-700'
-                              }`}>{String(alert.metadata.old_status)}</span></p>
-                            </div>
-                          )}
-                          {alert.metadata?.new_status != null && (
-                            <div>
-                              <span className="text-gray-500 text-xs">New Status</span>
-                              <p><span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
-                                String(alert.metadata.new_status).toLowerCase().includes('denied') ? 'bg-red-100 text-red-800' :
-                                String(alert.metadata.new_status).toLowerCase().includes('funded') || String(alert.metadata.new_status).toLowerCase().includes('committed') ? 'bg-green-100 text-green-800' :
-                                String(alert.metadata.new_status).toLowerCase().includes('pending') ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-gray-100 text-gray-700'
-                              }`}>{String(alert.metadata.new_status)}</span></p>
-                            </div>
-                          )}
-                          {alert.metadata?.amount != null && Number(alert.metadata.amount) > 0 && (
-                            <div>
-                              <span className="text-gray-500 text-xs">Amount</span>
-                              <p className="font-medium text-gray-900">${Number(alert.metadata.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                            </div>
-                          )}
-                        </div>
-                        <div className="mt-3 pt-3 border-t border-gray-200">
-                          <a href="/consultant?tab=frn-status" className="text-xs text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1">
-                            View FRN Status Tab <ExternalLink className="h-3 w-3" />
-                          </a>
-                        </div>
-                      </div>
-                    )}
+
                   </div>
                 )}
                 </div>
@@ -560,6 +588,15 @@ export default function NotificationsPage() {
           </div>
         )}
       </div>
+
+      {/* FRN Detail Modal */}
+      <FRNDetailModal
+        isOpen={frnModalOpen}
+        onClose={() => setFrnModalOpen(false)}
+        frn={selectedFrn}
+        ben={selectedBen}
+        initialData={selectedFrnData as any}
+      />
     </div>
   );
 }
