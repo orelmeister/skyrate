@@ -230,6 +230,19 @@ class FRNReportService:
                     denials = [c for c in all_changes if "denied" in (c.get("new_status", "") or "").lower()]
                     other_changes = [c for c in all_changes if c not in denials]
                     
+                    # Build compact change details for metadata (max 50 entries to avoid DB bloat)
+                    def _change_rows(changes, limit=50):
+                        return [
+                            {
+                                "frn": c.get("frn", ""),
+                                "entity": c.get("entity_name", ""),
+                                "old": c.get("old_status", ""),
+                                "new": c.get("new_status", ""),
+                                "amt": float(c.get("amount", 0) or 0),
+                            }
+                            for c in changes[:limit]
+                        ]
+                    
                     if denials:
                         denial_names = list(set(c.get("entity_name", c.get("frn", "")) for c in denials))[:5]
                         total_amt = sum(float(c.get("amount", 0) or 0) for c in denials)
@@ -240,7 +253,11 @@ class FRNReportService:
                             title=f"{len(denials)} Denial(s) Detected",
                             message=f"{len(denials)} FRN(s) denied ({', '.join(denial_names[:3])}{'...' if len(denial_names) > 3 else ''}). Total: ${total_amt:,.2f}. Check your FRN report for details.",
                             entity_type="frn_report",
-                            metadata={"denial_count": len(denials), "total_amount": total_amt},
+                            metadata={
+                                "denial_count": len(denials),
+                                "total_amount": total_amt,
+                                "changes": _change_rows(denials),
+                            },
                             send_email=False
                         )
                     
@@ -254,7 +271,10 @@ class FRNReportService:
                             title=f"{len(other_changes)} FRN Status Change(s)",
                             message=f"{len(other_changes)} FRN(s) changed status ({', '.join(change_names[:3])}{'...' if len(change_names) > 3 else ''}). Check your FRN report for full details.",
                             entity_type="frn_report",
-                            metadata={"change_count": len(other_changes)},
+                            metadata={
+                                "change_count": len(other_changes),
+                                "changes": _change_rows(other_changes),
+                            },
                             send_email=False
                         )
                     
@@ -389,8 +409,19 @@ class FRNReportService:
         return []
     
     def _fetch_portfolio_frns(self, user: User, client, funding_year: int = None) -> List[Dict]:
-        """Fetch all FRNs across a user's portfolio"""
+        """Fetch all FRNs across a user's portfolio.
+        
+        If no funding_year is specified, defaults to current + previous year
+        to avoid pulling irrelevant historical data.
+        """
         all_frns = []
+        
+        # Default to current + previous funding year if not specified
+        if funding_year is None:
+            current_year = datetime.utcnow().year
+            years_to_fetch = [current_year, current_year - 1]
+        else:
+            years_to_fetch = [funding_year]
         
         profile = self.db.query(ConsultantProfile).filter(
             ConsultantProfile.user_id == user.id
@@ -403,25 +434,36 @@ class FRNReportService:
             bens = [s.ben for s in schools if s.ben]
             
             if bens:
-                result = client.get_frn_status_batch(bens, year=funding_year)
-                if result.get("success"):
-                    for ben, ben_data in result.get("results", {}).items():
-                        for frn in ben_data.get("frns", []):
-                            frn["entity_name"] = ben_data.get("entity_name", f"BEN {ben}")
-                            frn["ben"] = str(ben)
-                            all_frns.append(frn)
+                for yr in years_to_fetch:
+                    result = client.get_frn_status_batch(bens, year=yr)
+                    if result.get("success"):
+                        for ben, ben_data in result.get("results", {}).items():
+                            for frn in ben_data.get("frns", []):
+                                frn["entity_name"] = ben_data.get("entity_name", f"BEN {ben}")
+                                frn["ben"] = str(ben)
+                                all_frns.append(frn)
         
         vendor_profile = self.db.query(VendorProfile).filter(
             VendorProfile.user_id == user.id
         ).first()
         
         if vendor_profile and vendor_profile.spin:
-            result = client.get_frn_status_by_spin(vendor_profile.spin, year=funding_year)
-            if result.get("success"):
-                for frn in result.get("frns", []):
-                    all_frns.append(frn)
+            for yr in years_to_fetch:
+                result = client.get_frn_status_by_spin(vendor_profile.spin, year=yr)
+                if result.get("success"):
+                    for frn in result.get("frns", []):
+                        all_frns.append(frn)
         
-        return all_frns
+        # Deduplicate by FRN number (same FRN can appear from both BEN and SPIN queries)
+        seen = set()
+        unique_frns = []
+        for frn in all_frns:
+            frn_num = frn.get("frn", "")
+            if frn_num and frn_num not in seen:
+                seen.add(frn_num)
+                unique_frns.append(frn)
+        
+        return unique_frns
     
     def _apply_filters(self, frns: List[Dict], watch: FRNWatch) -> List[Dict]:
         """Apply watch filters to FRN list"""
@@ -444,35 +486,45 @@ class FRNReportService:
         return filtered
     
     def _detect_changes(self, current_frns: List[Dict], last_snapshot: Dict) -> List[Dict]:
-        """Compare current FRNs with last snapshot to detect changes"""
+        """Compare current FRNs with last snapshot to detect changes.
+        
+        Deduplicates by FRN number first to avoid false changes from
+        duplicate entries (e.g. same FRN from BEN + SPIN queries).
+        """
         changes = []
         if not last_snapshot:
             return []
         
-        current_frn_numbers = set()
+        # Build deduplicated map: frn_number -> frn dict (first occurrence wins)
+        current_map = {}
         for frn in current_frns:
             frn_num = frn.get("frn", "")
-            current_frn_numbers.add(frn_num)
+            if frn_num and frn_num not in current_map:
+                current_map[frn_num] = frn
+        
+        old_frn_numbers = set(last_snapshot.keys())
+        
+        for frn_num, frn in current_map.items():
             current_status = frn.get("status", "")
             old_status = last_snapshot.get(frn_num)
             
-            if old_status and old_status != current_status:
+            if old_status is not None:
+                # Existing FRN — check for status change
+                if old_status != current_status:
+                    changes.append({
+                        "frn": frn_num,
+                        "entity_name": frn.get("entity_name", ""),
+                        "old_status": old_status,
+                        "new_status": current_status,
+                        "amount": float(frn.get("commitment_amount", 0) or 0),
+                    })
+            else:
+                # New FRN not in previous snapshot
                 changes.append({
                     "frn": frn_num,
                     "entity_name": frn.get("entity_name", ""),
-                    "old_status": old_status,
-                    "new_status": current_status,
-                    "amount": float(frn.get("commitment_amount", 0) or 0),
-                })
-        
-        old_frn_numbers = set(last_snapshot.keys())
-        for frn in current_frns:
-            if frn.get("frn") in (current_frn_numbers - old_frn_numbers):
-                changes.append({
-                    "frn": frn.get("frn", ""),
-                    "entity_name": frn.get("entity_name", ""),
                     "old_status": "[New]",
-                    "new_status": frn.get("status", ""),
+                    "new_status": current_status,
                     "amount": float(frn.get("commitment_amount", 0) or 0),
                 })
         

@@ -4,10 +4,27 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Bell, Check, CheckCheck, Trash2, ArrowLeft, ChevronLeft,
-  ChevronRight, Filter, Loader2
+  ChevronRight, Filter, Loader2, ChevronDown, ChevronUp, ExternalLink
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/auth-store';
 import { api } from '@/lib/api';
+
+interface ChangeDetail {
+  frn: string;
+  entity: string;
+  old: string;
+  new: string;
+  amt: number;
+}
+
+interface AlertMetadata {
+  changes?: ChangeDetail[];
+  change_count?: number;
+  denial_count?: number;
+  total_amount?: number;
+  frn_details?: Record<string, unknown>[];
+  [key: string]: unknown;
+}
 
 interface Alert {
   id: number;
@@ -18,6 +35,7 @@ interface Alert {
   entity_type?: string;
   entity_id?: string;
   entity_name?: string;
+  metadata?: AlertMetadata;
   is_read: boolean;
   is_dismissed: boolean;
   created_at: string;
@@ -79,7 +97,17 @@ function formatTimeAgo(dateString: string): string {
   return date.toLocaleDateString();
 }
 
+function hasInlineDetails(alert: Alert): boolean {
+  return (
+    alert.entity_type === 'frn_report' &&
+    Array.isArray(alert.metadata?.changes) &&
+    (alert.metadata?.changes?.length ?? 0) > 0
+  );
+}
+
 function getAlertUrl(alert: Alert): string {
+  // FRN report summary alerts expand inline instead of navigating
+  if (alert.entity_type === 'frn_report') return '';
   switch (alert.alert_type) {
     case 'frn_status_change':
       return alert.entity_id ? `/applicant?frn=${alert.entity_id}` : '/consultant';
@@ -131,6 +159,7 @@ export default function NotificationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const fetchAlerts = useCallback(async (offset: number) => {
     if (!isAuthenticated || !token) return;
@@ -204,8 +233,13 @@ export default function NotificationsPage() {
     if (!alert.is_read) {
       await markAsRead(alert.id);
     }
+    // If alert has inline change details, toggle expansion
+    if (hasInlineDetails(alert)) {
+      setExpandedId(prev => prev === alert.id ? null : alert.id);
+      return;
+    }
     const url = getAlertUrl(alert);
-    if (url !== '/dashboard/notifications') {
+    if (url) {
       router.push(url);
     }
   };
@@ -302,8 +336,8 @@ export default function NotificationsPage() {
           ) : (
             <div className="divide-y divide-gray-100">
               {filteredAlerts.map(alert => (
+                <div key={alert.id}>
                 <div
-                  key={alert.id}
                   onClick={() => handleAlertClick(alert)}
                   className={`relative flex items-start gap-4 px-5 py-4 cursor-pointer hover:bg-gray-50 transition-colors border-l-4 ${
                     priorityColors[alert.priority] || priorityColors.medium
@@ -340,6 +374,15 @@ export default function NotificationsPage() {
                         {alert.entity_name}
                       </p>
                     )}
+                    {hasInlineDetails(alert) && (
+                      <span className="mt-1.5 inline-flex items-center gap-1 text-xs text-blue-600 font-medium">
+                        {expandedId === alert.id ? (
+                          <><ChevronUp className="h-3 w-3" /> Hide details</>
+                        ) : (
+                          <><ChevronDown className="h-3 w-3" /> View {alert.metadata?.changes?.length} change(s)</>
+                        )}
+                      </span>
+                    )}
                   </div>
 
                   {/* Actions */}
@@ -364,6 +407,53 @@ export default function NotificationsPage() {
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
+                </div>
+
+                {/* Expanded FRN change details */}
+                {expandedId === alert.id && hasInlineDetails(alert) && (
+                  <div className="px-5 pb-4 -mt-1 bg-white border-l-4 border-gray-200">
+                    <div className="ml-6 bg-gray-50 rounded-lg border border-gray-200 overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-gray-100 text-gray-600">
+                            <th className="px-3 py-2 text-left font-medium">FRN</th>
+                            <th className="px-3 py-2 text-left font-medium">Entity</th>
+                            <th className="px-3 py-2 text-left font-medium">Previous Status</th>
+                            <th className="px-3 py-2 text-left font-medium">New Status</th>
+                            <th className="px-3 py-2 text-right font-medium">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {alert.metadata?.changes?.map((c: ChangeDetail, i: number) => (
+                            <tr key={i} className="hover:bg-white transition-colors">
+                              <td className="px-3 py-2 font-mono text-gray-900">{c.frn}</td>
+                              <td className="px-3 py-2 text-gray-700 max-w-[200px] truncate">{c.entity}</td>
+                              <td className="px-3 py-2">
+                                <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
+                                  c.old === '[New]' ? 'bg-green-100 text-green-800' :
+                                  c.old.toLowerCase().includes('denied') ? 'bg-red-100 text-red-800' :
+                                  c.old.toLowerCase().includes('funded') || c.old.toLowerCase().includes('committed') ? 'bg-blue-100 text-blue-800' :
+                                  'bg-gray-100 text-gray-700'
+                                }`}>{c.old}</span>
+                              </td>
+                              <td className="px-3 py-2">
+                                <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
+                                  c.new.toLowerCase().includes('denied') ? 'bg-red-100 text-red-800' :
+                                  c.new.toLowerCase().includes('funded') || c.new.toLowerCase().includes('committed') ? 'bg-green-100 text-green-800' :
+                                  c.new.toLowerCase().includes('pending') ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-gray-100 text-gray-700'
+                                }`}>{c.new}</span>
+                              </td>
+                              <td className="px-3 py-2 text-right text-gray-700">
+                                {c.amt > 0 ? `$${c.amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
                 </div>
               ))}
             </div>

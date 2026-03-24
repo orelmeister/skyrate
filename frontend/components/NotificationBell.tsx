@@ -56,9 +56,11 @@ function formatTimeAgo(dateString: string): string {
 }
 
 function getAlertUrl(alert: Alert): string {
+  // FRN report summary alerts should go to notifications page for detail expansion
+  if (alert.entity_type === 'frn_report') return '/dashboard/notifications';
   switch (alert.alert_type) {
     case 'frn_status_change':
-      return alert.entity_id ? `/applicant?frn=${alert.entity_id}` : '/consultant';
+      return alert.entity_id ? `/applicant?frn=${alert.entity_id}` : '/dashboard/notifications';
     case 'new_denial':
       return alert.entity_id ? `/applicant?frn=${alert.entity_id}` : '/dashboard/notifications';
     case 'deadline_approaching':
