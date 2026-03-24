@@ -4355,6 +4355,7 @@ function ConsultantPortalPage() {
         frn={selectedFRN?.frn ?? ''}
         ben={selectedFRN?.ben}
         initialData={selectedFRN ? {
+          frn: selectedFRN.frn,
           organization_name: selectedFRN.entity_name,
           status: selectedFRN.status,
           commitment_amount: selectedFRN.commitment_amount,
