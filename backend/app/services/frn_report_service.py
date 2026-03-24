@@ -221,44 +221,44 @@ class FRNReportService:
                 ai_summary = self._generate_ai_summary(all_changes, user, watch_sections)
             
             # Bridge FRN Watch changes to Alert system so they appear in notifications page
+            # Create ONE summary alert per batch (not one per change) to avoid flooding
             if all_changes:
                 try:
                     from .alert_service import AlertService
                     alert_svc = AlertService(self.db)
-                    for change in all_changes:
-                        frn_num = change.get("frn", "")
-                        entity = change.get("entity_name", "")
-                        old_st = change.get("old_status", "")
-                        new_st = change.get("new_status", "")
-                        amt = float(change.get("amount", 0) or 0)
-                        
-                        if "denied" in new_st.lower():
-                            alert_svc.create_alert(
-                                user_id=user.id,
-                                alert_type=AlertType.NEW_DENIAL,
-                                priority=AlertPriority.HIGH,
-                                title=f"Denial Detected: {entity or frn_num}",
-                                message=f"FRN {frn_num} status changed to '{new_st}'. Amount: ${amt:,.2f}",
-                                entity_type="frn",
-                                entity_id=frn_num,
-                                entity_name=entity,
-                                metadata={"old_status": old_st, "new_status": new_st, "amount": amt},
-                                send_email=False  # FRN Watch already sends its own email
-                            )
-                        else:
-                            alert_svc.create_alert(
-                                user_id=user.id,
-                                alert_type=AlertType.FRN_STATUS_CHANGE,
-                                priority=AlertPriority.HIGH if "denied" in new_st.lower() else AlertPriority.MEDIUM if "funded" in new_st.lower() or "committed" in new_st.lower() else AlertPriority.LOW,
-                                title=f"Status Change: {entity or frn_num}",
-                                message=f"FRN {frn_num} changed from '{old_st}' to '{new_st}'. Amount: ${amt:,.2f}",
-                                entity_type="frn",
-                                entity_id=frn_num,
-                                entity_name=entity,
-                                metadata={"old_status": old_st, "new_status": new_st, "amount": amt},
-                                send_email=False  # FRN Watch already sends its own email
-                            )
-                    logger.info(f"Created {len(all_changes)} alert records for user {user.id} from FRN Watch changes")
+                    
+                    denials = [c for c in all_changes if "denied" in (c.get("new_status", "") or "").lower()]
+                    other_changes = [c for c in all_changes if c not in denials]
+                    
+                    if denials:
+                        denial_names = list(set(c.get("entity_name", c.get("frn", "")) for c in denials))[:5]
+                        total_amt = sum(float(c.get("amount", 0) or 0) for c in denials)
+                        alert_svc.create_alert(
+                            user_id=user.id,
+                            alert_type=AlertType.NEW_DENIAL,
+                            priority=AlertPriority.HIGH,
+                            title=f"{len(denials)} Denial(s) Detected",
+                            message=f"{len(denials)} FRN(s) denied ({', '.join(denial_names[:3])}{'...' if len(denial_names) > 3 else ''}). Total: ${total_amt:,.2f}. Check your FRN report for details.",
+                            entity_type="frn_report",
+                            metadata={"denial_count": len(denials), "total_amount": total_amt},
+                            send_email=False
+                        )
+                    
+                    if other_changes:
+                        change_names = list(set(c.get("entity_name", c.get("frn", "")) for c in other_changes))[:5]
+                        has_funded = any("funded" in (c.get("new_status", "") or "").lower() or "committed" in (c.get("new_status", "") or "").lower() for c in other_changes)
+                        alert_svc.create_alert(
+                            user_id=user.id,
+                            alert_type=AlertType.FRN_STATUS_CHANGE,
+                            priority=AlertPriority.MEDIUM if has_funded else AlertPriority.LOW,
+                            title=f"{len(other_changes)} FRN Status Change(s)",
+                            message=f"{len(other_changes)} FRN(s) changed status ({', '.join(change_names[:3])}{'...' if len(change_names) > 3 else ''}). Check your FRN report for full details.",
+                            entity_type="frn_report",
+                            metadata={"change_count": len(other_changes)},
+                            send_email=False
+                        )
+                    
+                    logger.info(f"Created summary alerts for user {user.id}: {len(denials)} denials, {len(other_changes)} other changes")
                 except Exception as e:
                     logger.error(f"Failed to create alert records for FRN Watch changes: {e}")
             
