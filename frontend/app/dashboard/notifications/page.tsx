@@ -23,6 +23,9 @@ interface AlertMetadata {
   denial_count?: number;
   total_amount?: number;
   frn_details?: Record<string, unknown>[];
+  old_status?: string;
+  new_status?: string;
+  amount?: number;
   [key: string]: unknown;
 }
 
@@ -98,35 +101,39 @@ function formatTimeAgo(dateString: string): string {
 }
 
 function hasInlineDetails(alert: Alert): boolean {
-  return (
+  // Summary alerts with change table
+  if (
     alert.entity_type === 'frn_report' &&
     Array.isArray(alert.metadata?.changes) &&
     (alert.metadata?.changes?.length ?? 0) > 0
-  );
+  ) return true;
+  // Individual FRN status change / denial alerts — show detail from metadata
+  if (
+    alert.entity_type === 'frn' &&
+    (alert.alert_type === 'frn_status_change' || alert.alert_type === 'new_denial')
+  ) return true;
+  return false;
 }
 
 function getAlertUrl(alert: Alert): string {
-  // FRN report summary alerts expand inline instead of navigating
-  if (alert.entity_type === 'frn_report') return '';
+  // FRN report summary alerts and individual FRN alerts expand inline
+  if (alert.entity_type === 'frn_report' || alert.entity_type === 'frn') return '';
   switch (alert.alert_type) {
     case 'frn_status_change':
-      return alert.entity_id ? `/applicant?frn=${alert.entity_id}` : '/consultant';
     case 'new_denial':
-      return alert.entity_id ? `/applicant?frn=${alert.entity_id}` : '/dashboard/notifications';
-    case 'deadline_approaching':
-    case 'appeal_deadline':
-      return '/applicant?tab=appeals';
-    case 'form_470_match':
-      return alert.entity_id ? `/vendor?form470=${alert.entity_id}` : '/vendor';
     case 'disbursement_received':
     case 'funding_approved':
-      return alert.entity_id ? `/applicant?frn=${alert.entity_id}` : '/dashboard/notifications';
+    case 'pending_too_long':
+      return '/consultant?tab=frn-status';
+    case 'deadline_approaching':
+    case 'appeal_deadline':
+      return '/consultant?tab=appeals';
+    case 'form_470_match':
+      return alert.entity_id ? `/vendor?form470=${alert.entity_id}` : '/vendor';
     case 'competitor_activity':
       return '/vendor';
-    case 'pending_too_long':
-      return alert.entity_id ? `/applicant?frn=${alert.entity_id}` : '/dashboard/notifications';
     default:
-      return '/dashboard/notifications';
+      return '';
   }
 }
 
@@ -378,8 +385,10 @@ export default function NotificationsPage() {
                       <span className="mt-1.5 inline-flex items-center gap-1 text-xs text-blue-600 font-medium">
                         {expandedId === alert.id ? (
                           <><ChevronUp className="h-3 w-3" /> Hide details</>
-                        ) : (
+                        ) : alert.entity_type === 'frn_report' ? (
                           <><ChevronDown className="h-3 w-3" /> View {alert.metadata?.changes?.length} change(s)</>
+                        ) : (
+                          <><ChevronDown className="h-3 w-3" /> View FRN details</>
                         )}
                       </span>
                     )}
@@ -412,46 +421,100 @@ export default function NotificationsPage() {
                 {/* Expanded FRN change details */}
                 {expandedId === alert.id && hasInlineDetails(alert) && (
                   <div className="px-5 pb-4 -mt-1 bg-white border-l-4 border-gray-200">
-                    <div className="ml-6 bg-gray-50 rounded-lg border border-gray-200 overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="bg-gray-100 text-gray-600">
-                            <th className="px-3 py-2 text-left font-medium">FRN</th>
-                            <th className="px-3 py-2 text-left font-medium">Entity</th>
-                            <th className="px-3 py-2 text-left font-medium">Previous Status</th>
-                            <th className="px-3 py-2 text-left font-medium">New Status</th>
-                            <th className="px-3 py-2 text-right font-medium">Amount</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                          {alert.metadata?.changes?.map((c: ChangeDetail, i: number) => (
-                            <tr key={i} className="hover:bg-white transition-colors">
-                              <td className="px-3 py-2 font-mono text-gray-900">{c.frn}</td>
-                              <td className="px-3 py-2 text-gray-700 max-w-[200px] truncate">{c.entity}</td>
-                              <td className="px-3 py-2">
-                                <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
-                                  c.old === '[New]' ? 'bg-green-100 text-green-800' :
-                                  c.old.toLowerCase().includes('denied') ? 'bg-red-100 text-red-800' :
-                                  c.old.toLowerCase().includes('funded') || c.old.toLowerCase().includes('committed') ? 'bg-blue-100 text-blue-800' :
-                                  'bg-gray-100 text-gray-700'
-                                }`}>{c.old}</span>
-                              </td>
-                              <td className="px-3 py-2">
-                                <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
-                                  c.new.toLowerCase().includes('denied') ? 'bg-red-100 text-red-800' :
-                                  c.new.toLowerCase().includes('funded') || c.new.toLowerCase().includes('committed') ? 'bg-green-100 text-green-800' :
-                                  c.new.toLowerCase().includes('pending') ? 'bg-yellow-100 text-yellow-800' :
-                                  'bg-gray-100 text-gray-700'
-                                }`}>{c.new}</span>
-                              </td>
-                              <td className="px-3 py-2 text-right text-gray-700">
-                                {c.amt > 0 ? `$${c.amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
-                              </td>
+                    {/* Summary alert: table of changes */}
+                    {alert.entity_type === 'frn_report' && alert.metadata?.changes && (
+                      <div className="ml-6 bg-gray-50 rounded-lg border border-gray-200 overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-gray-100 text-gray-600">
+                              <th className="px-3 py-2 text-left font-medium">FRN</th>
+                              <th className="px-3 py-2 text-left font-medium">Entity</th>
+                              <th className="px-3 py-2 text-left font-medium">Previous Status</th>
+                              <th className="px-3 py-2 text-left font-medium">New Status</th>
+                              <th className="px-3 py-2 text-right font-medium">Amount</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {alert.metadata?.changes?.map((c: ChangeDetail, i: number) => (
+                              <tr key={i} className="hover:bg-white transition-colors">
+                                <td className="px-3 py-2 font-mono text-gray-900">{c.frn}</td>
+                                <td className="px-3 py-2 text-gray-700 max-w-[200px] truncate">{c.entity}</td>
+                                <td className="px-3 py-2">
+                                  <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
+                                    c.old === '[New]' ? 'bg-green-100 text-green-800' :
+                                    c.old.toLowerCase().includes('denied') ? 'bg-red-100 text-red-800' :
+                                    c.old.toLowerCase().includes('funded') || c.old.toLowerCase().includes('committed') ? 'bg-blue-100 text-blue-800' :
+                                    'bg-gray-100 text-gray-700'
+                                  }`}>{c.old}</span>
+                                </td>
+                                <td className="px-3 py-2">
+                                  <span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
+                                    c.new.toLowerCase().includes('denied') ? 'bg-red-100 text-red-800' :
+                                    c.new.toLowerCase().includes('funded') || c.new.toLowerCase().includes('committed') ? 'bg-green-100 text-green-800' :
+                                    c.new.toLowerCase().includes('pending') ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-gray-100 text-gray-700'
+                                  }`}>{c.new}</span>
+                                </td>
+                                <td className="px-3 py-2 text-right text-gray-700">
+                                  {c.amt > 0 ? `$${c.amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    {/* Individual FRN alert: detail card */}
+                    {alert.entity_type === 'frn' && (
+                      <div className="ml-6 bg-gray-50 rounded-lg border border-gray-200 p-4">
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          {alert.entity_id && (
+                            <div>
+                              <span className="text-gray-500 text-xs">FRN</span>
+                              <p className="font-mono font-medium text-gray-900">{alert.entity_id}</p>
+                            </div>
+                          )}
+                          {alert.entity_name && (
+                            <div>
+                              <span className="text-gray-500 text-xs">Entity</span>
+                              <p className="font-medium text-gray-900">{alert.entity_name}</p>
+                            </div>
+                          )}
+                          {alert.metadata?.old_status != null && (
+                            <div>
+                              <span className="text-gray-500 text-xs">Previous Status</span>
+                              <p><span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
+                                String(alert.metadata.old_status).toLowerCase().includes('denied') ? 'bg-red-100 text-red-800' :
+                                String(alert.metadata.old_status).toLowerCase().includes('funded') || String(alert.metadata.old_status).toLowerCase().includes('committed') ? 'bg-blue-100 text-blue-800' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>{String(alert.metadata.old_status)}</span></p>
+                            </div>
+                          )}
+                          {alert.metadata?.new_status != null && (
+                            <div>
+                              <span className="text-gray-500 text-xs">New Status</span>
+                              <p><span className={`inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
+                                String(alert.metadata.new_status).toLowerCase().includes('denied') ? 'bg-red-100 text-red-800' :
+                                String(alert.metadata.new_status).toLowerCase().includes('funded') || String(alert.metadata.new_status).toLowerCase().includes('committed') ? 'bg-green-100 text-green-800' :
+                                String(alert.metadata.new_status).toLowerCase().includes('pending') ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>{String(alert.metadata.new_status)}</span></p>
+                            </div>
+                          )}
+                          {alert.metadata?.amount != null && Number(alert.metadata.amount) > 0 && (
+                            <div>
+                              <span className="text-gray-500 text-xs">Amount</span>
+                              <p className="font-medium text-gray-900">${Number(alert.metadata.amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                            </div>
+                          )}
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-gray-200">
+                          <a href="/consultant?tab=frn-status" className="text-xs text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1">
+                            View FRN Status Tab <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 </div>

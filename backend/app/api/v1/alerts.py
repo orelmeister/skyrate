@@ -217,6 +217,26 @@ async def dismiss_alerts(
     return {"success": True, "dismissed": updated}
 
 
+@router.post("/cleanup")
+async def cleanup_old_alerts(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Dismiss old individual FRN change alerts (entity_type='frn') to clean up notification flood.
+    Keeps summary alerts (entity_type='frn_report') and non-FRN alerts."""
+    dismissed = db.query(Alert).filter(
+        Alert.user_id == current_user.id,
+        Alert.is_dismissed == False,
+        Alert.entity_type == "frn"
+    ).update({
+        Alert.is_dismissed: True
+    }, synchronize_session=False)
+
+    db.commit()
+
+    return {"success": True, "dismissed": dismissed}
+
+
 @router.delete("/{alert_id}")
 async def delete_alert(
     alert_id: int,
