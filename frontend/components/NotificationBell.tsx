@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Bell, Check, CheckCheck, Trash2, Settings, X } from 'lucide-react';
 import { useAuthStore } from '@/lib/auth-store';
 import { api } from '@/lib/api';
@@ -54,7 +55,31 @@ function formatTimeAgo(dateString: string): string {
   return date.toLocaleDateString();
 }
 
+function getAlertUrl(alert: Alert): string {
+  switch (alert.alert_type) {
+    case 'frn_status_change':
+      return alert.entity_id ? `/applicant?frn=${alert.entity_id}` : '/consultant';
+    case 'new_denial':
+      return alert.entity_id ? `/applicant?frn=${alert.entity_id}` : '/dashboard/notifications';
+    case 'deadline_approaching':
+    case 'appeal_deadline':
+      return '/applicant?tab=appeals';
+    case 'form_470_match':
+      return alert.entity_id ? `/vendor?form470=${alert.entity_id}` : '/vendor';
+    case 'disbursement_received':
+    case 'funding_approved':
+      return alert.entity_id ? `/applicant?frn=${alert.entity_id}` : '/dashboard/notifications';
+    case 'competitor_activity':
+      return '/vendor';
+    case 'pending_too_long':
+      return alert.entity_id ? `/applicant?frn=${alert.entity_id}` : '/dashboard/notifications';
+    default:
+      return '/dashboard/notifications';
+  }
+}
+
 export default function NotificationBell() {
+  const router = useRouter();
   const { isAuthenticated, token } = useAuthStore();
   const [isOpen, setIsOpen] = useState(false);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -233,7 +258,14 @@ export default function NotificationBell() {
                 {alerts.map(alert => (
                   <div
                     key={alert.id}
-                    className={`relative px-4 py-3 hover:bg-gray-50 transition-colors ${
+                    onClick={async () => {
+                      if (!alert.is_read) {
+                        await markAsRead(alert.id);
+                      }
+                      setIsOpen(false);
+                      router.push(getAlertUrl(alert));
+                    }}
+                    className={`relative px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer ${
                       !alert.is_read ? 'bg-blue-50/50' : ''
                     }`}
                   >

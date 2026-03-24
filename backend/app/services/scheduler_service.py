@@ -17,6 +17,7 @@ from ..core.database import SessionLocal
 from ..models.alert import AlertConfig
 from ..models.user import User
 from ..models.applicant import ApplicantProfile, ApplicantFRN, ApplicantAutoAppeal
+from ..models.consultant import ConsultantProfile, ConsultantSchool
 from .alert_service import AlertService
 
 logger = logging.getLogger(__name__)
@@ -660,6 +661,97 @@ def sync_frn_statuses():
         db.close()
 
 
+def sync_consultant_frn_statuses():
+    """
+    Sync FRN statuses for consultant-tracked schools from USAC and trigger alerts on changes.
+    Runs every 2 hours.
+    """
+    logger.info("Running consultant FRN status sync job...")
+
+    db = SessionLocal()
+    try:
+        # Get all consultant schools with FRNs that are not in terminal states
+        terminal_statuses = ['Funded', 'Cancelled', 'Denied - Final']
+        schools = db.query(ConsultantSchool).filter(
+            ConsultantSchool.frn.isnot(None),
+            ConsultantSchool.frn != '',
+            ConsultantSchool.status.notin_(terminal_statuses)
+        ).all()
+
+        if not schools:
+            logger.info("No consultant FRNs to sync")
+            return
+
+        from ..services.usac_service import USACService
+        usac_service = USACService(db)
+        alert_service = AlertService(db)
+
+        updated_count = 0
+        for school in schools:
+            try:
+                frn_data = usac_service.get_frn_details(school.frn)
+
+                if frn_data and frn_data.get('status'):
+                    new_status = frn_data['status']
+                    old_status = school.status or 'Unknown'
+
+                    if new_status != old_status:
+                        school.status = new_status
+                        school.last_synced = datetime.utcnow()
+                        updated_count += 1
+
+                        # Resolve the consultant's user_id
+                        profile = db.query(ConsultantProfile).filter(
+                            ConsultantProfile.id == school.consultant_profile_id
+                        ).first()
+
+                        if profile:
+                            frn_detail = {
+                                "ben": school.ben or '',
+                                "entity_name": school.school_name or '',
+                                "frn": school.frn,
+                                "old_status": old_status,
+                                "new_status": new_status,
+                                "status": new_status,
+                                "spin_name": frn_data.get("spin_name") or frn_data.get("service_provider", ""),
+                                "commitment_amount": float(frn_data.get("commitment_amount", 0) or 0),
+                            }
+
+                            if 'denied' in new_status.lower():
+                                alert_service.alert_on_denial(
+                                    user_id=profile.user_id,
+                                    frn=school.frn,
+                                    school_name=school.school_name or f"BEN {school.ben}",
+                                    denial_reason=frn_data.get('denial_reason', 'Unknown'),
+                                    amount=float(frn_data.get("commitment_amount", 0) or 0),
+                                    funding_year=frn_data.get("funding_year")
+                                )
+                            else:
+                                alert_service.alert_on_status_change(
+                                    user_id=profile.user_id,
+                                    frn=school.frn,
+                                    school_name=school.school_name or f"BEN {school.ben}",
+                                    old_status=old_status,
+                                    new_status=new_status,
+                                    amount=float(frn_data.get("commitment_amount", 0) or 0),
+                                    frn_details=[frn_detail]
+                                )
+                else:
+                    # Still update last_synced even if no change
+                    school.last_synced = datetime.utcnow()
+
+            except Exception as e:
+                logger.error(f"Error syncing consultant FRN {school.frn}: {e}")
+
+        db.commit()
+        logger.info(f"Consultant FRN sync complete. Updated {updated_count} FRNs.")
+
+    except Exception as e:
+        logger.error(f"Consultant FRN sync job failed: {e}")
+    finally:
+        db.close()
+
+
 def check_long_pending_frns():
     """
     Check for FRNs that have been pending for more than 15 days.
@@ -1050,6 +1142,15 @@ def init_scheduler():
         trigger=IntervalTrigger(hours=1),
         id='sync_frn_statuses',
         name='Sync FRN statuses from USAC',
+        replace_existing=True
+    )
+    
+    # Consultant FRN status sync - every 2 hours
+    scheduler.add_job(
+        sync_consultant_frn_statuses,
+        trigger=IntervalTrigger(hours=2),
+        id='sync_consultant_frn_statuses',
+        name='Sync consultant school FRN statuses from USAC',
         replace_existing=True
     )
     

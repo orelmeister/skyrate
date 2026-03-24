@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from ..core.config import settings
 from ..models.push_subscription import PushSubscription
 from ..models.alert import Alert
+from ..models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -152,14 +153,23 @@ class PushNotificationService:
     
     def send_alert_as_push(self, alert: Alert) -> int:
         """Send an alert as a push notification"""
-        # Determine URL based on alert type
-        url = "/"
+        # Determine URL based on alert type and user role
+        url = "/dashboard/notifications"
+        user = self.db.query(User).filter(User.id == alert.user_id).first()
+        user_type = getattr(user, 'entity_type', 'applicant') if user else 'applicant'
+
         if alert.entity_type == "frn":
-            url = f"/applicant?frn={alert.entity_id}"
+            if user_type in ('consultant', 'super'):
+                url = "/consultant"
+            else:
+                url = f"/applicant?frn={alert.entity_id}"
         elif alert.entity_type == "form_470":
             url = f"/vendor?form470={alert.entity_id}"
         elif alert.entity_type == "deadline":
-            url = "/applicant?tab=appeals"
+            if user_type in ('consultant', 'super'):
+                url = "/consultant"
+            else:
+                url = "/applicant?tab=appeals"
         
         return self.send_push_to_user(
             user_id=alert.user_id,

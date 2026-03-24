@@ -323,7 +323,7 @@ class EmailService:
                     
                     {frn_detail_html}
                     
-                    <a href="{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/dashboard" class="cta-button">
+                    <a href="{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/dashboard/notifications" class="cta-button">
                         View in Dashboard
                     </a>
                 </div>
@@ -347,7 +347,7 @@ SkyRate AI Alert
 Priority: {alert.priority}
 {f'Related: {alert.entity_name}' if alert.entity_name else ''}
 
-View in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/dashboard
+View in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/dashboard/notifications
 
 ---
 To manage your notification preferences, visit: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/settings/notifications
@@ -453,7 +453,7 @@ To manage your notification preferences, visit: {getattr(settings, 'FRONTEND_URL
                     
                     {alerts_html}
                     
-                    <a href="{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/dashboard" class="cta-button">
+                    <a href="{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/dashboard/notifications" class="cta-button">
                         View All in Dashboard
                     </a>
                 </div>
@@ -479,7 +479,7 @@ You have {len(alerts)} new alerts today.
             text_content += f"- {alert.title}\n  {alert.message[:100]}...\n\n"
         
         text_content += f"""
-View all in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/dashboard
+View all in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/dashboard/notifications
         """
         
         return self.send_email(
