@@ -17,6 +17,7 @@ from ...core.database import get_db
 from ...core.security import (
     hash_password, verify_password, 
     create_access_token, create_refresh_token, decode_token,
+    create_email_verification_token,
     get_current_user
 )
 from ...core.config import settings
@@ -471,11 +472,20 @@ async def register(
     if data.role == "consultant" and data.crn:
         background_tasks.add_task(auto_import_schools_from_crn, user.id, data.crn.upper().strip())
     
-    # Send welcome email in background
+    # Send welcome email and verification email in background
     from ..services.email_service import get_email_service
     email_svc = get_email_service()
     background_tasks.add_task(email_svc.send_welcome_email, user.email, user.first_name or "there", data.role)
     background_tasks.add_task(email_svc.send_admin_new_user_notification, user.email, user.full_name or user.email, data.role)
+    
+    # Send verification email with one-click link
+    verification_token = create_email_verification_token(user.id, user.email)
+    background_tasks.add_task(
+        email_svc.send_verification_email,
+        user.email,
+        user.first_name or "there",
+        verification_token
+    )
     
     return TokenResponse(
         access_token=access_token,
@@ -779,3 +789,109 @@ async def google_auth(
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         user=user.to_dict()
     )
+
+
+# ==================== EMAIL VERIFICATION ENDPOINTS ====================
+
+class ResendVerificationRequest(BaseModel):
+    email: Optional[EmailStr] = None
+
+
+@router.get("/verify-email")
+async def verify_email_token(
+    token: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Verify a user's email using a token from the verification link.
+    Public endpoint (no auth required) - the token contains the user info.
+    """
+    try:
+        payload = decode_token(token)
+    except HTTPException:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification link. Please request a new one."
+        )
+    
+    if payload.get("type") != "email_verification":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid token type"
+        )
+    
+    user_id = payload.get("sub")
+    email = payload.get("email")
+    if not user_id or not email:
+        raise HTTPException(status_code=400, detail="Invalid token payload")
+    
+    user = db.query(User).filter(User.id == int(user_id), User.email == email.lower()).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if user.is_verified and user.email_verified:
+        return {"success": True, "message": "Email already verified", "already_verified": True}
+    
+    # Mark as verified
+    user.is_verified = True
+    user.email_verified = True
+    user.email_verified_at = datetime.utcnow()
+    db.commit()
+    
+    return {
+        "success": True,
+        "message": "Email verified successfully! You can now use all features.",
+        "already_verified": False
+    }
+
+
+@router.post("/resend-verification")
+@limiter.limit("3/minute")
+async def resend_verification(
+    request: Request,
+    data: ResendVerificationRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """
+    Resend the verification email. Can be called with or without auth.
+    If no auth, requires email in request body.
+    """
+    email = data.email
+    if not email:
+        # Try to get from auth header
+        try:
+            from ...core.security import security as http_security
+            creds = await http_security(request)
+            payload = decode_token(creds.credentials)
+            user_id = payload.get("sub")
+            if user_id:
+                user = db.query(User).filter(User.id == int(user_id)).first()
+                if user:
+                    email = user.email
+        except Exception:
+            pass
+    
+    if not email:
+        raise HTTPException(status_code=400, detail="Email address required")
+    
+    user = db.query(User).filter(User.email == email.lower()).first()
+    if not user:
+        # Don't reveal whether email exists
+        return {"success": True, "message": "If that email is registered, a verification link has been sent."}
+    
+    if user.is_verified and user.email_verified:
+        return {"success": True, "message": "Email is already verified."}
+    
+    # Generate and send verification email
+    from ...services.email_service import get_email_service
+    verification_token = create_email_verification_token(user.id, user.email)
+    email_svc = get_email_service()
+    background_tasks.add_task(
+        email_svc.send_verification_email,
+        user.email,
+        user.first_name or "there",
+        verification_token
+    )
+    
+    return {"success": True, "message": "Verification email sent. Please check your inbox."}

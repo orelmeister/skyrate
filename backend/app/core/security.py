@@ -68,6 +68,13 @@ def create_refresh_token(data: Dict[str, Any]) -> str:
     return encoded_jwt
 
 
+def create_email_verification_token(user_id: int, email: str) -> str:
+    """Create a JWT token for email verification (24-hour expiry)"""
+    expire = datetime.utcnow() + timedelta(hours=24)
+    to_encode = {"sub": str(user_id), "email": email, "exp": expire, "type": "email_verification"}
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+
 def decode_token(token: str) -> Dict[str, Any]:
     """Decode and validate a JWT token"""
     try:

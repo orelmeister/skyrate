@@ -494,6 +494,8 @@ export interface Form470Service {
   min_capacity: string | null;
   max_capacity: string | null;
   installation_required: string;
+  rfp_documents: string | null;
+  rfp_identifier: string | null;
 }
 
 export interface Form470Lead {
@@ -2595,6 +2597,16 @@ class ApiClient {
    */
   async getOnboardingStatus(): Promise<ApiResponse<any>> {
     return this.request('/api/v1/onboarding/status');
+  }
+
+  /**
+   * Resend verification email (public - can be called with or without auth)
+   */
+  async resendVerificationEmail(email?: string): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/auth/resend-verification', {
+      method: 'POST',
+      body: JSON.stringify({ email: email || null }),
+    });
   }
 
   // ==================== ADMIN BROADCAST ====================
