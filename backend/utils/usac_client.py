@@ -1832,7 +1832,7 @@ class USACDataClient:
                     'min_capacity': service.get('minimum_capacity'),
                     'max_capacity': service.get('maximum_capacity'),
                     'installation_required': service.get('installation_initial_configuration'),
-                    'rfp_documents': service.get('rfp_documents'),
+                    'rfp_documents': service.get('rfp_documents', {}).get('url') if isinstance(service.get('rfp_documents'), dict) else service.get('rfp_documents'),
                     'rfp_identifier': service.get('rfp_identifier')
                 })
                 
@@ -2058,7 +2058,7 @@ class USACDataClient:
                     'min_capacity': s.get('minimum_capacity'),
                     'max_capacity': s.get('maximum_capacity'),
                     'installation_required': s.get('installation_initial_configuration'),
-                    'rfp_documents': s.get('rfp_documents'),
+                    'rfp_documents': s.get('rfp_documents', {}).get('url') if isinstance(s.get('rfp_documents'), dict) else s.get('rfp_documents'),
                     'rfp_identifier': s.get('rfp_identifier')
                 } for s in services_data],
                 # Summary

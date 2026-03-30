@@ -4493,7 +4493,7 @@ function VendorPortalPage() {
                                 <span className="text-sm font-mono text-slate-900">{service.rfp_identifier}</span>
                               </div>
                             )}
-                            {service.rfp_documents && (
+                            {service.rfp_documents && typeof service.rfp_documents === 'string' && (
                               <div className="flex items-start gap-2">
                                 <span className="text-xs font-medium text-slate-500 mt-0.5">Document:</span>
                                 {service.rfp_documents.startsWith('http') ? (
