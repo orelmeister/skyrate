@@ -3,13 +3,13 @@ import Link from "next/link";
 import { Check, ArrowRight, Bell, Activity, Clock, Mail, BarChart3, Shield, Database, History } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate FRN Status Tracker | SkyRate AI",
-  description: "Monitor E-Rate Funding Request Number status changes in real time. Get instant alerts for approvals, denials, and disbursements. Track multiple FRNs across schools.",
+  title: "E-Rate FRN Tracker [Real-Time Status Alerts] | SkyRate AI",
+  description: "Track your E-Rate FRN status 24/7 with instant alerts. Know the moment your funding request is approved, denied, or disbursed. Free for up to 5 FRNs.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/features/frn-monitoring" },
   openGraph: {
-    title: "E-Rate FRN Status Tracker | SkyRate AI",
-    description: "Monitor E-Rate FRN status changes in real time with instant alerts.",
+    title: "E-Rate FRN Tracker [Real-Time Status Alerts]",
+    description: "Track your E-Rate FRN status 24/7. Instant alerts for approvals, denials, and disbursements.",
     url: "https://skyrate.ai/features/frn-monitoring",
     siteName: "SkyRate AI",
     type: "website",
