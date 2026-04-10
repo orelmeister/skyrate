@@ -5,13 +5,13 @@ import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowRight, ArrowLeft, FileText, Search, Clock, CheckCircle, Sparkles, BookOpen, Users, ShoppingCart, Target, BarChart3, Filter } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate Form 470 Guide 2026 [Search, Track & Win Bids]",
-  description: "Your complete 2026 E-Rate Form 470 playbook. How to search open 470s, respond before deadlines, and win competitive bids. Used by 500+ E-Rate vendors and consultants.",
+  title: "E-Rate Form 470 Guide 2026 [Step-by-Step + Free Checklist]",
+  description: "Complete guide to filing E-Rate Form 470 for FY2026. Step-by-step instructions, competitive bidding requirements, common rejection reasons, and a free filing checklist. Updated April 2026.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/blog/erate-form-470-guide" },
   openGraph: {
-    title: "E-Rate Form 470 Guide 2026 [Search, Track & Win Bids]",
-    description: "Your complete 2026 E-Rate Form 470 playbook. How to search open 470s, respond before deadlines, and win competitive bids.",
+    title: "E-Rate Form 470 Guide 2026 [Step-by-Step + Free Checklist]",
+    description: "Complete guide to filing E-Rate Form 470 for FY2026. Step-by-step instructions, competitive bidding requirements, common rejection reasons, and a free filing checklist.",
     url: "https://skyrate.ai/blog/erate-form-470-guide",
     siteName: "SkyRate AI",
     type: "article",
@@ -23,8 +23,8 @@ export default function ErateForm470GuidePage() {
   return (
     <>
     <BlogPostJsonLd
-      title="E-Rate Form 470 Guide 2026 [Search, Track & Win Bids]"
-      description="Your complete 2026 E-Rate Form 470 playbook. How to search open 470s, respond before deadlines, and win competitive bids."
+      title="E-Rate Form 470 Guide 2026 [Step-by-Step + Free Checklist]"
+      description="Complete guide to filing E-Rate Form 470 for FY2026. Step-by-step instructions, competitive bidding requirements, common rejection reasons, and a free filing checklist."
       slug="erate-form-470-guide"
       datePublished="2026-02-16T00:00:00Z"
     />

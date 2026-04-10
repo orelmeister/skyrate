@@ -5,13 +5,13 @@ import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowRight, ArrowLeft, Clock, Sparkles, BookOpen, DollarSign, Calculator, Laptop, Wifi, Server, CheckCircle, AlertTriangle, TrendingUp, Users } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate Category 2 Budget Calculator & Guide [2026]",
-  description: "Calculate your exact E-Rate Category 2 budget. Learn which equipment qualifies, the 5-year budget cycle, and how to maximize your C2 allocation. Includes per-student calculator.",
+  title: "E-Rate Category 2 Budget Guide 2026 [Exact Amounts Per Student]",
+  description: "Calculate your exact E-Rate Category 2 budget for FY2026. Per-student amounts, 5-year budget cycle rules, eligible equipment list, and strategies to maximize your C2 allocation. Updated April 2026.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/blog/erate-category-2-budget-guide" },
   openGraph: {
-    title: "E-Rate Category 2 Budget Calculator & Guide [2026]",
-    description: "Calculate your exact E-Rate Category 2 budget. Learn which equipment qualifies, the 5-year budget cycle, and how to maximize your C2 allocation.",
+    title: "E-Rate Category 2 Budget Guide 2026 [Exact Amounts Per Student]",
+    description: "Calculate your exact E-Rate Category 2 budget for FY2026. Per-student amounts, 5-year budget cycle rules, eligible equipment list, and strategies to maximize your C2 allocation.",
     url: "https://skyrate.ai/blog/erate-category-2-budget-guide",
     siteName: "SkyRate AI",
     type: "article",
@@ -23,8 +23,8 @@ export default function ErateCategory2BudgetGuidePage() {
   return (
     <>
     <BlogPostJsonLd
-      title="E-Rate Category 2 Budget Calculator & Guide [2026]"
-      description="Calculate your exact E-Rate Category 2 budget. Learn which equipment qualifies, the 5-year budget cycle, and how to maximize your C2 allocation."
+      title="E-Rate Category 2 Budget Guide 2026 [Exact Amounts Per Student]"
+      description="Calculate your exact E-Rate Category 2 budget for FY2026. Per-student amounts, 5-year budget cycle rules, eligible equipment list, and strategies to maximize your C2 allocation."
       slug="erate-category-2-budget-guide"
       datePublished="2026-02-16T00:00:00Z"
     />
