@@ -1272,7 +1272,7 @@ class USACDataClient:
                     where_conditions.append(f"spin_name = '{spin_name}'")
             
             params = {
-                '$select': ':updated_at, *',
+                '$select': '*, :updated_at',
                 '$where': ' AND '.join(where_conditions),
                 '$limit': limit,
                 '$order': 'funding_year DESC, funding_request_number ASC'
@@ -1432,7 +1432,7 @@ class USACDataClient:
                 where_conditions = [f"ben IN ({ben_list})"] + extra_conditions
                 
                 params = {
-                    '$select': ':updated_at, *',
+                    '$select': '*, :updated_at',
                     '$where': ' AND '.join(where_conditions),
                     '$limit': limit,
                     '$order': 'ben ASC, funding_year DESC, funding_request_number ASC'
