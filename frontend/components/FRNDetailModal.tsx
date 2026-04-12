@@ -13,6 +13,7 @@ interface FRNDetailModalProps {
   onClose: () => void;
   frn: string;
   ben?: string;
+  onViewInTab?: (frn: string, ben: string) => void;
   initialData?: {
     frn: string;
     ben?: string;
@@ -108,7 +109,7 @@ function ShimmerLine({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse bg-slate-200 rounded h-4 ${className}`} />;
 }
 
-export default function FRNDetailModal({ isOpen, onClose, frn, ben, initialData }: FRNDetailModalProps) {
+export default function FRNDetailModal({ isOpen, onClose, frn, ben, onViewInTab, initialData }: FRNDetailModalProps) {
   const [data, setData] = useState<FRNData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -396,13 +397,26 @@ export default function FRNDetailModal({ isOpen, onClose, frn, ben, initialData 
 
           {/* Footer Actions */}
           <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex items-center justify-between gap-3">
-            <a
-              href="/consultant?tab=frn-status"
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-teal-700 hover:text-teal-900 transition-colors"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              View in FRN Status Tab
-            </a>
+            {onViewInTab ? (
+              <button
+                onClick={() => {
+                  onViewInTab(display.frn as string || frn, display.ben as string || ben || '');
+                  onClose();
+                }}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-teal-700 hover:text-teal-900 transition-colors"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                View in FRN Status Tab
+              </button>
+            ) : (
+              <a
+                href={`/consultant?tab=frn-status&frn=${encodeURIComponent(display.frn as string || frn)}&ben=${encodeURIComponent(display.ben as string || ben || '')}`}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-teal-700 hover:text-teal-900 transition-colors"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                View in FRN Status Tab
+              </a>
+            )}
             <button
               onClick={onClose}
               className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"

@@ -364,7 +364,7 @@ function ConsultantPortalPage() {
     }
     // Then filter by status if a filter is selected
     if (portfolioFrnStatusFilter) {
-      filtered = flattenedFrns.filter(frn => {
+      filtered = filtered.filter(frn => {
         const status = (frn.status || '').toLowerCase();
         const filter = portfolioFrnStatusFilter.toLowerCase();
         if (filter === 'funded') return status.includes('funded') || status.includes('committed');
@@ -567,6 +567,11 @@ function ConsultantPortalPage() {
         ben: benParam || '',
       });
       setShowFRNDetailModal(true);
+      // Pre-fill search and load portfolio data so FRN appears in table when modal closes
+      setPortfolioFrnSearch(frnParam);
+      if (!portfolioFrnData) {
+        loadPortfolioFRNStatus();
+      }
     }
   }, [frnParam, benParam, isLoading, checkingPayment]);
 
@@ -4392,6 +4397,14 @@ function ConsultantPortalPage() {
         onClose={() => { setShowFRNDetailModal(false); setSelectedFRN(null); }}
         frn={selectedFRN?.frn ?? ''}
         ben={selectedFRN?.ben}
+        onViewInTab={(frnNum, benNum) => {
+          setShowFRNDetailModal(false);
+          setSelectedFRN(null);
+          setPortfolioFrnSearch(frnNum);
+          if (!portfolioFrnData) {
+            loadPortfolioFRNStatus();
+          }
+        }}
         initialData={selectedFRN ? {
           frn: selectedFRN.frn,
           organization_name: selectedFRN.entity_name,
