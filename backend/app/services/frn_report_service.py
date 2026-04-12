@@ -177,6 +177,8 @@ class FRNReportService:
                                 "f486_status": f.get("f486_status", f.get("f486_case_status", "")),
                                 "wave_number": f.get("wave_number", f.get("wave_sequence_number", "")),
                                 "invoicing_mode": f.get("invoicing_mode", ""),
+                                "updated_at": f.get("updated_at", ""),
+                                "commitment_amount": float(f.get("commitment_amount", 0) or 0),
                             }
                     print(f"[SNAPSHOT] Built new_snapshot for watch {watch.id}: {len(new_snapshot)} entries, {len(json.dumps(new_snapshot))} bytes")
                     
@@ -522,6 +524,12 @@ class FRNReportService:
             if isinstance(old_data, str):
                 old_data = {"status": old_data, "pending_reason": "", "disbursed_amount": 0, "f486_status": "", "wave_number": "", "invoicing_mode": ""}
             
+            # Fast-skip: if updated_at timestamps match, nothing changed at USAC
+            current_updated = frn.get("updated_at", "")
+            old_updated = old_data.get("updated_at", "")
+            if current_updated and old_updated and current_updated == old_updated:
+                continue
+            
             current_status = frn.get("status", "")
             old_status = old_data.get("status", "")
             current_pending = frn.get("pending_reason", "")
@@ -571,6 +579,7 @@ class FRNReportService:
             "application_number": frn.get("application_number", ""),
             "wave_number": frn.get("wave_number", frn.get("wave_sequence_number", "")),
             "invoicing_mode": frn.get("invoicing_mode", ""),
+            "updated_at": frn.get("updated_at", ""),
         }
     
     # ==================== PER-FRN ALERT CREATION ====================
@@ -1150,6 +1159,16 @@ class FRNReportService:
 
                     frn_link = f"https://skyrate.ai/consultant?tab=frn-status&frn={frn_num}&ben={ben}"
 
+                    updated_at = c.get("updated_at", "")
+                    updated_display = ""
+                    if updated_at:
+                        try:
+                            from datetime import datetime as dt
+                            ua_dt = dt.fromisoformat(updated_at.replace('Z', '+00:00'))
+                            updated_display = ua_dt.strftime('%b %d, %Y at %I:%M %p UTC')
+                        except Exception:
+                            updated_display = updated_at[:19].replace('T', ' ')
+
                     html += f"""
                             <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 10px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
                                 <tr>
@@ -1158,6 +1177,7 @@ class FRNReportService:
                                         <span style="color: #334155; font-size: 12px;"> &mdash; {entity}</span>
                                         {f'<span style="color: #94a3b8; font-size: 11px;"> (BEN {ben})</span>' if ben else ''}
                                         {f'<br><span style="color: #94a3b8; font-size: 11px;">{context_line}</span>' if context_line else ''}
+                                        {f'<br><span style="color: #94a3b8; font-size: 10px; font-style: italic;">USAC modified: {updated_display}</span>' if updated_display else ''}
                                     </td>
                                 </tr>
                                 <tr>

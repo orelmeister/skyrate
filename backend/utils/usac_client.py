@@ -1272,6 +1272,7 @@ class USACDataClient:
                     where_conditions.append(f"spin_name = '{spin_name}'")
             
             params = {
+                '$select': ':updated_at, *',
                 '$where': ' AND '.join(where_conditions),
                 '$limit': limit,
                 '$order': 'funding_year DESC, funding_request_number ASC'
@@ -1354,7 +1355,8 @@ class USACDataClient:
                     'invoicing_ready': record.get('invoicing_ready', ''),
                     'f486_status': record.get('f486_case_status', ''),
                     'wave_number': record.get('wave_sequence_number', ''),
-                    'fcdl_comment': record.get('fcdl_comment_frn', '')
+                    'fcdl_comment': record.get('fcdl_comment_frn', ''),
+                    'updated_at': record.get(':updated_at', '')
                 })
             
             return {
@@ -1423,6 +1425,7 @@ class USACDataClient:
                 where_conditions.append(f"UPPER(pending_reason) LIKE UPPER('%{pending_reason_filter}%')")
             
             params = {
+                '$select': ':updated_at, *',
                 '$where': ' AND '.join(where_conditions),
                 '$limit': limit,
                 '$order': 'ben ASC, funding_year DESC, funding_request_number ASC'
@@ -1494,7 +1497,8 @@ class USACDataClient:
                         'invoicing_ready': record.get('invoicing_ready', ''),
                         'f486_status': record.get('f486_case_status', ''),
                         'wave_number': record.get('wave_sequence_number', ''),
-                        'fcdl_comment': record.get('fcdl_comment_frn', '')
+                        'fcdl_comment': record.get('fcdl_comment_frn', ''),
+                        'updated_at': record.get(':updated_at', '')
                     })
                 
                 results[ben] = {
