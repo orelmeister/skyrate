@@ -151,6 +151,10 @@ function getAlertUrl(alert: Alert): string {
     case 'deadline_approaching':
     case 'appeal_deadline':
       return '/consultant?tab=appeals';
+    case 'substatus_change':
+    case 'form_486_due':
+    case 'no_disbursement_warning':
+      return '/consultant?tab=frn-status';
     case 'form_470_match':
       return alert.entity_id ? `/vendor?form470=${alert.entity_id}` : '/vendor';
     case 'competitor_activity':
@@ -173,7 +177,7 @@ function matchesFilter(alert: Alert, filter: FilterTab): boolean {
     case 'denials':
       return alert.alert_type === 'new_denial';
     case 'deadlines':
-      return alert.alert_type === 'deadline_approaching' || alert.alert_type === 'appeal_deadline';
+      return alert.alert_type === 'deadline_approaching' || alert.alert_type === 'appeal_deadline' || alert.alert_type === 'form_486_due' || alert.alert_type === 'no_disbursement_warning';
     default:
       return true;
   }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, Suspense } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
@@ -541,6 +541,23 @@ function ConsultantPortalPage() {
     
     checkPaymentStatus();
   }, [_hasHydrated, isAuthenticated, user, router, checkingVerification, emailVerified]);
+
+  // Deep link handling: open FRN detail modal from email links
+  // URL format: /consultant?tab=frn-status&frn=XXXXX&ben=YYYYY
+  const searchParams = useSearchParams();
+  const frnParam = searchParams.get('frn');
+  const benParam = searchParams.get('ben');
+
+  useEffect(() => {
+    if (frnParam && !isLoading) {
+      setActiveTab('frn-status');
+      setSelectedFRN({
+        frn: frnParam,
+        ben: benParam || '',
+      });
+      setShowFRNDetailModal(true);
+    }
+  }, [frnParam, benParam, isLoading]);
 
   const loadData = async (withUsacData: boolean = false) => {
     setIsLoading(true);

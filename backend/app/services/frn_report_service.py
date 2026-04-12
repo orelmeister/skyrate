@@ -166,8 +166,18 @@ class FRNReportService:
                     pending = sum(1 for f in filtered if "pending" in (f.get("status") or "").lower())
                     amount = sum(float(f.get("commitment_amount", 0) or 0) for f in filtered)
                     
-                    # Build new snapshot for change detection on next run
-                    new_snapshot = {f["frn"]: f.get("status", "") for f in filtered if f.get("frn")}
+                    # Build new snapshot for change detection on next run (multi-field)
+                    new_snapshot = {}
+                    for f in filtered:
+                        if f.get("frn"):
+                            new_snapshot[f["frn"]] = {
+                                "status": f.get("status", ""),
+                                "pending_reason": f.get("pending_reason", ""),
+                                "disbursed_amount": float(f.get("disbursed_amount", 0) or 0),
+                                "f486_status": f.get("f486_status", f.get("f486_case_status", "")),
+                                "wave_number": f.get("wave_number", f.get("wave_sequence_number", "")),
+                                "invoicing_mode": f.get("invoicing_mode", ""),
+                            }
                     print(f"[SNAPSHOT] Built new_snapshot for watch {watch.id}: {len(new_snapshot)} entries, {len(json.dumps(new_snapshot))} bytes")
                     
                     watch_sections.append({
@@ -485,6 +495,10 @@ class FRNReportService:
         Deduplicates by FRN number first to avoid false changes from
         duplicate entries (e.g. same FRN from BEN + SPIN queries).
         Returns enriched change dicts with full USAC record fields.
+        
+        Detects: status changes, substatus/pending_reason changes,
+        disbursement increases, and Form 486 status changes.
+        Backward-compatible with old string-only snapshots.
         """
         changes = []
         if not last_snapshot:
@@ -498,21 +512,47 @@ class FRNReportService:
                 current_map[frn_num] = frn
         
         for frn_num, frn in current_map.items():
-            current_status = frn.get("status", "")
-            old_status = last_snapshot.get(frn_num)
+            old_data = last_snapshot.get(frn_num)
+            if old_data is None:
+                # New FRN not in previous snapshot
+                changes.append(self._build_enriched_change(frn_num, frn, "[New]", frn.get("status", ""), change_type="new_frn"))
+                continue
             
-            if old_status is not None:
-                if old_status != current_status:
-                    changes.append(self._build_enriched_change(frn_num, frn, old_status, current_status))
-            else:
-                changes.append(self._build_enriched_change(frn_num, frn, "[New]", current_status))
+            # Backward compat: old snapshots stored just a status string
+            if isinstance(old_data, str):
+                old_data = {"status": old_data, "pending_reason": "", "disbursed_amount": 0, "f486_status": "", "wave_number": "", "invoicing_mode": ""}
+            
+            current_status = frn.get("status", "")
+            old_status = old_data.get("status", "")
+            current_pending = frn.get("pending_reason", "")
+            old_pending = old_data.get("pending_reason", "")
+            current_disbursed = float(frn.get("disbursed_amount", 0) or 0)
+            old_disbursed = float(old_data.get("disbursed_amount", 0) or 0)
+            current_f486 = frn.get("f486_status", frn.get("f486_case_status", ""))
+            old_f486 = old_data.get("f486_status", "")
+            
+            # Status change (highest priority)
+            if old_status != current_status:
+                changes.append(self._build_enriched_change(frn_num, frn, old_status, current_status, change_type="status_change"))
+            # SubStatus/pending_reason change
+            elif old_pending != current_pending and current_pending:
+                changes.append(self._build_enriched_change(frn_num, frn, old_pending, current_pending, change_type="substatus_change"))
+            # Disbursement increase
+            elif current_disbursed > old_disbursed and current_disbursed > 0:
+                change = self._build_enriched_change(frn_num, frn, f"${old_disbursed:,.2f}", f"${current_disbursed:,.2f}", change_type="disbursement")
+                change["disbursement_delta"] = current_disbursed - old_disbursed
+                changes.append(change)
+            # Form 486 status change
+            elif old_f486 != current_f486 and current_f486:
+                changes.append(self._build_enriched_change(frn_num, frn, old_f486, current_f486, change_type="f486_change"))
         
         return changes
     
-    def _build_enriched_change(self, frn_num: str, frn: Dict, old_status: str, new_status: str) -> Dict:
+    def _build_enriched_change(self, frn_num: str, frn: Dict, old_status: str, new_status: str, change_type: str = "status_change") -> Dict:
         """Build a change dict enriched with full USAC record fields."""
         return {
             "frn": frn_num,
+            "change_type": change_type,
             "entity_name": frn.get("entity_name", ""),
             "old_status": old_status,
             "new_status": new_status,
@@ -529,6 +569,8 @@ class FRNReportService:
             "discount_rate": frn.get("discount_rate", ""),
             "disbursed_amount": float(frn.get("disbursed_amount", 0) or 0),
             "application_number": frn.get("application_number", ""),
+            "wave_number": frn.get("wave_number", frn.get("wave_sequence_number", "")),
+            "invoicing_mode": frn.get("invoicing_mode", ""),
         }
     
     # ==================== PER-FRN ALERT CREATION ====================
@@ -536,6 +578,7 @@ class FRNReportService:
     def _create_per_frn_alerts(self, alert_svc, user_id: int, changes: List[Dict]):
         """Create individual per-FRN alerts for each change."""
         for change in changes:
+            change_type = change.get("change_type", "status_change")
             is_denial = "denied" in (change.get("new_status", "") or "").lower()
             is_funded = "funded" in (change.get("new_status", "") or "").lower() or "committed" in (change.get("new_status", "") or "").lower()
             
@@ -545,25 +588,58 @@ class FRNReportService:
             elif is_funded:
                 alert_type = AlertType.FUNDING_APPROVED
                 priority = AlertPriority.MEDIUM
+            elif change_type == "disbursement":
+                alert_type = AlertType.DISBURSEMENT_RECEIVED
+                priority = AlertPriority.MEDIUM
+            elif change_type in ("substatus_change", "f486_change"):
+                alert_type = AlertType.SUBSTATUS_CHANGE
+                priority = AlertPriority.LOW
             else:
                 alert_type = AlertType.FRN_STATUS_CHANGE
                 priority = AlertPriority.MEDIUM
+            
+            # Build contextual title and message based on change type
+            if change_type == "disbursement":
+                title = f"FRN {change['frn']} - Disbursement: {change.get('new_status', '')}"
+                message = (
+                    f"{change.get('entity_name', 'Unknown')} (BEN {change.get('ben', 'N/A')}): "
+                    f"Disbursement changed from {change.get('old_status', '?')} to {change.get('new_status', '?')}. "
+                    f"Delta: ${float(change.get('disbursement_delta', 0)):,.2f}"
+                )
+            elif change_type == "substatus_change":
+                title = f"FRN {change['frn']} - SubStatus: {change.get('new_status', 'Unknown')}"
+                message = (
+                    f"{change.get('entity_name', 'Unknown')} (BEN {change.get('ben', 'N/A')}): "
+                    f"Pending reason changed from '{change.get('old_status', '?')}' to '{change.get('new_status', '?')}'. "
+                    f"Amount: ${float(change.get('amount', 0)):,.2f}"
+                )
+            elif change_type == "f486_change":
+                title = f"FRN {change['frn']} - Form 486: {change.get('new_status', 'Unknown')}"
+                message = (
+                    f"{change.get('entity_name', 'Unknown')} (BEN {change.get('ben', 'N/A')}): "
+                    f"Form 486 status changed from '{change.get('old_status', '?')}' to '{change.get('new_status', '?')}'. "
+                    f"Amount: ${float(change.get('amount', 0)):,.2f}"
+                )
+            else:
+                title = f"FRN {change['frn']} - {change.get('new_status', 'Unknown')}"
+                message = (
+                    f"{change.get('entity_name', 'Unknown')} (BEN {change.get('ben', 'N/A')}): "
+                    f"Status changed from {change.get('old_status', '?')} to {change.get('new_status', '?')}. "
+                    f"Amount: ${float(change.get('amount', 0)):,.2f}"
+                )
             
             alert_svc.create_alert(
                 user_id=user_id,
                 alert_type=alert_type,
                 priority=priority,
-                title=f"FRN {change['frn']} - {change.get('new_status', 'Unknown')}",
-                message=(
-                    f"{change.get('entity_name', 'Unknown')} (BEN {change.get('ben', 'N/A')}): "
-                    f"Status changed from {change.get('old_status', '?')} to {change.get('new_status', '?')}. "
-                    f"Amount: ${float(change.get('amount', 0)):,.2f}"
-                ),
+                title=title,
+                message=message,
                 entity_type="frn",
                 entity_id=change["frn"],
                 entity_name=change.get("entity_name", ""),
                 metadata={
                     "frn": change["frn"],
+                    "change_type": change.get("change_type", "status_change"),
                     "ben": change.get("ben", ""),
                     "organization_name": change.get("entity_name", ""),
                     "old_status": change.get("old_status", ""),
@@ -577,6 +653,7 @@ class FRNReportService:
                     "spin_name": change.get("spin_name", ""),
                     "last_date_to_invoice": change.get("last_date_to_invoice", ""),
                     "service_delivery_deadline": change.get("service_delivery_deadline", ""),
+                    "disbursement_delta": float(change.get("disbursement_delta", 0) or 0),
                 },
                 send_email=False  # Never send individual emails; daily digest handles email
             )
@@ -601,6 +678,8 @@ class FRNReportService:
         INVOICE_ALERT_DAYS = [30, 14, 7, 3]
         APPEAL_ALERT_DAYS = [30, 14, 7, 3]
         SERVICE_ALERT_DAYS = [60, 30, 14]
+        F486_ALERT_DAYS = [90, 60, 30, 14]
+        DISBURSEMENT_WARNING_DAYS = [30, 7]
         
         def _urgency(days_remaining: int) -> str:
             if days_remaining <= 7:
@@ -641,6 +720,8 @@ class FRNReportService:
                         "invoice": "Invoicing Deadline",
                         "appeal": "Appeal Deadline",
                         "service": "Service Delivery Deadline",
+                        "f486": "Form 486 Filing Deadline",
+                        "no_disbursement": "No Disbursements Warning",
                     }
                     
                     alert_svc.create_alert(
@@ -694,6 +775,82 @@ class FRNReportService:
             # Service delivery deadline
             svc_deadline = frn.get("service_end") or frn.get("service_delivery_deadline", "")
             _check_date(svc_deadline, frn, "service", AlertType.DEADLINE_APPROACHING, SERVICE_ALERT_DAYS)
+            
+            # Form 486 deadline (funded FRNs where f486 is NOT Approved/Filed)
+            f486_status = (frn.get("f486_status") or frn.get("f486_case_status") or "").lower()
+            if ("funded" in status or "committed" in status) and f486_status not in ("approved", "filed"):
+                fcdl_str = frn.get("fcdl_date") or frn.get("fcdl_letter_date", "")
+                svc_start_str = frn.get("service_start") or frn.get("service_start_date", "")
+                try:
+                    fcdl_dt = datetime.fromisoformat(fcdl_str.replace("Z", "+00:00").split("T")[0]) if fcdl_str else None
+                except (ValueError, TypeError):
+                    fcdl_dt = None
+                try:
+                    svc_start_dt = datetime.fromisoformat(svc_start_str.replace("Z", "+00:00").split("T")[0]) if svc_start_str else None
+                except (ValueError, TypeError):
+                    svc_start_dt = None
+                
+                base_dates = [d for d in [fcdl_dt, svc_start_dt] if d is not None]
+                if base_dates:
+                    f486_deadline = max(base_dates) + timedelta(days=120)
+                    _check_date(f486_deadline.strftime("%Y-%m-%d"), frn, "f486", AlertType.FORM_486_DUE, F486_ALERT_DAYS)
+            
+            # No-disbursement warning (funded FRNs with $0 disbursed near invoice deadline)
+            if "funded" in status or "committed" in status:
+                disbursed = float(frn.get("disbursed_amount") or frn.get("total_authorized_disbursement") or 0)
+                if disbursed == 0:
+                    inv_date_str = frn.get("last_invoice_date") or frn.get("last_date_to_invoice", "")
+                    if inv_date_str:
+                        try:
+                            inv_deadline = datetime.fromisoformat(inv_date_str.replace("Z", "+00:00").split("T")[0])
+                            inv_days_rem = (inv_deadline - now).days
+                            if 0 < inv_days_rem <= DISBURSEMENT_WARNING_DAYS[0]:
+                                for threshold in DISBURSEMENT_WARNING_DAYS:
+                                    if inv_days_rem <= threshold:
+                                        frn_num = frn.get("frn", "")
+                                        dedup_key = f"{frn_num}_no_disbursement_{threshold}"
+                                        if dedup_key in sent_deadlines:
+                                            continue
+                                        urgency = _urgency(inv_days_rem)
+                                        priority_map = {
+                                            "critical": AlertPriority.CRITICAL,
+                                            "high": AlertPriority.HIGH,
+                                            "medium": AlertPriority.MEDIUM,
+                                            "low": AlertPriority.LOW,
+                                        }
+                                        alert_svc.create_alert(
+                                            user_id=user.id,
+                                            alert_type=AlertType.NO_DISBURSEMENT_WARNING,
+                                            priority=priority_map.get(urgency, AlertPriority.HIGH),
+                                            title=f"FRN {frn_num} - No Disbursements with {inv_days_rem} days until invoicing deadline",
+                                            message=(
+                                                f"{frn.get('entity_name', 'Unknown')} (BEN {frn.get('ben', 'N/A')}): "
+                                                f"FRN {frn_num} has NO disbursements with only {inv_days_rem} days until "
+                                                f"invoicing deadline ({inv_deadline.strftime('%Y-%m-%d')}). "
+                                                f"Amount: ${float(frn.get('commitment_amount', 0) or 0):,.2f}"
+                                            ),
+                                            entity_type="frn",
+                                            entity_id=frn_num,
+                                            entity_name=frn.get("entity_name", ""),
+                                            metadata={
+                                                "frn": frn_num,
+                                                "ben": frn.get("ben", ""),
+                                                "organization_name": frn.get("entity_name", ""),
+                                                "deadline_type": "no_disbursement",
+                                                "deadline_date": inv_deadline.strftime("%Y-%m-%d"),
+                                                "days_remaining": inv_days_rem,
+                                                "urgency": urgency,
+                                                "status": frn.get("status", ""),
+                                                "amount": float(frn.get("commitment_amount", 0) or 0),
+                                                "funding_year": frn.get("funding_year", ""),
+                                                "disbursed_amount": 0,
+                                            },
+                                            send_email=False,
+                                        )
+                                        new_sent[dedup_key] = now.isoformat()
+                                        break  # only create alert for the most urgent threshold
+                        except (ValueError, TypeError):
+                            pass
         
         # Persist updated deadline tracking
         if new_sent != sent_deadlines:
@@ -851,12 +1008,16 @@ class FRNReportService:
                     html += self._generate_watch_section_html(watch, frns, changes)
                 else:
                     html += self._generate_no_changes_section_html(watch, frns)
-        
+
+        # Portfolio summary — only for reports with changes (skip first-snapshot and no-changes)
+        if grand_changes > 0 and not (is_first_snapshot and grand_changes == 0):
+            html += self._generate_portfolio_summary_html(watch_sections)
+
         # View in dashboard link
         html += f"""
                     <tr>
                         <td style="padding: 20px 30px; text-align: center;">
-                            <a href="https://skyrate.ai/consultant" style="display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #0f766e, #0d9488); color: #ffffff; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600;">View Full Details in Dashboard</a>
+                            <a href="https://skyrate.ai/consultant?tab=frn-status" style="display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #0f766e, #0d9488); color: #ffffff; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600;">View FRN Status Details</a>
                         </td>
                     </tr>
 """
@@ -870,7 +1031,7 @@ class FRNReportService:
                                 This report was generated by <a href="https://skyrate.ai" style="color: #0d9488;">SkyRate AI</a>
                                 <br>Monitors: {watch_names}
                                 <br><br>
-                                To manage your report monitors, visit your <a href="https://skyrate.ai/consultant" style="color: #0d9488;">dashboard</a>.
+                                To manage your report monitors, visit your <a href="https://skyrate.ai/consultant?tab=frn-status" style="color: #0d9488;">FRN Status Dashboard</a>.
                             </p>
                         </td>
                     </tr>
@@ -883,7 +1044,7 @@ class FRNReportService:
         return html
     
     def _generate_watch_section_html(self, watch: FRNWatch, frns: List[Dict], changes: List[Dict]) -> str:
-        """Generate changes-focused section for a watch"""
+        """Generate changes-focused section for a watch — card-based layout grouped by type"""
         html = f"""
                     <tr>
                         <td style="padding: 24px 30px 0 30px;">
@@ -894,50 +1055,239 @@ class FRNReportService:
                                 </p>
                             </div>
 """
-        
-        # Changes table (max MAX_CHANGES_IN_EMAIL rows)
+
         if changes:
             display_changes = changes[:MAX_CHANGES_IN_EMAIL]
-            html += """
-                            <table width="100%" cellpadding="6" cellspacing="0" style="border: 1px solid #e2e8f0; border-radius: 6px; border-collapse: collapse; font-size: 12px; margin-bottom: 16px;">
-                                <tr style="background-color: #fdf2f8;">
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Entity</th>
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">FRN</th>
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Previous</th>
-                                    <th style="text-align: left; color: #64748b; border-bottom: 1px solid #e2e8f0;">Current</th>
-                                    <th style="text-align: right; color: #64748b; border-bottom: 1px solid #e2e8f0;">Amount</th>
-                                </tr>
-"""
+
+            # Group changes by type for categorized rendering
+            change_groups = defaultdict(list)
             for c in display_changes:
-                new_color = "#059669" if "funded" in c["new_status"].lower() else "#dc2626" if "denied" in c["new_status"].lower() else "#d97706"
-                amt = float(c.get("amount", 0) or 0)
+                change_groups[c.get("change_type", "status_change")].append(c)
+
+            # Ordered categories with display metadata
+            category_order = [
+                ("status_change", "Funding Decisions", "#2563eb", "#eff6ff", "#dbeafe"),
+                ("substatus_change", "Review Stage Updates", "#7c3aed", "#faf5ff", "#ede9fe"),
+                ("disbursement", "Disbursement Activity", "#059669", "#f0fdf4", "#dcfce7"),
+                ("f486_change", "Form 486 Updates", "#ea580c", "#fff7ed", "#ffedd5"),
+                ("new_frn", "New FRNs Detected", "#0891b2", "#f0fdfa", "#ccfbf1"),
+            ]
+
+            badge_map = {
+                "status_change": ("Status Change", "#2563eb", "#dbeafe"),
+                "substatus_change": ("Review Stage", "#7c3aed", "#ede9fe"),
+                "disbursement": ("Disbursement", "#059669", "#dcfce7"),
+                "f486_change": ("Form 486", "#ea580c", "#ffedd5"),
+                "new_frn": ("New FRN", "#0891b2", "#ccfbf1"),
+            }
+
+            for cat_type, cat_label, cat_color, cat_bg, cat_border in category_order:
+                group = change_groups.get(cat_type, [])
+                if not group:
+                    continue
+
+                # Category header
                 html += f"""
-                                <tr>
-                                    <td style="border-bottom: 1px solid #f1f5f9;">{(c.get('entity_name', '') or '')[:30]}</td>
-                                    <td style="font-family: monospace; border-bottom: 1px solid #f1f5f9;">{c['frn']}</td>
-                                    <td style="color: #64748b; border-bottom: 1px solid #f1f5f9;">{c['old_status']}</td>
-                                    <td style="color: {new_color}; font-weight: 600; border-bottom: 1px solid #f1f5f9;">{c['new_status']}</td>
-                                    <td style="text-align: right; font-family: monospace; border-bottom: 1px solid #f1f5f9;">${amt:,.0f}</td>
-                                </tr>
+                            <div style="margin-bottom: 4px; margin-top: 12px;">
+                                <span style="display: inline-block; background-color: {cat_bg}; color: {cat_color}; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 4px 10px; border-radius: 4px; border: 1px solid {cat_border};">{cat_label} ({len(group)})</span>
+                            </div>
 """
-            if len(changes) > MAX_CHANGES_IN_EMAIL:
-                html += f"""
+
+                # Render each change as a card
+                for c in group:
+                    frn_num = c.get("frn", "")
+                    entity = (c.get("entity_name", "") or "")[:40]
+                    ben = c.get("ben", "")
+                    fy = c.get("funding_year", "")
+                    svc = c.get("service_type", "")
+                    wave = c.get("wave_number", "")
+                    amt = float(c.get("amount", 0) or 0)
+                    disbursed = float(c.get("disbursed_amount", 0) or 0)
+                    inv_mode = c.get("invoicing_mode", "")
+                    ldi = c.get("last_date_to_invoice", "")
+                    pending = c.get("pending_reason", "")
+
+                    utilization = f"{(disbursed / amt * 100):.0f}%" if amt > 0 else "N/A"
+
+                    badge_label, badge_color, badge_bg = badge_map.get(
+                        c.get("change_type", "status_change"),
+                        ("Change", "#64748b", "#f1f5f9")
+                    )
+
+                    # Build context line: FY | Service | Wave
+                    context_parts = []
+                    if fy:
+                        context_parts.append(f"FY{fy}")
+                    if svc:
+                        context_parts.append(svc)
+                    if wave:
+                        context_parts.append(f"Wave {wave}")
+                    context_line = " | ".join(context_parts) if context_parts else ""
+
+                    # Status color for new value
+                    new_lower = (c.get("new_status", "") or "").lower()
+                    if "funded" in new_lower or "committed" in new_lower:
+                        new_color = "#059669"
+                    elif "denied" in new_lower:
+                        new_color = "#dc2626"
+                    else:
+                        new_color = "#d97706"
+
+                    # Transition text — add pending reason if substatus
+                    old_display = c.get("old_status", "?")
+                    new_display = c.get("new_status", "?")
+                    if c.get("change_type") == "substatus_change" and pending:
+                        new_display = f"{new_display}"
+
+                    # Financial and invoicing details
+                    financial_line = f"Commitment: ${amt:,.0f} | Disbursed: ${disbursed:,.0f} ({utilization})"
+                    inv_parts = []
+                    if inv_mode:
+                        inv_parts.append(f"Inv Mode: {inv_mode}")
+                    if ldi:
+                        inv_parts.append(f"Last Inv: {ldi}")
+                    inv_line = " | ".join(inv_parts)
+
+                    frn_link = f"https://skyrate.ai/consultant?tab=frn-status&frn={frn_num}&ben={ben}"
+
+                    html += f"""
+                            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 10px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
                                 <tr>
-                                    <td colspan="5" style="text-align: center; color: #94a3b8; padding: 8px; font-size: 11px;">
-                                        ...and {len(changes) - MAX_CHANGES_IN_EMAIL} more changes. View all in your dashboard.
+                                    <td style="background-color: #f8fafc; padding: 10px 14px; border-bottom: 1px solid #e2e8f0;">
+                                        <a href="{frn_link}" style="color: #0d9488; font-family: monospace; font-size: 13px; font-weight: 700; text-decoration: underline;">FRN {frn_num}</a>
+                                        <span style="color: #334155; font-size: 12px;"> &mdash; {entity}</span>
+                                        {f'<span style="color: #94a3b8; font-size: 11px;"> (BEN {ben})</span>' if ben else ''}
+                                        {f'<br><span style="color: #94a3b8; font-size: 11px;">{context_line}</span>' if context_line else ''}
                                     </td>
                                 </tr>
-"""
-            html += """
+                                <tr>
+                                    <td style="padding: 10px 14px;">
+                                        <span style="display: inline-block; background-color: {badge_bg}; color: {badge_color}; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; padding: 2px 8px; border-radius: 3px; margin-bottom: 6px;">{badge_label}</span>
+                                        <div style="font-size: 13px; margin-top: 4px;">
+                                            <span style="color: #64748b;">{old_display}</span>
+                                            <span style="color: #94a3b8; margin: 0 4px;">&#8594;</span>
+                                            <span style="color: {new_color}; font-weight: 600;">{new_display}</span>
+                                        </div>
+                                        <div style="color: #64748b; font-size: 11px; margin-top: 6px; font-family: monospace;">{financial_line}</div>
+                                        {f'<div style="color: #94a3b8; font-size: 11px; margin-top: 2px; font-family: monospace;">{inv_line}</div>' if inv_line else ''}
+                                    </td>
+                                </tr>
                             </table>
 """
-        
+
+            if len(changes) > MAX_CHANGES_IN_EMAIL:
+                html += f"""
+                            <div style="text-align: center; color: #94a3b8; padding: 8px; font-size: 11px;">
+                                ...and {len(changes) - MAX_CHANGES_IN_EMAIL} more changes.
+                                <a href="https://skyrate.ai/consultant?tab=frn-status" style="color: #0d9488;">View all in dashboard</a>
+                            </div>
+"""
+
         html += """
                         </td>
                     </tr>
 """
         return html
-    
+
+    def _generate_portfolio_summary_html(self, watch_sections: List[Dict]) -> str:
+        """Generate an aggregate portfolio summary table across all monitored FRNs."""
+        # Aggregate FRNs across all watches into status buckets
+        status_buckets = defaultdict(lambda: {"count": 0, "amount": 0.0, "disbursed": 0.0})
+        seen_frns = set()  # Deduplicate across watches
+
+        for section in watch_sections:
+            for frn in section.get("frns", []):
+                frn_num = frn.get("frn", "")
+                if not frn_num or frn_num in seen_frns:
+                    continue
+                seen_frns.add(frn_num)
+
+                status = (frn.get("status") or "").lower()
+                amt = float(frn.get("commitment_amount", 0) or 0)
+                disb = float(frn.get("disbursed_amount", 0) or 0)
+
+                if "funded" in status or "committed" in status:
+                    bucket = "Funded"
+                elif "pending" in status:
+                    bucket = "Pending"
+                elif "denied" in status:
+                    bucket = "Denied"
+                else:
+                    bucket = "Other"
+
+                status_buckets[bucket]["count"] += 1
+                status_buckets[bucket]["amount"] += amt
+                status_buckets[bucket]["disbursed"] += disb
+
+        if not seen_frns:
+            return ""
+
+        # Totals
+        total_count = sum(b["count"] for b in status_buckets.values())
+        total_amount = sum(b["amount"] for b in status_buckets.values())
+        total_disbursed = sum(b["disbursed"] for b in status_buckets.values())
+        total_util = f"{(total_disbursed / total_amount * 100):.0f}%" if total_amount > 0 else "N/A"
+
+        def fmt_amount(v):
+            if v >= 1_000_000:
+                return f"${v / 1_000_000:,.1f}M"
+            elif v >= 1_000:
+                return f"${v / 1_000:,.0f}K"
+            else:
+                return f"${v:,.0f}"
+
+        # Row builder
+        def summary_row(label, color, data, is_last=False):
+            util = f"{(data['disbursed'] / data['amount'] * 100):.0f}%" if data["amount"] > 0 else "N/A"
+            border = "" if is_last else "border-bottom: 1px solid #e2e8f0;"
+            return f"""
+                                <tr>
+                                    <td style="padding: 6px 10px; {border}"><span style="color: {color}; font-weight: 600; font-size: 12px;">{label}</span></td>
+                                    <td style="padding: 6px 10px; text-align: center; {border} font-size: 12px;">{data['count']}</td>
+                                    <td style="padding: 6px 10px; text-align: right; {border} font-family: monospace; font-size: 12px;">{fmt_amount(data['amount'])}</td>
+                                    <td style="padding: 6px 10px; text-align: right; {border} font-family: monospace; font-size: 12px;">{fmt_amount(data['disbursed'])}</td>
+                                    <td style="padding: 6px 10px; text-align: center; {border} font-size: 12px;">{util}</td>
+                                </tr>"""
+
+        # Render order with label colors
+        row_defs = [
+            ("Funded", "#059669"),
+            ("Pending", "#d97706"),
+            ("Denied", "#dc2626"),
+            ("Other", "#64748b"),
+        ]
+        rows_html = ""
+        active_rows = [(label, color) for label, color in row_defs if label in status_buckets]
+        for i, (label, color) in enumerate(active_rows):
+            rows_html += summary_row(label, color, status_buckets[label], is_last=(i == len(active_rows) - 1))
+
+        return f"""
+                    <tr>
+                        <td style="padding: 16px 30px 0 30px;">
+                            <div style="background-color: #f8fafc; border-radius: 8px; padding: 16px; border: 1px solid #e2e8f0;">
+                                <h3 style="color: #0f766e; font-size: 14px; margin: 0 0 10px 0;">Portfolio Summary</h3>
+                                <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; font-size: 12px;">
+                                    <tr style="background-color: #f1f5f9;">
+                                        <th style="text-align: left; padding: 6px 10px; color: #64748b; font-size: 11px; border-bottom: 1px solid #e2e8f0;">Status</th>
+                                        <th style="text-align: center; padding: 6px 10px; color: #64748b; font-size: 11px; border-bottom: 1px solid #e2e8f0;">Count</th>
+                                        <th style="text-align: right; padding: 6px 10px; color: #64748b; font-size: 11px; border-bottom: 1px solid #e2e8f0;">Amount</th>
+                                        <th style="text-align: right; padding: 6px 10px; color: #64748b; font-size: 11px; border-bottom: 1px solid #e2e8f0;">Disbursed</th>
+                                        <th style="text-align: center; padding: 6px 10px; color: #64748b; font-size: 11px; border-bottom: 1px solid #e2e8f0;">Util%</th>
+                                    </tr>
+{rows_html}
+                                    <tr style="background-color: #f0fdfa;">
+                                        <td style="padding: 8px 10px; font-weight: 700; font-size: 12px; color: #0f766e;">Total</td>
+                                        <td style="padding: 8px 10px; text-align: center; font-weight: 700; font-size: 12px;">{total_count}</td>
+                                        <td style="padding: 8px 10px; text-align: right; font-weight: 700; font-family: monospace; font-size: 12px;">{fmt_amount(total_amount)}</td>
+                                        <td style="padding: 8px 10px; text-align: right; font-weight: 700; font-family: monospace; font-size: 12px;">{fmt_amount(total_disbursed)}</td>
+                                        <td style="padding: 8px 10px; text-align: center; font-weight: 700; font-size: 12px;">{total_util}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </td>
+                    </tr>
+"""
+
     def _generate_first_snapshot_section_html(self, watch: FRNWatch, frns: List[Dict]) -> str:
         """Section for a watch that just took its initial snapshot"""
         funded = sum(1 for f in frns if "funded" in (f.get("status") or "").lower() or "committed" in (f.get("status") or "").lower())
@@ -986,7 +1336,7 @@ class FRNReportService:
                                     <span style="color: #15803d;">{funded} funded</span> |
                                     <span style="color: #d97706;">{pending} pending</span> |
                                     <span style="color: #dc2626;">{denied} denied</span>
-                                    &mdash; <a href="https://skyrate.ai/consultant" style="color: #0d9488; font-weight: 600;">View full details</a>
+                                    &mdash; <a href="https://skyrate.ai/consultant?tab=frn-status" style="color: #0d9488; font-weight: 600;">View full details</a>
                                 </p>
                             </div>
                         </td>
@@ -1164,7 +1514,7 @@ Do NOT use emojis. Use plain professional language. Do NOT include a greeting or
         message = (
             f"SkyRate: Your FRN Status Report is ready! "
             f"{total_frns} FRNs across {num_watches} monitor{'s' if num_watches != 1 else ''}. "
-            f"View it at https://skyrate.ai/consultant"
+            f"View details: https://skyrate.ai/consultant?tab=frn-status"
         )
         
         return sms_service.send_sms(phone, message)

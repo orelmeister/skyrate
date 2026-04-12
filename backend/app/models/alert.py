@@ -22,6 +22,9 @@ class AlertType(str, enum.Enum):
     FUNDING_APPROVED = "funding_approved"  # FRN approved/committed
     APPEAL_DEADLINE = "appeal_deadline"  # Appeal deadline approaching
     PENDING_TOO_LONG = "pending_too_long"  # FRN pending for more than 15 days
+    SUBSTATUS_CHANGE = "substatus_change"  # PIA review stage changed (pending_reason)
+    FORM_486_DUE = "form_486_due"  # Form 486 filing deadline approaching
+    NO_DISBURSEMENT_WARNING = "no_disbursement_warning"  # Funded FRN with no disbursements near invoice deadline
 
 
 class AlertPriority(str, enum.Enum):
