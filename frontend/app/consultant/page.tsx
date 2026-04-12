@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, Suspense } from "react";
+import { useState, useEffect, useMemo, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
@@ -187,6 +187,7 @@ function ConsultantPortalPage() {
   const [portfolioFrnYear, setPortfolioFrnYear] = useState<number | undefined>(undefined);
   const [portfolioFrnStatusFilter, setPortfolioFrnStatusFilter] = useState<string>("");
   const [portfolioFrnPendingReason, setPortfolioFrnPendingReason] = useState<string>("");
+  const [portfolioFrnSearch, setPortfolioFrnSearch] = useState<string>("");
   const [expandedSchools, setExpandedSchools] = useState<Set<string>>(new Set());
   const [frnSortBy, setFrnSortBy] = useState<string>("name");
   const [selectedFRN, setSelectedFRN] = useState<any>(null);
@@ -351,8 +352,17 @@ function ConsultantPortalPage() {
   const sortedFlattenedFrns = useMemo(() => {
     if (!flattenedFrns.length) return [];
     
-    // First filter by status if a filter is selected
+    // First filter by search term
     let filtered = flattenedFrns;
+    if (portfolioFrnSearch.trim()) {
+      const search = portfolioFrnSearch.trim().toLowerCase();
+      filtered = filtered.filter(frn =>
+        (frn.frn || '').toLowerCase().includes(search) ||
+        (frn.entity_name || '').toLowerCase().includes(search) ||
+        (frn.ben || '').toLowerCase().includes(search)
+      );
+    }
+    // Then filter by status if a filter is selected
     if (portfolioFrnStatusFilter) {
       filtered = flattenedFrns.filter(frn => {
         const status = (frn.status || '').toLowerCase();
@@ -374,7 +384,7 @@ function ConsultantPortalPage() {
       return frnTableSort.dir === 'asc' ? cmp : -cmp;
     });
     return sorted;
-  }, [flattenedFrns, frnTableSort, portfolioFrnStatusFilter]);
+  }, [flattenedFrns, frnTableSort, portfolioFrnStatusFilter, portfolioFrnSearch]);
 
   // Toggle FRN table sort
   const toggleFrnTableSort = (field: string) => {
@@ -547,17 +557,18 @@ function ConsultantPortalPage() {
   const searchParams = useSearchParams();
   const frnParam = searchParams.get('frn');
   const benParam = searchParams.get('ben');
+  const deepLinkHandled = useRef(false);
 
   useEffect(() => {
-    if (frnParam && !isLoading) {
-      setActiveTab('frn-status');
+    if (frnParam && !isLoading && !checkingPayment && !deepLinkHandled.current) {
+      deepLinkHandled.current = true;
       setSelectedFRN({
         frn: frnParam,
         ben: benParam || '',
       });
       setShowFRNDetailModal(true);
     }
-  }, [frnParam, benParam, isLoading]);
+  }, [frnParam, benParam, isLoading, checkingPayment]);
 
   const loadData = async (withUsacData: boolean = false) => {
     setIsLoading(true);
@@ -2639,6 +2650,16 @@ function ConsultantPortalPage() {
                       onChange={(e) => setPortfolioFrnPendingReason(e.target.value)}
                       placeholder="e.g., PIA Review"
                       className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-48"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-slate-600 mb-1 block">Search FRN / Entity / BEN</label>
+                    <input
+                      type="text"
+                      value={portfolioFrnSearch}
+                      onChange={(e) => setPortfolioFrnSearch(e.target.value)}
+                      placeholder="e.g., 2699061470"
+                      className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-56"
                     />
                   </div>
                   <button
