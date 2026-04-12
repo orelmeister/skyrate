@@ -1411,30 +1411,40 @@ class USACDataClient:
         try:
             url = USAC_ENDPOINTS['frn_status']
             
-            # Build IN clause for batch query
-            ben_list = ", ".join(f"'{b}'" for b in bens)
-            where_conditions = [f"ben IN ({ben_list})"]
+            # Chunk BENs to avoid URL length limits (USAC Socrata rejects queries with 100+ BENs)
+            BATCH_CHUNK_SIZE = 50
+            all_data = []
             
+            # Build non-BEN conditions once
+            extra_conditions = []
             if year:
-                where_conditions.append(f"funding_year = '{year}'")
-            
+                extra_conditions.append(f"funding_year = '{year}'")
             if status_filter:
-                where_conditions.append(f"UPPER(frn_status) LIKE UPPER('%{status_filter}%')")
-            
+                extra_conditions.append(f"UPPER(frn_status) LIKE UPPER('%{status_filter}%')")
             if pending_reason_filter:
-                where_conditions.append(f"UPPER(pending_reason) LIKE UPPER('%{pending_reason_filter}%')")
+                extra_conditions.append(f"UPPER(pending_reason) LIKE UPPER('%{pending_reason_filter}%')")
             
-            params = {
-                '$select': ':updated_at, *',
-                '$where': ' AND '.join(where_conditions),
-                '$limit': limit,
-                '$order': 'ben ASC, funding_year DESC, funding_request_number ASC'
-            }
+            chunks = [bens[i:i + BATCH_CHUNK_SIZE] for i in range(0, len(bens), BATCH_CHUNK_SIZE)]
+            logger.info(f"Batch fetching FRN status for {len(bens)} BENs in {len(chunks)} chunks of {BATCH_CHUNK_SIZE}")
             
-            logger.info(f"Batch fetching FRN status for {len(bens)} BENs in single query")
-            response = self.session.get(url, params=params, timeout=120)
-            response.raise_for_status()
-            data = response.json()
+            for chunk_idx, chunk in enumerate(chunks):
+                ben_list = ", ".join(f"'{b}'" for b in chunk)
+                where_conditions = [f"ben IN ({ben_list})"] + extra_conditions
+                
+                params = {
+                    '$select': ':updated_at, *',
+                    '$where': ' AND '.join(where_conditions),
+                    '$limit': limit,
+                    '$order': 'ben ASC, funding_year DESC, funding_request_number ASC'
+                }
+                
+                response = self.session.get(url, params=params, timeout=180)
+                response.raise_for_status()
+                chunk_data = response.json()
+                all_data.extend(chunk_data)
+                logger.info(f"Chunk {chunk_idx + 1}/{len(chunks)}: {len(chunk_data)} records for {len(chunk)} BENs")
+            
+            data = all_data
             
             # Group results by BEN
             ben_groups: Dict[str, list] = {}
