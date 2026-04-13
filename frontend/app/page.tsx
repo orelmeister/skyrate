@@ -4,6 +4,8 @@ import type { Metadata } from "next";
 import { SafeEmail } from "@/components/SafeEmail";
 import WhatsAppButton from "@/components/WhatsAppButton";
 import MobileContactBar from "@/components/MobileContactBar";
+import ExitIntentPopup from "@/components/ExitIntentPopup";
+import EmailCaptureForm from "@/components/EmailCaptureForm";
 
 export const metadata: Metadata = {
   title: "SkyRate AI - AI-Powered E-Rate Intelligence Platform | Maximize Your E-Rate Funding",
@@ -41,6 +43,7 @@ function MobileMenuButton() {
 export default function HomePage() {
   return (
     <div className="min-h-screen flex flex-col">
+      <ExitIntentPopup />
       {/* ════════════════════ HEADER ════════════════════ */}
       <header className="sticky top-0 z-50 border-b border-white/10 px-4 sm:px-6 py-3 bg-slate-950/80 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -727,6 +730,9 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ════════════════════ EMAIL CAPTURE ════════════════════ */}
+      <EmailCaptureForm id="email-capture" />
+
       {/* ════════════════════ PRICING (Light) ════════════════════ */}
       <section id="pricing" className="py-14 sm:py-20 px-4 sm:px-6 bg-slate-50">
         <div className="max-w-7xl mx-auto">
@@ -883,6 +889,25 @@ export default function HomePage() {
                 <p className="text-sm sm:text-base text-slate-600">{faq.a}</p>
               </div>
             ))}
+          </div>
+
+          {/* Lead Magnet CTA */}
+          <div className="mt-8 sm:mt-10 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl p-5 sm:p-6 border border-indigo-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide mb-1">Free Resource</p>
+              <h4 className="text-base sm:text-lg font-bold text-slate-900">
+                Download our 2026 E-Rate Filing Timeline &amp; Checklist
+              </h4>
+            </div>
+            <a
+              href="#email-capture"
+              className="shrink-0 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-500 hover:to-purple-500 transition shadow-lg shadow-indigo-500/25 text-sm flex items-center gap-2"
+            >
+              Get the Checklist
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+              </svg>
+            </a>
           </div>
         </div>
       </section>
