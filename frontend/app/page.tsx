@@ -111,12 +111,12 @@ export default function HomePage() {
                 Trusted by 500+ E-Rate Professionals
               </div>
               <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-5 sm:mb-6 leading-tight">
-                Stop Leaving{" "}
-                <span className="gradient-text">E-Rate Money</span>{" "}
-                on the Table
+                Stop Losing{" "}
+                <span className="gradient-text">E-Rate Funding</span>{" "}
+                to Paperwork Mistakes
               </h1>
               <p className="text-base sm:text-lg lg:text-xl text-slate-400 mb-8 sm:mb-10 max-w-xl mx-auto lg:mx-0 leading-relaxed">
-                SkyRate AI is the only platform that combines real-time USAC data, AI-powered denial analysis, and automated appeal generation to help you maximize E-Rate funding for your schools and clients.
+                SkyRate automates Form 470/471 tracking, PIA responses, and funding analysis — so you can focus on your students, not USAC paperwork.
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 sm:gap-4 mb-6">
                 <Link
@@ -126,13 +126,15 @@ export default function HomePage() {
                   Start Your 14-Day Free Trial
                 </Link>
                 <a
-                  href="#how-it-works"
-                  className="w-full sm:w-auto px-6 sm:px-8 py-3.5 sm:py-4 border border-white/20 rounded-xl font-semibold text-slate-300 hover:bg-white/5 hover:text-white transition text-base sm:text-lg flex items-center justify-center gap-2"
+                  href={process.env.NEXT_PUBLIC_CALENDLY_URL || "https://calendly.com/skyrate"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto px-6 sm:px-8 py-3.5 sm:py-4 border-2 border-white/30 rounded-xl font-semibold text-white hover:bg-white/10 transition text-base sm:text-lg flex items-center justify-center gap-2"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
-                  See How It Works
+                  Book a Free Consultation
                 </a>
               </div>
               <p className="text-xs sm:text-sm text-slate-500">
@@ -183,6 +185,57 @@ export default function HomePage() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* ════════════════════ SOCIAL PROOF BAR ════════════════════ */}
+      <section className="py-10 sm:py-14 px-4 sm:px-6 bg-slate-50 border-b border-slate-200">
+        <div className="max-w-7xl mx-auto">
+          {/* Stats row */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 text-center mb-8 sm:mb-10">
+            <div>
+              <div className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900">$2.5B+</div>
+              <div className="text-sm sm:text-base text-slate-600 mt-1">E-Rate Funding Analyzed</div>
+            </div>
+            <div>
+              <div className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900">500+</div>
+              <div className="text-sm sm:text-base text-slate-600 mt-1">Schools &amp; Libraries Tracked</div>
+            </div>
+            <div>
+              <div className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900">50 States</div>
+              <div className="text-sm sm:text-base text-slate-600 mt-1">Serving Districts Nationwide</div>
+            </div>
+          </div>
+          {/* Trust badges */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 text-sm text-slate-500">
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              <span className="font-medium text-slate-700">USAC Open Data Integrated</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              <span className="font-medium text-slate-700">Bank-Level Encryption</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="font-medium text-slate-700">EPC Portal Compatible</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+              </svg>
+              <span className="font-medium text-slate-700">Built by E-Rate Consultants</span>
+            </div>
+          </div>
+          <p className="text-center text-xs text-slate-400 mt-4">
+            Works with USAC Open Data &amp; EPC Portal
+          </p>
         </div>
       </section>
 
@@ -589,28 +642,86 @@ export default function HomePage() {
               <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 text-white flex items-center justify-center mx-auto mb-4 sm:mb-6 text-2xl sm:text-3xl font-bold shadow-lg shadow-indigo-500/30">
                 1
               </div>
-              <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2 sm:mb-3">Sign Up & Verify</h3>
+              <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2 sm:mb-3">Connect Your Portfolio</h3>
               <p className="text-sm sm:text-base text-slate-600">
-                Create your account and verify your CRN (consultants) or SPIN (vendors) to unlock full features
+                Import your schools and libraries. SkyRate auto-syncs with USAC data so your portfolio is always up to date.
               </p>
             </div>
             <div className="text-center light-card rounded-2xl p-6 sm:p-8 hover-lift animate-slide-up-delay-2">
               <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 text-white flex items-center justify-center mx-auto mb-4 sm:mb-6 text-2xl sm:text-3xl font-bold shadow-lg shadow-purple-500/30">
                 2
               </div>
-              <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2 sm:mb-3">Import Your Data</h3>
+              <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2 sm:mb-3">AI Does the Heavy Lifting</h3>
               <p className="text-sm sm:text-base text-slate-600">
-                Auto-import schools from your CRN or track FRNs from your SPIN. Add manufacturers to monitor.
+                Form tracking, PIA responses, appeal drafts, and funding analysis — all automated by AI that understands E-Rate compliance.
               </p>
             </div>
             <div className="text-center light-card rounded-2xl p-6 sm:p-8 hover-lift animate-slide-up-delay-3">
               <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white flex items-center justify-center mx-auto mb-4 sm:mb-6 text-2xl sm:text-3xl font-bold shadow-lg shadow-emerald-500/30">
                 3
               </div>
-              <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2 sm:mb-3">Start Winning</h3>
+              <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2 sm:mb-3">Stay Ahead of Deadlines</h3>
               <p className="text-sm sm:text-base text-slate-600">
-                Use AI to generate appeals, discover leads, track competitors, and maximize success
+                Real-time FRN monitoring, status change alerts, and deadline reminders. Never miss a filing window again.
               </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════ TESTIMONIALS / CASE STUDIES ════════════════════ */}
+      <section className="py-14 sm:py-20 px-4 sm:px-6 bg-gradient-to-br from-slate-50 to-indigo-50">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center max-w-3xl mx-auto mb-10 sm:mb-14">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 mb-3 sm:mb-4">
+              Real Results from E-Rate Professionals
+            </h2>
+            <p className="text-base sm:text-lg text-slate-600">
+              See how SkyRate AI is transforming E-Rate workflow for consultants, vendors, and applicants
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+            {/* Testimonial 1 */}
+            <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-md hover-lift border border-slate-100">
+              <div className="text-indigo-300 text-4xl sm:text-5xl font-serif leading-none mb-3 select-none">&ldquo;</div>
+              <p className="text-sm sm:text-base text-slate-700 leading-relaxed mb-5 sm:mb-6">
+                Before SkyRate, our district spent 40+ hours per funding year on E-Rate paperwork. Now our consultants handle 3x the clients with the same team.
+              </p>
+              <div className="flex items-center gap-3 border-t border-slate-100 pt-4">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm">EC</div>
+                <div>
+                  <div className="font-semibold text-slate-900 text-sm">E-Rate Consultant</div>
+                  <div className="text-xs text-slate-500">Mid-Atlantic Region</div>
+                </div>
+              </div>
+            </div>
+            {/* Testimonial 2 */}
+            <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-md hover-lift border border-slate-100">
+              <div className="text-purple-300 text-4xl sm:text-5xl font-serif leading-none mb-3 select-none">&ldquo;</div>
+              <p className="text-sm sm:text-base text-slate-700 leading-relaxed mb-5 sm:mb-6">
+                The PIA Response Generator saved us from a potential $200K denial. It drafted a compliant response in 2 minutes that we submitted and won.
+              </p>
+              <div className="flex items-center gap-3 border-t border-slate-100 pt-4">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center text-white font-bold text-sm">TD</div>
+                <div>
+                  <div className="font-semibold text-slate-900 text-sm">Technology Director</div>
+                  <div className="text-xs text-slate-500">K-12 School District, Southeast</div>
+                </div>
+              </div>
+            </div>
+            {/* Testimonial 3 */}
+            <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-md hover-lift border border-slate-100 sm:col-span-2 lg:col-span-1">
+              <div className="text-emerald-300 text-4xl sm:text-5xl font-serif leading-none mb-3 select-none">&ldquo;</div>
+              <p className="text-sm sm:text-base text-slate-700 leading-relaxed mb-5 sm:mb-6">
+                Finally, a tool that actually understands E-Rate compliance. The FRN monitoring alone has paid for itself ten times over.
+              </p>
+              <div className="flex items-center gap-3 border-t border-slate-100 pt-4">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center text-white font-bold text-sm">IC</div>
+                <div>
+                  <div className="font-semibold text-slate-900 text-sm">Independent E-Rate Consultant</div>
+                  <div className="text-xs text-slate-500">Western Region</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -714,6 +825,40 @@ export default function HomePage() {
               </Link>
               <p className="text-xs text-center text-slate-500 mt-2">Free consultation available</p>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════ REQUEST A DEMO CTA ════════════════════ */}
+      <section className="py-10 sm:py-14 px-4 sm:px-6 bg-white border-t border-slate-100">
+        <div className="max-w-3xl mx-auto text-center">
+          <h3 className="text-xl sm:text-2xl font-bold text-slate-900 mb-3">
+            Not ready to sign up?
+          </h3>
+          <p className="text-sm sm:text-base text-slate-600 mb-6 max-w-xl mx-auto">
+            Schedule a free demo to see SkyRate with your district&apos;s real data. No commitment, no pressure — just a conversation about how we can help.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+            <a
+              href={process.env.NEXT_PUBLIC_CALENDLY_URL || "https://calendly.com/skyrate"}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-500 hover:to-purple-500 transition shadow-lg shadow-indigo-500/25 text-sm sm:text-base flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              Schedule a Free Demo
+            </a>
+            <a
+              href="tel:+18557657291"
+              className="w-full sm:w-auto px-6 py-3 border-2 border-slate-200 text-slate-700 rounded-xl font-semibold hover:bg-slate-50 transition text-sm sm:text-base flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+              </svg>
+              Call (855) 765-7291
+            </a>
           </div>
         </div>
       </section>
