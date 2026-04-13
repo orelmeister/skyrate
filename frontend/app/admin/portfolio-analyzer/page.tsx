@@ -45,6 +45,8 @@ interface PortfolioSummary {
   total_bens: number;
   total_frns: number;
   total_committed: number;
+  funded_committed?: number;
+  pending_committed?: number;
   total_disbursed: number;
   total_denied_amount: number;
   funded_count: number;
@@ -447,7 +449,7 @@ function PortfolioAnalyzer() {
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
               <SummaryCard label="Total BENs" value={report.portfolio_summary.total_bens.toString()} />
               <SummaryCard label="Total FRNs" value={report.portfolio_summary.total_frns.toString()} />
               <SummaryCard
@@ -456,8 +458,14 @@ function PortfolioAnalyzer() {
                 color={report.portfolio_summary.success_rate >= 0.8 ? "text-emerald-600" : "text-amber-600"}
               />
               <SummaryCard
-                label="Committed"
-                value={fmtCurrency(report.portfolio_summary.total_committed)}
+                label="Funded Committed"
+                value={fmtCurrency(report.portfolio_summary.funded_committed ?? report.portfolio_summary.total_committed)}
+                color="text-emerald-600"
+              />
+              <SummaryCard
+                label="Pending Committed"
+                value={fmtCurrency(report.portfolio_summary.pending_committed ?? 0)}
+                color="text-amber-600"
               />
               <SummaryCard
                 label="Disbursed"
@@ -499,6 +507,28 @@ function PortfolioAnalyzer() {
                 {/* ========== OVERVIEW TAB ========== */}
                 {activeTab === "overview" && (
                   <div className="space-y-6">
+                    {/* Disbursement rate badge */}
+                    <div className="flex items-center gap-4">
+                      <div className="px-4 py-2 rounded-lg bg-purple-50 border border-purple-200">
+                        <span className="text-xs text-slate-500">Disbursement Rate (Funded Only)</span>
+                        <span className={`ml-2 text-lg font-bold ${
+                          report.portfolio_summary.disbursement_rate >= 0.75
+                            ? "text-emerald-600"
+                            : report.portfolio_summary.disbursement_rate >= 0.4
+                            ? "text-amber-600"
+                            : "text-red-600"
+                        }`}>
+                          {fmtPct(report.portfolio_summary.disbursement_rate)}
+                        </span>
+                      </div>
+                      {report.portfolio_summary.funded_committed != null && (
+                        <div className="text-xs text-slate-500">
+                          {fmtCurrency(report.portfolio_summary.total_disbursed)} disbursed of{" "}
+                          {fmtCurrency(report.portfolio_summary.funded_committed)} funded
+                        </div>
+                      )}
+                    </div>
+
                     {/* Status distribution */}
                     <div>
                       <h3 className="text-sm font-semibold text-slate-700 mb-3">

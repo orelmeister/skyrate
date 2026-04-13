@@ -542,13 +542,14 @@ class PortfolioAnalyzerService:
         for frn in frns:
             frn_num = frn.get("frn", "")
             if frn_num in disbursement_map:
-                frn["disbursed_amount"] = disbursement_map[frn_num]
+                frn["disbursed_amount"] = max(frn.get("disbursed_amount", 0.0), disbursement_map[frn_num])
 
     # ==================== PORTFOLIO SUMMARY ====================
 
     def _calculate_portfolio_summary(self, frns: list) -> dict:
         """Calculate aggregate stats across all FRNs."""
-        total_committed = 0.0
+        funded_committed = 0.0
+        pending_committed = 0.0
         total_disbursed = 0.0
         total_denied_amt = 0.0
         funded_count = 0
@@ -572,27 +573,30 @@ class PortfolioAnalyzerService:
 
             if "funded" in status:
                 funded_count += 1
-                total_committed += committed
+                funded_committed += committed
                 total_disbursed += disbursed
             elif "pending" in status:
                 pending_count += 1
-                total_committed += committed
+                pending_committed += committed
             elif "denied" in status:
                 denied_count += 1
                 total_denied_amt += committed
             else:
                 other_count += 1
 
+        total_committed = funded_committed + pending_committed
         total_frns = len(frns)
         decidable = funded_count + denied_count
         success_rate = round(funded_count / decidable, 4) if decidable > 0 else 0.0
-        disbursement_rate = round(total_disbursed / total_committed, 4) if total_committed > 0 else 0.0
-        money_left = round(total_committed - total_disbursed, 2)
+        disbursement_rate = round(total_disbursed / funded_committed, 4) if funded_committed > 0 else 0.0
+        money_left = round(funded_committed - total_disbursed, 2)
 
         return {
             "total_bens": len(bens),
             "total_frns": total_frns,
             "total_committed": round(total_committed, 2),
+            "funded_committed": round(funded_committed, 2),
+            "pending_committed": round(pending_committed, 2),
             "total_disbursed": round(total_disbursed, 2),
             "total_denied_amount": round(total_denied_amt, 2),
             "funded_count": funded_count,
