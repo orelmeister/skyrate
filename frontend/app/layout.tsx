@@ -5,6 +5,7 @@ import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import InstallPrompt from "@/components/InstallPrompt";
 import ChatWidget from "@/components/ChatWidget";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import Analytics from "@/components/Analytics";
 
 const inter = Inter({ 
   subsets: ["latin"],
@@ -121,6 +122,7 @@ export default function RootLayout({
         {/* CF replaces emails with <span> elements which breaks React hydration */}
         <div dangerouslySetInnerHTML={{ __html: '<!--email_off-->' }} style={{ display: 'none' }} />
         <ErrorBoundary>
+          <Analytics />
           <ServiceWorkerRegistrar />
           {children}
           <ChatWidget />

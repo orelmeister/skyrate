@@ -56,6 +56,10 @@ export default function HomePage() {
           </nav>
 
           <div className="flex items-center gap-3">
+            <a href="tel:855-765-7291" className="hidden lg:flex items-center gap-1.5 text-slate-400 hover:text-white transition text-sm font-medium">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+              (855) 765-7291
+            </a>
             <Link href="/sign-in" className="hidden sm:inline text-slate-400 hover:text-white transition font-medium text-sm">
               Sign In
             </Link>
@@ -111,13 +115,13 @@ export default function HomePage() {
                   Start Your 14-Day Free Trial
                 </Link>
                 <a
-                  href="#demo"
+                  href="#how-it-works"
                   className="w-full sm:w-auto px-6 sm:px-8 py-3.5 sm:py-4 border border-white/20 rounded-xl font-semibold text-slate-300 hover:bg-white/5 hover:text-white transition text-base sm:text-lg flex items-center justify-center gap-2"
                 >
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
-                  Watch Demo
+                  See How It Works
                 </a>
               </div>
               <p className="text-xs sm:text-sm text-slate-500">
@@ -323,6 +327,7 @@ export default function HomePage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
                 </svg>
               </Link>
+              <p className="text-xs text-slate-500 mt-2">No credit card required - Setup in 5 minutes</p>
             </div>
 
             {/* Applicant dashboard preview */}
@@ -409,6 +414,7 @@ export default function HomePage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
                 </svg>
               </Link>
+              <p className="text-xs text-slate-500 mt-2">No credit card required - Cancel anytime</p>
             </div>
 
             {/* Dashboard preview card */}
@@ -530,6 +536,7 @@ export default function HomePage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
                 </svg>
               </Link>
+              <p className="text-xs text-slate-500 mt-2">Free consultation available - Cancel anytime</p>
             </div>
           </div>
         </div>
@@ -556,7 +563,7 @@ export default function HomePage() {
       </section>
 
       {/* ════════════════════ HOW IT WORKS (Light) ════════════════════ */}
-      <section className="py-14 sm:py-20 px-4 sm:px-6 bg-white">
+      <section id="how-it-works" className="py-14 sm:py-20 px-4 sm:px-6 bg-white scroll-mt-16">
         <div className="max-w-7xl mx-auto">
           <div className="text-center max-w-3xl mx-auto mb-10 sm:mb-16">
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 mb-3 sm:mb-4">
@@ -633,9 +640,10 @@ export default function HomePage() {
                   </li>
                 ))}
               </ul>
-              <Link href="/applicant/sign-up" className="block w-full py-2.5 sm:py-3 text-center bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition text-sm sm:text-base shadow-md shadow-emerald-500/20">
+              <Link href="/sign-up?role=applicant" className="block w-full py-2.5 sm:py-3 text-center bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition text-sm sm:text-base shadow-md shadow-emerald-500/20">
                 Start Free Trial
               </Link>
+              <p className="text-xs text-center text-slate-500 mt-2">No credit card required</p>
             </div>
 
             {/* Consultant — blue/indigo accent */}
@@ -664,6 +672,7 @@ export default function HomePage() {
               <Link href="/sign-up?role=consultant" className="block w-full py-2.5 sm:py-3 text-center bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition text-sm sm:text-base shadow-md shadow-indigo-500/20">
                 Start Free Trial
               </Link>
+              <p className="text-xs text-center text-slate-500 mt-2">Setup in 5 minutes - Cancel anytime</p>
             </div>
 
             {/* Vendor — purple accent */}
@@ -692,6 +701,7 @@ export default function HomePage() {
               <Link href="/sign-up?role=vendor" className="block w-full py-2.5 sm:py-3 text-center bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 transition text-sm sm:text-base shadow-md shadow-purple-500/20">
                 Start Free Trial
               </Link>
+              <p className="text-xs text-center text-slate-500 mt-2">Free consultation available</p>
             </div>
           </div>
         </div>
