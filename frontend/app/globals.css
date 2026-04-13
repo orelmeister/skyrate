@@ -184,6 +184,16 @@ body {
   animation: gentleBounce 3s ease-in-out infinite;
 }
 
+/* ─── Pulse Once (for WhatsApp button) ─── */
+@keyframes pulseOnce {
+  0% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.5); }
+  70% { box-shadow: 0 0 0 16px rgba(37, 211, 102, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0); }
+}
+.animate-pulse-once {
+  animation: pulseOnce 1.5s ease-out 1;
+}
+
 /* ─── Icon Container (light background) ─── */
 .icon-container {
   width: 56px;

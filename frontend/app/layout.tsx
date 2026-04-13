@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Montserrat } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import InstallPrompt from "@/components/InstallPrompt";
@@ -128,6 +129,12 @@ export default function RootLayout({
           <ChatWidget />
           <InstallPrompt />
         </ErrorBoundary>
+        {process.env.NEXT_PUBLIC_TAWKTO_ID && (
+          <Script
+            src={`https://embed.tawk.to/${process.env.NEXT_PUBLIC_TAWKTO_ID}`}
+            strategy="lazyOnload"
+          />
+        )}
         <div dangerouslySetInnerHTML={{ __html: '<!--/email_off-->' }} style={{ display: 'none' }} />
       </body>
     </html>
