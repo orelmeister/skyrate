@@ -178,49 +178,6 @@ function PortfolioAnalyzer() {
     }
   }, [_hasHydrated, isAuthenticated, user, router]);
 
-  if (!_hasHydrated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto" />
-      </div>
-    );
-  }
-
-  // ==================== API CALL ====================
-
-  async function handleAnalyze() {
-    if (!lookupValue.trim()) {
-      setError("Please enter a value to search.");
-      return;
-    }
-    setLoading(true);
-    setError("");
-    setReport(null);
-
-    try {
-      const res = await api.post<PortfolioReport>("/admin/portfolio-report", {
-        lookup_type: lookupType,
-        lookup_value: lookupValue.trim(),
-        funding_years: selectedYears.length > 0 ? selectedYears : null,
-      });
-      if (res.data) {
-        setReport(res.data as unknown as PortfolioReport);
-        setActiveTab("overview");
-      } else {
-        setError(res.error || "Failed to generate report");
-      }
-    } catch (e: any) {
-      setError(e.message || "Failed to generate report");
-    }
-    setLoading(false);
-  }
-
-  function toggleYear(year: number) {
-    setSelectedYears((prev) =>
-      prev.includes(year) ? prev.filter((y) => y !== year) : [...prev, year]
-    );
-  }
-
   // ==================== FILTERED FRNs ====================
 
   const filteredFrns = useMemo(() => {
@@ -281,6 +238,49 @@ function PortfolioAnalyzer() {
     }
     return Object.values(map).sort((a, b) => b.denied - a.denied);
   }, [report]);
+
+  if (!_hasHydrated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto" />
+      </div>
+    );
+  }
+
+  // ==================== API CALL ====================
+
+  async function handleAnalyze() {
+    if (!lookupValue.trim()) {
+      setError("Please enter a value to search.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    setReport(null);
+
+    try {
+      const res = await api.post<PortfolioReport>("/admin/portfolio-report", {
+        lookup_type: lookupType,
+        lookup_value: lookupValue.trim(),
+        funding_years: selectedYears.length > 0 ? selectedYears : null,
+      });
+      if (res.data) {
+        setReport(res.data as unknown as PortfolioReport);
+        setActiveTab("overview");
+      } else {
+        setError(res.error || "Failed to generate report");
+      }
+    } catch (e: any) {
+      setError(e.message || "Failed to generate report");
+    }
+    setLoading(false);
+  }
+
+  function toggleYear(year: number) {
+    setSelectedYears((prev) =>
+      prev.includes(year) ? prev.filter((y) => y !== year) : [...prev, year]
+    );
+  }
 
   // ==================== RENDER ====================
 
