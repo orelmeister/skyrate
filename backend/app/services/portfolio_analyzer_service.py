@@ -104,9 +104,10 @@ class PortfolioAnalyzerService:
     # ==================== CRN ANALYSIS ====================
 
     def _analyze_crn(self, crn: str, years: List[int]) -> dict:
-        """CRN lookup: Query srbr-2d59 with crn_data LIKE '%|{CRN}|%'"""
+        """CRN lookup: Query srbr-2d59 for CRN FRNs, then cross-reference qdmp-ygft for real financial data."""
         logger.info(f"[CRN Lookup] Querying Form 471 Full for CRN: {crn}")
 
+        # Step 1: Query Form 471 Full to find all FRNs associated with this CRN
         # CRN data format: {Consultant Name|CRN_NUMBER|email}
         where = f"crn_data LIKE '%|{crn}|%'"
         year_filter = self._build_year_filter(years)
@@ -116,14 +117,36 @@ class PortfolioAnalyzerService:
         frn_records = self._fetch_usac_data(DATASET_471_FULL, where, limit=50000)
         logger.info(f"[CRN Lookup] Got {len(frn_records)} FRN records from Form 471")
 
-        # Extract subject info from crn_data
+        # Step 2: Extract subject info (consultant name/email) from crn_data
         subject_info = self._extract_crn_subject(crn, frn_records)
 
-        # Enrich with FRN status data
-        frns = self._enrich_frns_from_471(frn_records)
+        # Step 3: Build enrichment map from 471 records (keyed by FRN number)
+        enrichment_map = {}
+        for rec in frn_records:
+            frn_num = _safe_str(rec.get("funding_request_number"))
+            if frn_num:
+                enrichment_map[frn_num] = rec
 
-        # Fetch disbursement data for all BENs
-        bens = list(set(f.get("ben", "") for f in frns if f.get("ben")))
+        # Step 4: Extract unique BENs from 471 records and query FRN Status (qdmp-ygft)
+        # FRN Status has the real frn_status and original_commitment_adjustment fields
+        bens = list(set(_safe_str(rec.get("ben")) for rec in frn_records if rec.get("ben")))
+        logger.info(f"[CRN Lookup] Found {len(bens)} unique BENs, querying FRN Status dataset")
+
+        status_records = []
+        for chunk in self._chunk_list(bens, 20):
+            ben_clause = " OR ".join(f"ben='{b}'" for b in chunk)
+            status_where = ben_clause
+            if year_filter:
+                status_where = f"({ben_clause}) AND ({year_filter})"
+            recs = self._fetch_usac_data(DATASET_FRN_STATUS, status_where, limit=50000)
+            status_records.extend(recs)
+
+        logger.info(f"[CRN Lookup] Got {len(status_records)} records from FRN Status")
+
+        # Step 5: Build FRN list from status records, enriched with 471 data
+        frns = self._build_frns_from_status(status_records, enrichment_map)
+
+        # Step 6: Fetch disbursement data for all BENs
         disbursement_map = self._fetch_disbursements_for_bens(bens)
         self._apply_disbursements(frns, disbursement_map)
 
