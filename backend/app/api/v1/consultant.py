@@ -14,7 +14,10 @@ import io
 import sys
 import os
 import json
+import logging
 import requests
+
+logger = logging.getLogger(__name__)
 
 # Add skyrate-ai to path for importing existing utilities
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..', 'skyrate-ai'))
@@ -931,7 +934,7 @@ async def remove_crn(
     current_user: User = Depends(require_role("admin", "consultant", "super")),
     db: Session = Depends(get_db)
 ):
-    """Remove a CRN from the consultant's account. Does not remove imported schools."""
+    """Remove a CRN from the consultant's account and delete all schools imported from that CRN."""
     crn_record = db.query(ConsultantCRN).filter(
         ConsultantCRN.id == crn_id,
         ConsultantCRN.consultant_profile_id == profile.id
@@ -955,10 +958,18 @@ async def remove_crn(
         except Exception:
             pass  # Best effort
     
+    # Delete schools that were imported from this CRN
+    crn_value = crn_record.crn
+    deleted_schools = db.query(ConsultantSchool).filter(
+        ConsultantSchool.consultant_profile_id == profile.id,
+        ConsultantSchool.source_crn == crn_value
+    ).delete(synchronize_session="fetch")
+    logger.info(f"Removed {deleted_schools} schools imported from CRN {crn_value}")
+    
     db.delete(crn_record)
     db.commit()
     
-    return {"success": True, "message": f"CRN {crn_record.crn} removed"}
+    return {"success": True, "message": f"CRN {crn_value} removed along with {deleted_schools} imported schools"}
 
 
 def _import_schools_for_crn(
@@ -3272,3 +3283,42 @@ async def service_search(
             status_code=500,
             detail=f"Service search failed: {str(e)}"
         )
+
+
+@router.delete("/admin/cleanup-orphaned-schools")
+async def cleanup_orphaned_schools(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Admin endpoint to remove schools whose source CRN is no longer linked to the account."""
+    if current_user.get("role") not in ("super", "admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    user_id = current_user["user_id"]
+    profile = db.query(ConsultantProfile).filter(ConsultantProfile.user_id == user_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="No consultant profile found")
+
+    # Get all active CRNs for this profile
+    active_crns = db.query(ConsultantCRN.crn).filter(
+        ConsultantCRN.consultant_profile_id == profile.id
+    ).all()
+    active_crn_values = {c.crn for c in active_crns}
+
+    # Find schools with a source_crn that's no longer active
+    query = db.query(ConsultantSchool).filter(
+        ConsultantSchool.consultant_profile_id == profile.id,
+        ConsultantSchool.source_crn.isnot(None),
+        ConsultantSchool.source_crn != "",
+    )
+    if active_crn_values:
+        query = query.filter(~ConsultantSchool.source_crn.in_(active_crn_values))
+
+    orphaned = query.all()
+    count = len(orphaned)
+    for school in orphaned:
+        db.delete(school)
+    db.commit()
+
+    logger.info(f"Cleaned up {count} orphaned schools for user {user_id}")
+    return {"deleted": count, "message": f"Removed {count} orphaned schools"}
