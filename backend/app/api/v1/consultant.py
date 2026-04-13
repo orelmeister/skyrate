@@ -3287,15 +3287,11 @@ async def service_search(
 
 @router.delete("/admin/cleanup-orphaned-schools")
 async def cleanup_orphaned_schools(
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(require_role("admin", "super")),
+    db: Session = Depends(get_db)
 ):
     """Admin endpoint to remove schools whose source CRN is no longer linked to the account."""
-    if current_user.get("role") not in ("super", "admin"):
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    user_id = current_user["user_id"]
-    profile = db.query(ConsultantProfile).filter(ConsultantProfile.user_id == user_id).first()
+    profile = db.query(ConsultantProfile).filter(ConsultantProfile.user_id == current_user.id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="No consultant profile found")
 
@@ -3320,5 +3316,5 @@ async def cleanup_orphaned_schools(
         db.delete(school)
     db.commit()
 
-    logger.info(f"Cleaned up {count} orphaned schools for user {user_id}")
+    logger.info(f"Cleaned up {count} orphaned schools for user {current_user.id}")
     return {"deleted": count, "message": f"Removed {count} orphaned schools"}
