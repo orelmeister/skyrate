@@ -128,7 +128,7 @@ class PortfolioAnalyzerService:
                 enrichment_map[frn_num] = rec
 
         # Step 4: Extract unique BENs from 471 records and query FRN Status (qdmp-ygft)
-        # FRN Status has the real frn_status and original_commitment_adjustment fields
+        # FRN Status has the real form_471_frn_status_name and funding_commitment_request fields
         bens = list(set(_safe_str(rec.get("ben")) for rec in frn_records if rec.get("ben")))
         logger.info(f"[CRN Lookup] Found {len(bens)} unique BENs, querying FRN Status dataset")
 
@@ -324,8 +324,8 @@ class PortfolioAnalyzerService:
                 continue
             seen.add(frn_num)
 
-            status = _safe_str(rec.get("frn_status", "")).title()
-            committed = _safe_float(rec.get("original_commitment_adjustment"))
+            status = _safe_str(rec.get("form_471_frn_status_name", "")).title()
+            committed = _safe_float(rec.get("funding_commitment_request"))
             if committed == 0:
                 committed = _safe_float(rec.get("total_authorized_disbursement"))
 
@@ -337,15 +337,15 @@ class PortfolioAnalyzerService:
                 "ben": _safe_str(rec.get("ben")),
                 "entity_name": _safe_str(rec.get("organization_name")),
                 "spin_name": _safe_str(rec.get("spin_name")),
-                "consultant": _safe_str(rec.get("consultant_name")),
+                "consultant": self._extract_consultant_name(rec.get("crn_data")),
                 "consultant_crn": self._extract_crn_number(rec.get("crn_data")),
                 "funding_year": _safe_str(rec.get("funding_year")),
-                "service_type": _safe_str(rec.get("service_type")),
+                "service_type": _safe_str(rec.get("form_471_service_type_name")),
                 "current_status": status,
                 "pending_reason": _safe_str(rec.get("pending_reason")),
                 "committed_amount": committed,
                 "disbursed_amount": _safe_float(rec.get("total_authorized_disbursement")),
-                "discount_rate": _safe_float(rec.get("discount_rate")),
+                "discount_rate": _safe_float(rec.get("dis_pct")),
                 "fcdl_date": _safe_str(rec.get("fcdl_letter_date")),
                 "revised_fcdl_date": _safe_str(rec.get("revised_fcdl_date")) or None,
                 "wave_number": _safe_str(rec.get("wave_sequence_number")),
@@ -371,8 +371,8 @@ class PortfolioAnalyzerService:
             seen.add(frn_num)
 
             enriched = enrichment_map.get(frn_num, {})
-            status = _safe_str(rec.get("frn_status", "")).title()
-            committed = _safe_float(rec.get("original_commitment_adjustment")) or _safe_float(enriched.get("original_commitment_adjustment"))
+            status = _safe_str(rec.get("form_471_frn_status_name", "")).title()
+            committed = _safe_float(rec.get("funding_commitment_request")) or _safe_float(enriched.get("funding_commitment_request"))
 
             fcdl_comment = _safe_str(enriched.get("fcdl_comment_frn", "")) or _safe_str(enriched.get("fcdl_comment", ""))
             denial_cat = self._classify_denial(fcdl_comment) if "denied" in status.lower() else None
@@ -385,15 +385,15 @@ class PortfolioAnalyzerService:
                 "ben": _safe_str(rec.get("ben")),
                 "entity_name": _safe_str(rec.get("organization_name")),
                 "spin_name": _safe_str(rec.get("spin_name")),
-                "consultant": _safe_str(enriched.get("consultant_name")),
+                "consultant": self._extract_consultant_name(enriched.get("crn_data")),
                 "consultant_crn": self._extract_crn_number(enriched.get("crn_data")),
                 "funding_year": _safe_str(rec.get("funding_year")),
-                "service_type": _safe_str(rec.get("service_type")),
+                "service_type": _safe_str(rec.get("form_471_service_type_name")),
                 "current_status": status,
                 "pending_reason": _safe_str(rec.get("pending_reason")),
                 "committed_amount": committed,
                 "disbursed_amount": _safe_float(rec.get("total_authorized_disbursement")),
-                "discount_rate": _safe_float(enriched.get("discount_rate")),
+                "discount_rate": _safe_float(enriched.get("dis_pct")),
                 "fcdl_date": _safe_str(rec.get("fcdl_letter_date")) or _safe_str(enriched.get("fcdl_letter_date")),
                 "revised_fcdl_date": _safe_str(enriched.get("revised_fcdl_date")) or None,
                 "wave_number": _safe_str(rec.get("wave_sequence_number")) or _safe_str(enriched.get("wave_sequence_number")),
@@ -417,6 +417,14 @@ class PortfolioAnalyzerService:
         if len(parts) >= 2:
             return parts[1].strip()
         return None
+
+    def _extract_consultant_name(self, crn_data: Any) -> str:
+        """Extract consultant name from crn_data field. Format: {Name|CRN|email}"""
+        if not crn_data:
+            return ""
+        text = str(crn_data).replace("{", "").replace("}", "")
+        parts = text.strip().split("|")
+        return parts[0].strip() if parts else ""
 
     # ==================== FRN TIMELINE ====================
 
@@ -453,7 +461,7 @@ class PortfolioAnalyzerService:
 
         # FCDL Issued
         fcdl_date = _safe_str(frn.get("fcdl_letter_date"))
-        status = _safe_str(frn.get("frn_status", "")).title()
+        status = _safe_str(frn.get("form_471_frn_status_name", "")).title()
         wave = _safe_str(frn.get("wave_sequence_number"))
         if fcdl_date:
             wave_str = f" (Wave {wave})" if wave else ""
@@ -483,7 +491,7 @@ class PortfolioAnalyzerService:
 
         # Disbursement
         disbursed = _safe_float(frn.get("total_authorized_disbursement"))
-        committed = _safe_float(frn.get("original_commitment_adjustment"))
+        committed = _safe_float(frn.get("funding_commitment_request"))
         if disbursed > 0 and committed > 0:
             pct = round((disbursed / committed) * 100, 1)
             events.append({
