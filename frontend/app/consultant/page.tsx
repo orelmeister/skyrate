@@ -5,15 +5,17 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
-import { api, ConsultantSchool, ConsultantProfile, AppealRecord, FRNWatch, FRNReportHistory } from "@/lib/api";
+import { api, ConsultantSchool, ConsultantProfile, AppealRecord, PIAResponseRecord, FRNWatch, FRNReportHistory } from "@/lib/api";
 import { SearchResultsTable } from "@/components/SearchResultsTable";
 import { AppealChat } from "@/components/AppealChat";
+import { PIAChat } from "@/components/PIAChat";
+import { PIATemplateGallery } from "@/components/PIATemplateGallery";
 import { TableExportBar } from "@/components/TableExportBar";
 import FRNDetailModal from "@/components/FRNDetailModal";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { useTabParam } from "@/hooks/useTabParam";
 
-const CONSULTANT_TABS = ["dashboard", "schools", "funding", "frn-status", "appeals", "service-search", "settings"] as const;
+const CONSULTANT_TABS = ["dashboard", "schools", "funding", "frn-status", "appeals", "pia", "service-search", "settings"] as const;
 type ConsultantTab = typeof CONSULTANT_TABS[number];
 
 // Extended school type with USAC data
@@ -181,6 +183,20 @@ function ConsultantPortalPage() {
   const [isLoadingDenied, setIsLoadingDenied] = useState(false);
   const [deniedStats, setDeniedStats] = useState<{ total: number; amount: number } | null>(null);
   
+  // PIA Response Generator state
+  const [piaQuestionInput, setPiaQuestionInput] = useState("");
+  const [piaBen, setPiaBen] = useState("");
+  const [piaFrn, setPiaFrn] = useState("");
+  const [piaAdditionalContext, setPiaAdditionalContext] = useState("");
+  const [piaResponses, setPiaResponses] = useState<PIAResponseRecord[]>([]);
+  const [selectedPia, setSelectedPia] = useState<PIAResponseRecord | null>(null);
+  const [showPiaChat, setShowPiaChat] = useState(false);
+  const [isPiaGenerating, setIsPiaGenerating] = useState(false);
+  const [showPiaTemplates, setShowPiaTemplates] = useState(false);
+  const [isLoadingPiaResponses, setIsLoadingPiaResponses] = useState(false);
+  const [piaError, setPiaError] = useState<string | null>(null);
+  const [detectedCategory, setDetectedCategory] = useState<{ category: string; name: string } | null>(null);
+
   // FRN Status Monitoring state
   const [portfolioFrnData, setPortfolioFrnData] = useState<any>(null);
   const [portfolioFrnLoading, setPortfolioFrnLoading] = useState(false);
@@ -714,6 +730,9 @@ function ConsultantPortalPage() {
       loadAppeals();
       loadDeniedApplications();
     }
+    if (activeTab === "pia") {
+      loadPIAHistory();
+    }
     if (activeTab === "frn-status") {
       loadFRNWatches();
       loadReportHistory();
@@ -1190,6 +1209,117 @@ function ConsultantPortalPage() {
     setSelectedAppeal(updatedAppeal);
   };
 
+  // ==================== PIA RESPONSE HANDLERS ====================
+
+  const loadPIAHistory = async () => {
+    setIsLoadingPiaResponses(true);
+    try {
+      const res = await api.getPIAResponses();
+      if (res.success && res.data) {
+        setPiaResponses(res.data.pia_responses || []);
+      }
+    } catch (error) {
+      console.error("Failed to load PIA responses:", error);
+    } finally {
+      setIsLoadingPiaResponses(false);
+    }
+  };
+
+  const generatePIAResponse = async () => {
+    if (!piaQuestionInput.trim()) return;
+    setIsPiaGenerating(true);
+    setPiaError(null);
+    try {
+      const res = await api.generatePIA(
+        piaQuestionInput,
+        piaBen || undefined,
+        piaFrn || undefined,
+        undefined,
+        piaAdditionalContext || undefined
+      );
+      if (res.success && res.data) {
+        setPiaResponses(prev => [res.data!, ...prev]);
+        setSelectedPia(res.data);
+        setShowPiaChat(true);
+        setPiaQuestionInput("");
+        setPiaBen("");
+        setPiaFrn("");
+        setPiaAdditionalContext("");
+        setDetectedCategory(null);
+        setShowPiaTemplates(false);
+      } else {
+        setPiaError(res.error || "Failed to generate PIA response");
+      }
+    } catch (error: unknown) {
+      console.error("PIA generation failed:", error);
+      setPiaError(error instanceof Error ? error.message : "Failed to generate PIA response");
+    } finally {
+      setIsPiaGenerating(false);
+    }
+  };
+
+  const handlePIATemplateSelect = (question: string, category: string) => {
+    setPiaQuestionInput(question);
+    setShowPiaTemplates(false);
+    const categoryNames: Record<string, string> = {
+      competitive_bidding: "Competitive Bidding",
+      cost_effectiveness: "Cost-Effectiveness",
+      entity_eligibility: "Entity Eligibility",
+      service_eligibility: "Service Eligibility",
+      discount_rate: "Discount Rate",
+      contracts: "Contracts",
+      cipa: "CIPA Compliance",
+      thirty_percent_rule: "30% Rule",
+    };
+    setDetectedCategory({ category, name: categoryNames[category] || category });
+  };
+
+  const handlePIAUpdate = (updatedPia: PIAResponseRecord) => {
+    setPiaResponses(prev => prev.map(p => p.id === updatedPia.id ? updatedPia : p));
+    setSelectedPia(updatedPia);
+  };
+
+  const handleDeletePIA = async (piaId: number) => {
+    if (!confirm("Are you sure you want to delete this PIA response?")) return;
+    try {
+      const res = await api.deletePIA(piaId);
+      if (res.success) {
+        setPiaResponses(prev => prev.filter(p => p.id !== piaId));
+        if (selectedPia?.id === piaId) {
+          setSelectedPia(null);
+          setShowPiaChat(false);
+        }
+      } else {
+        alert("Failed to delete: " + (res.error || "Unknown error"));
+      }
+    } catch (error) {
+      console.error("Failed to delete PIA response:", error);
+    }
+  };
+
+  // Debounced PIA question analysis
+  const piaAnalysisTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (piaQuestionInput.length > 50) {
+      if (piaAnalysisTimeoutRef.current) clearTimeout(piaAnalysisTimeoutRef.current);
+      piaAnalysisTimeoutRef.current = setTimeout(async () => {
+        try {
+          const res = await api.analyzePIAQuestion(piaQuestionInput);
+          if (res.success && res.data) {
+            setDetectedCategory({ category: res.data.category, name: res.data.category_name });
+          }
+        } catch {
+          // Silent fail on analysis
+        }
+      }, 800);
+    } else {
+      setDetectedCategory(null);
+    }
+    return () => {
+      if (piaAnalysisTimeoutRef.current) clearTimeout(piaAnalysisTimeoutRef.current);
+    };
+  }, [piaQuestionInput]);
+
   const handleRemoveSchool = async (ben: string) => {
     if (!confirm(`Remove school ${ben} from your portfolio?`)) return;
     try {
@@ -1301,6 +1431,7 @@ function ConsultantPortalPage() {
     { id: "funding", label: "Funding Data", icon: "💰" },
     { id: "frn-status", label: "FRN Status", icon: "📈" },
     { id: "appeals", label: "Appeals", icon: "📋" },
+    { id: "pia", label: "PIA Assistant", icon: "🛡️" },
     { id: "service-search", label: "Service Search", icon: "🔍" },
     { id: "settings", label: "Settings", icon: "⚙️" },
   ];
@@ -3490,6 +3621,272 @@ function ConsultantPortalPage() {
             </div>
           )}
 
+          {activeTab === "pia" && (
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">PIA Response Generator</h2>
+                  <p className="text-slate-500">Generate professional PIA responses in seconds with AI assistance</p>
+                </div>
+                <button
+                  onClick={() => loadPIAHistory()}
+                  className="px-4 py-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-sm font-medium text-slate-700 flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Refresh
+                </button>
+              </div>
+
+              {/* Input Panel */}
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-teal-50 to-cyan-50 px-6 py-4 border-b border-slate-200">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-slate-900">New PIA Response</h3>
+                      <p className="text-sm text-slate-500">Paste the PIA reviewer&apos;s question below</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-6 space-y-4">
+                  {piaError && (
+                    <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
+                      {piaError}
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      PIA Reviewer&apos;s Question *
+                    </label>
+                    <textarea
+                      value={piaQuestionInput}
+                      onChange={(e) => setPiaQuestionInput(e.target.value)}
+                      placeholder="Paste the PIA reviewer's question here (e.g., 'Please provide documentation showing that you posted your Form 470 and waited the required 28 days...')"
+                      rows={4}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        BEN (optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={piaBen}
+                        onChange={(e) => setPiaBen(e.target.value)}
+                        placeholder="e.g., 123456"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        FRN (optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={piaFrn}
+                        onChange={(e) => setPiaFrn(e.target.value)}
+                        placeholder="e.g., 2391012345"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Additional Context (optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={piaAdditionalContext}
+                        onChange={(e) => setPiaAdditionalContext(e.target.value)}
+                        placeholder="Any extra details..."
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Detected Category Badge */}
+                  {detectedCategory && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-slate-500">Detected category:</span>
+                      <span className="px-3 py-1 bg-teal-100 text-teal-700 text-sm font-medium rounded-full">
+                        {detectedCategory.name}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={generatePIAResponse}
+                      disabled={!piaQuestionInput.trim() || isPiaGenerating}
+                      className="px-6 py-2.5 bg-gradient-to-r from-teal-500 to-cyan-600 text-white rounded-xl shadow-lg shadow-teal-200 hover:shadow-xl transition-all flex items-center gap-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isPiaGenerating ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          Generate Response
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setShowPiaTemplates(!showPiaTemplates)}
+                      className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 transition-all flex items-center gap-2 font-medium text-sm"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                      </svg>
+                      {showPiaTemplates ? "Hide Templates" : "Browse Templates"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Template Gallery */}
+              {showPiaTemplates && (
+                <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                  <h3 className="font-semibold text-slate-900 mb-4">Common PIA Question Templates</h3>
+                  <PIATemplateGallery onSelectTemplate={handlePIATemplateSelect} />
+                </div>
+              )}
+
+              {/* PIA History */}
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-teal-50 to-cyan-50 px-6 py-4 border-b border-slate-200">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-slate-900">Past PIA Responses</h3>
+                      <p className="text-sm text-slate-500">Your generated PIA responses</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-6">
+                  {isLoadingPiaResponses ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+                      <p className="text-slate-500">Loading PIA responses...</p>
+                    </div>
+                  ) : piaResponses.length === 0 ? (
+                    <div className="text-center py-8">
+                      <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                        <svg className="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <h4 className="font-medium text-slate-900 mb-1">No PIA responses yet</h4>
+                      <p className="text-sm text-slate-500">Paste a PIA question above or browse templates to get started</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {piaResponses.map((pia) => {
+                        const categoryNames: Record<string, string> = {
+                          competitive_bidding: "Competitive Bidding",
+                          cost_effectiveness: "Cost-Effectiveness",
+                          entity_eligibility: "Entity Eligibility",
+                          service_eligibility: "Service Eligibility",
+                          discount_rate: "Discount Rate",
+                          contracts: "Contracts",
+                          cipa: "CIPA Compliance",
+                          thirty_percent_rule: "30% Rule",
+                        };
+                        const statusColors: Record<string, string> = {
+                          draft: "bg-amber-100 text-amber-700",
+                          finalized: "bg-green-100 text-green-700",
+                          submitted: "bg-blue-100 text-blue-700",
+                        };
+                        return (
+                          <div
+                            key={pia.id}
+                            className="flex items-center justify-between p-4 bg-gradient-to-r from-teal-50 to-white border border-teal-100 rounded-xl hover:shadow-md transition-all cursor-pointer"
+                            onClick={() => {
+                              setSelectedPia(pia);
+                              setShowPiaChat(true);
+                            }}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-3 mb-1">
+                                <span className="text-sm font-medium text-slate-900">
+                                  {categoryNames[pia.pia_category] || pia.pia_category}
+                                </span>
+                                <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${statusColors[pia.status] || ""}`}>
+                                  {pia.status.toUpperCase()}
+                                </span>
+                                <span className="text-xs text-slate-500">
+                                  {new Date(pia.generated_at).toLocaleDateString()}
+                                </span>
+                              </div>
+                              {pia.organization_name && (
+                                <p className="text-sm text-slate-700 font-medium">
+                                  {pia.organization_name}
+                                  {pia.ben ? ` (BEN: ${pia.ben})` : ""}
+                                </p>
+                              )}
+                              <p className="text-xs text-slate-500 mt-1 truncate">
+                                &ldquo;{pia.original_question.slice(0, 120)}{pia.original_question.length > 120 ? "..." : ""}&rdquo;
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1 ml-4">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedPia(pia);
+                                  setShowPiaChat(true);
+                                }}
+                                className="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
+                                title="Open & Chat"
+                              >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeletePIA(pia.id);
+                                }}
+                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Delete"
+                              >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === "service-search" && (
             <div className="space-y-6">
               {/* Service Search Filters */}
@@ -4430,6 +4827,18 @@ function ConsultantPortalPage() {
           onClose={() => {
             setShowAppealChat(false);
             setSelectedAppeal(null);
+          }}
+        />
+      )}
+
+      {/* PIA Chat Modal */}
+      {showPiaChat && selectedPia && (
+        <PIAChat
+          piaResponse={selectedPia}
+          onUpdate={handlePIAUpdate}
+          onClose={() => {
+            setShowPiaChat(false);
+            setSelectedPia(null);
           }}
         />
       )}

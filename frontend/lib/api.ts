@@ -813,6 +813,37 @@ export interface ConsultantSchool {
   created_at: string;
 }
 
+// ==================== PIA RESPONSE TYPES ====================
+
+export interface PIAResponseRecord {
+  id: number;
+  user_id: number;
+  ben: string | null;
+  frn: string | null;
+  funding_year: number;
+  application_number: string | null;
+  organization_name: string | null;
+  state: string | null;
+  entity_type: string | null;
+  pia_category: string;
+  original_question: string;
+  response_text: string | null;
+  supporting_docs: Array<{ name: string; description: string; required: boolean }>;
+  strategy: Record<string, unknown>;
+  chat_history: ChatMessage[];
+  status: 'draft' | 'finalized' | 'submitted';
+  deadline_date: string | null;
+  generated_at: string;
+  updated_at: string;
+}
+
+export interface PIATemplate {
+  category: string;
+  name: string;
+  description: string;
+  sample_questions: string[];
+}
+
 class ApiClient {
   private getAccessToken(): string | null {
     if (typeof window === 'undefined') return null;
@@ -1585,6 +1616,139 @@ class ApiClient {
     });
     if (!response.ok) throw new Error('Failed to download appeal');
     return response.blob();
+  }
+
+  // ==================== PIA RESPONSE GENERATOR ====================
+
+  /**
+   * Generate a PIA response for a reviewer's question
+   */
+  async generatePIA(
+    question: string,
+    ben?: string,
+    frn?: string,
+    fundingYear?: number,
+    additionalContext?: string
+  ): Promise<ApiResponse<PIAResponseRecord>> {
+    return this.request('/api/v1/pia/generate', {
+      method: 'POST',
+      body: JSON.stringify({
+        question,
+        ben: ben || undefined,
+        frn: frn || undefined,
+        funding_year: fundingYear || undefined,
+        additional_context: additionalContext || undefined,
+      }),
+    });
+  }
+
+  /**
+   * Chat to refine a PIA response
+   */
+  async chatWithPIA(piaId: number, message: string): Promise<ApiResponse<{
+    pia_response_id: number;
+    response: string;
+    updated_response: string;
+    chat_history: ChatMessage[];
+  }>> {
+    return this.request('/api/v1/pia/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        pia_response_id: piaId,
+        message,
+      }),
+    });
+  }
+
+  /**
+   * Save/update a PIA response
+   */
+  async savePIA(piaId: number, responseText: string, chatHistory?: ChatMessage[]): Promise<ApiResponse<PIAResponseRecord>> {
+    return this.request(`/api/v1/pia/${piaId}/save`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        response_text: responseText,
+        chat_history: chatHistory,
+      }),
+    });
+  }
+
+  /**
+   * Update PIA status
+   */
+  async updatePIAStatus(piaId: number, status: string): Promise<ApiResponse<PIAResponseRecord>> {
+    return this.request(`/api/v1/pia/${piaId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  /**
+   * Get a specific PIA response
+   */
+  async getPIA(piaId: number): Promise<ApiResponse<PIAResponseRecord>> {
+    return this.request(`/api/v1/pia/${piaId}`);
+  }
+
+  /**
+   * Get all PIA responses for the current user
+   */
+  async getPIAResponses(
+    status?: string,
+    category?: string,
+    skip?: number,
+    limit?: number
+  ): Promise<ApiResponse<{ pia_responses: PIAResponseRecord[]; total: number }>> {
+    const params = new URLSearchParams();
+    if (status) params.append('status', status);
+    if (category) params.append('category', category);
+    if (skip !== undefined) params.append('skip', skip.toString());
+    if (limit !== undefined) params.append('limit', limit.toString());
+    const queryString = params.toString();
+    return this.request(`/api/v1/pia/${queryString ? '?' + queryString : ''}`);
+  }
+
+  /**
+   * Delete a PIA response
+   */
+  async deletePIA(piaId: number): Promise<ApiResponse<{ message: string }>> {
+    return this.request(`/api/v1/pia/${piaId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Download PIA response as text file
+   */
+  async downloadPIAText(piaId: number): Promise<Blob> {
+    const token = this.getAccessToken();
+    const response = await fetch(`${API_BASE_URL}/api/v1/pia/${piaId}/download/txt`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) throw new Error('Failed to download PIA response');
+    return response.blob();
+  }
+
+  /**
+   * Get PIA templates/categories
+   */
+  async getPIATemplates(): Promise<ApiResponse<Record<string, PIATemplate>>> {
+    return this.request('/api/v1/pia/templates');
+  }
+
+  /**
+   * Analyze a PIA question to detect category
+   */
+  async analyzePIAQuestion(question: string): Promise<ApiResponse<{
+    category: string;
+    category_name: string;
+    confidence: number;
+    strategy_preview: string;
+  }>> {
+    return this.request('/api/v1/pia/analyze', {
+      method: 'POST',
+      body: JSON.stringify({ question }),
+    });
   }
 
   // ==================== CONSULTANT SERVICE SEARCH ====================
