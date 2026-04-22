@@ -8,6 +8,7 @@
   </url>
   <url>
     <loc>https://skyrate.ai/pricing</loc>
+    <lastmod>2026-04-22</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
@@ -25,6 +26,7 @@
   <!-- Feature Pages (SEO Silos) -->
   <url>
     <loc>https://skyrate.ai/features/consultants</loc>
+    <lastmod>2026-04-22</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
@@ -84,8 +86,9 @@
   </url>
   <url>
     <loc>https://skyrate.ai/blog/erate-form-470-guide</loc>
+    <lastmod>2026-04-22</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://skyrate.ai/blog/top-erate-denial-reasons</loc>
@@ -94,8 +97,9 @@
   </url>
   <url>
     <loc>https://skyrate.ai/blog/erate-category-2-budget-guide</loc>
+    <lastmod>2026-04-22</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://skyrate.ai/blog/erate-consultant-software-guide</loc>

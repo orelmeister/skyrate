@@ -5,17 +5,18 @@ import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowRight, ArrowLeft, FileText, Search, Clock, CheckCircle, Sparkles, BookOpen, Users, ShoppingCart, Target, BarChart3, Filter } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate Form 470 Guide 2026 [Step-by-Step + Free Checklist]",
-  description: "Complete guide to filing E-Rate Form 470 for FY2026. Step-by-step instructions, competitive bidding requirements, common rejection reasons, and a free filing checklist. Updated April 2026.",
+  title: "E-Rate Form 470 Guide 2026: Step-by-Step Filing Instructions + Free Checklist",
+  description: "Complete Form 470 guide for FY2026 E-Rate applications. Learn how to file Form 470, meet the 28-day bidding window, evaluate vendor bids, and avoid USAC disqualification. Updated April 2026.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/blog/erate-form-470-guide" },
   openGraph: {
-    title: "E-Rate Form 470 Guide 2026 [Step-by-Step + Free Checklist]",
-    description: "Complete guide to filing E-Rate Form 470 for FY2026. Step-by-step instructions, competitive bidding requirements, common rejection reasons, and a free filing checklist.",
+    title: "E-Rate Form 470 Guide 2026: Step-by-Step Filing Instructions + Free Checklist",
+    description: "Complete Form 470 guide for FY2026 E-Rate applications. Learn how to file Form 470, meet the 28-day bidding window, evaluate vendor bids, and avoid USAC disqualification.",
     url: "https://skyrate.ai/blog/erate-form-470-guide",
     siteName: "SkyRate AI",
     type: "article",
     publishedTime: "2026-02-16T00:00:00Z",
+    modifiedTime: "2026-04-22T00:00:00Z",
   },
 };
 
@@ -23,10 +24,11 @@ export default function ErateForm470GuidePage() {
   return (
     <>
     <BlogPostJsonLd
-      title="E-Rate Form 470 Guide 2026 [Step-by-Step + Free Checklist]"
-      description="Complete guide to filing E-Rate Form 470 for FY2026. Step-by-step instructions, competitive bidding requirements, common rejection reasons, and a free filing checklist."
+      title="E-Rate Form 470 Guide 2026: Step-by-Step Filing Instructions + Free Checklist"
+      description="Complete Form 470 guide for FY2026 E-Rate applications. Learn how to file Form 470, meet the 28-day bidding window, evaluate vendor bids, and avoid USAC disqualification."
       slug="erate-form-470-guide"
       datePublished="2026-02-16T00:00:00Z"
+      dateModified="2026-04-22T00:00:00Z"
     />
     <div className="min-h-screen bg-white">
       {/* Header */}
@@ -98,10 +100,10 @@ export default function ErateForm470GuidePage() {
               </span>
             </div>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 leading-tight mb-6">
-              Understanding E-Rate Form 470: A Complete Guide
+              E-Rate Form 470 Guide 2026: Step-by-Step Filing Instructions
             </h1>
             <p className="text-lg text-slate-600 leading-relaxed mb-6">
-              Form 470 is the foundation of the E-Rate competitive bidding process. Whether you&apos;re an applicant posting your requirements or a vendor seeking opportunities, understanding Form 470 is essential to E-Rate success.
+              Form 470 is the gateway to E-Rate funding. This complete guide covers who must file, the FY2026 filing timeline, step-by-step EPC instructions, the 28-day competitive bidding window, common USAC rejection reasons, and how Form 470 connects to Form 471. Updated April 2026.
             </p>
             <div className="flex items-center gap-3 text-sm text-slate-500 border-t border-slate-100 pt-6">
               <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
@@ -124,7 +126,23 @@ export default function ErateForm470GuidePage() {
               </p>
             </div>
 
-            <section className="mb-12">
+            {/* Table of Contents */}
+            <nav aria-label="Article contents" className="bg-indigo-50 border border-indigo-100 rounded-xl p-6 mb-10">
+              <p className="text-sm font-bold text-slate-900 mb-3">In This Guide</p>
+              <ol className="space-y-1.5 text-sm text-slate-700 list-decimal list-inside">
+                <li><a href="#what-is-form-470" className="text-indigo-600 hover:underline">What Is E-Rate Form 470?</a></li>
+                <li><a href="#who-must-file" className="text-indigo-600 hover:underline">Who Must File Form 470?</a></li>
+                <li><a href="#fy2026-timeline" className="text-indigo-600 hover:underline">FY2026 Filing Timeline</a></li>
+                <li><a href="#how-to-file" className="text-indigo-600 hover:underline">Step-by-Step: How to File Form 470 in EPC</a></li>
+                <li><a href="#vendor-search" className="text-indigo-600 hover:underline">How to Search Form 470 Filings (Vendors)</a></li>
+                <li><a href="#bidding-strategies" className="text-indigo-600 hover:underline">Response Deadlines and Bidding Strategies</a></li>
+                <li><a href="#mistakes" className="text-indigo-600 hover:underline">Common Form 470 Mistakes</a></li>
+                <li><a href="#form-470-vs-471" className="text-indigo-600 hover:underline">Form 470 vs Form 471</a></li>
+                <li><a href="#faq" className="text-indigo-600 hover:underline">Frequently Asked Questions</a></li>
+              </ol>
+            </nav>
+
+            <section id="what-is-form-470" className="mb-12">
               <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">What Is E-Rate Form 470?</h2>
               <p className="text-slate-700 leading-relaxed mb-6">
                 E-Rate Form 470, officially known as the &quot;Description of Services Requested and Certification Form,&quot; is the document that kicks off the competitive bidding process in the E-Rate program. Filed by schools and libraries (applicants), it publicly announces the telecommunications and internet access services that an institution needs and invites service providers to submit competitive bids.
@@ -138,7 +156,7 @@ export default function ErateForm470GuidePage() {
             </section>
 
             <section className="mb-12">
-              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Who Files Form 470 and Why?</h2>
+              <h2 id="who-must-file" className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Who Must File Form 470?</h2>
               <p className="text-slate-700 leading-relaxed mb-6">
                 Form 470 is filed by E-Rate eligible entities — primarily K-12 schools, school districts, and public libraries. These applicants file the form whenever they need to procure eligible services, which broadly fall into two categories:
               </p>
@@ -167,7 +185,150 @@ export default function ErateForm470GuidePage() {
               </p>
             </section>
 
-            <section className="mb-12">
+            <section id="fy2026-timeline" className="mb-12">
+              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">FY2026 E-Rate Form 470 Filing Timeline</h2>
+              <p className="text-slate-700 leading-relaxed mb-6">
+                For Funding Year 2026, Form 470 must be filed and the 28-day competitive bidding window must close before the Form 471 application deadline of <strong>May 29, 2026</strong>. This means applicants must file Form 470 <strong>no later than May 1, 2026</strong>. Earlier filing — ideally in October or November 2025 — allows more time to receive and evaluate bids.
+              </p>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 mb-6">
+                <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-slate-600" />
+                  FY2026 Key Dates
+                </h3>
+                <ul className="space-y-3 text-slate-700 text-sm">
+                  <li className="flex items-start gap-3">
+                    <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span><strong>October 1, 2025:</strong> FY2026 application window opens. You may begin filing Form 470 immediately.</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5" />
+                    <span><strong>Day of Form 470 posting:</strong> The 28-day competitive bidding window starts automatically upon submission to EPC.</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <span><strong>Day 29 or later:</strong> Earliest you may select a vendor and sign a service contract. Do not commit to a vendor before this date.</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                    <span><strong>May 1, 2026 (latest recommended Form 470 date):</strong> Filing after this date risks not completing the 28-day window before the Form 471 deadline.</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                    <span><strong>May 29, 2026:</strong> Form 471 filing deadline for FY2026. All funding requests must be submitted by this date.</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <CheckCircle className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5" />
+                    <span><strong>Summer–Fall 2026:</strong> USAC PIA review period. FRN commitment decisions are issued. Track status with <Link href="/features/frn-monitoring" className="text-indigo-600 font-medium underline">SkyRate FRN monitoring</Link>.</span>
+                  </li>
+                </ul>
+              </div>
+            </section>
+
+            <section id="how-to-file" className="mb-12">
+              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Step-by-Step: How to File Form 470 in EPC</h2>
+              <p className="text-slate-700 leading-relaxed mb-6">
+                Form 470 is filed through USAC&apos;s E-Rate Productivity Center (EPC) at <strong>usac.org</strong>. Filings require an authorized EPC account holder — typically a district IT director, business manager, or authorized E-Rate consultant. Follow these ten steps:
+              </p>
+              <ol className="space-y-5 mb-6">
+                <li className="flex items-start gap-4">
+                  <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-white text-sm font-bold">1</span>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900 mb-1">Log in to EPC and verify your entity profile</p>
+                    <p className="text-slate-700 text-sm leading-relaxed">Before filing, confirm your entity&apos;s profile is current — especially student enrollment counts, NSLP data, and building addresses. Outdated information affects your discount rate and <Link href="/blog/erate-category-2-budget-guide" className="text-purple-600 hover:text-purple-800 font-medium underline decoration-purple-300">Category 2 budget calculations</Link>.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-4">
+                  <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-white text-sm font-bold">2</span>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900 mb-1">Navigate to Form 470 and select Funding Year 2026</p>
+                    <p className="text-slate-700 text-sm leading-relaxed">From the EPC dashboard, select &quot;FCC Form 470&quot; and choose Funding Year 2026. Select the entity or entities being covered. Districts with multiple schools may file a single Form 470 covering all buildings or file per building.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-4">
+                  <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-white text-sm font-bold">3</span>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900 mb-1">Select eligible service types</p>
+                    <p className="text-slate-700 text-sm leading-relaxed">Choose Category 1 (Data Transmission and Internet Access) and/or Category 2 (Internal Connections, MIBS, or Basic Maintenance). Both categories can appear on one Form 470. Select service types that match your needs: &quot;Internet Access Service,&quot; &quot;Managed Internal Broadband Services,&quot; or &quot;Network Equipment.&quot;</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-4">
+                  <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-white text-sm font-bold">4</span>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900 mb-1">Describe your minimum service requirements (technology-neutral)</p>
+                    <p className="text-slate-700 text-sm leading-relaxed">Describe what you need functionally, not which vendor to use. Example: &quot;Internet access providing minimum 1 Gbps symmetrical bandwidth for 400 students across 3 buildings.&quot; Avoid specifying brand names or proprietary requirements that would limit fair competition unless genuinely necessary and documented.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-4">
+                  <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-white text-sm font-bold">5</span>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900 mb-1">Attach an RFP or technical specifications (highly recommended)</p>
+                    <p className="text-slate-700 text-sm leading-relaxed">Well-written RFPs attract better bids and serve as audit evidence. Attach evaluation criteria and a statement of work. This helps vendors understand your needs and helps USAC reviewers trace your competitive bidding process.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-4">
+                  <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-white text-sm font-bold">6</span>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900 mb-1">Review the certifications carefully before signing</p>
+                    <p className="text-slate-700 text-sm leading-relaxed">By certifying Form 470 you attest that your entity is eligible, you will evaluate all bids received, price will be the primary selection factor, and no vendor agreements were made before the 28-day window closes. Knowingly false certifications can result in debarment from the E-Rate program.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-4">
+                  <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-white text-sm font-bold">7</span>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900 mb-1">Submit and record your Form 470 application number</p>
+                    <p className="text-slate-700 text-sm leading-relaxed">After submission, USAC assigns a unique Form 470 number. Save this — you&apos;ll need it when filing Form 471. The form becomes publicly available within minutes and the 28-day clock starts immediately.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-4">
+                  <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-white text-sm font-bold">8</span>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900 mb-1">Wait the full 28 calendar days for vendor bids</p>
+                    <p className="text-slate-700 text-sm leading-relaxed">The 28-day competitive bidding window is a federal requirement with no exceptions. You cannot select a vendor or sign a contract before Day 29. You may communicate with interested vendors but cannot commit to any provider during this window.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-4">
+                  <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-white text-sm font-bold">9</span>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900 mb-1">Evaluate all bids — price must be the primary factor</p>
+                    <p className="text-slate-700 text-sm leading-relaxed">Evaluate every bid received. Per FCC Order 19-117, <strong>price must be the primary factor</strong> — weighted more heavily than all other criteria combined. Document your evaluation in writing. USAC may request records during a Program Integrity Assurance (PIA) review.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-4">
+                  <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <span className="text-white text-sm font-bold">10</span>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-900 mb-1">Sign your vendor contract and file Form 471 by May 29, 2026</p>
+                    <p className="text-slate-700 text-sm leading-relaxed">Once you&apos;ve selected a vendor and executed a contract, file Form 471 — the actual funding request. Reference your Form 470 number, the vendor&apos;s SPIN, services, and contract details. Review your <Link href="/blog/erate-category-2-budget-guide" className="text-purple-600 hover:text-purple-800 font-medium underline decoration-purple-300">Category 2 budget</Link> before submitting to confirm amounts are within your allocation.</p>
+                  </div>
+                </li>
+              </ol>
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-6">
+                <p className="text-amber-900 text-sm leading-relaxed">
+                  <strong>After filing Form 471:</strong> Use SkyRate AI&apos;s <Link href="/features/frn-monitoring" className="text-amber-700 font-medium underline">FRN monitoring tool</Link> to track each Funding Request Number (FRN) status in real time — from USAC PIA review through commitment and disbursement.
+                </p>
+              </div>
+            </section>
+
+            <section id="vendor-search" className="mb-12">
               <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">How to Search and Filter Form 470 Filings</h2>
               <p className="text-slate-700 leading-relaxed mb-6">
                 For vendors, the ability to efficiently search and filter Form 470 filings is the difference between finding opportunities early and missing them entirely. USAC makes all Form 470 filings publicly available through their EPC system, but the native search tools can be limited and cumbersome.
@@ -258,7 +419,7 @@ export default function ErateForm470GuidePage() {
             </div>
 
             <section className="mb-12">
-              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Response Deadlines and Bidding Strategies</h2>
+              <h2 id="bidding-strategies" className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Response Deadlines and Bidding Strategies</h2>
               <p className="text-slate-700 leading-relaxed mb-6">
                 The E-Rate competitive bidding process has strict timeline requirements that both applicants and vendors must follow:
               </p>
@@ -341,7 +502,7 @@ export default function ErateForm470GuidePage() {
             </section>
 
             <section className="mb-12">
-              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Common Form 470 Mistakes to Avoid</h2>
+              <h2 id="mistakes" className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Common Form 470 Mistakes to Avoid</h2>
               <p className="text-slate-700 leading-relaxed mb-4">
                 Whether you&apos;re an applicant filing a Form 470 or a vendor responding to one, avoiding these common mistakes will save you time, money, and frustration:
               </p>
@@ -374,6 +535,84 @@ export default function ErateForm470GuidePage() {
                   </div>
                 </li>
               </ul>
+            </section>
+
+            <section id="form-470-vs-471" className="mb-12">
+              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Form 470 vs Form 471: What Comes Next</h2>
+              <p className="text-slate-700 leading-relaxed mb-6">
+                Form 470 and Form 471 work in sequence — you cannot file Form 471 without a valid Form 470. Here is how they differ:
+              </p>
+              <div className="overflow-x-auto mb-6">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="bg-indigo-600 text-white">
+                      <th className="text-left p-3 rounded-tl-lg">Feature</th>
+                      <th className="text-left p-3">Form 470</th>
+                      <th className="text-left p-3 rounded-tr-lg">Form 471</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <td className="p-3 font-semibold text-slate-800">Purpose</td>
+                      <td className="p-3 text-slate-700">Announce competitive bidding / post RFP</td>
+                      <td className="p-3 text-slate-700">Request E-Rate funding for selected services</td>
+                    </tr>
+                    <tr className="bg-white border-b border-slate-200">
+                      <td className="p-3 font-semibold text-slate-800">When filed</td>
+                      <td className="p-3 text-slate-700">Before selecting a vendor</td>
+                      <td className="p-3 text-slate-700">After 28-day window closes and vendor is selected</td>
+                    </tr>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <td className="p-3 font-semibold text-slate-800">FY2026 deadline</td>
+                      <td className="p-3 text-slate-700">No later than May 1, 2026</td>
+                      <td className="p-3 text-slate-700">May 29, 2026</td>
+                    </tr>
+                    <tr className="bg-white border-b border-slate-200">
+                      <td className="p-3 font-semibold text-slate-800">Key contents</td>
+                      <td className="p-3 text-slate-700">Service description, RFP, entity info</td>
+                      <td className="p-3 text-slate-700">Vendor SPIN, FRN details, contract, funding amounts</td>
+                    </tr>
+                    <tr className="bg-slate-50">
+                      <td className="p-3 font-semibold text-slate-800">Result</td>
+                      <td className="p-3 text-slate-700">Public bid solicitation posted on USAC</td>
+                      <td className="p-3 text-slate-700">FRN created; USAC issues commitment decision</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-slate-700 leading-relaxed mb-6">
+                The most critical rule: you must wait at least 28 calendar days after posting Form 470 before signing any contract or filing Form 471. Filing Form 471 without a valid Form 470, or filing before the 28-day window closes, is one of the most common reasons USAC denies E-Rate funding requests. See our <Link href="/blog/top-erate-denial-reasons" className="text-purple-600 hover:text-purple-800 font-medium underline decoration-purple-300">Top E-Rate Denial Reasons guide</Link> for the full list of filing errors that lead to denials.
+              </p>
+            </section>
+
+            <section id="faq" className="mb-12">
+              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-6">Frequently Asked Questions About Form 470</h2>
+              <div className="space-y-5">
+                <div className="border border-slate-200 rounded-xl p-6">
+                  <h3 className="font-bold text-slate-900 mb-2">When is the deadline to file Form 470 for FY2026?</h3>
+                  <p className="text-slate-700 text-sm leading-relaxed">There is no specific opening deadline, but Form 470 must be posted at least 28 calendar days before you intend to select a vendor. For FY2026, since Form 471 is due <strong>May 29, 2026</strong>, file Form 470 no later than <strong>May 1, 2026</strong>. Filing in October or November 2025 is strongly recommended for adequate bid evaluation time.</p>
+                </div>
+                <div className="border border-slate-200 rounded-xl p-6">
+                  <h3 className="font-bold text-slate-900 mb-2">Can I reuse last year&apos;s Form 470 for FY2026?</h3>
+                  <p className="text-slate-700 text-sm leading-relaxed">No — each funding year requires a new Form 470 for services being renewed or newly procured. Exception: if you have a multi-year contract that was competitively bid in a prior year and is still active, you may be able to file Form 471 without a new Form 470. Consult an E-Rate compliance advisor if uncertain.</p>
+                </div>
+                <div className="border border-slate-200 rounded-xl p-6">
+                  <h3 className="font-bold text-slate-900 mb-2">What if I only receive one bid?</h3>
+                  <p className="text-slate-700 text-sm leading-relaxed">Receiving only one bid is acceptable — there is no minimum number of bids required. You must still evaluate the bid with price as the primary factor and document your process. USAC may scrutinize single-bid selections, so thorough written documentation is essential.</p>
+                </div>
+                <div className="border border-slate-200 rounded-xl p-6">
+                  <h3 className="font-bold text-slate-900 mb-2">Can I name a specific brand or vendor on Form 470?</h3>
+                  <p className="text-slate-700 text-sm leading-relaxed">Generally, no. USAC requires vendor-neutral descriptions so all qualified providers have a fair opportunity. You may reference technical standards or performance specifications that match a specific product if you can document a legitimate technical reason and you accept equivalent products from other vendors.</p>
+                </div>
+                <div className="border border-slate-200 rounded-xl p-6">
+                  <h3 className="font-bold text-slate-900 mb-2">Does filing Form 470 commit me to using E-Rate?</h3>
+                  <p className="text-slate-700 text-sm leading-relaxed">No. Filing Form 470 only initiates competitive bidding. You are not obligated to file Form 471 or use E-Rate. However, if you do ultimately procure the services described, the competitive bidding process is a prerequisite for receiving E-Rate discounts.</p>
+                </div>
+                <div className="border border-slate-200 rounded-xl p-6">
+                  <h3 className="font-bold text-slate-900 mb-2">How can SkyRate AI help with Form 470?</h3>
+                  <p className="text-slate-700 text-sm leading-relaxed">SkyRate AI helps <Link href="/features/applicants" className="text-purple-600 hover:text-purple-800 font-medium underline decoration-purple-300">applicants</Link> plan Category 2 budgets and track FRN status after Form 471 filing. For <Link href="/features/vendors" className="text-purple-600 hover:text-purple-800 font-medium underline decoration-purple-300">vendors</Link>, it monitors new Form 470 filings in real time and delivers qualified leads. For <Link href="/features/consultants" className="text-purple-600 hover:text-purple-800 font-medium underline decoration-purple-300">consultants</Link>, it tracks deadlines and FRN commitments across an entire client portfolio.</p>
+                </div>
+              </div>
             </section>
 
             <section className="mb-12">
