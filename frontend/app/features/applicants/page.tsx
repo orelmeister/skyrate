@@ -335,6 +335,49 @@ export default function ApplicantsFeaturePage() {
         </div>
       </section>
 
+      {/* Related Guides */}
+      <section className="bg-white py-16 sm:py-20">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="text-2xl font-bold text-slate-900 mb-8">Related Guides</h2>
+          <div className="grid sm:grid-cols-2 gap-6">
+            <Link
+              href="/blog/erate-form-470-guide"
+              className="group bg-slate-50 border border-slate-200 rounded-2xl p-6 hover:shadow-lg hover:-translate-y-1 transition-all duration-300"
+            >
+              <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center mb-4">
+                <Search className="w-5 h-5 text-indigo-600" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 group-hover:text-purple-600 transition-colors mb-2">
+                E-Rate Form 470 Guide 2026
+              </h3>
+              <p className="text-slate-600 text-sm leading-relaxed">
+                Understanding E-Rate Form 470 is essential before filing your application. Everything you need to know.
+              </p>
+              <span className="mt-4 flex items-center gap-1 text-purple-600 font-medium text-sm group-hover:gap-2 transition-all">
+                Read guide <ArrowRight className="w-3.5 h-3.5" />
+              </span>
+            </Link>
+            <Link
+              href="/blog/erate-category-2-budget-guide"
+              className="group bg-slate-50 border border-slate-200 rounded-2xl p-6 hover:shadow-lg hover:-translate-y-1 transition-all duration-300"
+            >
+              <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center mb-4">
+                <DollarSign className="w-5 h-5 text-emerald-600" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 group-hover:text-purple-600 transition-colors mb-2">
+                Category 2 Budget Guide 2026
+              </h3>
+              <p className="text-slate-600 text-sm leading-relaxed">
+                How to maximize your Category 2 budget — exact per-student amounts, eligible Wi-Fi equipment, and strategies.
+              </p>
+              <span className="mt-4 flex items-center gap-1 text-purple-600 font-medium text-sm group-hover:gap-2 transition-all">
+                Read guide <ArrowRight className="w-3.5 h-3.5" />
+              </span>
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="bg-slate-50 py-20 sm:py-24">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">

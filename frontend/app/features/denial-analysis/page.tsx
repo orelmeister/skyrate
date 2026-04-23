@@ -371,6 +371,32 @@ export default function DenialAnalysisFeaturePage() {
                   </div>
                   <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-purple-600 ml-auto shrink-0 transition-colors" />
                 </Link>
+                <Link
+                  href="/blog/erate-form-470-guide"
+                  className="flex items-center gap-4 p-4 rounded-xl bg-slate-50 hover:bg-purple-50 border border-slate-200 hover:border-purple-200 transition-all group"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
+                    <Search className="w-5 h-5 text-indigo-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900 group-hover:text-purple-700 transition-colors">E-Rate Form 470 Guide 2026</p>
+                    <p className="text-sm text-slate-500">Understanding Form 470 is essential before filing — start here</p>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-purple-600 ml-auto shrink-0 transition-colors" />
+                </Link>
+                <Link
+                  href="/blog/erate-category-2-budget-guide"
+                  className="flex items-center gap-4 p-4 rounded-xl bg-slate-50 hover:bg-purple-50 border border-slate-200 hover:border-purple-200 transition-all group"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
+                    <Lightbulb className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900 group-hover:text-purple-700 transition-colors">Category 2 Budget Guide 2026</p>
+                    <p className="text-sm text-slate-500">How to maximize your Category 2 budget per student</p>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-purple-600 ml-auto shrink-0 transition-colors" />
+                </Link>
               </div>
             </div>
           </div>
