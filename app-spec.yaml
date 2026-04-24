@@ -1,6 +1,11 @@
 ﻿ingress:
   rules:
   - component:
+      name: frontend
+    match:
+      path:
+        prefix: /api/mail
+  - component:
       name: backend
     match:
       path:
