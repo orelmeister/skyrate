@@ -5,18 +5,18 @@ import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowRight, ArrowLeft, Clock, Sparkles, BookOpen, DollarSign, Calculator, Laptop, Wifi, Server, CheckCircle, AlertTriangle, TrendingUp, Users } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate Category 2 Budget Calculator 2026 [Exact Per-Student Amounts]",
-  description: "FY2026 E-Rate Category 2 budgets: $167 per student (schools), $132,300 per library building. Covers Wi-Fi, switches, firewalls, and eligible equipment. Calculate your district's budget here. Updated April 2026.",
+  title: "E-Rate Category 2 Budget 2026: $167/Student Calculator",
+  description: "$167/student and $132,300/building — official FY2026 Category 2 E-Rate budgets. Calculate your district total and see all eligible Wi-Fi equipment. Updated April 2026.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/blog/erate-category-2-budget-guide" },
   openGraph: {
-    title: "E-Rate Category 2 Budget Calculator 2026 [Exact Per-Student Amounts]",
-    description: "FY2026 E-Rate Category 2 budgets: $167 per student (schools), $132,300 per library building. Covers Wi-Fi, switches, firewalls, and eligible equipment. Calculate your district's budget here.",
+    title: "E-Rate Category 2 Budget 2026: $167/Student Calculator",
+    description: "$167/student and $132,300/building — official FY2026 Category 2 E-Rate budgets. Calculate your district total and see all eligible Wi-Fi equipment.",
     url: "https://skyrate.ai/blog/erate-category-2-budget-guide",
     siteName: "SkyRate AI",
     type: "article",
     publishedTime: "2026-02-16T00:00:00Z",
-    modifiedTime: "2026-04-22T00:00:00Z",
+    modifiedTime: "2026-04-24T00:00:00Z",
   },
 };
 
@@ -24,8 +24,8 @@ export default function ErateCategory2BudgetGuidePage() {
   return (
     <>
     <BlogPostJsonLd
-      title="E-Rate Category 2 Budget Calculator 2026 [Exact Per-Student Amounts]"
-      description="FY2026 E-Rate Category 2 budgets: $167 per student (schools), $132,300 per library building. Covers Wi-Fi, switches, firewalls, and eligible equipment."
+      title="E-Rate Category 2 Budget 2026: $167/Student Calculator"
+      description="$167/student for schools and $132,300 per library building — official FY2026 Category 2 E-Rate budget amounts. Full calculator, eligible equipment, and 5-year cycle rules."
       slug="erate-category-2-budget-guide"
       datePublished="2026-02-16T00:00:00Z"
       dateModified="2026-04-22T00:00:00Z"
@@ -548,7 +548,7 @@ export default function ErateCategory2BudgetGuidePage() {
       <section className="bg-slate-50 py-16 sm:py-20">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 text-center mb-10">Related Articles</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Link
               href="/blog/how-to-appeal-erate-denial"
               className="group bg-white border border-slate-200 rounded-2xl p-6 hover:shadow-lg hover:-translate-y-1 transition-all duration-300"
@@ -578,6 +578,23 @@ export default function ErateCategory2BudgetGuidePage() {
               </h3>
               <p className="text-slate-600 text-sm leading-relaxed">
                 Complete guide to understanding Form 470, searching filings, and finding E-Rate business opportunities.
+              </p>
+              <span className="mt-4 flex items-center gap-1 text-purple-600 font-medium text-sm group-hover:gap-2 transition-all">
+                Read article <ArrowRight className="w-3.5 h-3.5" />
+              </span>
+            </Link>
+            <Link
+              href="/blog/top-erate-denial-reasons"
+              className="group bg-white border border-slate-200 rounded-2xl p-6 hover:shadow-lg hover:-translate-y-1 transition-all duration-300"
+            >
+              <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center mb-4">
+                <TrendingUp className="w-5 h-5 text-amber-600" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 group-hover:text-purple-600 transition-colors mb-2">
+                Top 10 E-Rate Denial Reasons 2026
+              </h3>
+              <p className="text-slate-600 text-sm leading-relaxed">
+                USAC denied 30%+ of FY2026 applications. Learn the most common mistakes and how to fix or appeal each one.
               </p>
               <span className="mt-4 flex items-center gap-1 text-purple-600 font-medium text-sm group-hover:gap-2 transition-all">
                 Read article <ArrowRight className="w-3.5 h-3.5" />

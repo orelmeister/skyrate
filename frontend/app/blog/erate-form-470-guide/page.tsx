@@ -5,18 +5,18 @@ import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowRight, ArrowLeft, FileText, Search, Clock, CheckCircle, Sparkles, BookOpen, Users, ShoppingCart, Target, BarChart3, Filter } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate Form 470 Guide 2026: Step-by-Step Filing Instructions + Free Checklist",
-  description: "Complete Form 470 guide for FY2026 E-Rate applications. Learn how to file Form 470, meet the 28-day bidding window, evaluate vendor bids, and avoid USAC disqualification. Updated April 2026.",
+  title: "E-Rate Form 470 Guide 2026 [Free Checklist + Deadlines]",
+  description: "Step-by-step Form 470 filing guide for FY2026. Covers the 28-day bidding window, vendor selection, and avoiding USAC rejection. Free checklist included.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/blog/erate-form-470-guide" },
   openGraph: {
-    title: "E-Rate Form 470 Guide 2026: Step-by-Step Filing Instructions + Free Checklist",
-    description: "Complete Form 470 guide for FY2026 E-Rate applications. Learn how to file Form 470, meet the 28-day bidding window, evaluate vendor bids, and avoid USAC disqualification.",
+    title: "E-Rate Form 470 Guide 2026 [Free Checklist + Deadlines]",
+    description: "Step-by-step Form 470 filing guide for FY2026. Covers the 28-day bidding window, vendor selection, and avoiding USAC rejection. Free checklist included.",
     url: "https://skyrate.ai/blog/erate-form-470-guide",
     siteName: "SkyRate AI",
     type: "article",
     publishedTime: "2026-02-16T00:00:00Z",
-    modifiedTime: "2026-04-22T00:00:00Z",
+    modifiedTime: "2026-04-24T00:00:00Z",
   },
 };
 
@@ -24,8 +24,8 @@ export default function ErateForm470GuidePage() {
   return (
     <>
     <BlogPostJsonLd
-      title="E-Rate Form 470 Guide 2026: Step-by-Step Filing Instructions + Free Checklist"
-      description="Complete Form 470 guide for FY2026 E-Rate applications. Learn how to file Form 470, meet the 28-day bidding window, evaluate vendor bids, and avoid USAC disqualification."
+      title="E-Rate Form 470 Guide 2026 [Free Checklist + Deadlines]"
+      description="Step-by-step Form 470 filing guide for FY2026. Covers the 28-day bidding window, vendor selection, and avoiding USAC rejection. Free checklist included."
       slug="erate-form-470-guide"
       datePublished="2026-02-16T00:00:00Z"
       dateModified="2026-04-22T00:00:00Z"
@@ -639,9 +639,9 @@ export default function ErateForm470GuidePage() {
 
       {/* Related Articles */}
       <section className="bg-slate-50 py-16 sm:py-20">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-2xl font-bold text-slate-900 mb-8">Related Articles</h2>
-          <div className="grid sm:grid-cols-2 gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             <Link
               href="/blog/how-to-appeal-erate-denial"
               className="group bg-white border border-slate-200 rounded-2xl p-6 hover:shadow-lg hover:-translate-y-1 transition-all duration-300"
@@ -671,6 +671,23 @@ export default function ErateForm470GuidePage() {
               </h3>
               <p className="text-slate-600 text-sm leading-relaxed">
                 Discover the most common E-Rate denial reasons and actionable strategies to fix and prevent each one.
+              </p>
+              <span className="mt-4 flex items-center gap-1 text-purple-600 font-medium text-sm group-hover:gap-2 transition-all">
+                Read article <ArrowRight className="w-3.5 h-3.5" />
+              </span>
+            </Link>
+            <Link
+              href="/blog/erate-category-2-budget-guide"
+              className="group bg-white border border-slate-200 rounded-2xl p-6 hover:shadow-lg hover:-translate-y-1 transition-all duration-300"
+            >
+              <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center mb-4">
+                <BarChart3 className="w-5 h-5 text-emerald-600" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 group-hover:text-purple-600 transition-colors mb-2">
+                E-Rate Category 2 Budget 2026: $167/Student Calculator
+              </h3>
+              <p className="text-slate-600 text-sm leading-relaxed">
+                Calculate your district&apos;s exact Wi-Fi budget — $167 per student, $132,300 per library, with the full 5-year cycle guide.
               </p>
               <span className="mt-4 flex items-center gap-1 text-purple-600 font-medium text-sm group-hover:gap-2 transition-all">
                 Read article <ArrowRight className="w-3.5 h-3.5" />
