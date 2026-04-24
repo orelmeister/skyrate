@@ -9,6 +9,21 @@ const nextConfig = {
   // API rewrites to FastAPI backend
   async rewrites() {
     return [
+      // Mail tracking proxy — forwards branded skyrate.ai/api/mail/* links
+      // to the mail.skyrate.ai worker (DO App 7743f6e0-9a31-433d-8ef0-3bf3367bfaa3).
+      // These must come BEFORE the /api/:path* catch-all.
+      {
+        source: "/api/mail/track/open/:token",
+        destination: "https://skyratemail-65jh2.ondigitalocean.app/t/o/:token",
+      },
+      {
+        source: "/api/mail/track/click/:token",
+        destination: "https://skyratemail-65jh2.ondigitalocean.app/t/c/:token",
+      },
+      {
+        source: "/api/mail/unsub",
+        destination: "https://skyratemail-65jh2.ondigitalocean.app/unsub",
+      },
       {
         source: "/api/:path*",
         destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001"}/api/:path*`,
