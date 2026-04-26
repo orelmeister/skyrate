@@ -218,6 +218,9 @@ function ConsultantPortalPage() {
   const [reportHistory, setReportHistory] = useState<FRNReportHistory[]>([]);
   const [selectedReport, setSelectedReport] = useState<{html: string; name: string} | null>(null);
   const [watchLoading, setWatchLoading] = useState(false);
+
+  // Trial banner state
+  const [trialBannerDismissed, setTrialBannerDismissed] = useState(false);
   
   // Service Search state
   const [serviceSearchBen, setServiceSearchBen] = useState("");
@@ -1575,6 +1578,42 @@ function ConsultantPortalPage() {
             </button>
           </div>
         </header>
+
+        {/* Trial Banner */}
+        {user?.subscription?.status === 'trialing' && !trialBannerDismissed && (() => {
+          const trialEnd = user?.subscription?.trial_end ? new Date(user.subscription.trial_end) : null;
+          const daysLeft = trialEnd ? Math.max(0, Math.ceil((trialEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24))) : 0;
+          return (
+            <div className="mx-6 mt-4 flex items-center justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 px-5 py-3">
+              <div className="flex items-center gap-3">
+                <span className="text-amber-500 text-lg">&#9888;</span>
+                <p className="text-sm text-amber-800">
+                  <span className="font-semibold">Free trial:</span>{" "}
+                  {daysLeft > 0
+                    ? `${daysLeft} day${daysLeft !== 1 ? "s" : ""} remaining. Add payment details to keep your access.`
+                    : "Your trial has ended."}
+                </p>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <a
+                  href="/subscribe"
+                  className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-lg transition-colors"
+                >
+                  Upgrade
+                </a>
+                <button
+                  onClick={() => setTrialBannerDismissed(true)}
+                  className="text-amber-400 hover:text-amber-600 transition-colors"
+                  aria-label="Dismiss"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Page Content */}
         <div className="p-6">

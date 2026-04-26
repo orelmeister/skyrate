@@ -17,7 +17,7 @@ from ...core.database import get_db
 from ...core.security import (
     hash_password, verify_password, 
     create_access_token, create_refresh_token, decode_token,
-    create_email_verification_token,
+    create_email_verification_token, create_password_reset_token,
     get_current_user
 )
 from ...core.config import settings
@@ -895,3 +895,94 @@ async def resend_verification(
     )
     
     return {"success": True, "message": "Verification email sent. Please check your inbox."}
+
+
+# ==================== PASSWORD RESET ====================
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=8)
+
+    @field_validator('new_password')
+    @classmethod
+    def validate_password_strength(cls, v: str) -> str:
+        errors = []
+        if len(v) < 8:
+            errors.append("at least 8 characters")
+        if not re.search(r'[A-Z]', v):
+            errors.append("one uppercase letter")
+        if not re.search(r'[a-z]', v):
+            errors.append("one lowercase letter")
+        if not re.search(r'\d', v):
+            errors.append("one digit")
+        if not re.search(r'[!@#$%^&*(),.?":{}|<>]', v):
+            errors.append("one special character (!@#$%^&*(),.?\":{}|<>)")
+        if errors:
+            raise ValueError(f"Password must contain {', '.join(errors)}")
+        return v
+
+
+@router.post("/forgot-password")
+@limiter.limit("3/minute")
+async def forgot_password(
+    request: Request,
+    data: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """
+    Request a password reset email.
+    Does not reveal whether the email is registered to prevent user enumeration.
+    Rate limited to 3 requests per minute.
+    """
+    user = db.query(User).filter(User.email == data.email.lower()).first()
+
+    if user and user.is_active:
+        reset_token = create_password_reset_token(user.id, user.email)
+        from ...services.email_service import get_email_service
+        email_svc = get_email_service()
+        background_tasks.add_task(
+            email_svc.send_password_reset_email,
+            user.email,
+            user.first_name or "there",
+            reset_token
+        )
+
+    # Always return the same message to prevent user enumeration
+    return {"message": "If that email is registered, you'll receive a reset link shortly."}
+
+
+@router.post("/reset-password")
+async def reset_password(
+    data: ResetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Reset password using a valid reset token.
+    Token must be a password_reset JWT, not expired.
+    """
+    try:
+        payload = decode_token(data.token)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link. Please request a new one.")
+
+    if payload.get("type") != "password_reset":
+        raise HTTPException(status_code=400, detail="Invalid reset token.")
+
+    user_id = payload.get("sub")
+    email = payload.get("email")
+    if not user_id or not email:
+        raise HTTPException(status_code=400, detail="Invalid reset token.")
+
+    user = db.query(User).filter(User.id == int(user_id), User.email == email.lower()).first()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=400, detail="User not found or account is disabled.")
+
+    user.password_hash = hash_password(data.new_password)
+    db.commit()
+
+    return {"message": "Password reset successfully. You can now sign in with your new password."}

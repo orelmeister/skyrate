@@ -75,6 +75,13 @@ def create_email_verification_token(user_id: int, email: str) -> str:
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
+def create_password_reset_token(user_id: int, email: str) -> str:
+    """Create a JWT token for password reset (1-hour expiry)"""
+    expire = datetime.utcnow() + timedelta(hours=1)
+    to_encode = {"sub": str(user_id), "email": email, "exp": expire, "type": "password_reset"}
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+
 def decode_token(token: str) -> Dict[str, Any]:
     """Decode and validate a JWT token"""
     try:

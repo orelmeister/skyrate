@@ -932,6 +932,52 @@ https://skyrate.ai | support@skyrate.ai
             email_type='noreply'
         )
 
+    def send_password_reset_email(self, to_email: str, first_name: str, reset_token: str) -> bool:
+        """Send password reset email with a one-click reset link (token-based, 1-hour expiry)"""
+        reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
+
+        html_content = f'''
+        <!DOCTYPE html>
+        <html>
+        <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+          <div style="max-width: 500px; margin: 0 auto; padding: 40px 20px;">
+            <div style="text-align: center; margin-bottom: 24px;">
+              <div style="display: inline-block; background: linear-gradient(135deg, #7c3aed, #4f46e5); padding: 12px 24px; border-radius: 12px;">
+                <span style="color: white; font-size: 20px; font-weight: bold;">SkyRate<span style="color: #c4b5fd;">.AI</span></span>
+              </div>
+            </div>
+            <div style="background: white; border-radius: 16px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+              <h2 style="color: #1e293b; margin: 0 0 12px 0; text-align: center;">Reset Your Password</h2>
+              <p style="color: #64748b; font-size: 14px; text-align: center; margin: 0 0 24px 0;">
+                Hi {first_name}, click the button below to reset your SkyRate AI password.
+              </p>
+              <div style="text-align: center; margin: 24px 0;">
+                <a href="{reset_url}"
+                   style="display: inline-block; background: linear-gradient(135deg, #7c3aed, #4f46e5); color: white; padding: 14px 32px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 15px;">
+                  Reset Password
+                </a>
+              </div>
+              <p style="color: #94a3b8; font-size: 12px; text-align: center;">
+                Or copy this link: <br>
+                <a href="{reset_url}" style="color: #7c3aed; word-break: break-all;">{reset_url}</a>
+              </p>
+              <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">
+                This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email.
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
+        '''
+
+        return self.send_email(
+            to_email=to_email,
+            subject="SkyRate AI - Reset Your Password",
+            html_content=html_content,
+            text_content=f"Hi {first_name}, reset your password: {reset_url}\n\nThis link expires in 1 hour. If you didn't request this, ignore this email.",
+            email_type='noreply'
+        )
+
 
 # Convenience function
 def get_email_service() -> EmailService:

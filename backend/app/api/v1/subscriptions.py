@@ -183,6 +183,16 @@ async def get_payment_status(
         )
     
     # User needs payment setup if they don't have Stripe IDs
+    # EXCEPTION: Allow access during active trial period without Stripe setup
+    if subscription.status == SubscriptionStatus.TRIALING.value:
+        if subscription.trial_end and subscription.trial_end > datetime.utcnow():
+            return PaymentStatusResponse(
+                requires_payment_setup=False,
+                subscription_status=subscription.status,
+                trial_ends_at=subscription.trial_end.isoformat(),
+                plan=subscription.plan
+            )
+
     requires_setup = (
         not subscription.stripe_customer_id or 
         not subscription.stripe_subscription_id
