@@ -637,12 +637,15 @@ async def lifespan(app: FastAPI):
         
         # Run lightweight schema migrations for MySQL (add missing columns)
         _run_schema_migrations(engine)
-        
-        # Seed demo accounts for testing
+    except Exception as e:
+        logger.error(f"Database schema initialization error (non-fatal): {e}")
+    
+    # Seed demo accounts — runs independently so schema errors don't block seeding
+    try:
         seed_demo_accounts()
         logger.info("Demo accounts seeded")
     except Exception as e:
-        logger.error(f"Database initialization error (will retry on first request): {e}")
+        logger.error(f"Demo account seeding error: {e}")
     
     # Initialize background scheduler for alerts/digests
     from app.services.scheduler_service import init_scheduler, shutdown_scheduler, refresh_admin_frn_snapshot
