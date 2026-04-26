@@ -96,6 +96,11 @@ class ProfileUpdate(BaseModel):
     last_name: Optional[str] = None
     company_name: Optional[str] = None
     phone: Optional[str] = None
+    # Onboarding deferred fields:
+    crn: Optional[str] = None              # consultants
+    spin: Optional[str] = None             # vendors
+    ben: Optional[str] = None              # applicants
+    verified_entity: Optional[bool] = None  # true after USAC validation
 
 
 # ==================== BACKGROUND TASKS ====================
@@ -301,29 +306,13 @@ async def register(
     """
     Register a new user account.
     Creates user and starts 14-day free trial.
-    Requires CRN for consultants, SPIN for vendors, and BEN for applicants.
+    CRN/SPIN/BEN are OPTIONAL — collected later in onboarding.
     Rate limited to 3 requests per minute.
     """
     from ...models.applicant import ApplicantProfile
-    
-    # Validate required registration numbers
-    if data.role == "consultant" and not data.crn:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="CRN (Consultant Registration Number) is required for consultant accounts"
-        )
-    
-    if data.role == "vendor" and not data.spin:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="SPIN (Service Provider Identification Number) is required for vendor accounts"
-        )
-    
-    if data.role == "applicant" and not data.ben:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="BEN (Billed Entity Number) is required for applicant accounts"
-        )
+
+    # CRN/SPIN/BEN are now collected in onboarding. We only validate uniqueness
+    # if the user happens to supply them at registration time.
     
     # Check if email exists
     existing = db.query(User).filter(User.email == data.email.lower()).first()
@@ -360,14 +349,15 @@ async def register(
                 detail="BEN is already registered to another account"
             )
     
-    # Create user
+    # Create user — default first/last name to email local-part if missing
+    email_local = data.email.split("@")[0]
     user = User(
         email=data.email.lower(),
         password_hash=hash_password(data.password),
         role=data.role,
-        first_name=data.first_name,
-        last_name=data.last_name,
-        company_name=data.company_name,
+        first_name=data.first_name or email_local,
+        last_name=data.last_name or "",
+        company_name=data.company_name or "",
         phone=data.phone.strip() if data.phone else None,
         is_active=True,
         is_verified=False,  # Must verify email during onboarding
@@ -375,7 +365,8 @@ async def register(
     db.add(user)
     db.flush()  # Get user.id
     
-    # Create role-specific profile with registration number
+    # Create role-specific profile (CRN/SPIN/BEN may be null at this point —
+    # user will fill them during onboarding).
     if data.role == "consultant":
         consultant_profile = ConsultantProfile(
             user_id=user.id,
@@ -396,7 +387,7 @@ async def register(
         applicant_profile = ApplicantProfile(
             user_id=user.id,
             ben=data.ben.strip() if data.ben else None,
-            organization_name=data.company_name,  # company_name contains entity name for applicants
+            organization_name=data.company_name,
         )
         db.add(applicant_profile)
     
@@ -612,10 +603,34 @@ async def update_profile(
         current_user.company_name = data.company_name
     if data.phone is not None:
         current_user.phone = data.phone
-    
+
+    # Role-specific identifier (CRN/SPIN/BEN) -- write to role profile.
+    if data.crn is not None and current_user.role == "consultant":
+        prof = db.query(ConsultantProfile).filter(ConsultantProfile.user_id == current_user.id).first()
+        if prof is None:
+            prof = ConsultantProfile(user_id=current_user.id)
+            db.add(prof)
+        prof.crn = data.crn.upper().strip() if data.crn else None
+    if data.spin is not None and current_user.role == "vendor":
+        prof = db.query(VendorProfile).filter(VendorProfile.user_id == current_user.id).first()
+        if prof is None:
+            prof = VendorProfile(user_id=current_user.id)
+            db.add(prof)
+        prof.spin = data.spin.upper().strip() if data.spin else None
+    if data.ben is not None and current_user.role == "applicant":
+        prof = db.query(ApplicantProfile).filter(ApplicantProfile.user_id == current_user.id).first()
+        if prof is None:
+            prof = ApplicantProfile(user_id=current_user.id)
+            db.add(prof)
+        prof.ben = data.ben.strip() if data.ben else None
+
+    if data.verified_entity is True:
+        current_user.verified_entity = True
+        current_user.verified_entity_at = datetime.utcnow()
+
     db.commit()
     db.refresh(current_user)
-    
+
     return {"success": True, "user": current_user.to_dict()}
 
 

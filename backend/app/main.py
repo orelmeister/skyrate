@@ -24,7 +24,7 @@ from app.core.config import settings
 from app.core.database import engine, Base
 
 # Import API routers - services are imported lazily within these
-from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals, alerts, applicant, notifications, support, onboarding, blog, frn_reports, usac, portfolio_analyzer, pia, mail_campaigns
+from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals, alerts, applicant, notifications, support, onboarding, blog, frn_reports, usac, portfolio_analyzer, pia, mail_campaigns, leads
 
 # Configure logging
 logging.basicConfig(
@@ -537,6 +537,8 @@ def _run_schema_migrations(engine):
         ("users", "email_verified_at", "DATETIME DEFAULT NULL", None),
         ("users", "sms_opt_in", "TINYINT(1) DEFAULT 0", None),
         ("users", "sms_opted_in_at", "DATETIME DEFAULT NULL", None),
+        ("users", "verified_entity", "TINYINT(1) DEFAULT 0", None),
+        ("users", "verified_entity_at", "DATETIME DEFAULT NULL", None),
         # Email verification codes table (replaces in-memory dict)
         # Note: This table is created via Base.metadata.create_all, migration entries here
         # are only for columns on existing tables.
@@ -753,6 +755,8 @@ app.add_middleware(
         "https://www.skyrate.ai",
         "https://*.skyrate.ai",
         "https://skyrate-unox7.ondigitalocean.app",
+        "https://erateapp.com",
+        "https://www.erateapp.com",
         "https://*.erateapp.com",
     ],
     allow_credentials=True,
@@ -830,6 +834,7 @@ app.include_router(usac.router, prefix="/v1")
 app.include_router(portfolio_analyzer.router, prefix="/v1")
 app.include_router(pia.router, prefix="/v1")
 app.include_router(mail_campaigns.router, prefix="/v1")
+app.include_router(leads.router, prefix="/v1")
 
 # ==================== MODELS ====================
 

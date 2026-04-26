@@ -46,6 +46,11 @@ class User(Base):
     # SMS opt-in consent tracking
     sms_opt_in = Column(Boolean, default=False)
     sms_opted_in_at = Column(DateTime, nullable=True)
+
+    # USAC entity verification (CRN/SPIN/BEN verified against USAC API)
+    # Used to gate AI features until the user proves they own a real E-Rate entity.
+    verified_entity = Column(Boolean, default=False)
+    verified_entity_at = Column(DateTime, nullable=True)
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -81,6 +86,7 @@ class User(Base):
             "email_verified": self.email_verified,
             "sms_opt_in": self.sms_opt_in,
             "onboarding_completed": self.onboarding_completed,
+            "verified_entity": self.verified_entity,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_login": self.last_login.isoformat() if self.last_login else None,
         }

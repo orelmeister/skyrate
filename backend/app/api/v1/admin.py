@@ -24,6 +24,7 @@ from ...models.applicant import ApplicantProfile, ApplicantFRN, ApplicantBEN
 from ...models.alert import Alert
 from ...models.admin_frn_snapshot import AdminFRNSnapshot
 from ...models.promo_invite import PromoInvite, PromoInviteStatus
+from ...models.lead import Lead
 from ...services.cache_service import get_cached, set_cached, make_cache_key
 
 router = APIRouter(prefix="/admin", tags=["Admin Portal"])
@@ -1543,3 +1544,86 @@ https://skyrate.ai
     except Exception as e:
         import logging
         logging.getLogger(__name__).error(f"Failed to send promo invite email to {email}: {e}")
+
+
+# ==================== LEAD INBOX (super/admin) ====================
+
+class LeadStatusUpdate(BaseModel):
+    status: Optional[str] = None
+    notes: Optional[str] = None
+    assigned_to_user_id: Optional[int] = None
+
+
+@router.get("/leads")
+async def list_leads(
+    status: Optional[str] = None,
+    role: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    current_user: User = AdminUser,
+    db: Session = Depends(get_db),
+):
+    """List inbound leads captured from public forms."""
+    query = db.query(Lead)
+    if status:
+        query = query.filter(Lead.status == status)
+    if role:
+        query = query.filter(Lead.role == role)
+    if search:
+        s = f"%{search}%"
+        query = query.filter(
+            (Lead.email.ilike(s))
+            | (Lead.name.ilike(s))
+            | (Lead.organization.ilike(s))
+            | (Lead.source.ilike(s))
+        )
+
+    total = query.count()
+    leads = (
+        query.order_by(Lead.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    by_status = {
+        row[0]: row[1]
+        for row in db.query(Lead.status, func.count(Lead.id)).group_by(Lead.status).all()
+    }
+
+    return {
+        "success": True,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "by_status": by_status,
+        "leads": [l.to_dict() for l in leads],
+    }
+
+
+@router.patch("/leads/{lead_id}")
+async def update_lead(
+    lead_id: int,
+    data: LeadStatusUpdate,
+    current_user: User = AdminUser,
+    db: Session = Depends(get_db),
+):
+    """Update lead status / notes / assignment."""
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    allowed_statuses = {"new", "contacted", "qualified", "closed", "spam"}
+    if data.status is not None:
+        if data.status not in allowed_statuses:
+            raise HTTPException(status_code=400, detail=f"Invalid status. Allowed: {sorted(allowed_statuses)}")
+        lead.status = data.status
+    if data.notes is not None:
+        lead.notes = data.notes
+    if data.assigned_to_user_id is not None:
+        lead.assigned_to_user_id = data.assigned_to_user_id
+
+    db.commit()
+    db.refresh(lead)
+    return {"success": True, "lead": lead.to_dict()}

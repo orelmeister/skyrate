@@ -21,6 +21,7 @@ from .usac_cache import USACCache
 from .admin_frn_snapshot import AdminFRNSnapshot
 from .promo_invite import PromoInvite, PromoInviteStatus
 from .prediction import PredictedLead, PredictionRefreshLog, PredictionType, PredictionStatus
+from .lead import Lead
 
 __all__ = [
     "User",
@@ -73,4 +74,6 @@ __all__ = [
     "PredictionRefreshLog",
     "PredictionType",
     "PredictionStatus",
+    # Inbound leads (public capture form)
+    "Lead",
 ]

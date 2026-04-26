@@ -872,6 +872,223 @@ function AlertPreferencesStep({
   );
 }
 
+// ==================== STEP 0: PROFILE DETAILS (NEW) ====================
+
+function ProfileDetailsStep({ onNext }: { onNext: () => void }) {
+  const { user, setUser } = useAuthStore();
+  const [firstName, setFirstName] = useState(user?.first_name || "");
+  const [lastName, setLastName] = useState(user?.last_name || "");
+  const [phone, setPhone] = useState(user?.phone || "");
+  const [company, setCompany] = useState((user as any)?.company_name || "");
+  const [identifier, setIdentifier] = useState("");
+  const [identLoading, setIdentLoading] = useState(false);
+  const [identResult, setIdentResult] = useState<{ valid?: boolean; name?: string; error?: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const role = user?.role || "consultant";
+  const identKey = role === "consultant" ? "crn" : role === "vendor" ? "spin" : role === "applicant" ? "ben" : null;
+  const identLabel =
+    role === "consultant"
+      ? "CRN (Consultant Registration Number)"
+      : role === "vendor"
+      ? "SPIN (Service Provider ID)"
+      : role === "applicant"
+      ? "BEN (Billed Entity Number)"
+      : "";
+  const identPlaceholder =
+    role === "consultant" ? "e.g. 16016019" : role === "vendor" ? "e.g. 143005551" : "e.g. 16002074";
+
+  const validateIdentifier = async () => {
+    if (!identifier.trim() || !identKey) return;
+    setIdentLoading(true);
+    setIdentResult(null);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      const endpoint = `/api/v1/auth/validate-${identKey}`;
+      const res = await fetch(`${apiUrl}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: identifier.trim() }),
+      });
+      const data = await res.json();
+      setIdentResult(data);
+    } catch {
+      setIdentResult({ valid: false, error: "Validation request failed" });
+    } finally {
+      setIdentLoading(false);
+    }
+  };
+
+  const handleSave = async (skipIdentifier: boolean) => {
+    setError("");
+    if (!firstName.trim()) {
+      setError("First name is required");
+      return;
+    }
+    setSaving(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      const token = (typeof window !== "undefined" && localStorage.getItem("access_token")) || "";
+      const body: Record<string, any> = {
+        first_name: firstName.trim(),
+        last_name: lastName.trim() || null,
+        phone: phone.trim() || null,
+        company_name: company.trim() || null,
+      };
+      if (!skipIdentifier && identKey && identifier.trim()) {
+        body[identKey] = identifier.trim();
+        if (identResult?.valid) body.verified_entity = true;
+      }
+      const res = await fetch(`${apiUrl}/api/v1/auth/me`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data?.detail || "Failed to save profile");
+        return;
+      }
+      if (data?.user) setUser(data.user);
+      onNext();
+    } catch (err: any) {
+      setError(err?.message || "Network error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="text-center mb-6">
+        <div className="inline-flex items-center justify-center w-12 h-12 bg-purple-100 rounded-full mb-3">
+          <Shield className="w-6 h-6 text-purple-600" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-900">Tell us about yourself</h2>
+        <p className="text-sm text-slate-500 mt-1">
+          We&apos;ll use this to personalize your dashboard. You can edit anytime.
+        </p>
+      </div>
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">First name *</label>
+            <input
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none"
+              placeholder="Jane"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Last name</label>
+            <input
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none"
+              placeholder="Doe"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-slate-700 mb-1">
+            Company / Organization
+          </label>
+          <input
+            value={company}
+            onChange={(e) => setCompany(e.target.value)}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none"
+            placeholder="Acme E-Rate Consulting"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-slate-700 mb-1">
+            Phone <span className="text-slate-400 font-normal">(optional)</span>
+          </label>
+          <input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none"
+            placeholder="+1 (555) 123-4567"
+          />
+        </div>
+
+        {identKey && (
+          <div className="pt-2 border-t border-slate-100">
+            <label className="block text-xs font-medium text-slate-700 mb-1">
+              {identLabel} <span className="text-slate-400 font-normal">(optional — verify now or later)</span>
+            </label>
+            <div className="flex gap-2">
+              <input
+                value={identifier}
+                onChange={(e) => {
+                  setIdentifier(e.target.value);
+                  setIdentResult(null);
+                }}
+                className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                placeholder={identPlaceholder}
+              />
+              <button
+                type="button"
+                onClick={validateIdentifier}
+                disabled={!identifier.trim() || identLoading}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-sm font-medium text-slate-700 disabled:opacity-50"
+              >
+                {identLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Verify"}
+              </button>
+            </div>
+            {identResult?.valid && (
+              <div className="mt-2 flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                <Check className="w-4 h-4" />
+                <span>
+                  Verified: <strong>{identResult.name}</strong>
+                </span>
+              </div>
+            )}
+            {identResult && identResult.valid === false && (
+              <div className="mt-2 flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <AlertTriangle className="w-4 h-4" />
+                <span>{identResult.error || "Not found in USAC database"}</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
+        <button
+          onClick={() => handleSave(true)}
+          disabled={saving}
+          className="text-sm text-slate-500 hover:text-slate-700 disabled:opacity-50"
+        >
+          Skip identifier for now
+        </button>
+        <button
+          onClick={() => handleSave(false)}
+          disabled={saving}
+          className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-6 py-2.5 rounded-xl font-medium text-sm transition-all shadow-lg shadow-purple-200 disabled:opacity-50"
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
+          Continue
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ==================== MAIN ONBOARDING PAGE ====================
 
 export default function OnboardingPage() {
@@ -886,14 +1103,17 @@ export default function OnboardingPage() {
     }
   }, [_hasHydrated, isAuthenticated, isLoading, router]);
 
-  // If user already verified, start at the appropriate step
+  // If user already has profile + email verified, skip ahead
   useEffect(() => {
     if (user?.email_verified || user?.is_verified) {
       if (user?.phone_verified) {
-        setStep(2); // Skip to FRN discovery
+        setStep(3); // Skip to FRN discovery
       } else {
-        setStep(1); // Skip to phone verification
+        setStep(2); // Skip to phone verification
       }
+    } else if (user?.first_name) {
+      // Has profile but unverified email -- skip profile step
+      setStep(1);
     }
   }, [user]);
 
@@ -911,6 +1131,7 @@ export default function OnboardingPage() {
   };
 
   const steps = [
+    { label: "Profile", icon: Shield },
     { label: "Email", icon: Mail },
     { label: "Phone", icon: Phone },
     { label: "FRNs", icon: Search },
@@ -974,29 +1195,30 @@ export default function OnboardingPage() {
 
         {/* Card */}
         <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-200/80 p-6 sm:p-8">
-          {step === 0 && (
-            <EmailVerificationStep
-              onNext={() => setStep(1)}
-            />
-          )}
+          {step === 0 && <ProfileDetailsStep onNext={() => setStep(1)} />}
           {step === 1 && (
-            <PhoneVerificationStep
+            <EmailVerificationStep
               onNext={() => setStep(2)}
-              onSkip={() => setStep(2)}
-              onBack={() => setStep(0)}
             />
           )}
           {step === 2 && (
-            <FRNDiscoveryStep
+            <PhoneVerificationStep
               onNext={() => setStep(3)}
               onSkip={() => setStep(3)}
               onBack={() => setStep(1)}
             />
           )}
           {step === 3 && (
+            <FRNDiscoveryStep
+              onNext={() => setStep(4)}
+              onSkip={() => setStep(4)}
+              onBack={() => setStep(2)}
+            />
+          )}
+          {step === 4 && (
             <AlertPreferencesStep
               onComplete={handleComplete}
-              onBack={() => setStep(2)}
+              onBack={() => setStep(3)}
             />
           )}
         </div>
