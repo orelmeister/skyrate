@@ -263,18 +263,24 @@ def seed_demo_accounts():
                 existing_vp = db.query(VendorProfile).filter(
                     VendorProfile.user_id == user.id
                 ).first()
+                test_vendor_spin = "143000001"  # Unique test SPIN (avoids conflict with super's CDW-G SPIN 143032945)
                 if not existing_vp:
-                    vp = VendorProfile(
-                        user_id=user.id,
-                        spin="143032945",  # Real SPIN - CDW-G
-                        company_name="Demo Vendor Co.",
-                        contact_name="Test Vendor",
-                    )
-                    db.add(vp)
-                    db.flush()
-                    logger.info(f"Created vendor profile for {email} with SPIN 143032945")
+                    # Check if SPIN is already taken (e.g., by super user's vendor profile)
+                    spin_taken = db.query(VendorProfile).filter(VendorProfile.spin == test_vendor_spin).first()
+                    if not spin_taken:
+                        vp = VendorProfile(
+                            user_id=user.id,
+                            spin=test_vendor_spin,
+                            company_name="Demo Vendor Co.",
+                            contact_name="Test Vendor",
+                        )
+                        db.add(vp)
+                        db.flush()
+                        logger.info(f"Created vendor profile for {email} with SPIN {test_vendor_spin}")
+                    else:
+                        logger.info(f"Vendor SPIN {test_vendor_spin} already taken, skipping vendor profile creation for {email}")
                 elif not existing_vp.spin:
-                    existing_vp.spin = "143032945"
+                    existing_vp.spin = test_vendor_spin
                     logger.info(f"Updated vendor profile SPIN for {email}")
             
             # Create consultant profile for test_consultant (whether new or existing user)
