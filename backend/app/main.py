@@ -75,7 +75,7 @@ def seed_demo_accounts():
     """Create demo accounts if they don't exist, and auto-sync data from USAC"""
     from app.models.applicant import ApplicantBEN
     from app.models.vendor import VendorProfile
-    from app.models.consultant import ConsultantProfile, ConsultantCRN
+    from app.models.consultant import ConsultantProfile, ConsultantCRN, ConsultantSchool
     from app.models.alert import AlertConfig
     from sqlalchemy.orm import Session
     from app.models.user import User, UserRole
