@@ -88,14 +88,9 @@ def seed_demo_accounts():
     _profiles_to_sync = []
     
     db = SessionLocal()
+
+    # ── Seed admin account ──────────────────────────────────────────────────
     try:
-        demo_accounts = [
-            ("test_consultant@example.com", UserRole.CONSULTANT.value, "TestPass123!"),
-            ("test_vendor@example.com", UserRole.VENDOR.value, "TestPass123!"),
-            ("test_applicant@example.com", UserRole.APPLICANT.value, "TestPass123!"),
-        ]
-        
-        # Seed super admin account
         admin_email = "admin@skyrate.ai"
         admin_existing = db.query(User).filter(User.email == admin_email).first()
         admin_password = os.environ.get("ADMIN_PASSWORD", "SkyRateAdmin2024!")
@@ -122,8 +117,14 @@ def seed_demo_accounts():
             admin_existing.is_verified = True
             admin_existing.email_verified = True
             logger.info(f"Updated super admin account: {admin_email}")
-        
-        # Seed super account (has both consultant and vendor privileges)
+        db.commit()
+        logger.info("Admin account seeded")
+    except Exception as e:
+        logger.error(f"Error seeding admin account: {e}")
+        db.rollback()
+
+    # ── Seed super account (consultant + vendor + applicant privileges) ─────
+    try:
         super_email = "super@skyrate.ai"
         super_existing = db.query(User).filter(User.email == super_email).first()
         super_password = "super@12345"
@@ -150,7 +151,7 @@ def seed_demo_accounts():
             )
             db.add(super_cp)
             db.flush()
-            
+
             # Add sample schools for super user's consultant profile (for PORTFOLIO FRN watches)
             sample_bens = [
                 ("16056315", "San Francisco Unified School District", "CA", "San Francisco"),
@@ -169,7 +170,7 @@ def seed_demo_accounts():
                     status_color="gray",
                 )
                 db.add(school)
-            
+
             super_vp = VendorProfile(
                 user_id=super_user.id,
                 spin="143032945",  # CDW-G SPIN for testing
@@ -233,8 +234,20 @@ def seed_demo_accounts():
                 _profiles_to_sync.append(super_ap.id)
                 logger.info(f"Created applicant profile for super account with BEN 16056315")
             logger.info(f"Updated super account: {super_email}")
-        
-        for email, role, password in demo_accounts:
+        db.commit()
+        logger.info("Super account seeded")
+    except Exception as e:
+        logger.error(f"Error seeding super account: {e}")
+        db.rollback()
+
+    # ── Seed demo accounts — each isolated so one failure never blocks others
+    demo_accounts = [
+        ("test_consultant@example.com", UserRole.CONSULTANT.value, "TestPass123!"),
+        ("test_vendor@example.com", UserRole.VENDOR.value, "TestPass123!"),
+        ("test_applicant@example.com", UserRole.APPLICANT.value, "TestPass123!"),
+    ]
+    for email, role, password in demo_accounts:
+        try:
             existing = db.query(User).filter(User.email == email).first()
             hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
             if not existing:
@@ -257,7 +270,7 @@ def seed_demo_accounts():
                 existing.email_verified = True
                 user = existing
                 logger.info(f"Updated password for demo account: {email}")
-            
+
             # Create vendor profile for test_vendor (whether new or existing user)
             if role == UserRole.VENDOR.value:
                 existing_vp = db.query(VendorProfile).filter(
@@ -282,7 +295,7 @@ def seed_demo_accounts():
                 elif not existing_vp.spin:
                     existing_vp.spin = test_vendor_spin
                     logger.info(f"Updated vendor profile SPIN for {email}")
-            
+
             # Create consultant profile for test_consultant (whether new or existing user)
             if role == UserRole.CONSULTANT.value:
                 existing_cp = db.query(ConsultantProfile).filter(
@@ -297,7 +310,7 @@ def seed_demo_accounts():
                     db.add(cp)
                     db.flush()
                     logger.info(f"Created consultant profile for {email}")
-            
+
             # Create applicant profile for test_applicant (whether new or existing user)
             if role == UserRole.APPLICANT.value:
                 existing_profile = db.query(ApplicantProfile).filter(
@@ -311,8 +324,8 @@ def seed_demo_accounts():
                         is_paid=True,  # Mark as paid for demo
                     )
                     db.add(profile)
-                    db.flush()  # Get the profile ID
-                    
+                    db.flush()
+
                     # Also create the ApplicantBEN record for the primary BEN
                     primary_ben = ApplicantBEN(
                         applicant_profile_id=profile.id,
@@ -324,12 +337,19 @@ def seed_demo_accounts():
                     )
                     db.add(primary_ben)
                     db.flush()
-                    
+
                     logger.info(f"Created applicant profile for {email} with BEN 16056315")
                     # Queue data sync (will happen after commit)
                     _profiles_to_sync.append(profile.id)
-        
-        # Also check if existing test_applicant user needs a profile
+
+            db.commit()
+            logger.info(f"Demo account seeded: {email}")
+        except Exception as e:
+            logger.error(f"Error seeding demo account {email}: {e}")
+            db.rollback()
+
+    # ── Extra reconciliation pass: ensure test_applicant BEN/profile is correct
+    try:
         test_applicant = db.query(User).filter(User.email == "test_applicant@example.com").first()
         if test_applicant:
             existing_profile = db.query(ApplicantProfile).filter(
@@ -344,7 +364,7 @@ def seed_demo_accounts():
                 )
                 db.add(profile)
                 db.flush()
-                
+
                 # Also create the ApplicantBEN record for the primary BEN
                 primary_ben = ApplicantBEN(
                     applicant_profile_id=profile.id,
@@ -356,7 +376,7 @@ def seed_demo_accounts():
                 )
                 db.add(primary_ben)
                 db.flush()
-                
+
                 logger.info(f"Created applicant profile for existing test_applicant with BEN 16056315")
                 _profiles_to_sync.append(profile.id)
             else:
@@ -365,7 +385,7 @@ def seed_demo_accounts():
                     ApplicantBEN.applicant_profile_id == existing_profile.id,
                     ApplicantBEN.ben == existing_profile.ben
                 ).first()
-                
+
                 if not existing_ben:
                     primary_ben = ApplicantBEN(
                         applicant_profile_id=existing_profile.id,
@@ -382,7 +402,7 @@ def seed_demo_accounts():
                     )
                     db.add(primary_ben)
                     logger.info(f"Created ApplicantBEN for existing profile with BEN {existing_profile.ben}")
-                
+
                 if existing_profile.ben != "16056315":
                     # Update existing profile to use real BEN and resync
                     existing_profile.ben = "16056315"
@@ -395,22 +415,23 @@ def seed_demo_accounts():
                     existing_profile.sync_status = "pending"
                     logger.info(f"Test applicant profile needs sync, queuing sync")
                     _profiles_to_sync.append(existing_profile.id)
-        
         db.commit()
-        logger.info("Demo accounts seeded")
-        
-        # Seed AlertConfig for admin and super users with daily_digest=True
-        # This ensures they receive all reports and notifications
+    except Exception as e:
+        logger.error(f"Error in test_applicant profile reconciliation: {e}")
+        db.rollback()
+
+    # ── Seed AlertConfig for admin and super users with daily_digest=True ───
+    try:
         admin_super_users = db.query(User).filter(
             User.role.in_(["admin", "super"]),
             User.is_active == True
         ).all()
-        
+
         for admin_user in admin_super_users:
             existing_config = db.query(AlertConfig).filter(
                 AlertConfig.user_id == admin_user.id
             ).first()
-            
+
             if not existing_config:
                 alert_config = AlertConfig(
                     user_id=admin_user.id,
@@ -436,12 +457,15 @@ def seed_demo_accounts():
                 if not existing_config.daily_digest:
                     existing_config.daily_digest = True
                     logger.info(f"Enabled daily_digest for existing admin/super user {admin_user.email}")
-        
+
         db.commit()
         logger.info("Admin/super alert configs seeded")
-        
-        # Migrate existing CRN data to consultant_crns table
-        # This runs on every startup to ensure consistency
+    except Exception as e:
+        logger.error(f"Error seeding alert configs: {e}")
+        db.rollback()
+
+    # ── Migrate existing CRN data to consultant_crns table ──────────────────
+    try:
         all_consultant_profiles = db.query(ConsultantProfile).filter(
             ConsultantProfile.crn.isnot(None),
             ConsultantProfile.crn != ""
@@ -466,32 +490,32 @@ def seed_demo_accounts():
                 db.add(crn_record)
                 logger.info(f"Migrated CRN {cp.crn} to consultant_crns table for profile {cp.id}")
         db.commit()
-        
-        # Now trigger USAC data sync for profiles that need it
-        if _profiles_to_sync:
-            logger.info(f"Queuing USAC data sync for {len(_profiles_to_sync)} profile(s)")
-            
-            def run_sync():
-                """Run the sync in background thread"""
-                import time
-                time.sleep(2)  # Wait for server to fully start
-                from app.api.v1.applicant import sync_applicant_data
-                for profile_id in _profiles_to_sync:
-                    try:
-                        logger.info(f"Starting USAC data sync for profile {profile_id}")
-                        sync_applicant_data(profile_id)
-                        logger.info(f"Completed USAC data sync for profile {profile_id}")
-                    except Exception as e:
-                        logger.error(f"Error syncing profile {profile_id}: {e}")
-            
-            sync_thread = threading.Thread(target=run_sync, daemon=True)
-            sync_thread.start()
-            
+        logger.info("CRN migration complete")
     except Exception as e:
-        logger.error(f"Error seeding demo accounts: {e}")
+        logger.error(f"Error in CRN migration: {e}")
         db.rollback()
-    finally:
-        db.close()
+
+    db.close()
+
+    # ── Trigger USAC data sync for profiles that need it ────────────────────
+    if _profiles_to_sync:
+        logger.info(f"Queuing USAC data sync for {len(_profiles_to_sync)} profile(s)")
+
+        def run_sync():
+            """Run the sync in background thread"""
+            import time
+            time.sleep(2)  # Wait for server to fully start
+            from app.api.v1.applicant import sync_applicant_data
+            for profile_id in _profiles_to_sync:
+                try:
+                    logger.info(f"Starting USAC data sync for profile {profile_id}")
+                    sync_applicant_data(profile_id)
+                    logger.info(f"Completed USAC data sync for profile {profile_id}")
+                except Exception as e:
+                    logger.error(f"Error syncing profile {profile_id}: {e}")
+
+        sync_thread = threading.Thread(target=run_sync, daemon=True)
+        sync_thread.start()
 
 
 def _run_schema_migrations(engine):
@@ -635,6 +659,17 @@ async def lifespan(app: FastAPI):
     from app.models.prediction import PredictedLead, PredictionRefreshLog
     from app.models.email_verification import EmailVerificationCode
     
+    # Guard: Warn loudly if running on SQLite in non-dev environment
+    if settings.ENVIRONMENT != "development":
+        from app.core.database import engine as _guard_engine
+        db_url_str = str(_guard_engine.url)
+        if "sqlite" in db_url_str:
+            logger.critical(
+                "CRITICAL WARNING: Application is running with SQLite database in a non-development environment. "
+                "All user data will be LOST on restart/redeploy. "
+                "Set DATABASE_URL environment variable immediately."
+            )
+
     # Database initialization (non-blocking — health checks can pass even if DB is slow)
     try:
         # Create database tables (new tables only — does NOT add columns to existing tables)
@@ -842,8 +877,41 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "version": "2.0.0"}
+    """Health check endpoint — used by DigitalOcean health probes and post-deploy verification"""
+    from app.core.database import engine as _health_engine
+    from sqlalchemy import text
+
+    db_status = "unknown"
+    db_type = "unknown"
+    db_warning = None
+
+    try:
+        with _health_engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        db_status = "ok"
+        db_url = str(_health_engine.url)
+        if "sqlite" in db_url:
+            db_type = "sqlite"
+            db_warning = "CRITICAL: Running on ephemeral SQLite — DATA WILL BE LOST ON RESTART. Set DATABASE_URL env var."
+        elif "mysql" in db_url:
+            db_type = "mysql"
+        elif "postgresql" in db_url or "postgres" in db_url:
+            db_type = "postgresql"
+        else:
+            db_type = db_url.split(":")[0]
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+
+    health = {
+        "status": "healthy" if db_status == "ok" else "degraded",
+        "database": db_status,
+        "database_type": db_type,
+        "environment": settings.ENVIRONMENT,
+    }
+    if db_warning:
+        health["warning"] = db_warning
+
+    return health
 
 # Health check at /v1/health (after /api prefix strip)
 @app.get("/v1/health")
