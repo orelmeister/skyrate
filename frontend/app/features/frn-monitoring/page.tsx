@@ -3,13 +3,13 @@ import Link from "next/link";
 import { Check, ArrowRight, Bell, Activity, Clock, Mail, BarChart3, Shield, Database, History } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "FRN Tracker — Free E-Rate Funding Status Checker | SkyRate",
-  description: "Check your E-Rate FRN status instantly — free FRN tracker shows if your Funding Request is pending, committed, or needs action. No manual USAC lookup required.",
+  title: "FRN Status Tracker 2026 [Free Real-Time Alerts] | SkyRate",
+  description: "Free E-Rate FRN status tracker with real-time alerts when USAC commits, denies, or modifies your Funding Request. Updated April 2026 — covers FY2026 funding cycle.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/features/frn-monitoring" },
   openGraph: {
-    title: "FRN Tracker — Free E-Rate Funding Status Checker | SkyRate",
-    description: "Check your E-Rate FRN status instantly — free FRN tracker shows if your Funding Request is pending, committed, or needs action. No manual USAC lookup required.",
+    title: "FRN Status Tracker 2026 [Free Real-Time Alerts]",
+    description: "Free E-Rate FRN status tracker with real-time alerts when USAC commits, denies, or modifies your Funding Request. Updated April 2026.",
     url: "https://skyrate.ai/features/frn-monitoring",
     siteName: "SkyRate AI",
     type: "website",
