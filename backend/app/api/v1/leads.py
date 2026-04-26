@@ -69,8 +69,10 @@ class LeadCapture(BaseModel):
     utm_medium: Optional[str] = Field(None, max_length=120)
     utm_campaign: Optional[str] = Field(None, max_length=120)
     notes: Optional[str] = Field(None, max_length=4000)
-    # Honeypot — should always be empty for real users
-    _hp: Optional[str] = Field(None, alias="_hp")
+    # Honeypot — should always be empty for real users.
+    # Pydantic v2 forbids leading-underscore field names, so we name the
+    # attribute `hp` and accept the form-field name `_hp` via alias.
+    hp: Optional[str] = Field(None, alias="_hp")
 
     class Config:
         populate_by_name = True
@@ -160,7 +162,7 @@ async def capture_lead(
         )
 
     # 2) Honeypot — silently discard bots, but return success
-    hp_value = getattr(payload, "_hp", None)
+    hp_value = getattr(payload, "hp", None)
     if hp_value:
         logger.warning(f"Honeypot triggered from {client_ip}: hp={hp_value!r}")
         return LeadCaptureResponse(success=True, lead_id=0)
