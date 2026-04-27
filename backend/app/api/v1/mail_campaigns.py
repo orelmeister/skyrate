@@ -5,9 +5,8 @@ Read-only + approval endpoints that power the /superadmin/mail-campaigns
 dashboard. Queries run against the separate Hostinger MySQL database used
 by the mail.skyrate.ai worker (NOT the SkyRate AI app DB).
 
-All endpoints require admin/super role AND the caller's email must appear
-in the ADMIN_EMAILS env var (comma-separated allowlist). This is the real
-admin gate that Objective 2 requires.
+All endpoints require admin/super role via the standard SkyRate auth
+(require_role from app.core.security) — same gate used by /api/v1/admin.
 
 No new ORM models — every query uses raw SQLAlchemy text() so we stay
 loosely coupled to the mail worker's schema.
@@ -85,26 +84,7 @@ def get_mail_db() -> Session:
 # Admin gate: role check + email allowlist
 # --------------------------------------------------------------------------
 
-def _parse_admin_emails() -> List[str]:
-    raw = os.environ.get("ADMIN_EMAILS", "")
-    return [e.strip().lower() for e in raw.split(",") if e.strip()]
-
-
-async def require_mail_admin(
-    current_user: User = Depends(require_role("admin", "super")),
-) -> User:
-    allowlist = _parse_admin_emails()
-    # If the allowlist is empty, we fall back to role-only (still admin/super)
-    # so a fresh deploy isn't locked out. Once ADMIN_EMAILS is set, it's enforced.
-    if allowlist and (current_user.email or "").lower() not in allowlist:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Mail admin access restricted to ADMIN_EMAILS allowlist.",
-        )
-    return current_user
-
-
-MailAdmin = Depends(require_mail_admin)
+MailAdmin = Depends(require_role("admin", "super"))
 
 
 def _rows(result) -> List[Dict[str, Any]]:
