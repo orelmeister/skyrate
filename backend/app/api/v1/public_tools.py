@@ -367,8 +367,8 @@ async def public_ben_lookup(ben: str, request: Request) -> Dict[str, Any]:
     client = USACDataClient()
     url = USAC_ENDPOINTS["frn_status"]
     params = {
-        "$select": "funding_request_number,funding_year,form_471_frn_status_name,frn_status,"
-                   "organization_name,state,spin_name,form_471_service_type_name,service_type,"
+        "$select": "funding_request_number,funding_year,form_471_frn_status_name,"
+                   "organization_name,state,spin_name,form_471_service_type_name,"
                    "funding_commitment_request,total_authorized_disbursement,dis_pct",
         "$where": f"ben = '{cleaned}'",
         "$limit": 200,
