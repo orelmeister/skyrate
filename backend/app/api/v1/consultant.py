@@ -629,18 +629,35 @@ async def list_crns(
     current_user: User = Depends(require_role("admin", "consultant", "super")),
     db: Session = Depends(get_db)
 ):
-    """List all CRNs for the current consultant."""
-    crns = db.query(ConsultantCRN).filter(
-        ConsultantCRN.consultant_profile_id == profile.id
-    ).order_by(ConsultantCRN.is_primary.desc(), ConsultantCRN.created_at).all()
-    
-    # Count schools per CRN
+    """List CRNs.
+
+    - Regular consultant: only their own CRNs (filtered by profile.id).
+    - Admin / super: ALL CRNs across every consultant profile, with owner
+      info attached (regression fix April 26, 2026: super accounts were
+      seeing an empty CRN list because the dependency scoped the query to
+      super's own freshly-seeded profile, hiding pre-existing CRN data
+      that admin can still see via the admin panel).
+    """
     from sqlalchemy import or_
+    from ...models.user import User as UserModel
+
+    is_privileged = current_user.role in ("admin", "super")
+
+    if is_privileged:
+        crns = db.query(ConsultantCRN).order_by(
+            ConsultantCRN.is_primary.desc(), ConsultantCRN.created_at
+        ).all()
+    else:
+        crns = db.query(ConsultantCRN).filter(
+            ConsultantCRN.consultant_profile_id == profile.id
+        ).order_by(ConsultantCRN.is_primary.desc(), ConsultantCRN.created_at).all()
+
+    # Count schools per CRN
     for crn_record in crns:
+        scope_profile_id = crn_record.consultant_profile_id
         if crn_record.is_primary:
-            # Primary CRN: count schools with matching source_crn OR NULL source_crn (legacy imports)
             count = db.query(ConsultantSchool).filter(
-                ConsultantSchool.consultant_profile_id == profile.id,
+                ConsultantSchool.consultant_profile_id == scope_profile_id,
                 or_(
                     ConsultantSchool.source_crn == crn_record.crn,
                     ConsultantSchool.source_crn.is_(None)
@@ -648,20 +665,45 @@ async def list_crns(
             ).count()
         else:
             count = db.query(ConsultantSchool).filter(
-                ConsultantSchool.consultant_profile_id == profile.id,
+                ConsultantSchool.consultant_profile_id == scope_profile_id,
                 ConsultantSchool.source_crn == crn_record.crn
             ).count()
         crn_record.schools_count = count
     db.commit()
-    
+
+    # Build response, attaching owner info when privileged so super/admin
+    # can tell which consultant each CRN belongs to.
+    owner_cache: dict = {}
+    def _enrich(c: ConsultantCRN) -> dict:
+        d = c.to_dict()
+        if is_privileged:
+            cp_id = c.consultant_profile_id
+            if cp_id not in owner_cache:
+                cp = db.query(ConsultantProfile).filter(
+                    ConsultantProfile.id == cp_id
+                ).first()
+                if cp:
+                    u = db.query(UserModel).filter(UserModel.id == cp.user_id).first()
+                    owner_cache[cp_id] = {
+                        "owner_user_id": cp.user_id,
+                        "owner_email": u.email if u else None,
+                        "owner_name": (u.full_name if u else None) or cp.contact_name,
+                        "owner_company": cp.company_name,
+                    }
+                else:
+                    owner_cache[cp_id] = {"owner_user_id": None, "owner_email": None, "owner_name": None, "owner_company": None}
+            d.update(owner_cache[cp_id])
+        return d
+
     is_free_user = _is_free_crn_user(current_user)
-    
+
     return {
         "success": True,
-        "crns": [c.to_dict() for c in crns],
+        "crns": [_enrich(c) for c in crns],
         "count": len(crns),
         "is_free_user": is_free_user,
         "can_add_free": is_free_user or len(crns) == 0,  # First CRN is always free
+        "scope": "all" if is_privileged else "self",
     }
 
 

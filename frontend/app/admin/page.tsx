@@ -266,7 +266,7 @@ function AdminDashboard() {
 
       {/* Tab Navigation */}
       <nav className="bg-white border-b shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 flex gap-1">
+        <div className="max-w-7xl mx-auto px-4 flex gap-1 flex-wrap">
           {[
             { key: "overview", label: "Overview", icon: "📊" },
             { key: "users", label: "Users", icon: "👥" },
@@ -288,6 +288,24 @@ function AdminDashboard() {
               {tab.icon} {tab.label}
             </button>
           ))}
+          {/* Super-only quick links to /superadmin/* tools (separate routes) */}
+          {user?.role === "super" && (
+            <>
+              <a
+                href="/superadmin/leads"
+                className="px-4 py-3 text-sm font-medium border-b-2 border-transparent text-amber-600 hover:text-amber-700 hover:border-amber-300 transition-colors"
+                data-testid="admin-nav-leads"
+              >
+                📥 Leads
+              </a>
+              <a
+                href="/superadmin/mail-campaigns"
+                className="px-4 py-3 text-sm font-medium border-b-2 border-transparent text-amber-600 hover:text-amber-700 hover:border-amber-300 transition-colors"
+              >
+                ✉️ Mail Campaigns
+              </a>
+            </>
+          )}
         </div>
       </nav>
 

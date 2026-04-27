@@ -76,6 +76,7 @@ class FRNRecord(BaseModel):
     fcdl_comment: Optional[str] = None
     ben: Optional[str] = None
     applicant_name: Optional[str] = None
+    applicant_email: Optional[str] = None
     state: Optional[str] = None
     spin_name: Optional[str] = None
     service_type: Optional[str] = None
@@ -98,6 +99,13 @@ class FRNLookupResponse(BaseModel):
     frn: str
     record: Optional[FRNRecord] = None
     message: Optional[str] = None
+    # Phase 2 enhancement (April 26, 2026):
+    # Surface "you can still appeal/recover this funding" prompts when the
+    # FRN is denied or canceled in the CURRENT calendar year. Frontend
+    # uses this to render an unmissable red banner + CTA.
+    urgent_help_eligible: bool = False
+    urgent_help_message: Optional[str] = None
+    auto_lead_captured: bool = False
 
 
 # ==================== HELPERS ====================
@@ -164,6 +172,19 @@ def _record_to_pydantic(frn: str, raw: Dict[str, Any]) -> FRNRecord:
         except (TypeError, ValueError):
             return default
 
+    # USAC qdmp-ygft surfaces a small handful of contact-email-ish fields
+    # depending on which join is current. Try them all in priority order.
+    applicant_email = (
+        raw.get("applicant_contact_email")
+        or raw.get("contact_email")
+        or raw.get("applicant_email")
+        or raw.get("billed_entity_contact_email")
+        or raw.get("be_contact_email")
+        or None
+    )
+    if applicant_email and "@" not in applicant_email:
+        applicant_email = None
+
     return FRNRecord(
         frn=frn,
         funding_year=str(raw.get("funding_year") or "") or None,
@@ -173,6 +194,7 @@ def _record_to_pydantic(frn: str, raw: Dict[str, Any]) -> FRNRecord:
         fcdl_comment=raw.get("fcdl_comment_frn") or raw.get("fcdl_comment") or None,
         ben=str(raw.get("ben") or "") or None,
         applicant_name=raw.get("organization_name") or None,
+        applicant_email=applicant_email,
         state=raw.get("state") or None,
         spin_name=raw.get("spin_name") or None,
         service_type=raw.get("form_471_service_type_name") or raw.get("service_type") or None,
@@ -188,6 +210,83 @@ def _record_to_pydantic(frn: str, raw: Dict[str, Any]) -> FRNRecord:
         wave_number=str(raw.get("wave_sequence_number") or "") or None,
         updated_at=raw.get(":updated_at") or None,
     )
+
+
+def _is_current_year_denial_or_cancel(record: FRNRecord) -> tuple[bool, Optional[str]]:
+    """If this FRN is denied/canceled AND its funding_year matches the current
+    calendar year, return (True, message) so the frontend can render an
+    "appeal-now" prompt. Otherwise (False, None).
+    """
+    if not record.status:
+        return False, None
+    s = record.status.lower()
+    is_denied = "denied" in s
+    is_cancelled = "cancel" in s  # matches both "canceled" and "cancelled"
+    if not (is_denied or is_cancelled):
+        return False, None
+
+    current_year = str(datetime.utcnow().year)
+    fy_raw = (record.funding_year or "").strip()
+    # funding_year may be "2026" or "FY2026" etc.
+    fy_digits = re.sub(r"\D", "", fy_raw)
+    if fy_digits != current_year:
+        return False, None
+
+    verb = "denied" if is_denied else "canceled"
+    msg = (
+        f"Your FY{current_year} FRN was {verb}. Appeals must be filed within 60 days of the FCDL "
+        f"under FCC Order 19-117 — SkyRate AI can help you recover this funding."
+    )
+    return True, msg
+
+
+def _try_auto_capture_lead(record: FRNRecord, ip: str, user_agent: Optional[str]) -> bool:
+    """Best-effort: if USAC gave us an email for this applicant, persist it
+    as a Lead so admin/super sees inbound interest. Never blocks the
+    response; failures are swallowed and logged.
+    """
+    if not record.applicant_email:
+        return False
+    try:
+        from ...core.database import SessionLocal
+        from ...models.lead import Lead
+        db = SessionLocal()
+        try:
+            # Skip if we already auto-captured this email + FRN combo recently.
+            existing = db.query(Lead).filter(
+                Lead.email == record.applicant_email,
+                Lead.source.like("frn-tracker-auto%"),
+            ).order_by(Lead.created_at.desc()).first()
+            if existing and existing.notes and f"FRN {record.frn}" in (existing.notes or ""):
+                return False
+
+            note = (
+                f"Auto-captured from public FRN lookup of FRN {record.frn}. "
+                f"Status: {record.status or 'unknown'}. "
+                f"Funding Year: {record.funding_year or 'unknown'}. "
+                f"BEN: {record.ben or 'unknown'}."
+            )
+            lead = Lead(
+                name=record.applicant_name or "(USAC applicant — name unknown)",
+                email=record.applicant_email,
+                organization=record.applicant_name,
+                role="applicant",
+                ben=record.ben,
+                source="frn-tracker-auto",
+                notes=note,
+                ip_address=ip[:64] if ip else None,
+                user_agent=(user_agent or "")[:500] or None,
+                status="new",
+            )
+            db.add(lead)
+            db.commit()
+            logger.info(f"[FRN-AUTO-LEAD] Captured lead for {record.applicant_email} (FRN {record.frn})")
+            return True
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"[FRN-AUTO-LEAD] Failed to auto-capture lead: {e}")
+        return False
 
 
 # ==================== ENDPOINTS ====================
@@ -222,8 +321,25 @@ async def public_frn_lookup(payload: FRNLookupRequest, request: Request):
         )
 
     record = _record_to_pydantic(frn, raw)
-    logger.info(f"Public FRN lookup OK: frn={frn} status={record.status} ip={ip}")
-    return FRNLookupResponse(success=True, found=True, frn=frn, record=record)
+    urgent_eligible, urgent_msg = _is_current_year_denial_or_cancel(record)
+    auto_lead = _try_auto_capture_lead(
+        record,
+        ip=ip,
+        user_agent=request.headers.get("user-agent"),
+    )
+    logger.info(
+        f"Public FRN lookup OK: frn={frn} status={record.status} fy={record.funding_year} "
+        f"urgent={urgent_eligible} auto_lead={auto_lead} ip={ip}"
+    )
+    return FRNLookupResponse(
+        success=True,
+        found=True,
+        frn=frn,
+        record=record,
+        urgent_help_eligible=urgent_eligible,
+        urgent_help_message=urgent_msg,
+        auto_lead_captured=auto_lead,
+    )
 
 
 @router.get("/health", status_code=status.HTTP_200_OK)

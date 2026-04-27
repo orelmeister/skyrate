@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect } from "react";
 import Link from "next/link";
-import { Loader2, Search, AlertCircle, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { Loader2, Search, AlertCircle, CheckCircle2, Clock, XCircle, AlertTriangle } from "lucide-react";
+import { trackEvent } from "@/lib/analytics";
 
 // Phase 2 client component — handles the FRN lookup form, displays the result,
 // and offers an optional email-alert capture below the result. No auth.
@@ -36,8 +37,11 @@ type LookupResponse = {
   success: boolean;
   found: boolean;
   frn: string;
-  record?: FRNRecord | null;
+  record?: (FRNRecord & { applicant_email?: string | null }) | null;
   message?: string | null;
+  urgent_help_eligible?: boolean;
+  urgent_help_message?: string | null;
+  auto_lead_captured?: boolean;
 };
 
 function formatMoney(n: number | undefined | null): string {
@@ -103,17 +107,25 @@ export default function FrnLookupClient() {
       return;
     }
     setLoading(true);
+    trackEvent("frn_lookup_submit", { frn: cleaned });
     try {
       const res = await fetch("/api/v1/public/frn-lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ frn: cleaned }),
       });
-      const data = await res.json();
+      const data: LookupResponse = await res.json();
       if (!res.ok) {
-        setError(data?.detail || "Lookup failed. Please try again.");
+        setError((data as unknown as { detail?: string })?.detail || "Lookup failed. Please try again.");
       } else {
         setResult(data);
+        trackEvent("frn_lookup_result", {
+          frn: cleaned,
+          found: !!data.found,
+          status: data.record?.status || null,
+          funding_year: data.record?.funding_year || null,
+          urgent_help_eligible: !!data.urgent_help_eligible,
+        });
       }
     } catch {
       setError("Network error. Please try again.");
@@ -153,6 +165,14 @@ export default function FrnLookupClient() {
           <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
           <span>{error}</span>
         </div>
+      )}
+
+      {result && result.urgent_help_eligible && (
+        <UrgentHelpBanner
+          frn={result.frn}
+          message={result.urgent_help_message || ""}
+          fundingYear={result.record?.funding_year || ""}
+        />
       )}
 
       {result && (
@@ -313,6 +333,8 @@ function FrnAlertCapture({ frn, found }: { frn: string; found: boolean }) {
         setErr(data?.detail || "Could not save your email. Try again.");
       } else {
         setDone(true);
+        trackEvent("frn_alert_capture_submit", { frn });
+        trackEvent("lead_capture_submit", { source: "frn-tracker-alert", frn });
       }
     } catch {
       setErr("Network error. Please try again.");
@@ -363,6 +385,60 @@ function FrnAlertCapture({ frn, found }: { frn: string; found: boolean }) {
         </button>
       </form>
       {err && <p className="text-red-300 text-sm mt-2">{err}</p>}
+    </div>
+  );
+}
+
+function UrgentHelpBanner({
+  frn,
+  message,
+  fundingYear,
+}: {
+  frn: string;
+  message: string;
+  fundingYear: string;
+}) {
+  useEffect(() => {
+    trackEvent("frn_urgent_help_shown", { frn, funding_year: fundingYear });
+  }, [frn, fundingYear]);
+
+  const ctaHref = `/sign-up?role=applicant&source=frn-tracker-urgent&prefill_frn=${encodeURIComponent(frn)}`;
+
+  return (
+    <div
+      role="alert"
+      data-testid="frn-urgent-help-banner"
+      className="max-w-3xl mx-auto mt-6 rounded-2xl border-2 border-red-500/70 bg-gradient-to-r from-red-600/30 via-red-500/20 to-amber-500/20 p-5 sm:p-6 shadow-lg shadow-red-500/20"
+    >
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="w-7 h-7 text-red-300 flex-shrink-0 mt-0.5 animate-pulse" />
+        <div className="flex-1">
+          <h3 className="text-white font-bold text-lg sm:text-xl mb-1">
+            Time-sensitive: you can still recover this funding
+          </h3>
+          <p className="text-red-100 text-sm sm:text-base mb-4">{message}</p>
+          <div className="flex flex-wrap gap-3 items-center">
+            <Link
+              href={ctaHref}
+              onClick={() =>
+                trackEvent("frn_urgent_help_cta_click", { frn, funding_year: fundingYear })
+              }
+              className="inline-flex items-center gap-2 px-5 py-3 bg-white text-red-700 rounded-xl font-bold hover:bg-red-50 transition shadow-lg"
+            >
+              Get Free Appeal Review →
+            </Link>
+            <a
+              href="tel:855-765-7291"
+              className="inline-flex items-center gap-2 px-4 py-3 bg-white/10 border border-white/30 text-white rounded-xl font-semibold hover:bg-white/20 transition"
+            >
+              Or call (855) 765-7291
+            </a>
+          </div>
+          <p className="text-xs text-red-200/80 mt-3">
+            FCC Order 19-117: appeals must be filed within 60 days of the FCDL date.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

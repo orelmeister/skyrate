@@ -8,6 +8,7 @@ import ExitIntentPopup from "@/components/ExitIntentPopup";
 import EmailCaptureForm from "@/components/EmailCaptureForm";
 import DeadlineCountdownBanner from "@/components/DeadlineCountdownBanner";
 import ROICalculator from "@/components/ROICalculator";
+import AudienceChips from "@/components/AudienceChips";
 
 export const metadata: Metadata = {
   title: "SkyRate AI — Manage Your Entire E-Rate Book in One Place",
@@ -145,18 +146,7 @@ export default function HomePage() {
                 No credit card required · Cancel anytime · Full access
               </p>
               {/* Audience selector chips */}
-              <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 text-sm" data-testid="audience-chips">
-                <span className="text-slate-500">Built for:</span>
-                <Link href="/features/consultants" className="px-3 py-1.5 rounded-full border border-purple-500/40 bg-purple-500/10 text-purple-200 hover:bg-purple-500/20 transition font-medium">
-                  Consultants
-                </Link>
-                <Link href="/features/applicants" className="px-3 py-1.5 rounded-full border border-white/15 bg-white/5 text-slate-300 hover:bg-white/10 transition font-medium">
-                  Applicants
-                </Link>
-                <Link href="/features/vendors" className="px-3 py-1.5 rounded-full border border-white/15 bg-white/5 text-slate-300 hover:bg-white/10 transition font-medium">
-                  Vendors
-                </Link>
-              </div>
+              <AudienceChips />
             </div>
 
             {/* Right: Dashboard illustration */}
@@ -1107,6 +1097,18 @@ export default function HomePage() {
               <ul className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
                 <li><Link href="/about" className="hover:text-white transition">About</Link></li>
                 <li><Link href="/contact" className="hover:text-white transition">Contact</Link></li>
+                <li><Link href="/case-studies" className="hover:text-white transition">Case Studies</Link></li>
+                <li><Link href="/demo" className="hover:text-white transition">Live Demo</Link></li>
+                <li>
+                  <a
+                    href="https://erateapp.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-white transition"
+                  >
+                    Need a consultant? erateapp.com →
+                  </a>
+                </li>
                 <li><Link href="/privacy" className="hover:text-white transition">Privacy Policy</Link></li>
                 <li><Link href="/terms" className="hover:text-white transition">Terms of Service</Link></li>
               </ul>

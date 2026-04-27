@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { trackEvent } from "@/lib/analytics";
 
 // Phase 2: Pure client-side ROI calculator for skyrate.ai homepage.
 // Defensible math:
@@ -138,6 +139,15 @@ export default function ROICalculator() {
             </div>
             <Link
               href="/sign-up?role=consultant&source=roi-calculator"
+              onClick={() =>
+                trackEvent("roi_calculator_complete", {
+                  bens,
+                  funding,
+                  hours,
+                  recovered: Math.round(out.recovered),
+                  hours_saved_per_year: Math.round(out.hoursSavedPerYear),
+                })
+              }
               className="block w-full text-center px-6 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl font-semibold hover:from-indigo-500 hover:to-purple-500 transition shadow-lg shadow-indigo-500/30"
             >
               See how SkyRate gets you there →

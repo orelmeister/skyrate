@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuthStore } from "@/lib/auth-store";
 import { api } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 
 type UserRole = "consultant" | "vendor" | "applicant";
 
@@ -53,6 +54,10 @@ function SignUpPage() {
   // Phase 2: read ?role=&prefill_frn= so deep-links from /tools/frn-tracker
   // and the homepage audience chips pre-populate the signup form.
   useEffect(() => {
+    trackEvent("signup_start", {
+      source: searchParams.get("source") || undefined,
+      role: searchParams.get("role") || undefined,
+    });
     const roleParam = searchParams.get("role");
     if (roleParam && ["consultant", "vendor", "applicant"].includes(roleParam)) {
       setFormData((prev) => ({ ...prev, role: roleParam as UserRole }));
@@ -116,6 +121,10 @@ function SignUpPage() {
     });
 
     if (success) {
+      trackEvent("signup_complete", {
+        role: formData.role,
+        source: searchParams.get("source") || undefined,
+      });
       router.push(promoToken && promoData ? "/onboarding" : "/onboarding");
     } else {
       setError(authError || "Failed to create account. Please try again.");

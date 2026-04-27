@@ -4,6 +4,9 @@
 User-agent: *
 Allow: /
 Disallow: /admin
+Disallow: /admin/
+Disallow: /superadmin
+Disallow: /superadmin/
 Disallow: /dashboard
 Disallow: /consultant
 Disallow: /vendor
