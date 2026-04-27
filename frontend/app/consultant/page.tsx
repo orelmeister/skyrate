@@ -123,7 +123,7 @@ function ConsultantPortalPage() {
   const [loadingApplications, setLoadingApplications] = useState(false);
   const [newBen, setNewBen] = useState("");
   const [newNotes, setNewNotes] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isRefreshingSchools, setIsRefreshingSchools] = useState(false);
   
   // Comprehensive school data state (includes C2 budget)
@@ -1461,7 +1461,7 @@ function ConsultantPortalPage() {
           {navItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id as ConsultantTab)}
+              onClick={() => { setActiveTab(item.id as ConsultantTab); setSidebarOpen(false); }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${
                 activeTab === item.id
                   ? "bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700 font-medium shadow-sm"
@@ -1542,6 +1542,11 @@ function ConsultantPortalPage() {
           </div>
         </div>
       </aside>
+
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
 
       {/* Main Content */}
       <main className="lg:ml-64">

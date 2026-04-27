@@ -53,7 +53,7 @@ function VendorPortalPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [selectedSchools, setSelectedSchools] = useState<Set<string>>(new Set());
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   
   // Search filters
   const [searchState, setSearchState] = useState("");

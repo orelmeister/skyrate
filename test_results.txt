@@ -1,10 +1,23 @@
-==================================================
-1. Testing production login...
-   Status: 200
-   Token: eyJhbGciOiJIUzI1NiIsInR5cCI6Ik...
-   User: test_consultant@example.com
-   Role: consultant
+[1] Logging in as super@skyrate.ai...
+    Status: 200
+    [OK] Logged in as super@skyrate.ai (role: super, id: 5)
 
-==================================================
-2. Testing SMTP email...
-   SUCCESS: Email sent to david@skyrate.ai
+[2] Sending test alert via /alerts/test...
+    Status: 200
+    Response: {"success":true,"message":"In-app notification sent. Push notification sent. Email sent to ari@skyrate.ai","alert_id":1607,"details":{"in_app_sent":true,"email_sent":true,"push_sent":true,"email_enabled":true,"daily_digest":true,"email_error":null}}
+
+[3] Listing FRN watches...
+    Status: 200
+    Response: {"success":true,"watches":[{"id":3,"user_id":5,"name":"test","watch_type":"portfolio","target_id":null,"target_name":null,"frequency":"daily","recipient_email":"ari@skyrate.ai","cc_emails":[],"delivery_mode":"full_email","notify_sms":false,"sms_phone":null,"funding_year":null,"status_filter":null,"include_funded":true,"include_pending":true,"include_denied":true,"include_summary":true,"include_details":true,"include_changes":true,"is_active":true,"last_sent_at":"2026-03-24T19:13:36","next_send_at":"2026-03-25T08:00:00","send_count":20,"last_error":null,"created_at":"2026-03-18T17:03:59","updated_at":"2026-03-24T19:13:40"}],"total":1}
+    Found 1 watch(es)
+
+[4] Triggering send-now on watches...
+    Sending for watch 3 (test)...
+    Status: 200
+    Response: {"success":true,"message":"Report generated with 4339 FRNs across 1 monitors","frn_count":4339,"changes_detected":2083,"report_id":20}
+
+[5] Listing recent alerts...
+    Status: 200
+    Response: {"success":true,"total":1630,"unread_count":1630,"limit":10,"offset":0,"alerts":[{"id":1630,"user_id":5,"alert_type":"frn_status_change","priority":"medium","title":"Status Change: Yeshivat Ohr Hatorah","message":"FRN 1799024952 changed from 'Pending' to 'Funded'. Amount: $34,452.00","entity_type":"frn","entity_id":"1799024952","entity_name":"Yeshivat Ohr Hatorah","metadata":{"amount":34452,"new_status":"Funded","old_status":"Pending"},"is_read":false,"is_dismissed":false,"is_actioned":false,"email_sent":false,"created_at":"2026-03-24T19:45:19","read_at":null},{"id":1629,"user_id":5,"alert_type":"frn_status_change","priority":"medium","title":"Status Change: Yeshivat Ohr Hatorah","message":"FRN 1799024940 changed from 'Pending' to 'Funded'. Amount: $24,678.00","entity_type":"frn","entity_id":"1799024940","entity_name":"Yeshivat Ohr Hatorah","metadata":{"amount":24678,"new_status":"Funded","old_status":"Pending"},"is_read":false,"is_dismissed":false,"is_actioned":false,"email_sent":false,"created_at":"2026-03-24T19:45:18","read_at":null},{"id":1628,"user_id":5,"alert_type":"frn_status_change","priority":"low","title":"Status Change: Yeshivat Ohr Hatorah","message":"FRN 1799024928 changed from 'Funded' to 'Pending'. Amount: $864.00","entity_type":"frn","entity_id":"1799024928","entity_name":"Yeshivat Ohr Hatorah","metadata":{"amount":864,"new_status":"Pending","old_status":"Funded"},"is_read":false,"is_dismissed":false,"is_actioned":false,"email_sent":false,"created_at":"2026-03-24T19:45:17","read_at":null},{"id":1627,"user_id":5,"alert_type":"frn_status_change","priority":"low","title":"Status Change: Yeshivat Ohr Hatorah","message":"FRN 1799024910 changed from 'Funded' to 'Pending'. Amount: $972.00","entity_type":"frn","entity_id":"1799024910","entity_name":"Yeshivat Ohr Hatorah","metadata":{"amount":972,"new_status":"Pending","old_status":"Funded"},"is_read":false,"is_dismissed":false,"is_actioned":false,"email_sent":false,"created_at":"2026-03-24T19:45:16","read_a
+
+[DONE] Test complete.
