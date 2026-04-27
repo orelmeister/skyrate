@@ -97,7 +97,7 @@ export default function BenLookupClient() {
     setLoading(true);
     trackEvent("ben_tracker_search", { ben: cleaned });
     try {
-      const res = await fetch(`/api/v1/tools/ben-lookup?ben=${encodeURIComponent(cleaned)}`);
+      const res = await fetch(`/api/v1/public/ben-lookup?ben=${encodeURIComponent(cleaned)}`);
       const data: BENLookupResponse = await res.json();
       if (!res.ok) {
         setError((data as unknown as { detail?: string })?.detail || "Lookup failed. Please try again.");

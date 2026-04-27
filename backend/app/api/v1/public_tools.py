@@ -342,6 +342,98 @@ async def public_frn_lookup(payload: FRNLookupRequest, request: Request):
     )
 
 
+@router.get("/ben-lookup", status_code=status.HTTP_200_OK)
+async def public_ben_lookup(ben: str, request: Request) -> Dict[str, Any]:
+    """Public BEN status lookup — returns all FRNs for a Billed Entity Number.
+    No auth required. Backed by USAC Open Data frn_status dataset.
+
+    Used by the free tracker page at https://skyrate.ai/tools/ben-tracker.
+    """
+    ip = _client_ip(request)
+    if not _check_rate_limit(ip):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many lookups from your IP. Please try again in an hour.",
+        )
+
+    # Validate BEN: digits only, 4-12 chars
+    cleaned = re.sub(r"\D", "", (ben or "").strip())
+    if not cleaned or len(cleaned) < 4 or len(cleaned) > 12:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="BEN must be a numeric string (4-12 digits).",
+        )
+
+    client = USACDataClient()
+    url = USAC_ENDPOINTS["frn_status"]
+    params = {
+        "$select": "funding_request_number,funding_year,form_471_frn_status_name,frn_status,"
+                   "organization_name,state,spin_name,form_471_service_type_name,service_type,"
+                   "funding_commitment_request,total_authorized_disbursement,dis_pct",
+        "$where": f"ben = '{cleaned}'",
+        "$limit": 200,
+        "$order": "funding_year DESC",
+    }
+    try:
+        response = client.session.get(url, params=params, timeout=25)
+        response.raise_for_status()
+        records = response.json()
+    except Exception as e:
+        logger.error(f"USAC BEN lookup failed for {cleaned}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="USAC Open Data is temporarily unavailable. Please try again in a moment.",
+        )
+
+    if not records:
+        return {
+            "success": True,
+            "found": False,
+            "ben": cleaned,
+            "message": "No public USAC records found for this BEN. It may be inactive or not yet filed.",
+        }
+
+    # Aggregate entity info from first record
+    first = records[0]
+    entity_name = first.get("organization_name") or None
+    state = first.get("state") or None
+
+    def _f(key: str, raw: Dict[str, Any]) -> float:
+        try:
+            return float(raw.get(key) or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    frns = []
+    total_committed = 0.0
+    for r in records:
+        amt = _f("funding_commitment_request", r)
+        total_committed += amt
+        frns.append({
+            "frn": r.get("funding_request_number") or "",
+            "funding_year": str(r.get("funding_year") or "") or None,
+            "status": r.get("form_471_frn_status_name") or r.get("frn_status") or None,
+            "commitment_amount": amt,
+            "spin_name": r.get("spin_name") or None,
+            "service_type": r.get("form_471_service_type_name") or r.get("service_type") or None,
+        })
+
+    logger.info(f"Public BEN lookup OK: ben={cleaned} frn_count={len(frns)} total=${total_committed:.0f} ip={ip}")
+    return {
+        "success": True,
+        "found": True,
+        "ben": cleaned,
+        "record": {
+            "ben": cleaned,
+            "applicant_name": entity_name,
+            "state": state,
+            "total_committed": total_committed,
+            "total_frns": len(frns),
+            "frns": frns,
+        },
+    }
+
+
 @router.get("/health", status_code=status.HTTP_200_OK)
 async def public_tools_health() -> Dict[str, Any]:
     return {"ok": True, "tool": "public-tools", "ts": datetime.utcnow().isoformat() + "Z"}
