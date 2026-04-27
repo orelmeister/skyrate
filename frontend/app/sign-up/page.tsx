@@ -45,9 +45,24 @@ function SignUpPage() {
     role: "consultant" as UserRole,
     referral: "",
   });
+  const [prefillFrn, setPrefillFrn] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Phase 2: read ?role=&prefill_frn= so deep-links from /tools/frn-tracker
+  // and the homepage audience chips pre-populate the signup form.
+  useEffect(() => {
+    const roleParam = searchParams.get("role");
+    if (roleParam && ["consultant", "vendor", "applicant"].includes(roleParam)) {
+      setFormData((prev) => ({ ...prev, role: roleParam as UserRole }));
+    }
+    const frnParam = searchParams.get("prefill_frn");
+    if (frnParam) {
+      const cleaned = frnParam.replace(/\D/g, "").slice(0, 20);
+      if (cleaned) setPrefillFrn(cleaned);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const token = searchParams.get("promo");
@@ -227,6 +242,20 @@ function SignUpPage() {
                 Start in seconds. Verify your USAC entity later.
               </p>
             </div>
+
+            {prefillFrn && (
+              <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-xl" data-testid="prefill-frn-banner">
+                <div className="flex items-start gap-2">
+                  <span className="text-indigo-500 text-lg">📡</span>
+                  <div>
+                    <div className="font-medium text-indigo-800">Tracking FRN {prefillFrn}</div>
+                    <div className="text-sm text-indigo-700 mt-0.5">
+                      We&apos;ll set up real-time alerts for this FRN as soon as you finish signing up.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {(error || authError) && (
               <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">

@@ -6,14 +6,16 @@ import WhatsAppButton from "@/components/WhatsAppButton";
 import MobileContactBar from "@/components/MobileContactBar";
 import ExitIntentPopup from "@/components/ExitIntentPopup";
 import EmailCaptureForm from "@/components/EmailCaptureForm";
+import DeadlineCountdownBanner from "@/components/DeadlineCountdownBanner";
+import ROICalculator from "@/components/ROICalculator";
 
 export const metadata: Metadata = {
-  title: "SkyRate AI - AI-Powered E-Rate Intelligence Platform | Maximize Your E-Rate Funding",
-  description: "SkyRate AI helps E-Rate consultants and vendors maximize funding with AI-powered denial analysis, automated appeal generation, Form 470 lead tracking, and real-time USAC data. Start your 14-day free trial.",
-  keywords: "E-Rate, E-Rate funding, E-Rate consultant, E-Rate vendor, USAC, FCC, school funding, Category 2, Form 470, Form 471, appeal generation, denial analysis",
+  title: "SkyRate AI — Manage Your Entire E-Rate Book in One Place",
+  description: "Built for E-Rate consultants: track 500+ FRNs in real time, automate Form 470 reviews, generate PIA-ready appeals, and never miss a filing window. 14-day free trial.",
+  keywords: "E-Rate consultant software, FRN tracker, Form 470 review, PIA response, appeal generation, USAC tracker, E-Rate portfolio management, school funding",
   openGraph: {
-    title: "SkyRate AI - AI-Powered E-Rate Intelligence Platform",
-    description: "Maximize your E-Rate funding with AI-powered analysis. Track denials, generate appeals, discover Form 470 leads, and manage your portfolio efficiently.",
+    title: "SkyRate AI — Manage Your Entire E-Rate Book in One Place",
+    description: "Track 500+ FRNs, automate Form 470 reviews, generate PIA appeals. Built for E-Rate consultants, vendors, and applicants.",
     type: "website",
     url: "https://skyrate.ai",
     siteName: "SkyRate AI",
@@ -21,8 +23,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "SkyRate AI - E-Rate Intelligence Platform",
-    description: "AI-powered E-Rate funding intelligence for consultants and vendors.",
+    title: "SkyRate AI — E-Rate Intelligence Platform",
+    description: "AI-powered E-Rate funding intelligence for consultants, vendors, and applicants.",
     images: ['/images/marketing/twitter.png'],
   },
   robots: "index, follow",
@@ -44,6 +46,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen flex flex-col">
       <ExitIntentPopup />
+      <DeadlineCountdownBanner />
       {/* ════════════════════ HEADER ════════════════════ */}
       <header className="sticky top-0 z-50 border-b border-white/10 px-4 sm:px-6 py-3 bg-slate-950/80 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -114,35 +117,46 @@ export default function HomePage() {
                 Trusted by 500+ E-Rate Professionals
               </div>
               <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-5 sm:mb-6 leading-tight">
-                Stop Losing{" "}
-                <span className="gradient-text">E-Rate Funding</span>{" "}
-                to Paperwork Mistakes
+                Manage Your Entire{" "}
+                <span className="gradient-text">E-Rate Book</span>{" "}
+                in One Place
               </h1>
               <p className="text-base sm:text-lg lg:text-xl text-slate-400 mb-8 sm:mb-10 max-w-xl mx-auto lg:mx-0 leading-relaxed">
-                SkyRate automates Form 470/471 tracking, PIA responses, and funding analysis — so you can focus on your students, not USAC paperwork.
+                Track 500+ FRNs in real time, automate Form 470 reviews, generate PIA-ready appeals, and never miss a filing window — the platform built for serious E-Rate consultants.
               </p>
-              <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 sm:gap-4 mb-6">
+              <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 sm:gap-4 mb-5">
                 <Link
-                  href="/sign-up"
+                  href="/sign-up?role=consultant"
                   className="w-full sm:w-auto px-6 sm:px-8 py-3.5 sm:py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-500 hover:to-purple-500 transition shadow-xl shadow-indigo-500/30 text-base sm:text-lg animate-gentle-bounce"
                 >
-                  Start Your 14-Day Free Trial
+                  Start Free Trial
                 </Link>
-                <a
-                  href={process.env.NEXT_PUBLIC_CALENDLY_URL || "https://calendar.app.google/NgrfWyBXME1PGEgP7"}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <Link
+                  href="/tools/frn-tracker"
                   className="w-full sm:w-auto px-6 sm:px-8 py-3.5 sm:py-4 border-2 border-white/30 rounded-xl font-semibold text-white hover:bg-white/10 transition text-base sm:text-lg flex items-center justify-center gap-2"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
                   </svg>
-                  Book a Free Consultation
-                </a>
+                  Track an FRN free
+                </Link>
               </div>
-              <p className="text-xs sm:text-sm text-slate-500">
-                No credit card required • Cancel anytime • Full access
+              <p className="text-xs sm:text-sm text-slate-500 mb-6">
+                No credit card required · Cancel anytime · Full access
               </p>
+              {/* Audience selector chips */}
+              <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 text-sm" data-testid="audience-chips">
+                <span className="text-slate-500">Built for:</span>
+                <Link href="/features/consultants" className="px-3 py-1.5 rounded-full border border-purple-500/40 bg-purple-500/10 text-purple-200 hover:bg-purple-500/20 transition font-medium">
+                  Consultants
+                </Link>
+                <Link href="/features/applicants" className="px-3 py-1.5 rounded-full border border-white/15 bg-white/5 text-slate-300 hover:bg-white/10 transition font-medium">
+                  Applicants
+                </Link>
+                <Link href="/features/vendors" className="px-3 py-1.5 rounded-full border border-white/15 bg-white/5 text-slate-300 hover:bg-white/10 transition font-medium">
+                  Vendors
+                </Link>
+              </div>
             </div>
 
             {/* Right: Dashboard illustration */}
@@ -241,6 +255,9 @@ export default function HomePage() {
           </p>
         </div>
       </section>
+
+      {/* ════════════════════ ROI CALCULATOR ════════════════════ */}
+      <ROICalculator />
 
       {/* ════════════════════ PROBLEM STATEMENT (Light) ════════════════════ */}
       <section className="py-12 sm:py-16 px-4 sm:px-6 bg-slate-50">

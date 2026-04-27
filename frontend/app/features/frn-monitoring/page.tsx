@@ -101,6 +101,12 @@ export default function FRNMonitoringFeaturePage() {
               View Pricing
             </Link>
           </div>
+          <p className="text-slate-400 text-sm mt-6">
+            Just want to look up a single FRN?{" "}
+            <Link href="/tools/frn-tracker" className="text-purple-300 hover:text-purple-200 underline font-medium">
+              Try our free FRN tracker — no signup
+            </Link>
+          </p>
         </div>
       </section>
 
