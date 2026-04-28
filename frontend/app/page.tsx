@@ -853,7 +853,7 @@ export default function HomePage() {
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
             <a
-              href={process.env.NEXT_PUBLIC_CALENDLY_URL || "https://calendar.app.google/NgrfWyBXME1PGEgP7"}
+              href={process.env.NEXT_PUBLIC_CALENDLY_URL || "https://calendar.app.google/edkn1FDx2mBngFGs9"}
               target="_blank"
               rel="noopener noreferrer"
               className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-500 hover:to-purple-500 transition shadow-lg shadow-indigo-500/25 text-sm sm:text-base flex items-center justify-center gap-2"
@@ -980,7 +980,7 @@ export default function HomePage() {
 
             {/* Book a Call */}
             <a
-              href={process.env.NEXT_PUBLIC_CALENDLY_URL || "https://calendar.app.google/NgrfWyBXME1PGEgP7"}
+              href={process.env.NEXT_PUBLIC_CALENDLY_URL || "https://calendar.app.google/edkn1FDx2mBngFGs9"}
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Book a free strategy call"
