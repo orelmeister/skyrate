@@ -5,18 +5,18 @@ import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowRight, ArrowLeft, FileText, Search, Clock, CheckCircle, Sparkles, BookOpen, Users, ShoppingCart, Target, BarChart3, Filter } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate Form 470 Guide 2026 [Free Checklist + Deadlines]",
-  description: "Step-by-step Form 470 filing guide for FY2026. Covers the 28-day bidding window, vendor selection, and avoiding USAC rejection. Free checklist included.",
+  title: "E-Rate Form 470 Guide 2026 — File & Win Bids | SkyRate",
+  description: "Learn exactly how to file E-Rate Form 470 in FY2026. Covers the 28-day bid window, vendor pitfalls, and the free SkyRate checklist used by 500+ districts.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/blog/erate-form-470-guide" },
   openGraph: {
-    title: "E-Rate Form 470 Guide 2026 [Free Checklist + Deadlines]",
-    description: "Step-by-step Form 470 filing guide for FY2026. Covers the 28-day bidding window, vendor selection, and avoiding USAC rejection. Free checklist included.",
+    title: "E-Rate Form 470 Guide 2026 — File & Win Bids | SkyRate",
+    description: "Learn exactly how to file E-Rate Form 470 in FY2026. Covers the 28-day bid window, vendor pitfalls, and the free SkyRate checklist used by 500+ districts.",
     url: "https://skyrate.ai/blog/erate-form-470-guide",
     siteName: "SkyRate AI",
     type: "article",
     publishedTime: "2026-02-16T00:00:00Z",
-    modifiedTime: "2026-04-24T00:00:00Z",
+    modifiedTime: "2026-05-01T00:00:00Z",
   },
 };
 
@@ -24,11 +24,11 @@ export default function ErateForm470GuidePage() {
   return (
     <>
     <BlogPostJsonLd
-      title="E-Rate Form 470 Guide 2026 [Free Checklist + Deadlines]"
-      description="Step-by-step Form 470 filing guide for FY2026. Covers the 28-day bidding window, vendor selection, and avoiding USAC rejection. Free checklist included."
+      title="E-Rate Form 470 Guide 2026 — File & Win Bids | SkyRate"
+      description="Learn exactly how to file E-Rate Form 470 in FY2026. Covers the 28-day bid window, vendor pitfalls, and the free SkyRate checklist used by 500+ districts."
       slug="erate-form-470-guide"
       datePublished="2026-02-16T00:00:00Z"
-      dateModified="2026-04-22T00:00:00Z"
+      dateModified="2026-05-01T00:00:00Z"
     />
     <div className="min-h-screen bg-white">
       {/* Header */}
