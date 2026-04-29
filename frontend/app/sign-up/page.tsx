@@ -11,9 +11,9 @@ import { trackEvent } from "@/lib/analytics";
 type UserRole = "consultant" | "vendor" | "applicant";
 
 const ROLE_OPTIONS: { value: UserRole; label: string; emoji: string; price: string; tagline: string }[] = [
-  { value: "consultant", label: "Consultant", emoji: "📋", price: "$300/mo", tagline: "Manage school portfolios" },
-  { value: "vendor", label: "Vendor", emoji: "🏢", price: "$199/mo", tagline: "Find Form 470 leads" },
-  { value: "applicant", label: "Applicant", emoji: "🏫", price: "$200/mo", tagline: "Track funding & FRNs" },
+  { value: "consultant", label: "Consultant", emoji: "📋", price: "$499/mo", tagline: "Manage school portfolios" },
+  { value: "vendor", label: "Vendor", emoji: "🏢", price: "$499/mo", tagline: "Find Form 470 leads" },
+  { value: "applicant", label: "Applicant", emoji: "🏫", price: "$199/mo", tagline: "Track funding & FRNs" },
 ];
 
 export default function SignUpPageWrapper() {
