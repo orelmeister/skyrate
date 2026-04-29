@@ -217,6 +217,7 @@ function ConsultantPortalPage() {
   const [showCreateWatch, setShowCreateWatch] = useState(false);
   const [reportHistory, setReportHistory] = useState<FRNReportHistory[]>([]);
   const [selectedReport, setSelectedReport] = useState<{html: string; name: string} | null>(null);
+  const [showReportArchive, setShowReportArchive] = useState(false);
   const [watchLoading, setWatchLoading] = useState(false);
 
   // Trial banner state
@@ -3338,13 +3339,22 @@ function ConsultantPortalPage() {
               {/* Report History */}
               {reportHistory.length > 0 && (
                 <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Recent Reports</h3>
-                  <div className="space-y-2">
-                    {reportHistory.map((report) => (
-                      <div
-                        key={report.id}
-                        className="flex items-center justify-between p-3 rounded-lg border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Latest Report</h3>
+                    {reportHistory.length > 1 && (
+                      <button
+                        onClick={() => setShowReportArchive(!showReportArchive)}
+                        className="text-sm text-teal-600 hover:text-teal-700 dark:text-teal-400 font-medium flex items-center gap-1"
                       >
+                        {showReportArchive ? 'Hide Archive' : `View Archive (${reportHistory.length - 1})`}
+                      </button>
+                    )}
+                  </div>
+                  {/* Most recent report */}
+                  {(() => {
+                    const report = reportHistory[0];
+                    return (
+                      <div className="flex items-center justify-between p-3 rounded-lg border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{report.report_name}</span>
@@ -3380,8 +3390,55 @@ function ConsultantPortalPage() {
                           </button>
                         )}
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })()}
+                  {/* Archive */}
+                  {showReportArchive && reportHistory.length > 1 && (
+                    <div className="mt-4 space-y-2 border-t border-gray-100 dark:border-gray-700 pt-4">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Older reports</p>
+                      {reportHistory.slice(1).map((report) => (
+                        <div
+                          key={report.id}
+                          className="flex items-center justify-between p-3 rounded-lg border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{report.report_name}</span>
+                              {report.changes_detected > 0 && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-300">
+                                  {report.changes_detected} changes
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                              <span>{report.total_frns} FRNs</span>
+                              <span className="text-green-600">{report.funded_count} funded</span>
+                              <span className="text-amber-600">{report.pending_count} pending</span>
+                              <span className="text-red-600">{report.denied_count} denied</span>
+                              {report.email_sent && <span className="text-blue-500">emailed</span>}
+                              {report.sms_sent && <span className="text-blue-500">SMS sent</span>}
+                              <span>{new Date(report.generated_at).toLocaleString()}</span>
+                            </div>
+                          </div>
+                          {report.has_html && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const res = await api.getFRNReport(report.id);
+                                  if (res?.data?.html) {
+                                    setSelectedReport({ html: res.data.html, name: report.report_name });
+                                  }
+                                } catch (e) { console.error(e); }
+                              }}
+                              className="ml-3 px-3 py-1.5 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 dark:text-teal-300 dark:bg-teal-900/30 dark:hover:bg-teal-900/50 rounded-lg transition-colors"
+                            >
+                              View Report
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -3400,10 +3457,10 @@ function ConsultantPortalPage() {
                     </div>
                     <div className="flex-1 overflow-auto p-1">
                       <iframe
-                        srcDoc={selectedReport.html}
+                        srcDoc={selectedReport.html.replace(/<head>/i, '<head><base target="_blank">')}
                         className="w-full h-full min-h-[600px] border-0 rounded-lg"
                         title="FRN Report"
-                        sandbox="allow-same-origin"
+                        sandbox="allow-same-origin allow-popups"
                       />
                     </div>
                   </div>
