@@ -837,6 +837,18 @@ export interface PIAResponseRecord {
   updated_at: string;
 }
 
+export interface PIAFRNRecord {
+  frn: string;
+  ben: string;
+  school_name: string;
+  funding_year: string;
+  status: string;
+  pending_reason: string;
+  amount_requested: number;
+  service_type: string;
+  application_number: string;
+}
+
 export interface PIATemplate {
   category: string;
   name: string;
@@ -1707,6 +1719,16 @@ class ApiClient {
     if (limit !== undefined) params.append('limit', limit.toString());
     const queryString = params.toString();
     return this.request(`/api/v1/pia/${queryString ? '?' + queryString : ''}`);
+  }
+
+  /**
+   * Get FRNs currently under USAC PIA Review
+   */
+  async getPIAFRNs(year?: number): Promise<ApiResponse<{ pia_frns: PIAFRNRecord[]; total: number; year: number }>> {
+    const params = new URLSearchParams();
+    if (year) params.append('year', year.toString());
+    const qs = params.toString();
+    return this.request(`/api/v1/consultant/pia-frns${qs ? '?' + qs : ''}`);
   }
 
   /**

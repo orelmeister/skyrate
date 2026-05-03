@@ -1520,6 +1520,89 @@ async def get_denied_applications(
     return result
 
 
+@router.get("/pia-frns")
+async def get_pia_frns(
+    year: Optional[int] = Query(None, description="Filter by funding year (defaults to 2026)"),
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    db: Session = Depends(get_db)
+):
+    """
+    Get FRNs currently under USAC PIA (Program Integrity Assurance) review
+    for the consultant's portfolio schools.
+    """
+    schools = db.query(ConsultantSchool).filter(
+        ConsultantSchool.consultant_profile_id == profile.id
+    ).all()
+
+    if not schools:
+        return {
+            "success": True,
+            "pia_frns": [],
+            "total": 0,
+            "year": year or 2026
+        }
+
+    all_bens = [school.ben for school in schools]
+    ben_to_school = {school.ben: school for school in schools}
+
+    from app.services.cache_service import get_cached, set_cached, make_cache_key
+    funding_year = year or 2026
+    cache_key = make_cache_key("pia_frns", bens=all_bens, year=funding_year)
+    cached = get_cached(db, cache_key)
+    if cached:
+        return cached
+
+    PIA_KEYWORDS = ["pia", "15 day", "15-day", "letter of inquiry", "reminder notice", "selective review"]
+    pia_frns = []
+
+    try:
+        from utils.usac_client import USACDataClient
+        client = USACDataClient()
+
+        batch_result = client.get_frn_status_batch(
+            bens=all_bens,
+            year=funding_year,
+            status_filter="Pending"
+        )
+
+        if batch_result.get("success"):
+            for ben_data in batch_result.get("results", {}).values():
+                ben = ben_data.get("ben", "")
+                school = ben_to_school.get(ben)
+                for frn_record in ben_data.get("frns", []):
+                    pending_reason = str(frn_record.get("pending_reason", "") or "").lower()
+                    if any(kw in pending_reason for kw in PIA_KEYWORDS):
+                        pia_frns.append({
+                            "frn": str(frn_record.get("frn", "")),
+                            "ben": ben,
+                            "school_name": school.school_name if school else ben_data.get("entity_name", "Unknown"),
+                            "funding_year": str(frn_record.get("funding_year", funding_year)),
+                            "status": str(frn_record.get("status", "Pending")),
+                            "pending_reason": str(frn_record.get("pending_reason", "")),
+                            "amount_requested": float(frn_record.get("commitment_amount") or 0),
+                            "service_type": str(frn_record.get("service_type", "") or ""),
+                            "application_number": str(frn_record.get("application_number", "") or ""),
+                        })
+
+        print(f"[INFO] pia-frns: Found {len(pia_frns)} FRNs in PIA review for year {funding_year}")
+
+    except Exception as e:
+        print(f"[ERROR] pia-frns: Failed to fetch PIA FRNs: {e}")
+        import traceback
+        traceback.print_exc()
+
+    result = {
+        "success": True,
+        "pia_frns": pia_frns,
+        "total": len(pia_frns),
+        "year": funding_year
+    }
+
+    set_cached(db, cache_key, result, ttl_hours=6)
+
+    return result
+
+
 @router.get("/schools")
 async def list_schools(
     include_usac_data: bool = Query(False, description="Fetch fresh data from USAC for each school"),

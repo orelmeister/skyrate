@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
-import { api, ConsultantSchool, ConsultantProfile, AppealRecord, PIAResponseRecord, FRNWatch, FRNReportHistory } from "@/lib/api";
+import { api, ConsultantSchool, ConsultantProfile, AppealRecord, PIAResponseRecord, PIAFRNRecord, FRNWatch, FRNReportHistory } from "@/lib/api";
 import { SearchResultsTable } from "@/components/SearchResultsTable";
 import { AppealChat } from "@/components/AppealChat";
 import { PIAChat } from "@/components/PIAChat";
@@ -194,6 +194,8 @@ function ConsultantPortalPage() {
   const [isPiaGenerating, setIsPiaGenerating] = useState(false);
   const [showPiaTemplates, setShowPiaTemplates] = useState(false);
   const [isLoadingPiaResponses, setIsLoadingPiaResponses] = useState(false);
+  const [piaFRNs, setPiaFRNs] = useState<PIAFRNRecord[]>([]);
+  const [isLoadingPiaFRNs, setIsLoadingPiaFRNs] = useState(false);
   const [piaError, setPiaError] = useState<string | null>(null);
   const [detectedCategory, setDetectedCategory] = useState<{ category: string; name: string } | null>(null);
 
@@ -1235,6 +1237,18 @@ function ConsultantPortalPage() {
       console.error("Failed to load PIA responses:", error);
     } finally {
       setIsLoadingPiaResponses(false);
+    }
+    // Also load FRNs currently under USAC PIA review
+    setIsLoadingPiaFRNs(true);
+    try {
+      const frnRes = await api.getPIAFRNs(2026);
+      if (frnRes.success && frnRes.data) {
+        setPiaFRNs(frnRes.data.pia_frns || []);
+      }
+    } catch (error) {
+      console.error("Failed to load PIA FRNs:", error);
+    } finally {
+      setIsLoadingPiaFRNs(false);
     }
   };
 
@@ -3759,6 +3773,77 @@ function ConsultantPortalPage() {
                   </svg>
                   Refresh
                 </button>
+              </div>
+
+              {/* FRNs Currently Under USAC PIA Review */}
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-amber-50 to-yellow-50 px-6 py-4 border-b border-slate-200">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-slate-900">FRNs Currently Under USAC PIA Review</h3>
+                      <p className="text-sm text-slate-500">These FRNs from your portfolio are in active PIA review</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-6">
+                  {isLoadingPiaFRNs ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="h-14 bg-slate-100 rounded-xl animate-pulse" />
+                      ))}
+                    </div>
+                  ) : piaFRNs.length === 0 ? (
+                    <div className="text-center py-8 text-slate-500">
+                      <p className="text-sm">No FRNs currently in PIA review</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-100">
+                            <th className="text-left py-2 pr-4 text-slate-500 font-medium">Entity Name</th>
+                            <th className="text-left py-2 pr-4 text-slate-500 font-medium">FRN</th>
+                            <th className="text-left py-2 pr-4 text-slate-500 font-medium">Pending Reason</th>
+                            <th className="text-left py-2 pr-4 text-slate-500 font-medium">Amount</th>
+                            <th className="text-left py-2 text-slate-500 font-medium">App #</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {piaFRNs.map((item, idx) => (
+                            <tr
+                              key={idx}
+                              className="border-b border-slate-50 hover:bg-amber-50 cursor-pointer transition-colors"
+                              onClick={() => {
+                                setPiaBen(item.ben);
+                                setPiaFrn(item.frn);
+                              }}
+                            >
+                              <td className="py-3 pr-4 font-medium text-slate-900">{item.school_name}</td>
+                              <td className="py-3 pr-4 font-mono text-slate-700">{item.frn}</td>
+                              <td className="py-3 pr-4">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                                  {item.pending_reason || "PIA Review"}
+                                </span>
+                              </td>
+                              <td className="py-3 pr-4 text-slate-700">
+                                {item.amount_requested > 0
+                                  ? `$${item.amount_requested.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                                  : "\u2014"}
+                              </td>
+                              <td className="py-3 text-slate-500 font-mono text-xs">{item.application_number || "\u2014"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <p className="mt-3 text-xs text-slate-400">Click a row to pre-fill the PIA Response Generator below</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Input Panel */}
