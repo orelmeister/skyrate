@@ -1551,7 +1551,7 @@ async def get_pia_frns(
     ben_to_school = {school.ben: school for school in schools}
 
     from app.services.cache_service import get_cached, set_cached, make_cache_key
-    cache_key = make_cache_key("pia_frns_v4", bens=all_bens, year=year or "all")
+    cache_key = make_cache_key("pia_frns_v5", bens=all_bens, year=year or "all")
     if not refresh:
         cached = get_cached(db, cache_key)
         if cached and cached.get("total", 0) > 0:
@@ -1581,12 +1581,16 @@ async def get_pia_frns(
                 for frn_record in ben_data.get("frns", []):
                     pending_reason_raw = str(frn_record.get("pending_reason", "") or "")
                     frn_status_raw = str(frn_record.get("status", "") or "").lower()
+                    pending_reason_lower = pending_reason_raw.lower()
                     # Only show FRNs actively under PIA review:
                     # - must have a pending_reason substatus set by USAC
-                    # - must NOT have a terminal status (FCDL Issued means review ended)
+                    # - pending_reason must NOT indicate review is already finished
+                    #   (e.g. "FCDL Issued", "Funded", "Funded, Not Pursued", "Denied")
+                    # - FRN status must NOT be terminal
                     TERMINAL_STATUSES = ("fcdl", "funded", "committed", "denied", "cancelled", "canceled", "withdrawn")
-                    is_terminal = any(t in frn_status_raw for t in TERMINAL_STATUSES)
-                    if pending_reason_raw.strip() and not is_terminal:
+                    pending_reason_terminal = any(t in pending_reason_lower for t in TERMINAL_STATUSES)
+                    status_terminal = any(t in frn_status_raw for t in TERMINAL_STATUSES)
+                    if pending_reason_raw.strip() and not pending_reason_terminal and not status_terminal:
                         pia_frns.append({
                             "frn": str(frn_record.get("frn", "")),
                             "ben": ben,
