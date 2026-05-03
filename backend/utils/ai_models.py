@@ -231,9 +231,9 @@ class AIModelManager:
                 api_key=api_key,
                 timeout=120.0  # 2 minute timeout for long appeals
             )
-            # Use claude-sonnet-4-20250514 as default (latest stable Sonnet)
-            # Alternative: claude-3-5-sonnet-20241022 for older version
-            model_name = os.environ.get('CLAUDE_MODEL', 'claude-sonnet-4-20250514')
+            # NOTE: Model IDs must be verified against the Anthropic API docs —
+            # newer model IDs like claude-sonnet-4-* are not yet stable release names.
+            model_name = os.environ.get('CLAUDE_MODEL', 'claude-3-7-sonnet-20250219')
             
             response = client.messages.create(
                 model=model_name,
@@ -325,24 +325,43 @@ Use specific details from the data provided."""
             elif model == 'deepseek' and self.is_model_available(AIModel.DEEPSEEK):
                 return self.call_deepseek([{"role": "user", "content": full_prompt}])
         
-        # Auto-select best available model
+        # Auto-select best available model with fallback on stub response
         if self.is_model_available(AIModel.CLAUDE):
             logger.info("Using Claude for deep analysis")
-            return self.call_claude(
+            result = self.call_claude(
                 [{"role": "user", "content": full_prompt}],
                 system="You are a senior E-Rate program consultant with 15+ years of experience with USAC and FCC E-Rate rules. You write winning appeals by demonstrating, with evidence, that the applicant followed program rules and that USAC's decision contains a factual or procedural error. You cite specific FCC orders and USAC program guidelines. You never use legal jargon, administrative law arguments, or due process claims — those are ignored by USAC reviewers. Your appeals are clear, concise, rule-based, and evidence-focused.",
                 max_tokens=8000
             )
-        elif self.is_model_available(AIModel.GEMINI):
-            logger.info("Using Gemini for deep analysis (Claude unavailable)")
-            return self.call_gemini(full_prompt)
-        elif self.is_model_available(AIModel.DEEPSEEK):
-            logger.info("Using DeepSeek for deep analysis (Claude and Gemini unavailable)")
+            if not self._is_stub_response(result):
+                return result
+            logger.warning("Claude returned stub response at runtime, falling back to Gemini")
+
+        if self.is_model_available(AIModel.GEMINI):
+            logger.info("Using Gemini for deep analysis (Claude unavailable or stub)")
+            result = self.call_gemini(full_prompt)
+            if not self._is_stub_response(result):
+                return result
+            logger.warning("Gemini returned stub response at runtime, falling back to DeepSeek")
+
+        if self.is_model_available(AIModel.DEEPSEEK):
+            logger.info("Using DeepSeek for deep analysis (Claude and Gemini unavailable or stub)")
             return self.call_deepseek([{"role": "user", "content": full_prompt}])
-        else:
-            logger.warning("No AI models available for deep analysis")
-            return self._stub_response(prompt, "AI")
+
+        logger.warning("No AI models available for deep analysis")
+        return self._stub_response(prompt, "AI")
     
+    def _is_stub_response(self, text: str) -> bool:
+        """Return True if the text is a stub/error response from a model call."""
+        if not text:
+            return False
+        lower = text.lower()
+        return (
+            "api not configured" in lower or
+            "unavailable:" in lower or
+            "please configure api key" in lower
+        )
+
     def _stub_response(self, prompt: str, model_name: str, error: str = None) -> str:
         """Generate a stub response when API is unavailable."""
         if error:

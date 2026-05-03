@@ -102,7 +102,7 @@ def _is_appealable_status(status_name: str, frn_data: Dict = None, additional_co
                 pass
         
         # If FCDL comment mentions rescission/adjustment
-        fcdl = str(frn_data.get("fcdl_comment") or "").lower()
+        fcdl = str(frn_data.get("fcdl_comment_frn") or frn_data.get("fcdl_comment_app") or frn_data.get("fcdl_comment") or "").lower()
         if any(kw in fcdl for kw in ["rescind", "adjustment", "recover", "reduce", "ineligible"]):
             return True, "rescission", "FCDL indicates adverse action"
     
@@ -196,7 +196,12 @@ def _build_denial_details(application: Application, frn_data: Dict[str, Any] = N
     # If we have raw USAC data, extract additional fields
     if frn_data:
         # Extract all relevant denial-related fields from USAC
-        fcdl_comment = fcdl_comment or frn_data.get("fcdl_comment", "") or frn_data.get("denial_reason", "") or frn_data.get("frn_denial_reason_desc", "")
+        fcdl_comment = (fcdl_comment or 
+            frn_data.get("fcdl_comment_frn", "") or 
+            frn_data.get("fcdl_comment_app", "") or
+            frn_data.get("fcdl_comment", "") or 
+            frn_data.get("denial_reason", "") or 
+            frn_data.get("frn_denial_reason_desc", ""))
         
         # Extract additional USAC fields for context
         usac_additional_context = {
@@ -665,6 +670,8 @@ async def generate_appeal(
         
         # Extract comprehensive denial information
         fcdl_comment = (
+            frn_data.get("fcdl_comment_frn") or 
+            frn_data.get("fcdl_comment_app") or 
             frn_data.get("fcdl_comment") or 
             frn_data.get("denial_reason") or 
             frn_data.get("frn_denial_reason_desc") or 
@@ -708,6 +715,8 @@ async def generate_appeal(
             
             # Update FCDL comment if we got better data from USAC
             new_fcdl = (
+                frn_data.get("fcdl_comment_frn") or 
+                frn_data.get("fcdl_comment_app") or 
                 frn_data.get("fcdl_comment") or 
                 frn_data.get("denial_reason") or 
                 frn_data.get("frn_denial_reason_desc") or 
@@ -975,7 +984,11 @@ INSTRUCTIONS:
         
         ai_result = ai_manager.deep_analysis(data_context, prompt)
         
-        if ai_result and len(ai_result) > 50:
+        # Detect stub responses (AI unavailable) — fall through to keyword-based fallback
+        stub_markers = ["api not configured", "unavailable:", "please configure api key"]
+        is_stub = ai_result and any(m in ai_result.lower() for m in stub_markers)
+
+        if ai_result and len(ai_result) > 50 and not is_stub:
             # Parse the AI response
             response_text = ""
             updated_text = None

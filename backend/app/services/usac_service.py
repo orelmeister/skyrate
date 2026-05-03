@@ -901,7 +901,10 @@ class USACService:
                         status = row.get('form_471_frn_status_name') or row.get('frn_status') or row.get('application_status') or 'Unknown'
                         
                         # Get FCDL comment (denial reason)
-                        fcdl_comment = row.get('fcdl_comment') or row.get('fcdl_letter_comment') or ''
+                        fcdl_comment = (row.get('fcdl_comment_frn') or 
+                            row.get('fcdl_comment_app') or 
+                            row.get('fcdl_comment') or 
+                            row.get('fcdl_letter_comment') or '')
                         
                         # Parse FCDL date and calculate appeal deadline
                         fcdl_date_str = row.get('fcdl_date') or row.get('fcdl_letter_date')
