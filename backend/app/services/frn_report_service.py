@@ -601,7 +601,15 @@ class FRNReportService:
             elif change_type == "disbursement":
                 alert_type = AlertType.DISBURSEMENT_RECEIVED
                 priority = AlertPriority.MEDIUM
-            elif change_type in ("substatus_change", "f486_change"):
+            elif change_type == "substatus_change":
+                alert_type = AlertType.SUBSTATUS_CHANGE
+                new_sub = (change.get("new_status", "") or "").lower()
+                urgent_patterns = ("15 day", "15-day", "letter of inquiry", "pia", "reminder notice", "outstanding", "response required")
+                if any(p in new_sub for p in urgent_patterns):
+                    priority = AlertPriority.HIGH
+                else:
+                    priority = AlertPriority.MEDIUM
+            elif change_type == "f486_change":
                 alert_type = AlertType.SUBSTATUS_CHANGE
                 priority = AlertPriority.LOW
             else:
@@ -1023,11 +1031,20 @@ class FRNReportService:
         if grand_changes > 0 and not (is_first_snapshot and grand_changes == 0):
             html += self._generate_portfolio_summary_html(watch_sections)
 
-        # View in dashboard link
+        # View in dashboard link — deep-link to first changed FRN if available
+        first_frn_number = None
+        for _section in watch_sections:
+            for _change in _section.get("changes", []):
+                if _change.get("frn"):
+                    first_frn_number = _change["frn"]
+                    break
+            if first_frn_number:
+                break
+        cta_url = f"https://skyrate.ai/consultant?tab=frn-status&frn={first_frn_number}" if first_frn_number else "https://skyrate.ai/consultant?tab=frn-status"
         html += f"""
                     <tr>
                         <td style="padding: 20px 30px; text-align: center;">
-                            <a href="https://skyrate.ai/consultant?tab=frn-status" style="display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #0f766e, #0d9488); color: #ffffff; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600;">View FRN Status Details</a>
+                            <a href="{cta_url}" style="display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #0f766e, #0d9488); color: #ffffff; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600;">View FRN Status Details</a>
                         </td>
                     </tr>
 """
@@ -1413,6 +1430,15 @@ class FRNReportService:
             prompt = f"""You are writing a brief FRN status change summary for an E-Rate consultant.
 E-Rate is the federal program (managed by USAC/FCC) that provides funding for schools and libraries.
 FRN = Funding Request Number. Key statuses: Funded/Committed (approved), Pending (under review), Denied (rejected - may need appeal).
+
+USAC PIA SUBSTATUS URGENCY GUIDE (critical for correct tone):
+- "15 Day Reminder Notice" or "15-Day" = CRITICAL: The applicant has only 15 calendar days to respond to USAC or the FRN will be DENIED. Flag this explicitly.
+- "Letter of Inquiry" = HIGH URGENCY: USAC is requesting clarification; non-response leads to denial.
+- "PIA Review" or "In PIA Review" = MEDIUM: Under review, no immediate action but monitor closely.
+- "Outstanding" with "PIA" context = HIGH: Response to USAC is overdue.
+- "FCDL" or "Commitment" = POSITIVE: Funding committed, no urgent action needed.
+- "Disbursement" changes = POSITIVE: Funds disbursed, inform client.
+Always match your summary tone to the urgency level above.
 
 Here are the changes detected since the last report:
 {changes_text}
