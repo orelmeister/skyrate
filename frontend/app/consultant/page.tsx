@@ -3817,10 +3817,11 @@ function ConsultantPortalPage() {
                           {piaFRNs.map((item, idx) => (
                             <tr
                               key={idx}
-                              className="border-b border-slate-50 hover:bg-amber-50 cursor-pointer transition-colors"
+                              className={`border-b border-slate-50 hover:bg-amber-50 cursor-pointer transition-colors ${item.frn === piaFrn && item.ben === piaBen ? "bg-amber-100" : ""}`}
                               onClick={() => {
                                 setPiaBen(item.ben);
                                 setPiaFrn(item.frn);
+                                document.getElementById("pia-input-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
                               }}
                             >
                               <td className="py-3 pr-4 font-medium text-slate-900">{item.school_name}</td>
@@ -3847,7 +3848,7 @@ function ConsultantPortalPage() {
               </div>
 
               {/* Input Panel */}
-              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+              <div id="pia-input-panel" className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
                 <div className="bg-gradient-to-r from-teal-50 to-cyan-50 px-6 py-4 border-b border-slate-200">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center">

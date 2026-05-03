@@ -618,6 +618,39 @@ def _run_schema_migrations(engine):
     
     try:
         inspector = inspect(engine)
+        
+        # Ensure pia_responses table exists (may not exist if app ran on SQLite when table was first deployed)
+        if not inspector.has_table("pia_responses"):
+            with engine.begin() as conn:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS pia_responses (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        user_id INT NOT NULL,
+                        ben VARCHAR(20),
+                        frn VARCHAR(20),
+                        funding_year INT DEFAULT 2026,
+                        application_number VARCHAR(50),
+                        organization_name VARCHAR(255),
+                        state VARCHAR(2),
+                        entity_type VARCHAR(50),
+                        pia_category VARCHAR(50) NOT NULL,
+                        original_question TEXT NOT NULL,
+                        response_text TEXT,
+                        supporting_docs JSON,
+                        strategy JSON,
+                        chat_history JSON,
+                        status VARCHAR(50) DEFAULT 'draft',
+                        deadline_date DATETIME,
+                        generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        INDEX ix_pia_responses_user_id (user_id),
+                        INDEX ix_pia_responses_ben (ben),
+                        INDEX ix_pia_responses_frn (frn),
+                        FOREIGN KEY (user_id) REFERENCES users(id)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """))
+            logger.info("Migration: Created pia_responses table")
+
         for table, column, col_type, _ in migrations:
             if not inspector.has_table(table):
                 continue

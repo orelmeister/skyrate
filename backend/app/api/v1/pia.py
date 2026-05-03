@@ -525,44 +525,51 @@ async def generate_pia_response(
     deadline_date = datetime.utcnow() + timedelta(days=15)
 
     # Create PIAResponse record
-    pia_record = PIAResponse(
-        user_id=current_user.id,
-        ben=request.ben or usac_data.get("ben"),
-        frn=request.frn,
-        funding_year=request.funding_year or 2026,
-        application_number=usac_data.get("application_number"),
-        organization_name=usac_data.get("organization_name"),
-        state=usac_data.get("state"),
-        entity_type=usac_data.get("entity_type"),
-        pia_category=category,
-        original_question=question,
-        response_text=response_text,
-        supporting_docs=doc_checklist,
-        strategy=strategy,
-        status="draft",
-        deadline_date=deadline_date,
-        chat_history=[{
-            "role": "assistant",
-            "content": (
-                f"I've generated a PIA response for the {classification['category_name']} category. "
-                f"The response addresses the reviewer's question and includes document attachment placeholders. "
-                f"Would you like me to modify any section?"
-            ),
-            "timestamp": datetime.utcnow().isoformat(),
-        }],
-    )
+    try:
+        pia_record = PIAResponse(
+            user_id=current_user.id,
+            ben=request.ben or usac_data.get("ben"),
+            frn=request.frn,
+            funding_year=request.funding_year or 2026,
+            application_number=usac_data.get("application_number"),
+            organization_name=usac_data.get("organization_name"),
+            state=usac_data.get("state"),
+            entity_type=usac_data.get("entity_type"),
+            pia_category=category,
+            original_question=question,
+            response_text=response_text,
+            supporting_docs=doc_checklist,
+            strategy=strategy,
+            status="draft",
+            deadline_date=deadline_date,
+            chat_history=[{
+                "role": "assistant",
+                "content": (
+                    f"I've generated a PIA response for the {classification['category_name']} category. "
+                    f"The response addresses the reviewer's question and includes document attachment placeholders. "
+                    f"Would you like me to modify any section?"
+                ),
+                "timestamp": datetime.utcnow().isoformat(),
+            }],
+        )
 
-    db.add(pia_record)
-    db.commit()
-    db.refresh(pia_record)
+        db.add(pia_record)
+        db.commit()
+        db.refresh(pia_record)
+    except Exception as db_err:
+        db.rollback()
+        print(f"[ERROR] pia/generate: DB write failed: {db_err}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save PIA response: {str(db_err)}. The pia_responses table may not exist — check server logs."
+        )
 
-    return {
-        "success": True,
-        "data": pia_record.to_dict(),
-        "classification": classification,
-        "document_checklist": doc_checklist,
-        "message": f"PIA response generated for category: {classification['category_name']}",
-    }
+    record_dict = pia_record.to_dict()
+    record_dict["classification"] = classification
+    record_dict["document_checklist"] = doc_checklist
+    return record_dict
 
 
 @router.post("/chat", response_model=PIAChatResponse)
@@ -659,11 +666,7 @@ async def save_pia_response(
     db.commit()
     db.refresh(pia_record)
 
-    return {
-        "success": True,
-        "data": pia_record.to_dict(),
-        "message": "PIA response saved successfully",
-    }
+    return pia_record.to_dict()
 
 
 @router.put("/{pia_id}/status")
@@ -697,11 +700,7 @@ async def update_pia_status(
     db.commit()
     db.refresh(pia_record)
 
-    return {
-        "success": True,
-        "data": pia_record.to_dict(),
-        "message": f"PIA response status updated to {request.status}",
-    }
+    return pia_record.to_dict()
 
 
 @router.get("/{pia_id}")
@@ -722,10 +721,7 @@ async def get_pia_response(
             detail="PIA response not found",
         )
 
-    return {
-        "success": True,
-        "data": pia_record.to_dict(),
-    }
+    return pia_record.to_dict()
 
 
 @router.get("/")
@@ -749,9 +745,8 @@ async def list_pia_responses(
     pia_records = query.order_by(PIAResponse.generated_at.desc()).all()
 
     return {
-        "success": True,
-        "data": [r.to_dict() for r in pia_records],
-        "count": len(pia_records),
+        "pia_responses": [r.to_dict() for r in pia_records],
+        "total": len(pia_records),
     }
 
 

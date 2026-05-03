@@ -1551,13 +1551,12 @@ async def get_pia_frns(
     ben_to_school = {school.ben: school for school in schools}
 
     from app.services.cache_service import get_cached, set_cached, make_cache_key
-    cache_key = make_cache_key("pia_frns_v2", bens=all_bens, year=year or "all")
+    cache_key = make_cache_key("pia_frns_v3", bens=all_bens, year=year or "all")
     if not refresh:
         cached = get_cached(db, cache_key)
         if cached and cached.get("total", 0) > 0:
             return cached
 
-    PIA_KEYWORDS = ["pia", "15 day", "15-day", "letter of inquiry", "reminder notice", "selective review"]
     pia_frns = []
 
     try:
@@ -1568,6 +1567,8 @@ async def get_pia_frns(
         # for status filtering ("frn_status") differs from the actual USAC column
         # ("form_471_frn_status_name"), which causes a Socrata 400 error and empty results.
         # Instead, fetch all FRNs for the given year and filter PIA matches in Python.
+        # In E-Rate, any FRN with a non-empty pending_reason is under PIA review
+        # (pending_reason is the PIA sub-status field set by USAC during review).
         batch_result = client.get_frn_status_batch(
             bens=all_bens,
             year=year  # None = all funding years
@@ -1578,21 +1579,22 @@ async def get_pia_frns(
                 ben = ben_data.get("ben", "")
                 school = ben_to_school.get(ben)
                 for frn_record in ben_data.get("frns", []):
-                    pending_reason = str(frn_record.get("pending_reason", "") or "").lower()
-                    if any(kw in pending_reason for kw in PIA_KEYWORDS):
+                    pending_reason_raw = str(frn_record.get("pending_reason", "") or "")
+                    # Any non-empty pending_reason means USAC has the FRN under PIA review
+                    if pending_reason_raw.strip():
                         pia_frns.append({
                             "frn": str(frn_record.get("frn", "")),
                             "ben": ben,
                             "school_name": school.school_name if school else ben_data.get("entity_name", "Unknown"),
                             "funding_year": str(frn_record.get("funding_year", "")),
                             "status": str(frn_record.get("status", "Pending")),
-                            "pending_reason": str(frn_record.get("pending_reason", "")),
+                            "pending_reason": pending_reason_raw,
                             "amount_requested": float(frn_record.get("commitment_amount") or 0),
                             "service_type": str(frn_record.get("service_type", "") or ""),
                             "application_number": str(frn_record.get("application_number", "") or ""),
                         })
 
-        print(f"[INFO] pia-frns: Found {len(pia_frns)} FRNs in PIA review (year filter: {year or 'all'})")
+        print(f"[INFO] pia-frns: Found {len(pia_frns)} FRNs with pending_reason (PIA review) for {len(all_bens)} BENs (year filter: {year or 'all'})")
 
     except Exception as e:
         print(f"[ERROR] pia-frns: Failed to fetch PIA FRNs: {e}")
