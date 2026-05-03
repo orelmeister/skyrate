@@ -1226,7 +1226,7 @@ function ConsultantPortalPage() {
 
   // ==================== PIA RESPONSE HANDLERS ====================
 
-  const loadPIAHistory = async () => {
+  const loadPIAHistory = async (forceRefresh = false) => {
     setIsLoadingPiaResponses(true);
     try {
       const res = await api.getPIAResponses();
@@ -1238,10 +1238,10 @@ function ConsultantPortalPage() {
     } finally {
       setIsLoadingPiaResponses(false);
     }
-    // Also load FRNs currently under USAC PIA review
+    // Also load FRNs currently under USAC PIA review (no year filter — catches FY2025 and FY2026)
     setIsLoadingPiaFRNs(true);
     try {
-      const frnRes = await api.getPIAFRNs(2026);
+      const frnRes = await api.getPIAFRNs(undefined, forceRefresh);
       if (frnRes.success && frnRes.data) {
         setPiaFRNs(frnRes.data.pia_frns || []);
       }
@@ -3765,7 +3765,7 @@ function ConsultantPortalPage() {
                   <p className="text-slate-500">Generate professional PIA responses in seconds with AI assistance</p>
                 </div>
                 <button
-                  onClick={() => loadPIAHistory()}
+                  onClick={() => loadPIAHistory(true)}
                   className="px-4 py-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-sm font-medium text-slate-700 flex items-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

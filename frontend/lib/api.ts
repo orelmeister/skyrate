@@ -1724,9 +1724,10 @@ class ApiClient {
   /**
    * Get FRNs currently under USAC PIA Review
    */
-  async getPIAFRNs(year?: number): Promise<ApiResponse<{ pia_frns: PIAFRNRecord[]; total: number; year: number }>> {
+  async getPIAFRNs(year?: number, refresh?: boolean): Promise<ApiResponse<{ pia_frns: PIAFRNRecord[]; total: number; year: number | null }>> {
     const params = new URLSearchParams();
     if (year) params.append('year', year.toString());
+    if (refresh) params.append('refresh', 'true');
     const qs = params.toString();
     return this.request(`/api/v1/consultant/pia-frns${qs ? '?' + qs : ''}`);
   }

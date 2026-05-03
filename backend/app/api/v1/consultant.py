@@ -1522,13 +1522,18 @@ async def get_denied_applications(
 
 @router.get("/pia-frns")
 async def get_pia_frns(
-    year: Optional[int] = Query(None, description="Filter by funding year (defaults to 2026)"),
+    year: Optional[int] = Query(None, description="Filter by funding year. Omit to search all years."),
+    refresh: bool = Query(False, description="Bypass cache and fetch fresh data from USAC"),
     profile: ConsultantProfile = Depends(get_consultant_profile),
     db: Session = Depends(get_db)
 ):
     """
     Get FRNs currently under USAC PIA (Program Integrity Assurance) review
     for the consultant's portfolio schools.
+
+    Searches ALL years by default (no year= param) so that FRNs from FY2025
+    and FY2026 are both captured. The pending_reason field is checked in Python
+    because the Socrata status column name differs across USAC endpoints.
     """
     schools = db.query(ConsultantSchool).filter(
         ConsultantSchool.consultant_profile_id == profile.id
@@ -1539,18 +1544,18 @@ async def get_pia_frns(
             "success": True,
             "pia_frns": [],
             "total": 0,
-            "year": year or 2026
+            "year": year
         }
 
     all_bens = [school.ben for school in schools]
     ben_to_school = {school.ben: school for school in schools}
 
     from app.services.cache_service import get_cached, set_cached, make_cache_key
-    funding_year = year or 2026
-    cache_key = make_cache_key("pia_frns", bens=all_bens, year=funding_year)
-    cached = get_cached(db, cache_key)
-    if cached:
-        return cached
+    cache_key = make_cache_key("pia_frns_v2", bens=all_bens, year=year or "all")
+    if not refresh:
+        cached = get_cached(db, cache_key)
+        if cached and cached.get("total", 0) > 0:
+            return cached
 
     PIA_KEYWORDS = ["pia", "15 day", "15-day", "letter of inquiry", "reminder notice", "selective review"]
     pia_frns = []
@@ -1559,10 +1564,13 @@ async def get_pia_frns(
         from utils.usac_client import USACDataClient
         client = USACDataClient()
 
+        # Do NOT pass status_filter here — the column name used in get_frn_status_batch
+        # for status filtering ("frn_status") differs from the actual USAC column
+        # ("form_471_frn_status_name"), which causes a Socrata 400 error and empty results.
+        # Instead, fetch all FRNs for the given year and filter PIA matches in Python.
         batch_result = client.get_frn_status_batch(
             bens=all_bens,
-            year=funding_year,
-            status_filter="Pending"
+            year=year  # None = all funding years
         )
 
         if batch_result.get("success"):
@@ -1576,7 +1584,7 @@ async def get_pia_frns(
                             "frn": str(frn_record.get("frn", "")),
                             "ben": ben,
                             "school_name": school.school_name if school else ben_data.get("entity_name", "Unknown"),
-                            "funding_year": str(frn_record.get("funding_year", funding_year)),
+                            "funding_year": str(frn_record.get("funding_year", "")),
                             "status": str(frn_record.get("status", "Pending")),
                             "pending_reason": str(frn_record.get("pending_reason", "")),
                             "amount_requested": float(frn_record.get("commitment_amount") or 0),
@@ -1584,7 +1592,7 @@ async def get_pia_frns(
                             "application_number": str(frn_record.get("application_number", "") or ""),
                         })
 
-        print(f"[INFO] pia-frns: Found {len(pia_frns)} FRNs in PIA review for year {funding_year}")
+        print(f"[INFO] pia-frns: Found {len(pia_frns)} FRNs in PIA review (year filter: {year or 'all'})")
 
     except Exception as e:
         print(f"[ERROR] pia-frns: Failed to fetch PIA FRNs: {e}")
@@ -1595,10 +1603,12 @@ async def get_pia_frns(
         "success": True,
         "pia_frns": pia_frns,
         "total": len(pia_frns),
-        "year": funding_year
+        "year": year
     }
 
-    set_cached(db, cache_key, result, ttl_hours=6)
+    # Only cache non-empty results to allow retries when data is temporarily unavailable
+    if pia_frns:
+        set_cached(db, cache_key, result, ttl_hours=6)
 
     return result
 
