@@ -217,6 +217,7 @@ class FRNReportService:
                 except Exception as e:
                     logger.error(f"Error processing watch {watch.id}: {e}")
                     watch.last_error = str(e)
+                    watch.next_send_at = watch.calculate_next_send()  # Always advance schedule even on error
                     watch_errors += 1
             
             if not watch_sections:
