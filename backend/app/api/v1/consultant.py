@@ -2414,7 +2414,9 @@ async def get_portfolio_frn_status(
     pending_reason: Optional[str] = None,
     limit: int = 500,
     refresh: bool = False,
+    ben: Optional[str] = None,
     profile: ConsultantProfile = Depends(get_consultant_profile),
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
     db: Session = Depends(get_db),
 ):
     """
@@ -2432,18 +2434,42 @@ async def get_portfolio_frn_status(
         limit: Maximum records per school (default 500)
         refresh: If True, bypass cache and fetch fresh data from USAC
     """
-    # Get all BENs in portfolio
-    school_bens = [s.ben for s in profile.schools]
-    
-    if not school_bens:
-        return {
-            "success": True,
-            "message": "No schools in portfolio. Add schools to track their FRN status.",
-            "total_frns": 0,
-            "summary": {},
-            "schools": []
-        }
-    
+    is_privileged = current_user.role in ("super", "admin")
+
+    # Direct BEN lookup (from frn-status tab search)
+    if ben:
+        portfolio_bens = {s.ben for s in profile.schools}
+        if ben not in portfolio_bens and not is_privileged:
+            # Regular consultant querying a BEN not in their portfolio — trigger upsell
+            return {
+                "success": True,
+                "access_restricted": True,
+                "upgrade_required": True,
+                "ben": ben,
+                "total_frns": 0,
+                "total_schools": 0,
+                "summary": {
+                    "funded": {"count": 0, "amount": 0},
+                    "denied": {"count": 0, "amount": 0},
+                    "pending": {"count": 0, "amount": 0},
+                    "other": {"count": 0, "amount": 0},
+                },
+                "schools": [],
+            }
+        # Super/admin or BEN is in portfolio: scope query to this single BEN
+        school_bens = [ben]
+    else:
+        # Get all BENs in portfolio
+        school_bens = [s.ben for s in profile.schools]
+        if not school_bens:
+            return {
+                "success": True,
+                "message": "No schools in portfolio. Add schools to track their FRN status.",
+                "total_frns": 0,
+                "summary": {},
+                "schools": [],
+            }
+
     # Check DB cache first (unless refresh is requested)
     cache_key = None
     try:
@@ -2556,6 +2582,7 @@ async def get_school_frn_status(
     ben: str,
     year: Optional[int] = None,
     profile: ConsultantProfile = Depends(get_consultant_profile),
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
 ):
     """
     Get detailed FRN status for a specific school in the portfolio.
@@ -2564,9 +2591,10 @@ async def get_school_frn_status(
         ben: Billed Entity Number
         year: Optional funding year filter
     """
-    # Verify school is in portfolio
+    # Verify school is in portfolio (bypassed for super/admin)
+    is_privileged = current_user.role in ("super", "admin")
     school_bens = [s.ben for s in profile.schools]
-    if ben not in school_bens:
+    if ben not in school_bens and not is_privileged:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"School {ben} not found in your portfolio"

@@ -1369,7 +1369,7 @@ class ApiClient {
   /**
    * Get FRN status for all schools in consultant's portfolio
    */
-  async getConsultantFRNStatus(year?: number, status?: string, limit: number = 500, pendingReason?: string, refresh?: boolean): Promise<ApiResponse<{
+  async getConsultantFRNStatus(year?: number, status?: string, limit: number = 500, pendingReason?: string, refresh?: boolean, ben?: string): Promise<ApiResponse<{
     success: boolean;
     total_frns: number;
     total_schools: number;
@@ -1398,6 +1398,7 @@ class ApiClient {
     if (limit) params.set('limit', String(limit));
     if (pendingReason) params.set('pending_reason', pendingReason);
     if (refresh) params.set('refresh', 'true');
+    if (ben) params.set('ben', ben);
     const queryString = params.toString() ? `?${params.toString()}` : '';
     return this.request(`/api/v1/consultant/frn-status${queryString}`);
   }

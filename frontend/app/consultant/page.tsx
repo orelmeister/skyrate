@@ -211,7 +211,9 @@ function ConsultantPortalPage() {
   const [frnTableSort, setFrnTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
   const [schoolsTableSort, setSchoolsTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
   const [serviceSearchSort, setServiceSearchSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
-  
+  const [showBenUpgradeModal, setShowBenUpgradeModal] = useState(false);
+  const [upgradeBen, setUpgradeBen] = useState<string>('');
+
   // FRN Watch/Monitor state
   const [frnWatches, setFrnWatches] = useState<FRNWatch[]>([]);
   const [showCreateWatch, setShowCreateWatch] = useState(false);
@@ -676,12 +678,19 @@ function ConsultantPortalPage() {
   };
 
   // Load Portfolio FRN Status
-  const loadPortfolioFRNStatus = async (year?: number, statusFilter?: string, pendingReason?: string, refresh?: boolean) => {
+  const loadPortfolioFRNStatus = async (year?: number, statusFilter?: string, pendingReason?: string, refresh?: boolean, ben?: string) => {
     setPortfolioFrnLoading(true);
     try {
-      const response = await api.getConsultantFRNStatus(year, statusFilter || undefined, 500, pendingReason || undefined, refresh);
+      const response = await api.getConsultantFRNStatus(year, statusFilter || undefined, 500, pendingReason || undefined, refresh, ben);
       if (response.success && response.data) {
-        setPortfolioFrnData(response.data);
+        const data = response.data as any;
+        if (data.access_restricted) {
+          // Regular consultant tried to look up a BEN not in their portfolio
+          setUpgradeBen(data.ben || ben || '');
+          setShowBenUpgradeModal(true);
+        } else {
+          setPortfolioFrnData(response.data);
+        }
       }
     } catch (error) {
       console.error("Failed to load portfolio FRN status:", error);
@@ -2844,7 +2853,18 @@ function ConsultantPortalPage() {
                     />
                   </div>
                   <button
-                    onClick={() => loadPortfolioFRNStatus(portfolioFrnYear, portfolioFrnStatusFilter, portfolioFrnPendingReason)}
+                    onClick={() => {
+                      const searchTerm = portfolioFrnSearch.trim();
+                      // Detect a BEN-like search (all digits, 5-10 chars)
+                      const looksLikeBen = /^\d{5,10}$/.test(searchTerm);
+                      const benAlreadyLoaded = looksLikeBen && portfolioFrnData?.schools?.some((s: any) => s.ben === searchTerm);
+                      if (looksLikeBen && !benAlreadyLoaded) {
+                        // Pass ben to backend — super/admin will get results, others get upsell
+                        loadPortfolioFRNStatus(portfolioFrnYear, portfolioFrnStatusFilter, portfolioFrnPendingReason, undefined, searchTerm);
+                      } else {
+                        loadPortfolioFRNStatus(portfolioFrnYear, portfolioFrnStatusFilter, portfolioFrnPendingReason);
+                      }
+                    }}
                     disabled={portfolioFrnLoading}
                     className="mt-5 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium flex items-center gap-2"
                   >
@@ -4885,6 +4905,49 @@ function ConsultantPortalPage() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* BEN Upgrade Modal — shown when regular consultant searches a non-portfolio BEN */}
+      {showBenUpgradeModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8">
+            <div className="text-center">
+              <div className="w-16 h-16 rounded-2xl bg-amber-100 flex items-center justify-center mx-auto mb-4">
+                <span className="text-3xl">🔒</span>
+              </div>
+              <h2 className="text-xl font-bold text-slate-900 mb-2">School Not in Your Portfolio</h2>
+              <p className="text-slate-600 mb-2">
+                BEN <span className="font-mono font-bold text-slate-900">{upgradeBen}</span> is not associated with your account.
+              </p>
+              <p className="text-slate-600 mb-6">
+                Upgrade to <strong>Unlimited Plan</strong> to look up any school by BEN number and access E-Rate data for any entity nationwide.
+              </p>
+              <div className="bg-gradient-to-r from-teal-50 to-emerald-50 rounded-xl p-4 mb-6 text-left">
+                <p className="text-sm font-semibold text-teal-800 mb-2">Unlimited Plan includes:</p>
+                <ul className="text-sm text-teal-700 space-y-1">
+                  <li>✓ Look up any school by BEN number</li>
+                  <li>✓ Unlimited portfolio size</li>
+                  <li>✓ Full FRN status history</li>
+                  <li>✓ Priority support</li>
+                </ul>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowBenUpgradeModal(false)}
+                  className="flex-1 px-4 py-2 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 text-sm font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => { setShowBenUpgradeModal(false); setActiveTab('settings'); }}
+                  className="flex-1 px-4 py-2 bg-teal-600 text-white rounded-xl hover:bg-teal-700 text-sm font-medium transition-colors"
+                >
+                  Upgrade Now
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
