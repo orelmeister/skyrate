@@ -328,26 +328,34 @@ Use specific details from the data provided."""
         # Auto-select best available model with fallback on stub response
         if self.is_model_available(AIModel.CLAUDE):
             logger.info("Using Claude for deep analysis")
+            print("[AI] deep_analysis: trying Claude", flush=True)
             result = self.call_claude(
                 [{"role": "user", "content": full_prompt}],
                 system="You are a senior E-Rate program consultant with 15+ years of experience with USAC and FCC E-Rate rules. You write winning appeals by demonstrating, with evidence, that the applicant followed program rules and that USAC's decision contains a factual or procedural error. You cite specific FCC orders and USAC program guidelines. You never use legal jargon, administrative law arguments, or due process claims — those are ignored by USAC reviewers. Your appeals are clear, concise, rule-based, and evidence-focused.",
                 max_tokens=8000
             )
             if not self._is_stub_response(result):
+                print("[AI] deep_analysis: Claude succeeded", flush=True)
                 return result
+            print(f"[AI] deep_analysis: Claude returned stub, falling back to Gemini. Stub snippet: {result[:120]}", flush=True)
             logger.warning("Claude returned stub response at runtime, falling back to Gemini")
 
         if self.is_model_available(AIModel.GEMINI):
             logger.info("Using Gemini for deep analysis (Claude unavailable or stub)")
+            print("[AI] deep_analysis: trying Gemini", flush=True)
             result = self.call_gemini(full_prompt)
             if not self._is_stub_response(result):
+                print("[AI] deep_analysis: Gemini succeeded", flush=True)
                 return result
+            print(f"[AI] deep_analysis: Gemini returned stub, falling back to DeepSeek. Stub snippet: {result[:120]}", flush=True)
             logger.warning("Gemini returned stub response at runtime, falling back to DeepSeek")
 
         if self.is_model_available(AIModel.DEEPSEEK):
             logger.info("Using DeepSeek for deep analysis (Claude and Gemini unavailable or stub)")
+            print("[AI] deep_analysis: trying DeepSeek", flush=True)
             return self.call_deepseek([{"role": "user", "content": full_prompt}])
 
+        print("[AI] deep_analysis: ALL models unavailable - running in stub mode", flush=True)
         logger.warning("No AI models available for deep analysis")
         return self._stub_response(prompt, "AI")
     

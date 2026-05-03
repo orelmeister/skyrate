@@ -932,9 +932,12 @@ def _generate_chat_response(
         # Build strategy summary for context
         strategy_summary = ""
         if strategy:
+            fcdl_comment = strategy.get("fcdl_comment", "")
             denial_types = strategy.get("violation_types", [])
             evidence = strategy.get("evidence_checklist", [])
             timeline = strategy.get("timeline", {})
+            if fcdl_comment:
+                strategy_summary += f"USAC Denial Reason (FCDL Comment): {fcdl_comment}\n"
             if denial_types:
                 strategy_summary += f"Violation Types: {', '.join(denial_types)}\n"
             if evidence:
@@ -1027,7 +1030,42 @@ INSTRUCTIONS:
     
     # Fallback: Quick keyword-based responses (only if AI fails)
     message_lower = user_message.lower()
-    
+
+    # --- Data-first: answer denial/status questions from strategy ---
+    denial_keywords = [
+        "why denied", "why was it denied", "denial reason", "why did usac",
+        "what happened", "what did usac say", "fcdl comment", "fcdl reason",
+        "denied for", "denial comment", "reason for denial", "why was this denied",
+        "what is the denial", "what was the reason",
+    ]
+    if any(kw in message_lower for kw in denial_keywords):
+        fcdl_comment = strategy.get("fcdl_comment", "") if strategy else ""
+        denial_reasons_list = strategy.get("denial_reasons", []) if strategy else []
+        violation_types = strategy.get("violation_types", []) if strategy else []
+        appeal_deadline = strategy.get("appeal_deadline") if strategy else None
+
+        if fcdl_comment:
+            parts = [f"**USAC denial reason (FCDL comment):** {fcdl_comment}"]
+            if denial_reasons_list and any(r for r in denial_reasons_list if r and r != fcdl_comment):
+                extras = [r for r in denial_reasons_list if r and r != fcdl_comment]
+                parts.append(f"**Additional reasons:** {'; '.join(str(r) for r in extras[:3])}")
+            if violation_types:
+                parts.append(f"**Issue category:** {', '.join(violation_types)}")
+            if appeal_deadline:
+                parts.append(f"**Appeal deadline:** {appeal_deadline}")
+            parts.append("\nWould you like me to strengthen the appeal argument against this specific denial reason?")
+            return {"response": "\n\n".join(parts), "updated_text": None}
+        else:
+            return {
+                "response": (
+                    "I don't have the USAC denial reason stored for this FRN. "
+                    "Check the FCDL letter you received from USAC, or look up the FRN in the USAC EPC portal for the official decision text. "
+                    "You can paste the denial reason here and I'll incorporate it into the appeal."
+                ),
+                "updated_text": None
+            }
+    # ------------------------------------------------------------------
+
     if any(word in message_lower for word in ["stronger", "improve", "better", "enhance"]):
         fallback_msg = ("I'll strengthen the appeal by adding more specific arguments and evidence references. "
                        "Note: AI refinement is temporarily unavailable, but you can edit the letter directly "
