@@ -6,6 +6,9 @@ import { useAuthStore } from '@/lib/auth-store';
 import {
   isPushSupported,
   getNotificationPermission,
+  getNotificationStatus,
+  isIOS,
+  isRunningStandalone,
   requestNotificationPermission,
   subscribeToPush,
   unsubscribeFromPush,
@@ -41,23 +44,21 @@ export default function NotificationPermission() {
     }
   }, []);
 
-  const handleEnable = async () => {
+  // Must be synchronous up to the Notification.requestPermission call for iOS gesture recognition.
+  const handleEnable = () => {
     if (!token) return;
     setLoading(true);
-
-    try {
-      const perm = await requestNotificationPermission();
+    requestNotificationPermission((perm) => {
       setPermission(perm);
-
       if (perm === 'granted') {
-        const success = await subscribeToPush(token);
-        setIsSubscribed(success);
+        subscribeToPush(token)
+          .then((success) => setIsSubscribed(success))
+          .catch((err) => console.error('Failed to subscribe to push:', err))
+          .finally(() => setLoading(false));
+      } else {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error('Failed to enable notifications:', err);
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   const handleDisable = async () => {
@@ -79,8 +80,33 @@ export default function NotificationPermission() {
     localStorage.setItem('skyrate-push-dismissed', Date.now().toString());
   };
 
+  const notifStatus = getNotificationStatus();
+
+  // iOS not in standalone — show "Add to Home Screen" guidance
+  if (notifStatus === 'ios-not-standalone' && !dismissed) {
+    return (
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0 p-2 bg-blue-100 rounded-lg">
+            <Bell className="h-5 w-5 text-blue-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-900">Enable Push Notifications on iPhone/iPad</p>
+            <p className="text-xs text-gray-600 mt-1">
+              To enable notifications, add this app to your Home Screen: tap the{' '}
+              <strong>Share</strong> button, then <strong>Add to Home Screen</strong>, then reopen the app.
+            </p>
+          </div>
+          <button onClick={handleDismiss} className="text-gray-400 hover:text-gray-600 text-xs flex-shrink-0">
+            Dismiss
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Don't show if not supported, already subscribed, or dismissed
-  if (!isPushSupported() || permission === 'unsupported') return null;
+  if (notifStatus === 'unsupported' || !isPushSupported()) return null;
   if (isSubscribed) return null;
   if (permission === 'denied') return null;
   if (dismissed) return null;
@@ -140,30 +166,47 @@ export function PushNotificationToggle() {
     });
   }, [supported]);
 
-  const toggle = async () => {
+  const toggle = () => {
     if (!token) return;
     setLoading(true);
-    try {
-      if (isSubscribed) {
-        await unsubscribeFromPush(token);
-        setIsSubscribed(false);
-      } else {
-        const perm = await requestNotificationPermission();
+    if (isSubscribed) {
+      unsubscribeFromPush(token)
+        .then(() => setIsSubscribed(false))
+        .catch((err) => console.error('Failed to unsubscribe:', err))
+        .finally(() => setLoading(false));
+    } else {
+      requestNotificationPermission((perm) => {
         if (perm === 'granted') {
-          const success = await subscribeToPush(token);
-          setIsSubscribed(success);
+          subscribeToPush(token)
+            .then((success) => setIsSubscribed(success))
+            .catch((err) => console.error('Failed to subscribe:', err))
+            .finally(() => setLoading(false));
+        } else {
+          setLoading(false);
         }
-      }
-    } finally {
-      setLoading(false);
+      });
     }
   };
 
-  if (!supported) {
+  const status = getNotificationStatus();
+
+  if (status === 'ios-not-standalone') {
+    return (
+      <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+        <Bell className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+        <p className="text-xs text-gray-700">
+          To enable push notifications on iPhone/iPad, tap <strong>Share</strong> in Safari and select{' '}
+          <strong>Add to Home Screen</strong>, then reopen the app.
+        </p>
+      </div>
+    );
+  }
+
+  if (!supported || status === 'unsupported') {
     return (
       <div className="flex items-center gap-3 opacity-50">
         <BellOff className="h-5 w-5 text-gray-400" />
-        <span className="text-sm text-gray-500">Push notifications not supported in this browser</span>
+        <span className="text-sm text-gray-500">Notifications not supported in this browser</span>
       </div>
     );
   }

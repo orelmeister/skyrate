@@ -27,10 +27,57 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
 }
 
 /**
- * Check if push notifications are supported
+ * Feature detection — no user-agent sniffing.
+ * Checks if the browser exposes the APIs needed for push.
  */
 export function isPushSupported(): boolean {
-  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  return (
+    typeof window !== 'undefined' &&
+    'Notification' in window &&
+    ('PushManager' in window || 'serviceWorker' in navigator)
+  );
+}
+
+/**
+ * Checks if PWA is running in standalone (Home Screen) mode.
+ * iOS 16.4+ Web Push ONLY works in standalone mode.
+ */
+export function isRunningStandalone(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (window.navigator as any).standalone === true ||
+    document.referrer.includes('android-app://')
+  );
+}
+
+/**
+ * Returns true if we're on iOS.
+ * Used only to show the "Add to Home Screen" message — NOT to block the API.
+ */
+export function isIOS(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    /iPad|iPhone|iPod/.test(navigator.platform) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
+}
+
+export type NotificationPermissionStatus =
+  | 'granted'
+  | 'denied'
+  | 'default'
+  | 'unsupported'
+  | 'ios-not-standalone';
+
+/**
+ * Returns a rich status string that distinguishes iOS-not-standalone
+ * from genuinely unsupported environments.
+ */
+export function getNotificationStatus(): NotificationPermissionStatus {
+  if (!isPushSupported()) return 'unsupported';
+  if (isIOS() && !isRunningStandalone()) return 'ios-not-standalone';
+  return (Notification.permission as NotificationPermissionStatus) ?? 'default';
 }
 
 /**
@@ -42,16 +89,36 @@ export function getNotificationPermission(): NotificationPermission | 'unsupport
 }
 
 /**
- * Request notification permission from the user
+ * Request notification permission from the user.
+ * Uses the callback form so iOS recognises the user gesture.
+ * MUST be called directly from a click handler — not inside useEffect
+ * or an async chain with awaited calls before it.
  */
-export async function requestNotificationPermission(): Promise<NotificationPermission> {
-  if (!('Notification' in window)) return 'denied';
-  
-  if (Notification.permission === 'granted') return 'granted';
-  if (Notification.permission === 'denied') return 'denied';
-
-  const permission = await Notification.requestPermission();
-  return permission;
+export function requestNotificationPermission(
+  onResult: (status: NotificationPermission) => void
+): void {
+  if (!isPushSupported()) {
+    onResult('denied');
+    return;
+  }
+  if (isIOS() && !isRunningStandalone()) {
+    // Cannot request on iOS outside of standalone mode.
+    onResult('default');
+    return;
+  }
+  // Use callback form — required for iOS gesture recognition.
+  // Guard against double-invocation (callback + Promise both firing).
+  let settled = false;
+  const settle = (permission: NotificationPermission) => {
+    if (settled) return;
+    settled = true;
+    onResult(permission);
+  };
+  const result = Notification.requestPermission(settle);
+  // Modern browsers also return a Promise; handle both paths.
+  if (result && typeof result.then === 'function') {
+    result.then(settle);
+  }
 }
 
 /**

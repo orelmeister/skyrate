@@ -1308,29 +1308,29 @@ function CommunicationsTab({
     }
   }, []);
 
-  async function handleEnablePush() {
+  function handleEnablePush() {
     setPushSubscribing(true);
-    try {
-      const permission = await requestNotificationPermission();
+    requestNotificationPermission((permission) => {
       if (permission === 'granted') {
         const token = useAuthStore.getState().token;
         if (token) {
-          const success = await subscribeToPush(token);
-          setPushStatus(success ? 'enabled' : 'error');
+          subscribeToPush(token)
+            .then((success) => setPushStatus(success ? 'enabled' : 'error'))
+            .catch(() => setPushStatus('error'))
+            .finally(() => setPushSubscribing(false));
         } else {
           setPushStatus('error');
+          setPushSubscribing(false);
         }
       } else if (permission === 'denied') {
         setPushStatus('blocked');
         alert('Notifications are blocked. Please enable them in your browser settings.');
+        setPushSubscribing(false);
       } else {
         setPushStatus('dismissed');
+        setPushSubscribing(false);
       }
-    } catch (e) {
-      console.error('Push subscribe error:', e);
-      setPushStatus('error');
-    }
-    setPushSubscribing(false);
+    });
   }
 
   const toggleChannel = (ch: string) => {
