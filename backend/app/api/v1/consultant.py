@@ -1551,7 +1551,7 @@ async def get_pia_frns(
     ben_to_school = {school.ben: school for school in schools}
 
     from app.services.cache_service import get_cached, set_cached, make_cache_key
-    cache_key = make_cache_key("pia_frns_v3", bens=all_bens, year=year or "all")
+    cache_key = make_cache_key("pia_frns_v4", bens=all_bens, year=year or "all")
     if not refresh:
         cached = get_cached(db, cache_key)
         if cached and cached.get("total", 0) > 0:
@@ -1580,8 +1580,13 @@ async def get_pia_frns(
                 school = ben_to_school.get(ben)
                 for frn_record in ben_data.get("frns", []):
                     pending_reason_raw = str(frn_record.get("pending_reason", "") or "")
-                    # Any non-empty pending_reason means USAC has the FRN under PIA review
-                    if pending_reason_raw.strip():
+                    frn_status_raw = str(frn_record.get("status", "") or "").lower()
+                    # Only show FRNs actively under PIA review:
+                    # - must have a pending_reason substatus set by USAC
+                    # - must NOT have a terminal status (FCDL Issued means review ended)
+                    TERMINAL_STATUSES = ("fcdl", "funded", "committed", "denied", "cancelled", "canceled", "withdrawn")
+                    is_terminal = any(t in frn_status_raw for t in TERMINAL_STATUSES)
+                    if pending_reason_raw.strip() and not is_terminal:
                         pia_frns.append({
                             "frn": str(frn_record.get("frn", "")),
                             "ben": ben,
@@ -1594,7 +1599,7 @@ async def get_pia_frns(
                             "application_number": str(frn_record.get("application_number", "") or ""),
                         })
 
-        print(f"[INFO] pia-frns: Found {len(pia_frns)} FRNs with pending_reason (PIA review) for {len(all_bens)} BENs (year filter: {year or 'all'})")
+        print(f"[INFO] pia-frns: Found {len(pia_frns)} active PIA FRNs (non-terminal + pending_reason) for {len(all_bens)} BENs (year filter: {year or 'all'})")
 
     except Exception as e:
         print(f"[ERROR] pia-frns: Failed to fetch PIA FRNs: {e}")
