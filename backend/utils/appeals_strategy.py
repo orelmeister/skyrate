@@ -120,6 +120,14 @@ class AppealsStrategy:
         return {
             "success": True,
             "generated_at": datetime.now().isoformat(),
+            # Pass through source denial fields so chat can reference them directly
+            "fcdl_comment": denial_details.get("fcdl_comment", ""),
+            "denial_reasons": denial_details.get("denial_reasons", []),
+            "violation_types": violation_types,
+            "frn": denial_details.get("frn", ""),
+            "funding_year": denial_details.get("funding_year", ""),
+            "appeal_deadline": denial_details.get("appeal_deadline"),
+            # Strategy components
             "executive_summary": executive_summary,
             "timeline": timeline,
             "document_checklist": checklist,
