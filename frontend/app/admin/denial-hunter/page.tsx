@@ -843,25 +843,26 @@ function DetailPanel({
   const emailDraft = useMemo(() => {
     if (!detail) return "";
     const name = detail.cnct_first_name || detail.cnct_name || "there";
-    const org = detail.organization_name || "your district";
     const amt = detail.requested_amount ? fmtUSD(detail.requested_amount) : "your funding";
-    const angle = detail.outreach_angle || detail.primary_argument || "we believe this denial is appealable.";
-    const pivot = detail.pivot_offer || "";
-    const docs = (detail.documents_needed || []).map((d) => `  - ${d}`).join("\n");
+    // Days remaining until appeal deadline
+    let deadlineLine = "";
+    if (detail.appeal_deadline) {
+      const days = Math.ceil((new Date(detail.appeal_deadline).getTime() - Date.now()) / 86400000);
+      if (days > 1) deadlineLine = `You only have ${days} days left to appeal (deadline ${fmtDate(detail.appeal_deadline)}) — after that the money is gone.`;
+      else if (days === 1) deadlineLine = `You have 1 day left to appeal (deadline ${fmtDate(detail.appeal_deadline)}) — after that the money is gone.`;
+      else if (days === 0) deadlineLine = `Your appeal deadline is TODAY (${fmtDate(detail.appeal_deadline)}).`;
+      else deadlineLine = `Your appeal window has closed (${fmtDate(detail.appeal_deadline)}) — let's see if there's still a path.`;
+    }
     return [
-      `Subject: ${org} – appealing your USAC denial (FRN ${detail.frn})`,
+      `Subject: We can help you win back your E-Rate funding (FRN ${detail.frn})`,
       "",
       `Hi ${name},`,
       "",
-      `I came across the USAC FCDL on FRN ${detail.frn} (${amt}, FY${detail.funding_year || "?"}) and wanted to reach out directly.`,
+      `We saw USAC denied your ${amt} E-Rate request. We've helped other schools overturn denials just like this one and get their funding back.`,
       "",
-      angle,
+      deadlineLine,
       "",
-      detail.fcc_precedent ? `Relevant FCC precedent: ${detail.fcc_precedent}` : "",
-      pivot ? `\nWhat we'd suggest: ${pivot}` : "",
-      docs ? `\nDocuments we'd want to gather:\n${docs}` : "",
-      "",
-      `If helpful, I can put together a draft Request for Review at no cost so you can decide whether to file. Appeal window closes ${fmtDate(detail.appeal_deadline)}.`,
+      `Want to hop on a quick call so we can get you that money before it's too late?`,
       "",
       "Thanks,",
       "Ari",
