@@ -214,7 +214,7 @@ export default function ErateForm470GuidePage() {
                   </li>
                   <li className="flex items-start gap-3">
                     <CheckCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
-                    <span><strong>May 29, 2026:</strong> Form 471 filing deadline for FY2026. All funding requests must be submitted by this date.</span>
+                    <span><strong>May 29, 2026:</strong> Form 471 filing deadline for FY2026. All funding requests must be submitted by this date. See the full <a href="https://erateapp.com/guides/e-rate-deadlines-2026.html" rel="noopener" className="text-purple-700 hover:text-purple-900 underline font-medium">FY2026 E-Rate deadlines calendar on erateapp</a> for every USAC milestone through July 2027.</span>
                   </li>
                   <li className="flex items-start gap-3">
                     <CheckCircle className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5" />

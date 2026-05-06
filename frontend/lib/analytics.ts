@@ -28,6 +28,8 @@ export type SkyRateEvent =
   | "roi_calculator_complete"
   | "signup_start"
   | "signup_complete"
+  | "signup_success"
+  | "signup_page_view"
   | "audience_chip_click"
   | "demo_viewed"
   | "case_study_viewed";

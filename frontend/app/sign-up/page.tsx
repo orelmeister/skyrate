@@ -54,6 +54,7 @@ function SignUpPage() {
   // Phase 2: read ?role=&prefill_frn= so deep-links from /tools/frn-tracker
   // and the homepage audience chips pre-populate the signup form.
   useEffect(() => {
+    trackEvent("signup_page_view");
     trackEvent("signup_start", {
       source: searchParams.get("source") || undefined,
       role: searchParams.get("role") || undefined,
@@ -122,6 +123,10 @@ function SignUpPage() {
 
     if (success) {
       trackEvent("signup_complete", {
+        role: formData.role,
+        source: searchParams.get("source") || undefined,
+      });
+      trackEvent("signup_success", {
         role: formData.role,
         source: searchParams.get("source") || undefined,
       });
@@ -246,9 +251,39 @@ function SignUpPage() {
             )}
 
             <div className="text-center mb-6">
-              <h1 className="text-2xl font-bold gradient-text-dark">Create your account</h1>
+              <h1 className="text-2xl font-bold gradient-text-dark">
+                Start your free FY2026 E-Rate AI account in 30 seconds
+              </h1>
               <p className="text-slate-500 mt-2 text-sm">
-                Start in seconds. Verify your USAC entity later.
+                Just email and password. Verify your USAC entity later.
+              </p>
+            </div>
+
+            {/* Trust signals row */}
+            <div className="grid grid-cols-3 gap-2 mb-5">
+              <div className="text-center px-2 py-2 rounded-lg border border-slate-200 bg-slate-50">
+                <div className="text-[11px] font-semibold text-purple-700">FY2026 Ready</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">USAC-current</div>
+              </div>
+              <div className="text-center px-2 py-2 rounded-lg border border-slate-200 bg-slate-50">
+                <div className="text-[11px] font-semibold text-purple-700">Free Forever Plan</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">No trial expiry</div>
+              </div>
+              <div className="text-center px-2 py-2 rounded-lg border border-slate-200 bg-slate-50">
+                <div className="text-[11px] font-semibold text-purple-700">No Credit Card</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">Required to start</div>
+              </div>
+            </div>
+
+            {/* TODO: replace with real testimonial */}
+            <div className="mb-6 p-4 rounded-xl border border-slate-200 bg-gradient-to-br from-purple-50 to-indigo-50">
+              <p className="text-sm text-slate-700 italic leading-relaxed">
+                {/* TODO: replace with real testimonial */}
+                &ldquo;Built specifically for E-Rate workflows — Form 470/471 tracking, FRN
+                monitoring, and AI denial defense in one place.&rdquo;
+              </p>
+              <p className="text-xs text-slate-500 mt-2">
+                — Product overview {/* TODO: replace with real testimonial */}
               </p>
             </div>
 
