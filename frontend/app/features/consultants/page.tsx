@@ -3,16 +3,22 @@ import Link from "next/link";
 import { Check, ArrowRight, Brain, Shield, BarChart3, Bell, Database, FileText, Users, Zap } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate Consultant Software | SkyRate AI",
-  description: "All-in-one E-Rate consultant software with AI-powered appeal generation, portfolio management, FRN monitoring, and denial analysis. Manage multiple schools from one dashboard.",
+  title: "E-Rate Consultant Software — Manage 100+ Clients in One Dashboard",
+  description: "Built for E-Rate consultants. Track every client's 470/471, FRN status, and PIA reviews from one screen. AI denial defense. Try free.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/features/consultants" },
   openGraph: {
-    title: "E-Rate Consultant Software | SkyRate AI",
-    description: "All-in-one E-Rate consultant software with AI appeal generation and portfolio management.",
+    title: "E-Rate Consultant Software — Manage 100+ Clients in One Dashboard",
+    description: "Built for E-Rate consultants. Track every client's 470/471, FRN status, and PIA reviews from one screen. AI denial defense. Try free.",
     url: "https://skyrate.ai/features/consultants",
     siteName: "SkyRate AI",
     type: "website",
+    modifiedTime: "2026-05-06T00:00:00Z",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "E-Rate Consultant Software — Manage 100+ Clients in One Dashboard",
+    description: "Track every client's 470/471, FRN status, and PIA reviews from one screen. AI denial defense.",
   },
 };
 

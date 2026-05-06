@@ -3,16 +3,22 @@ import Link from "next/link";
 import { Check, ArrowRight, Bell, Activity, Clock, Mail, BarChart3, Shield, Database, History } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate FRN Tracker 2026 — Free Real-Time Status Alerts",
-  description: "Track every E-Rate FRN in real time. Get instant alerts when USAC commits, denies, or flags your Funding Request. Free for FY2026 — no account required to preview.",
+  title: "FRN Tracker — Real-Time E-Rate Status Alerts (Free 2026)",
+  description: "Track every E-Rate FRN in real time. Free instant alerts the moment USAC commits, denies, or flags your funding. No credit card. 500+ districts trust SkyRate.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/features/frn-monitoring" },
   openGraph: {
-    title: "E-Rate FRN Tracker 2026 — Free Real-Time Status Alerts",
-    description: "Track every E-Rate FRN in real time. Get instant alerts when USAC commits, denies, or flags your Funding Request. Free for FY2026 — no account required to preview.",
+    title: "FRN Tracker — Real-Time E-Rate Status Alerts (Free 2026)",
+    description: "Track every E-Rate FRN in real time. Free instant alerts the moment USAC commits, denies, or flags your funding. No credit card. 500+ districts trust SkyRate.",
     url: "https://skyrate.ai/features/frn-monitoring",
     siteName: "SkyRate AI",
     type: "website",
+    modifiedTime: "2026-05-06T00:00:00Z",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "FRN Tracker — Real-Time E-Rate Status Alerts (Free 2026)",
+    description: "Track every E-Rate FRN in real time. Free instant alerts when USAC commits, denies, or flags your funding.",
   },
 };
 

@@ -3,16 +3,22 @@ import Link from "next/link";
 import { Check, ArrowRight, Search, BarChart3, Bell, Target, Users, TrendingUp, DollarSign, Zap } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate Form 470 Lead Finder | SkyRate AI",
-  description: "Find E-Rate Form 470 opportunities instantly. Track vendor SPIN status, analyze competitors, and discover school leads with AI-powered market intelligence.",
+  title: "E-Rate for Service Providers — Win More 470 Bids with AI",
+  description: "SkyRate helps E-Rate service providers find every 470, qualify bids in seconds, and submit competitive proposals fast. SPIN-aware. FY2026-ready.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/features/vendors" },
   openGraph: {
-    title: "E-Rate Form 470 Lead Finder | SkyRate AI",
-    description: "Find E-Rate Form 470 opportunities and track vendor intelligence.",
+    title: "E-Rate for Service Providers — Win More 470 Bids with AI",
+    description: "SkyRate helps E-Rate service providers find every 470, qualify bids in seconds, and submit competitive proposals fast. SPIN-aware. FY2026-ready.",
     url: "https://skyrate.ai/features/vendors",
     siteName: "SkyRate AI",
     type: "website",
+    modifiedTime: "2026-05-06T00:00:00Z",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "E-Rate for Service Providers — Win More 470 Bids with AI",
+    description: "Find every 470, qualify bids in seconds, and submit competitive proposals fast. SPIN-aware.",
   },
 };
 

@@ -16,7 +16,7 @@ export const metadata: Metadata = {
     siteName: "SkyRate AI",
     type: "article",
     publishedTime: "2026-02-16T00:00:00Z",
-    modifiedTime: "2026-05-01T00:00:00Z",
+    modifiedTime: "2026-05-06T00:00:00Z",
   },
 };
 

@@ -5,18 +5,23 @@ import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowRight, ArrowLeft, Clock, Sparkles, BookOpen, DollarSign, Calculator, Laptop, Wifi, Server, CheckCircle, AlertTriangle, TrendingUp, Users } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate Category 2 Budget 2026: Wi-Fi Limits, $167/Student & 5-Year Calculator",
-  description: "FY2026 Category 2 E-Rate: $167/student for schools, $132,300/building for libraries. Calculate your full 5-year budget, see every eligible Wi-Fi device, and plan your C2 FRN. Updated May 2026.",
+  title: "E-Rate Category 2 Budget 2026 — Exact Amounts Per Student",
+  description: "Look up your school's exact 2026–2027 Category 2 budget. Updated USAC formula, free calculator, and what changed for FY2026. Includes equipment eligibility list.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/blog/erate-category-2-budget-guide" },
   openGraph: {
-    title: "E-Rate Category 2 Budget 2026: Wi-Fi Limits, $167/Student & 5-Year Calculator",
-    description: "FY2026 Category 2 E-Rate: $167/student for schools, $132,300/building for libraries. Calculate your full 5-year budget, see every eligible Wi-Fi device, and plan your C2 FRN.",
+    title: "E-Rate Category 2 Budget 2026 — Exact Amounts Per Student",
+    description: "Look up your school's exact 2026–2027 Category 2 budget. Updated USAC formula, free calculator, and what changed for FY2026. Includes equipment eligibility list.",
     url: "https://skyrate.ai/blog/erate-category-2-budget-guide",
     siteName: "SkyRate AI",
     type: "article",
     publishedTime: "2026-02-16T00:00:00Z",
-    modifiedTime: "2026-05-03T00:00:00Z",
+    modifiedTime: "2026-05-06T00:00:00Z",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "E-Rate Category 2 Budget 2026 — Exact Amounts Per Student",
+    description: "Your exact 2026–2027 C2 budget per student, with USAC formula and free calculator.",
   },
 };
 
@@ -294,6 +299,9 @@ export default function ErateCategory2BudgetGuidePage() {
               </p>
               <p className="text-slate-700 leading-relaxed mb-6">
                 For a district with 10 schools averaging 400 students each, the total five-year Category 2 budget is approximately <strong>$668,000 pre-discount</strong>. At an average 75% discount rate, E-Rate contributes $501,000 toward network equipment and installation &mdash; funds that can transform classroom connectivity across an entire district.
+              </p>
+              <p className="text-slate-700 leading-relaxed mb-6">
+                Need to verify your school&apos;s exact enrollment and discount rate before you calculate? Use the free <a href="https://erateapp.com/schools.html" rel="noopener" className="text-purple-700 hover:text-purple-900 underline font-medium">erateapp school lookup</a> to pull current USAC-reported numbers for any K-12 building in the country.
               </p>
             </section>
 

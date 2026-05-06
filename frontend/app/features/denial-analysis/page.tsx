@@ -3,16 +3,22 @@ import Link from "next/link";
 import { Check, ArrowRight, Brain, Search, BarChart3, AlertTriangle, Layers, TrendingUp, FileText, Lightbulb } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate Denial Analysis Tool | SkyRate AI",
-  description: "Understand why your E-Rate application was denied. AI analyzes USAC denial codes, identifies patterns, and recommends corrective actions. Works with all denial types.",
+  title: "E-Rate Denial Analysis — AI Identifies USAC's Real Reasons",
+  description: "Upload your USAC denial letter. Our AI tells you the exact regulation cited, your appeal odds, and a draft response in 60 seconds. Free for FY2026.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/features/denial-analysis" },
   openGraph: {
-    title: "E-Rate Denial Analysis Tool | SkyRate AI",
-    description: "Understand why your E-Rate application was denied with AI-powered analysis.",
+    title: "E-Rate Denial Analysis — AI Identifies USAC's Real Reasons",
+    description: "Upload your USAC denial letter. Our AI tells you the exact regulation cited, your appeal odds, and a draft response in 60 seconds. Free for FY2026.",
     url: "https://skyrate.ai/features/denial-analysis",
     siteName: "SkyRate AI",
     type: "website",
+    modifiedTime: "2026-05-06T00:00:00Z",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "E-Rate Denial Analysis — AI Identifies USAC's Real Reasons",
+    description: "Upload your USAC denial letter and get the exact regulation, appeal odds, and a draft response in 60 seconds.",
   },
 };
 

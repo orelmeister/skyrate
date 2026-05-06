@@ -3,16 +3,22 @@ import Link from "next/link";
 import { Check, ArrowRight, BarChart3, Bell, Shield, Clock, DollarSign, FileText, Search, Zap } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate Application Tracking | SkyRate AI",
-  description: "Track your E-Rate applications in real time. Monitor FRN status, analyze denials, track Category 2 budgets, and never miss a deadline. Built for schools and libraries.",
+  title: "E-Rate for Schools & Districts — File 470/471 in Half the Time",
+  description: "SkyRate AI files E-Rate Forms 470 & 471 for K-12 schools, districts, and consortia. Cut filing time 60%, reduce denials, FY2026-ready. Free trial.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/features/applicants" },
   openGraph: {
-    title: "E-Rate Application Tracking | SkyRate AI",
-    description: "Track your E-Rate applications in real time. Built for schools and libraries.",
+    title: "E-Rate for Schools & Districts — File 470/471 in Half the Time",
+    description: "SkyRate AI files E-Rate Forms 470 & 471 for K-12 schools, districts, and consortia. Cut filing time 60%, reduce denials, FY2026-ready. Free trial.",
     url: "https://skyrate.ai/features/applicants",
     siteName: "SkyRate AI",
     type: "website",
+    modifiedTime: "2026-05-06T00:00:00Z",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "E-Rate for Schools & Districts — File 470/471 in Half the Time",
+    description: "Cut E-Rate filing time 60% and reduce denials. FY2026-ready. Free trial.",
   },
 };
 
