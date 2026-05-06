@@ -4,12 +4,12 @@ import { Check, ArrowRight, Bell, Activity, Clock, Mail, BarChart3, Shield, Data
 
 export const metadata: Metadata = {
   title: "FRN Tracker — Real-Time E-Rate Status Alerts (Free 2026)",
-  description: "Track every E-Rate FRN in real time. Free instant alerts the moment USAC commits, denies, or flags your funding. No credit card. 500+ districts trust SkyRate.",
+  description: "Track every E-Rate FRN in real time. Free instant alerts the moment USAC commits, denies, or flags your funding. No credit card. Trusted by E-Rate consultants nationwide.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/features/frn-monitoring" },
   openGraph: {
     title: "FRN Tracker — Real-Time E-Rate Status Alerts (Free 2026)",
-    description: "Track every E-Rate FRN in real time. Free instant alerts the moment USAC commits, denies, or flags your funding. No credit card. 500+ districts trust SkyRate.",
+    description: "Track every E-Rate FRN in real time. Free instant alerts the moment USAC commits, denies, or flags your funding. No credit card. Trusted by E-Rate consultants nationwide.",
     url: "https://skyrate.ai/features/frn-monitoring",
     siteName: "SkyRate AI",
     type: "website",
