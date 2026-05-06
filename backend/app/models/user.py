@@ -51,7 +51,11 @@ class User(Base):
     # Used to gate AI features until the user proves they own a real E-Rate entity.
     verified_entity = Column(Boolean, default=False)
     verified_entity_at = Column(DateTime, nullable=True)
-    
+
+    # Funnel re-engagement: stamped when user clicks "remind me later" on
+    # onboarding step 0. A scheduled job sends a follow-up email ~48h after.
+    pending_identifier_reminder = Column(DateTime, nullable=True)
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -84,9 +88,11 @@ class User(Base):
             "is_active": self.is_active,
             "is_verified": self.is_verified,
             "email_verified": self.email_verified,
+            "email_verified_at": self.email_verified_at.isoformat() if self.email_verified_at else None,
             "sms_opt_in": self.sms_opt_in,
             "onboarding_completed": self.onboarding_completed,
             "verified_entity": self.verified_entity,
+            "pending_identifier_reminder": self.pending_identifier_reminder.isoformat() if self.pending_identifier_reminder else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_login": self.last_login.isoformat() if self.last_login else None,
         }

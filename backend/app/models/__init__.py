@@ -22,6 +22,7 @@ from .admin_frn_snapshot import AdminFRNSnapshot
 from .promo_invite import PromoInvite, PromoInviteStatus
 from .prediction import PredictedLead, PredictionRefreshLog, PredictionType, PredictionStatus
 from .lead import Lead
+from .email_verification_token import EmailVerificationToken
 
 __all__ = [
     "User",
@@ -76,4 +77,6 @@ __all__ = [
     "PredictionStatus",
     # Inbound leads (public capture form)
     "Lead",
+    # Magic-link / email verification tokens
+    "EmailVerificationToken",
 ]

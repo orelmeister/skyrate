@@ -69,12 +69,26 @@ async def list_users(
     role: Optional[str] = None,
     is_active: Optional[bool] = None,
     search: Optional[str] = None,
+    # Funnel-drilldown filters added 2026-05-06 — see _investigation_signup_flow.md.
+    # Each is opt-in; absence preserves the original behaviour.
+    missing_identifier: Optional[bool] = None,
+    never_logged_in: Optional[bool] = None,
+    email_unverified: Optional[bool] = None,
+    onboarding_incomplete: Optional[bool] = None,
     limit: int = 50,
     offset: int = 0,
     current_user: User = AdminUser,
     db: Session = Depends(get_db)
 ):
-    """List all users with optional filtering"""
+    """List all users with optional filtering.
+
+    Adds drill-down filters so admins can isolate funnel-collapse cohorts:
+      - missing_identifier=true: consultants without CRN, vendors without SPIN,
+        applicants without BEN.
+      - never_logged_in=true: users.last_login IS NULL.
+      - email_unverified=true: users.email_verified = 0.
+      - onboarding_incomplete=true: users.onboarding_completed = 0.
+    """
     query = db.query(User)
     
     if role:
@@ -89,14 +103,53 @@ async def list_users(
             (User.last_name.ilike(search_term)) |
             (User.company_name.ilike(search_term))
         )
-    
+
+    if never_logged_in is True:
+        query = query.filter(User.last_login.is_(None))
+    if email_unverified is True:
+        query = query.filter(
+            (User.email_verified.is_(None)) | (User.email_verified == False)  # noqa: E712
+        )
+    if onboarding_incomplete is True:
+        query = query.filter(
+            (User.onboarding_completed.is_(None)) | (User.onboarding_completed == False)  # noqa: E712
+        )
+
+    if missing_identifier is True:
+        # Subqueries: roles with their own identifier column. SQL keeps it cheap;
+        # we LEFT JOIN each profile and require the identifier to be NULL/empty.
+        cons_with_crn = db.query(ConsultantProfile.user_id).filter(
+            ConsultantProfile.crn.isnot(None), ConsultantProfile.crn != ""
+        )
+        vend_with_spin = db.query(VendorProfile.user_id).filter(
+            VendorProfile.spin.isnot(None), VendorProfile.spin != ""
+        )
+        appl_with_ben = db.query(ApplicantProfile.user_id).filter(
+            ApplicantProfile.ben.isnot(None), ApplicantProfile.ben != ""
+        )
+        query = query.filter(
+            User.role.in_(("consultant", "vendor", "applicant")),
+            ~User.id.in_(cons_with_crn),
+            ~User.id.in_(vend_with_spin),
+            ~User.id.in_(appl_with_ben),
+        )
+
     total = query.count()
     users = query.order_by(User.created_at.desc()).offset(offset).limit(limit).all()
     
     # Enrich with role-specific portfolio data
     enriched = []
+    now = datetime.utcnow()
     for u in users:
         data = u.to_dict()
+        # Funnel drill-down derived fields. days_since_signup helps admins spot
+        # stale signups; identifier presence is a quick pass/fail at a glance.
+        if u.created_at:
+            data["days_since_signup"] = (now - u.created_at).days
+        else:
+            data["days_since_signup"] = None
+        data["has_identifier"] = False  # default, overwritten in role branches below
+
         if u.role == "consultant" and u.consultant_profile:
             schools = db.query(ConsultantSchool).filter(
                 ConsultantSchool.consultant_profile_id == u.consultant_profile.id
@@ -106,11 +159,13 @@ async def list_users(
                 "schools_count": len(schools),
                 "schools": [{"ben": s.ben, "name": s.school_name, "state": s.state} for s in schools[:10]],
             }
+            data["has_identifier"] = bool(u.consultant_profile.crn)
         elif u.role == "vendor" and u.vendor_profile:
             data["portfolio"] = {
                 "spin": u.vendor_profile.spin,
                 "company_name": u.vendor_profile.company_name,
             }
+            data["has_identifier"] = bool(u.vendor_profile.spin)
         elif u.role == "applicant":
             profile = db.query(ApplicantProfile).filter(ApplicantProfile.user_id == u.id).first()
             if profile:
@@ -120,6 +175,7 @@ async def list_users(
                     "ben_count": len(bens),
                     "bens": [{"ben": b.ben, "name": b.organization_name or b.display_name} for b in bens[:10]],
                 }
+                data["has_identifier"] = bool(profile.ben)
         enriched.append(data)
     
     return {

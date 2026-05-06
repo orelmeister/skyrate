@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import { useTabParam } from "@/hooks/useTabParam";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { TableExportBar } from "@/components/TableExportBar";
+import MissingIdentifierBanner from "@/components/MissingIdentifierBanner";
 
 const APPLICANT_TABS = ["overview", "frns", "appeals", "changes", "frn-status", "disbursements"] as const;
 type ApplicantTab = typeof APPLICANT_TABS[number];
@@ -514,6 +515,9 @@ function ApplicantDashboard() {
             )}
           </div>
         </header>
+
+        {/* Soft-gate: prompt applicants without a BEN to finish onboarding */}
+        <MissingIdentifierBanner />
 
         {/* Page Content */}
         <div className="p-6">

@@ -9,6 +9,7 @@ import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailR
 import { useTabParam } from "@/hooks/useTabParam";
 import PredictedLeadsTab from "@/components/PredictedLeadsTab";
 import { TableExportBar } from "@/components/TableExportBar";
+import MissingIdentifierBanner from "@/components/MissingIdentifierBanner";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 
 const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "470-leads", "predicted-leads", "competitive", "search", "leads", "settings"] as const;
@@ -1246,6 +1247,9 @@ function VendorPortalPage() {
             </button>
           </div>
         </header>
+
+        {/* Soft-gate: prompt vendors without a SPIN to finish onboarding */}
+        <MissingIdentifierBanner />
 
         {/* Page Content */}
         <div className="p-6">

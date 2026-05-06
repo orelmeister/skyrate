@@ -12,6 +12,7 @@ import { PIAChat } from "@/components/PIAChat";
 import { PIATemplateGallery } from "@/components/PIATemplateGallery";
 import { TableExportBar } from "@/components/TableExportBar";
 import FRNDetailModal from "@/components/FRNDetailModal";
+import MissingIdentifierBanner from "@/components/MissingIdentifierBanner";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { useTabParam } from "@/hooks/useTabParam";
 
@@ -1607,6 +1608,9 @@ function ConsultantPortalPage() {
             </button>
           </div>
         </header>
+
+        {/* Soft-gate: prompt users without a CRN to finish onboarding */}
+        <MissingIdentifierBanner />
 
         {/* Trial Banner */}
         {user?.subscription?.status === 'trialing' && !trialBannerDismissed && (() => {

@@ -86,6 +86,11 @@ function AdminDashboard() {
   const [userSearch, setUserSearch] = useState("");
   const [userRoleFilter, setUserRoleFilter] = useState("");
   const [usersTotal, setUsersTotal] = useState(0);
+  // Funnel-drilldown filters (admin can isolate stranded signups for outreach).
+  const [userMissingIdent, setUserMissingIdent] = useState(false);
+  const [userNeverLogged, setUserNeverLogged] = useState(false);
+  const [userEmailUnverified, setUserEmailUnverified] = useState(false);
+  const [userOnbIncomplete, setUserOnbIncomplete] = useState(false);
 
   // Ticket state
   const [ticketStatusFilter, setTicketStatusFilter] = useState("");
@@ -135,7 +140,10 @@ function AdminDashboard() {
       if (activeTab === "tickets") loadTickets();
       if (activeTab === "frn") loadFRNs();
     }
-  }, [activeTab, userSearch, userRoleFilter, ticketStatusFilter]);
+  }, [
+    activeTab, userSearch, userRoleFilter, ticketStatusFilter,
+    userMissingIdent, userNeverLogged, userEmailUnverified, userOnbIncomplete,
+  ]);
 
   async function loadDashboard() {
     setLoading(true);
@@ -154,6 +162,10 @@ function AdminDashboard() {
         search: userSearch || undefined,
         role: userRoleFilter || undefined,
         limit: 50,
+        missing_identifier: userMissingIdent || undefined,
+        never_logged_in: userNeverLogged || undefined,
+        email_unverified: userEmailUnverified || undefined,
+        onboarding_incomplete: userOnbIncomplete || undefined,
       });
       const data = res.data?.users || [];
       setUsers(data);
@@ -338,6 +350,14 @@ function AdminDashboard() {
                 setSearch={setUserSearch}
                 roleFilter={userRoleFilter}
                 setRoleFilter={setUserRoleFilter}
+                missingIdentifier={userMissingIdent}
+                setMissingIdentifier={setUserMissingIdent}
+                neverLoggedIn={userNeverLogged}
+                setNeverLoggedIn={setUserNeverLogged}
+                emailUnverified={userEmailUnverified}
+                setEmailUnverified={setUserEmailUnverified}
+                onboardingIncomplete={userOnbIncomplete}
+                setOnboardingIncomplete={setUserOnbIncomplete}
                 onEmailUser={(id) => { setEmailUserId(id); setActiveTab("communications"); }}
               />
             )}
@@ -545,26 +565,50 @@ function OverviewTab({ dashboard, setActiveTab }: { dashboard: DashboardData; se
 // ==================== USERS TAB ====================
 
 function UsersTab({
-  users, total, search, setSearch, roleFilter, setRoleFilter, onEmailUser,
+  users, total, search, setSearch, roleFilter, setRoleFilter,
+  missingIdentifier, setMissingIdentifier,
+  neverLoggedIn, setNeverLoggedIn,
+  emailUnverified, setEmailUnverified,
+  onboardingIncomplete, setOnboardingIncomplete,
+  onEmailUser,
 }: {
   users: any[]; total: number; search: string; setSearch: (s: string) => void;
-  roleFilter: string; setRoleFilter: (r: string) => void; onEmailUser: (id: number) => void;
+  roleFilter: string; setRoleFilter: (r: string) => void;
+  missingIdentifier: boolean; setMissingIdentifier: (v: boolean) => void;
+  neverLoggedIn: boolean; setNeverLoggedIn: (v: boolean) => void;
+  emailUnverified: boolean; setEmailUnverified: (v: boolean) => void;
+  onboardingIncomplete: boolean; setOnboardingIncomplete: (v: boolean) => void;
+  onEmailUser: (id: number) => void;
 }) {
   const [selectedUsers, setSelectedUsers] = useState<Set<number>>(new Set());
 
   function handleExportUsers() {
-    const cols = ["Email", "Name", "Role", "Company", "Status", "Joined"];
+    const cols = [
+      "Email", "Name", "Role", "Company", "Identifier", "Email Verified",
+      "Onboarding", "Status", "Last Login", "Joined", "Days Since Signup",
+    ];
     const source = selectedUsers.size > 0 ? users.filter(u => selectedUsers.has(u.id)) : users;
     const rows = source.map(u => ({
       Email: u.email || "",
       Name: u.full_name || u.first_name || "",
       Role: u.role || "",
       Company: u.company_name || "",
+      Identifier: u.has_identifier ? "Yes" : "No",
+      "Email Verified": u.email_verified ? "Yes" : "No",
+      Onboarding: u.onboarding_completed ? "Complete" : "Incomplete",
       Status: u.is_active ? "Active" : "Inactive",
+      "Last Login": u.last_login ? new Date(u.last_login).toLocaleDateString() : "Never",
       Joined: u.created_at ? new Date(u.created_at).toLocaleDateString() : "",
+      "Days Since Signup": u.days_since_signup ?? "",
     }));
     downloadCsv(csvFilename("admin-users"), cols, rows);
   }
+
+  const activeFilterCount =
+    (missingIdentifier ? 1 : 0) +
+    (neverLoggedIn ? 1 : 0) +
+    (emailUnverified ? 1 : 0) +
+    (onboardingIncomplete ? 1 : 0);
 
   return (
     <div className="space-y-4">
@@ -590,6 +634,45 @@ function UsersTab({
         <span className="text-sm text-slate-500">{total} users</span>
       </div>
 
+      {/* Funnel-drilldown filter chips. Each is a toggle that maps 1:1 to a
+          backend query param and is mutually composable with the others. */}
+      <div className="flex items-center gap-2 flex-wrap text-xs">
+        <span className="text-slate-500">Funnel filters:</span>
+        {[
+          { key: "missing_identifier", label: "Missing CRN/SPIN/BEN", active: missingIdentifier, set: setMissingIdentifier },
+          { key: "never_logged_in", label: "Never logged in", active: neverLoggedIn, set: setNeverLoggedIn },
+          { key: "email_unverified", label: "Email unverified", active: emailUnverified, set: setEmailUnverified },
+          { key: "onboarding_incomplete", label: "Onboarding incomplete", active: onboardingIncomplete, set: setOnboardingIncomplete },
+        ].map((chip) => (
+          <button
+            key={chip.key}
+            type="button"
+            onClick={() => chip.set(!chip.active)}
+            className={`px-2.5 py-1 rounded-full border transition-colors ${
+              chip.active
+                ? "bg-purple-100 border-purple-300 text-purple-800 font-medium"
+                : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
+            }`}
+          >
+            {chip.label}
+          </button>
+        ))}
+        {activeFilterCount > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setMissingIdentifier(false);
+              setNeverLoggedIn(false);
+              setEmailUnverified(false);
+              setOnboardingIncomplete(false);
+            }}
+            className="ml-1 text-slate-500 hover:text-slate-700 underline"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
       <TableExportBar
         selectedCount={selectedUsers.size}
         totalCount={users.length}
@@ -597,7 +680,7 @@ function UsersTab({
         onClearSelection={() => setSelectedUsers(new Set())}
       />
 
-      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 border-b">
             <tr>
@@ -612,10 +695,12 @@ function UsersTab({
               <th className="text-left px-4 py-3 font-medium text-slate-600">Email</th>
               <th className="text-left px-4 py-3 font-medium text-slate-600">Name</th>
               <th className="text-left px-4 py-3 font-medium text-slate-600">Role</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Company</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Portfolio</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600">Identifier</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600">Email Verified</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600">Onboarding</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600">Last Login</th>
+              <th className="text-left px-4 py-3 font-medium text-slate-600 whitespace-nowrap">Days Since Signup</th>
               <th className="text-left px-4 py-3 font-medium text-slate-600">Status</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Joined</th>
               <th className="text-left px-4 py-3 font-medium text-slate-600">Actions</th>
             </tr>
           </thead>
@@ -640,30 +725,49 @@ function UsersTab({
                     "bg-green-100 text-green-700"
                   }`}>{u.role}</span>
                 </td>
-                <td className="px-4 py-3 text-slate-600">{u.company_name || "—"}</td>
-                <td className="px-4 py-3 text-xs text-slate-600">
-                  {u.portfolio ? (
-                    u.role === "consultant" ? (
-                      <span title={u.portfolio.crn ? `CRN: ${u.portfolio.crn}` : ""}>
-                        {u.portfolio.schools_count} school{u.portfolio.schools_count !== 1 ? "s" : ""}
-                        {u.portfolio.crn && <span className="ml-1 text-slate-400">({u.portfolio.crn})</span>}
+                <td className="px-4 py-3 text-xs">
+                  {(() => {
+                    // Identifier presence: backend pre-computes has_identifier
+                    // and exposes the raw value via portfolio.crn/spin/ben.
+                    const identValue =
+                      u.role === "consultant" ? u.portfolio?.crn :
+                      u.role === "vendor" ? u.portfolio?.spin :
+                      u.role === "applicant" ? u.portfolio?.ben : null;
+                    if (u.has_identifier && identValue) {
+                      return <span className="font-mono text-slate-700">{identValue}</span>;
+                    }
+                    return (
+                      <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                        Missing
                       </span>
-                    ) : u.role === "vendor" ? (
-                      <span>SPIN: {u.portfolio.spin || "—"}</span>
-                    ) : u.role === "applicant" ? (
-                      <span>
-                        {u.portfolio.ben_count} BEN{u.portfolio.ben_count !== 1 ? "s" : ""}
-                        {u.portfolio.organization && <span className="ml-1 text-slate-400">({u.portfolio.organization})</span>}
-                      </span>
-                    ) : "—"
-                  ) : "—"}
+                    );
+                  })()}
                 </td>
+                <td className="px-4 py-3 text-xs">
+                  {u.email_verified ? (
+                    <span className="text-green-600">Yes</span>
+                  ) : (
+                    <span className="text-red-500">No</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-xs">
+                  {u.onboarding_completed ? (
+                    <span className="text-green-600">Complete</span>
+                  ) : (
+                    <span className="text-amber-600">Incomplete</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">
+                  {u.last_login ? new Date(u.last_login).toLocaleDateString() : (
+                    <span className="text-red-500">Never</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-slate-500 text-xs">{u.days_since_signup ?? "—"}</td>
                 <td className="px-4 py-3">
                   <span className={`text-xs ${u.is_active ? "text-green-600" : "text-red-500"}`}>
                     {u.is_active ? "Active" : "Inactive"}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-slate-500 text-xs">{u.created_at ? new Date(u.created_at).toLocaleDateString() : "—"}</td>
                 <td className="px-4 py-3">
                   <button
                     onClick={() => onEmailUser(u.id)}

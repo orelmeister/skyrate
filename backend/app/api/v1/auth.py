@@ -1001,3 +1001,148 @@ async def reset_password(
     db.commit()
 
     return {"message": "Password reset successfully. You can now sign in with your new password."}
+
+
+# ==================== ONBOARDING / IDENTIFIER REMINDER ====================
+
+@router.post("/remind-identifier-later")
+async def remind_identifier_later(
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Stamp users.pending_identifier_reminder = NOW(). A scheduled job (or the
+    next cron sweep) sends a follow-up email ~48h later asking the user to
+    return and add their CRN/SPIN/BEN.
+
+    To make the funnel observable even without a scheduler, we ALSO immediately
+    queue a magic-link email so QA can verify wiring end-to-end. The cron sweep
+    in scheduler_service can later send the second touch at +48h.
+    """
+    from datetime import datetime as _dt
+
+    current_user.pending_identifier_reminder = _dt.utcnow()
+    db.commit()
+
+    # Generate a 7-day single-use magic-link so the reminder email can deep-link
+    # the user straight into onboarding step 0 with auth pre-flighted.
+    from ...services.email_service import get_email_service
+    raw_token, _row = _create_magic_link_token(
+        db=db,
+        user=current_user,
+        purpose="identifier_reminder",
+        ttl_hours=24 * 7,
+    )
+    db.commit()
+
+    email_svc = get_email_service()
+    background_tasks.add_task(
+        email_svc.send_identifier_reminder_email,
+        current_user.email,
+        current_user.first_name or "there",
+        raw_token,
+        current_user.role or "consultant",
+    )
+    return {"success": True, "scheduled_at": current_user.pending_identifier_reminder.isoformat()}
+
+
+# ==================== MAGIC LINK (winback / passwordless re-entry) ====================
+
+class MagicLinkExchange(BaseModel):
+    token: str
+
+
+def _hash_token(raw: str) -> str:
+    """Hash a magic-link token for at-rest storage. SHA-256 is fine here because
+    the raw token is already 32+ bytes of CSPRNG entropy."""
+    import hashlib
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _create_magic_link_token(
+    db: Session,
+    user: User,
+    purpose: str,
+    ttl_hours: int = 24,
+):
+    """Create a magic-link token row and return (raw_token, row).
+
+    The raw token is returned so it can be embedded into an outbound email.
+    Only the SHA-256 hash is persisted, so a DB leak doesn't enable takeover.
+    """
+    from ...models.email_verification_token import EmailVerificationToken
+    import secrets as _secrets
+    from datetime import datetime as _dt, timedelta as _td
+
+    raw = _secrets.token_urlsafe(32)
+    row = EmailVerificationToken(
+        user_id=user.id,
+        token_hash=_hash_token(raw),
+        purpose=purpose,
+        expires_at=_dt.utcnow() + _td(hours=ttl_hours),
+    )
+    db.add(row)
+    db.flush()
+    return raw, row
+
+
+@router.post("/magic-link/exchange", response_model=TokenResponse)
+@limiter.limit("10/minute")
+async def magic_link_exchange(
+    request: Request,
+    data: MagicLinkExchange,
+    db: Session = Depends(get_db),
+):
+    """
+    Exchange a single-use magic-link token for a full JWT session.
+
+    Used by the winback campaign and the identifier-reminder follow-up email so
+    users can return to /onboarding without re-entering credentials. The token
+    row's used_at is stamped atomically; reuse returns 400.
+    """
+    from ...models.email_verification_token import EmailVerificationToken
+    from datetime import datetime as _dt
+
+    row = (
+        db.query(EmailVerificationToken)
+        .filter(EmailVerificationToken.token_hash == _hash_token(data.token))
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=400, detail="Invalid or expired link.")
+
+    if row.used_at is not None:
+        raise HTTPException(status_code=400, detail="This link has already been used.")
+
+    if row.expires_at <= _dt.utcnow():
+        raise HTTPException(status_code=400, detail="This link has expired.")
+
+    user = db.query(User).filter(User.id == row.user_id, User.is_active == True).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Account not found.")
+
+    # Stamp used_at so this token cannot be redeemed twice.
+    row.used_at = _dt.utcnow()
+
+    # Magic-link redemption counts as email verification — the user proved they
+    # control the inbox we mailed.
+    if not user.email_verified:
+        user.email_verified = True
+        user.email_verified_at = _dt.utcnow()
+    if not user.is_verified:
+        user.is_verified = True
+
+    user.last_login = _dt.utcnow()
+    db.commit()
+    db.refresh(user)
+
+    access_token = create_access_token(data={"sub": str(user.id), "role": user.role})
+    refresh_token = create_refresh_token(data={"sub": str(user.id), "role": user.role})
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        user=user.to_dict(),
+    )

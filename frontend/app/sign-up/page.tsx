@@ -6,9 +6,44 @@ import Link from "next/link";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuthStore } from "@/lib/auth-store";
 import { api } from "@/lib/api";
-import { trackEvent } from "@/lib/analytics";
+import { trackEvent, setUserProperties } from "@/lib/analytics";
 
 type UserRole = "consultant" | "vendor" | "applicant";
+
+// Role -> identifier metadata. CRN/SPIN/BEN are the USAC keys we accept on /register.
+const IDENTIFIER_META: Record<UserRole, {
+  key: "crn" | "spin" | "ben";
+  label: string;
+  helper: string;
+  placeholder: string;
+  minLen: number;
+  maxLen: number;
+}> = {
+  consultant: {
+    key: "crn",
+    label: "Your USAC Consultant Registration Number (CRN)",
+    helper: "Don't have one? You can add it later.",
+    placeholder: "e.g. 16016019",
+    minLen: 6,
+    maxLen: 15,
+  },
+  vendor: {
+    key: "spin",
+    label: "Your USAC Service Provider Identification Number (SPIN)",
+    helper: "Find it on your USAC profile.",
+    placeholder: "e.g. 143005551",
+    minLen: 9,
+    maxLen: 9,
+  },
+  applicant: {
+    key: "ben",
+    label: "Your Billed Entity Number (BEN)",
+    helper: "Look it up at usac.org if unsure.",
+    placeholder: "e.g. 16002074",
+    minLen: 6,
+    maxLen: 9,
+  },
+};
 
 const ROLE_OPTIONS: { value: UserRole; label: string; emoji: string; price: string; tagline: string }[] = [
   { value: "consultant", label: "Consultant", emoji: "📋", price: "$499/mo", tagline: "Manage school portfolios" },
@@ -45,7 +80,9 @@ function SignUpPage() {
     password: "",
     role: "consultant" as UserRole,
     referral: "",
+    identifier: "",
   });
+  const [identifierWarning, setIdentifierWarning] = useState("");
   const [prefillFrn, setPrefillFrn] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -55,6 +92,12 @@ function SignUpPage() {
   // and the homepage audience chips pre-populate the signup form.
   useEffect(() => {
     trackEvent("signup_page_view");
+    trackEvent("signup_view", {
+      utm_source: searchParams.get("utm_source") || undefined,
+      utm_medium: searchParams.get("utm_medium") || undefined,
+      utm_campaign: searchParams.get("utm_campaign") || undefined,
+      referrer: typeof document !== "undefined" ? document.referrer || undefined : undefined,
+    });
     trackEvent("signup_start", {
       source: searchParams.get("source") || undefined,
       role: searchParams.get("role") || undefined,
@@ -104,12 +147,31 @@ function SignUpPage() {
     e.preventDefault();
     setError("");
 
+    const meta = IDENTIFIER_META[formData.role];
+    const identifier = formData.identifier.trim();
+    const hasIdentifier = identifier.length > 0;
+
+    trackEvent("signup_submit_attempt", {
+      role: formData.role,
+      has_identifier: hasIdentifier,
+    });
+
     if (!formData.email.trim()) {
       setError("Email is required");
+      trackEvent("signup_submit_error", {
+        role: formData.role,
+        error_code: "email_missing",
+        error_message: "Email is required",
+      });
       return;
     }
     if (formData.password.length < 8) {
       setError("Password must be at least 8 characters");
+      trackEvent("signup_submit_error", {
+        role: formData.role,
+        error_code: "password_short",
+        error_message: "Password must be at least 8 characters",
+      });
       return;
     }
 
@@ -119,20 +181,43 @@ function SignUpPage() {
       password: formData.password,
       role: formData.role,
       promo_token: promoToken || undefined,
-    });
+      // Forward role-specific identifier when provided. Backend treats them as optional.
+      [meta.key]: hasIdentifier ? identifier : undefined,
+    } as any);
 
     if (success) {
+      // Stamp signup time so the onboarding page can compute time_signup_to_complete_sec.
+      try {
+        if (typeof window !== "undefined" && !sessionStorage.getItem("signup_started_at")) {
+          sessionStorage.setItem("signup_started_at", String(Date.now()));
+        }
+      } catch {
+        // no-op
+      }
+      setUserProperties({
+        user_role: formData.role,
+        has_identifier: hasIdentifier,
+      });
       trackEvent("signup_complete", {
         role: formData.role,
         source: searchParams.get("source") || undefined,
       });
       trackEvent("signup_success", {
         role: formData.role,
+        has_identifier: hasIdentifier,
         source: searchParams.get("source") || undefined,
       });
+      // Backend always queues a verification email after register; emit the funnel event.
+      trackEvent("email_verification_sent", { role: formData.role });
       router.push(promoToken && promoData ? "/onboarding" : "/onboarding");
     } else {
-      setError(authError || "Failed to create account. Please try again.");
+      const msg = authError || "Failed to create account. Please try again.";
+      setError(msg);
+      trackEvent("signup_submit_error", {
+        role: formData.role,
+        error_code: "server_error",
+        error_message: typeof msg === "string" ? msg : "Server error",
+      });
     }
     setSubmitting(false);
   };
@@ -329,7 +414,11 @@ function SignUpPage() {
                     <button
                       key={opt.value}
                       type="button"
-                      onClick={() => setFormData((prev) => ({ ...prev, role: opt.value }))}
+                      onClick={() => {
+                        setFormData((prev) => ({ ...prev, role: opt.value, identifier: "" }));
+                        setIdentifierWarning("");
+                        trackEvent("signup_role_selected", { role: opt.value });
+                      }}
                       className={`p-3 rounded-xl border-2 text-center transition-all ${
                         formData.role === opt.value
                           ? "border-purple-500 bg-purple-50 shadow-md shadow-purple-100"
@@ -355,6 +444,68 @@ function SignUpPage() {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Role-aware identifier (CRN / SPIN / BEN) — optional but prominent */}
+              <div data-testid="identifier-field">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  {IDENTIFIER_META[formData.role].label}{" "}
+                  <span className="text-slate-400 font-normal">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  name="identifier"
+                  value={formData.identifier}
+                  onChange={(e) => {
+                    const cleaned = e.target.value.replace(/\D/g, "").slice(0, 20);
+                    setFormData((prev) => ({ ...prev, identifier: cleaned }));
+                    if (identifierWarning) setIdentifierWarning("");
+                  }}
+                  onFocus={() => {
+                    trackEvent("signup_identifier_focused", {
+                      role: formData.role,
+                      field_type: IDENTIFIER_META[formData.role].key,
+                    });
+                  }}
+                  onBlur={() => {
+                    const meta = IDENTIFIER_META[formData.role];
+                    const v = formData.identifier.trim();
+                    if (!v) {
+                      setIdentifierWarning("");
+                      return;
+                    }
+                    if (v.length < meta.minLen || v.length > meta.maxLen) {
+                      // Warn-only — never block submission on format mismatch.
+                      setIdentifierWarning(
+                        `Heads up: ${meta.key.toUpperCase()} is usually ${
+                          meta.minLen === meta.maxLen
+                            ? `${meta.minLen} digits`
+                            : `${meta.minLen}–${meta.maxLen} digits`
+                        }. We'll still save what you entered.`,
+                      );
+                    } else {
+                      setIdentifierWarning("");
+                      trackEvent("signup_identifier_filled", {
+                        role: formData.role,
+                        field_type: meta.key,
+                        value_length: v.length,
+                      });
+                    }
+                  }}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                  placeholder={IDENTIFIER_META[formData.role].placeholder}
+                  autoComplete="off"
+                />
+                <p className="mt-1 text-xs text-purple-700">
+                  Add your number now — we&apos;ll auto-pull your portfolio in seconds.
+                </p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {IDENTIFIER_META[formData.role].helper}
+                </p>
+                {identifierWarning && (
+                  <p className="mt-1 text-xs text-amber-600">{identifierWarning}</p>
+                )}
               </div>
 
               {/* Email */}

@@ -30,6 +30,23 @@ export type SkyRateEvent =
   | "signup_complete"
   | "signup_success"
   | "signup_page_view"
+  | "signup_view"
+  | "signup_role_selected"
+  | "signup_identifier_focused"
+  | "signup_identifier_filled"
+  | "signup_submit_attempt"
+  | "signup_submit_error"
+  | "signup_complete_funnel"
+  | "email_verification_sent"
+  | "email_verification_clicked"
+  | "onboarding_view"
+  | "onboarding_identifier_entered"
+  | "onboarding_skip_clicked"
+  | "onboarding_completed"
+  | "dashboard_identifier_banner_view"
+  | "dashboard_identifier_banner_click"
+  | "winback_email_sent"
+  | "winback_email_clicked"
   | "audience_chip_click"
   | "demo_viewed"
   | "case_study_viewed";
@@ -44,6 +61,23 @@ export function trackEvent(
     window.dataLayer.push({ event, ...params });
     if (typeof window.gtag === "function") {
       window.gtag("event", event, params);
+    }
+  } catch {
+    // never let analytics break the page
+  }
+}
+
+/**
+ * Set GA4 user properties so funnels can be sliced by role / has_identifier.
+ * Pushes to both GTM dataLayer and gtag for redundancy.
+ */
+export function setUserProperties(props: Record<string, unknown>): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({ event: "set_user_properties", user_properties: props });
+    if (typeof window.gtag === "function") {
+      window.gtag("set", "user_properties", props);
     }
   } catch {
     // never let analytics break the page

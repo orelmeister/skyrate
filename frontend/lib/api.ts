@@ -2509,14 +2509,29 @@ class ApiClient {
   }
 
   /**
-   * List all users (admin)
+   * List all users (admin) with optional funnel-drilldown filters.
+   * The four boolean filters mirror the backend `list_users` query params and
+   * are mutually composable so admins can isolate funnel-collapse cohorts.
    */
-  async getAdminUsers(params?: { role?: string; search?: string; limit?: number; offset?: number }): Promise<ApiResponse<any>> {
+  async getAdminUsers(params?: {
+    role?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+    missing_identifier?: boolean;
+    never_logged_in?: boolean;
+    email_unverified?: boolean;
+    onboarding_incomplete?: boolean;
+  }): Promise<ApiResponse<any>> {
     const qs = new URLSearchParams();
     if (params?.role) qs.set('role', params.role);
     if (params?.search) qs.set('search', params.search);
     if (params?.limit) qs.set('limit', params.limit.toString());
     if (params?.offset) qs.set('offset', params.offset.toString());
+    if (params?.missing_identifier) qs.set('missing_identifier', 'true');
+    if (params?.never_logged_in) qs.set('never_logged_in', 'true');
+    if (params?.email_unverified) qs.set('email_unverified', 'true');
+    if (params?.onboarding_incomplete) qs.set('onboarding_incomplete', 'true');
     return this.request(`/api/v1/admin/users?${qs.toString()}`);
   }
 
@@ -2794,6 +2809,28 @@ class ApiClient {
     return this.request('/api/v1/auth/resend-verification', {
       method: 'POST',
       body: JSON.stringify({ email: email || null }),
+    });
+  }
+
+  /**
+   * Stamp users.pending_identifier_reminder = NOW() and queue a magic-link
+   * follow-up email so the user can resume onboarding without signing in again.
+   */
+  async remindIdentifierLater(): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/auth/remind-identifier-later', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  }
+
+  /**
+   * Exchange a single-use magic-link token (winback / identifier-reminder)
+   * for a full JWT session. Used by /onboarding when ?token=... is present.
+   */
+  async magicLinkExchange(token: string): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/auth/magic-link/exchange', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
     });
   }
 

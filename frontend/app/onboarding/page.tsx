@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/auth-store";
 import { api } from "@/lib/api";
+import { trackEvent, setUserProperties } from "@/lib/analytics";
 import {
   CheckCircle2,
   ChevronRight,
@@ -885,6 +886,7 @@ function ProfileDetailsStep({ onNext }: { onNext: () => void }) {
   const [identResult, setIdentResult] = useState<{ valid?: boolean; name?: string; error?: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [showRemindLater, setShowRemindLater] = useState(false);
 
   const role = user?.role || "consultant";
   const identKey = role === "consultant" ? "crn" : role === "vendor" ? "spin" : role === "applicant" ? "ben" : null;
@@ -954,6 +956,24 @@ function ProfileDetailsStep({ onNext }: { onNext: () => void }) {
         return;
       }
       if (data?.user) setUser(data.user);
+      if (!skipIdentifier && identKey && identifier.trim()) {
+        trackEvent("onboarding_identifier_entered", {
+          role,
+          field_type: identKey,
+        });
+        setUserProperties({ user_role: role, has_identifier: true });
+      }
+      // If the user chose "remind me later", flip the server-side reminder
+      // flag and queue the magic-link follow-up email. We do this AFTER the
+      // profile save so the name we display in the email is fresh.
+      if (skipIdentifier) {
+        try {
+          await api.remindIdentifierLater();
+          trackEvent("onboarding_remind_clicked", { role });
+        } catch {
+          // Non-fatal — user still progresses, we just won't follow up.
+        }
+      }
       onNext();
     } catch (err: any) {
       setError(err?.message || "Network error");
@@ -962,8 +982,28 @@ function ProfileDetailsStep({ onNext }: { onNext: () => void }) {
     }
   };
 
+  const identifierShortLabel =
+    role === "consultant" ? "CRN" : role === "vendor" ? "SPIN" : role === "applicant" ? "BEN" : "USAC ID";
+
   return (
     <div>
+      {/* Sticky value-prop banner — replaces the previous "Skip" dead-end. */}
+      <div className="mb-5 p-4 rounded-xl bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200">
+        <div className="flex items-start gap-3">
+          <div className="shrink-0 mt-0.5">
+            <AlertTriangle className="w-5 h-5 text-purple-600" />
+          </div>
+          <div className="text-sm">
+            <p className="font-semibold text-slate-900">
+              Your portfolio is empty until we have your {identifierShortLabel}.
+            </p>
+            <p className="text-slate-600 mt-0.5">
+              This takes about 10 seconds &mdash; we&rsquo;ll auto-pull your E-Rate funding requests, status, and deadlines.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="text-center mb-6">
         <div className="inline-flex items-center justify-center w-12 h-12 bg-purple-100 rounded-full mb-3">
           <Shield className="w-6 h-6 text-purple-600" />
@@ -1069,17 +1109,39 @@ function ProfileDetailsStep({ onNext }: { onNext: () => void }) {
       </div>
 
       <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
-        <button
-          onClick={() => handleSave(true)}
-          disabled={saving}
-          className="text-sm text-slate-500 hover:text-slate-700 disabled:opacity-50"
-        >
-          Skip identifier for now
-        </button>
+        {showRemindLater ? (
+          <button
+            onClick={() => {
+              trackEvent("onboarding_skip_clicked", { role });
+              // Persist a profile save (without identifier) so we still capture name + can email later.
+              handleSave(true);
+            }}
+            disabled={saving}
+            className="text-sm text-slate-500 hover:text-slate-700 underline disabled:opacity-50"
+          >
+            I&apos;ll add it later — remind me
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowRemindLater(true)}
+            disabled={saving}
+            className="text-xs text-slate-400 hover:text-slate-600 disabled:opacity-50"
+          >
+            Need to add it later?
+          </button>
+        )}
         <button
           onClick={() => handleSave(false)}
-          disabled={saving}
-          className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-6 py-2.5 rounded-xl font-medium text-sm transition-all shadow-lg shadow-purple-200 disabled:opacity-50"
+          disabled={saving || !identifier.trim() || !firstName.trim()}
+          title={
+            !firstName.trim()
+              ? "First name is required"
+              : !identifier.trim()
+              ? "Enter your CRN/SPIN/BEN to continue"
+              : undefined
+          }
+          className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-6 py-2.5 rounded-xl font-medium text-sm transition-all shadow-lg shadow-purple-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
           Continue
@@ -1103,9 +1165,17 @@ export default function OnboardingPage() {
     }
   }, [_hasHydrated, isAuthenticated, isLoading, router]);
 
+  // Track onboarding view + step changes.
+  useEffect(() => {
+    if (!user?.role) return;
+    trackEvent("onboarding_view", { role: user.role, step });
+  }, [user?.role, step]);
+
   // If user already has profile + email verified, skip ahead
   useEffect(() => {
     if (user?.email_verified || user?.is_verified) {
+      // Email verification just landed — emit funnel event once.
+      trackEvent("email_verification_clicked", { role: user?.role });
       if (user?.phone_verified) {
         setStep(3); // Skip to FRN discovery
       } else {
@@ -1118,6 +1188,44 @@ export default function OnboardingPage() {
   }, [user]);
 
   const handleComplete = async () => {
+    // Mark onboarding as complete server-side (sets users.onboarding_completed=1).
+    try {
+      await api.completeOnboarding();
+    } catch {
+      // Non-fatal: dashboard will still render. Backend re-tries on next visit.
+    }
+    // Compute time-to-complete from sessionStorage stamp set on /sign-up success.
+    let timeToCompleteSec: number | undefined;
+    try {
+      if (typeof window !== "undefined") {
+        const startedAt = sessionStorage.getItem("signup_started_at");
+        if (startedAt) {
+          timeToCompleteSec = Math.round((Date.now() - Number(startedAt)) / 1000);
+          sessionStorage.removeItem("signup_started_at");
+        }
+      }
+    } catch {
+      // no-op
+    }
+    const role = user?.role || "unknown";
+    const hasIdentifier = Boolean(
+      (user as any)?.consultant_profile?.crn ||
+        (user as any)?.vendor_profile?.spin ||
+        (user as any)?.applicant_profile?.ben ||
+        (user as any)?.verified_entity,
+    );
+    trackEvent("onboarding_completed", {
+      role,
+      steps_completed: 5,
+      time_to_complete_sec: timeToCompleteSec,
+    });
+    trackEvent("signup_complete_funnel", {
+      role,
+      time_signup_to_complete_sec: timeToCompleteSec,
+      identifier_provided: hasIdentifier,
+    });
+    setUserProperties({ user_role: role, has_identifier: hasIdentifier });
+
     // Redirect to role-based dashboard
     const dashboardUrl =
       user?.role === "super"

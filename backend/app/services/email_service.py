@@ -978,6 +978,139 @@ https://skyrate.ai | support@skyrate.ai
             email_type='noreply'
         )
 
+    def send_identifier_reminder_email(self, to_email: str, first_name: str, magic_token: str, role: str) -> bool:
+        """Send a one-click magic-link reminder asking the user to add their CRN/SPIN/BEN.
+
+        Triggered when the user clicks "I'll add it later — remind me by email"
+        on onboarding step 0. The link drops them straight back into onboarding
+        step 0 with a fresh authenticated session.
+        """
+        identifier_label = (
+            "CRN" if role == "consultant"
+            else "SPIN" if role == "vendor"
+            else "BEN" if role == "applicant"
+            else "USAC ID"
+        )
+        url = f"{settings.FRONTEND_URL}/onboarding?from=reminder&token={magic_token}"
+        html_content = f'''
+        <!DOCTYPE html>
+        <html>
+        <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+          <div style="max-width: 540px; margin: 0 auto; padding: 40px 20px;">
+            <div style="text-align: center; margin-bottom: 24px;">
+              <div style="display: inline-block; background: linear-gradient(135deg, #7c3aed, #4f46e5); padding: 12px 24px; border-radius: 12px;">
+                <span style="color: white; font-size: 20px; font-weight: bold;">SkyRate<span style="color: #c4b5fd;">.AI</span></span>
+              </div>
+            </div>
+            <div style="background: white; border-radius: 16px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+              <h2 style="color: #1e293b; margin: 0 0 12px 0;">Hi {first_name},</h2>
+              <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 16px 0;">
+                You started a SkyRate AI account but haven&rsquo;t added your <strong>{identifier_label}</strong> yet.
+                Your portfolio stays empty until we have it &mdash; this takes about 10 seconds.
+              </p>
+              <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 24px 0;">
+                Click below to pick up where you left off &mdash; you&rsquo;ll be signed straight in:
+              </p>
+              <div style="text-align: center; margin: 24px 0;">
+                <a href="{url}"
+                   style="display: inline-block; background: linear-gradient(135deg, #7c3aed, #4f46e5); color: white; padding: 14px 32px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 15px;">
+                  Add my {identifier_label}
+                </a>
+              </div>
+              <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 16px;">
+                This link is single-use and expires in 7 days.
+              </p>
+            </div>
+            <p style="color: #94a3b8; font-size: 11px; text-align: center; margin-top: 16px;">
+              You&rsquo;re receiving this because you asked us to remind you. Reply to unsubscribe.
+            </p>
+          </div>
+        </body>
+        </html>
+        '''
+        text_content = (
+            f"Hi {first_name},\n\n"
+            f"You started a SkyRate AI account but haven't added your {identifier_label} yet. "
+            f"Your portfolio stays empty until we have it.\n\n"
+            f"Add it now (signed-in link, expires in 7 days):\n{url}\n\n"
+            f"-- SkyRate AI"
+        )
+        return self.send_email(
+            to_email=to_email,
+            subject=f"Finish setting up your SkyRate account - add your {identifier_label}",
+            html_content=html_content,
+            text_content=text_content,
+            email_type='noreply',
+        )
+
+    def send_winback_email(self, to_email: str, first_name: str, magic_token: str, role: str) -> bool:
+        """One-shot win-back to a stranded signup. Used by scripts/winback_send.py.
+
+        Drops the user directly on /onboarding step 0 via a single-use 24-hour
+        magic-link. No password required.
+        """
+        identifier_label = (
+            "CRN" if role == "consultant"
+            else "SPIN" if role == "vendor"
+            else "BEN" if role == "applicant"
+            else "USAC ID"
+        )
+        url = f"{settings.FRONTEND_URL}/onboarding?from=winback&token={magic_token}"
+        html_content = f'''
+        <!DOCTYPE html>
+        <html>
+        <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+          <div style="max-width: 540px; margin: 0 auto; padding: 40px 20px;">
+            <div style="text-align: center; margin-bottom: 24px;">
+              <div style="display: inline-block; background: linear-gradient(135deg, #7c3aed, #4f46e5); padding: 12px 24px; border-radius: 12px;">
+                <span style="color: white; font-size: 20px; font-weight: bold;">SkyRate<span style="color: #c4b5fd;">.AI</span></span>
+              </div>
+            </div>
+            <div style="background: white; border-radius: 16px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+              <h2 style="color: #1e293b; margin: 0 0 12px 0;">Finish setting up your SkyRate account &mdash; 30 seconds</h2>
+              <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 16px 0;">
+                Hi {first_name},
+              </p>
+              <p style="color: #475569; font-size: 15px; line-height: 1.6; margin: 0 0 16px 0;">
+                You created a SkyRate AI account but never finished onboarding. Your portfolio is one number away.
+                Add your <strong>{identifier_label}</strong> and we&rsquo;ll auto-pull every E-Rate funding request, deadline, and status alert tied to your entity.
+              </p>
+              <div style="text-align: center; margin: 28px 0;">
+                <a href="{url}"
+                   style="display: inline-block; background: linear-gradient(135deg, #7c3aed, #4f46e5); color: white; padding: 14px 32px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 15px;">
+                  Resume onboarding
+                </a>
+              </div>
+              <p style="color: #64748b; font-size: 13px; line-height: 1.6;">
+                The link signs you in automatically &mdash; no password required.
+              </p>
+              <p style="color: #94a3b8; font-size: 12px; margin-top: 16px;">
+                Single-use link, expires in 24 hours.
+              </p>
+            </div>
+            <p style="color: #94a3b8; font-size: 11px; text-align: center; margin-top: 16px;">
+              You&rsquo;re receiving this because you signed up at skyrate.ai. Reply to unsubscribe.
+            </p>
+          </div>
+        </body>
+        </html>
+        '''
+        text_content = (
+            f"Hi {first_name},\n\n"
+            f"You created a SkyRate AI account but never finished onboarding. "
+            f"Your portfolio is one number away. Add your {identifier_label} and we'll auto-pull "
+            f"every E-Rate funding request, deadline, and status alert tied to your entity.\n\n"
+            f"Resume onboarding (signed-in link, expires in 24 hours):\n{url}\n\n"
+            f"-- SkyRate AI"
+        )
+        return self.send_email(
+            to_email=to_email,
+            subject="Finish setting up your SkyRate account - 30 seconds",
+            html_content=html_content,
+            text_content=text_content,
+            email_type='noreply',
+        )
+
 
 # Convenience function
 def get_email_service() -> EmailService:
