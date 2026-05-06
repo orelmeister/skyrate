@@ -13,7 +13,6 @@ export const metadata: Metadata = {
     url: "https://skyrate.ai/features/denial-analysis",
     siteName: "SkyRate AI",
     type: "website",
-    modifiedTime: "2026-05-06T00:00:00Z",
   },
   twitter: {
     card: "summary_large_image",
