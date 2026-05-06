@@ -93,8 +93,25 @@ type Status = typeof STATUSES[number];
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
+function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  // Primary: Zustand persisted auth store
+  try {
+    const raw = localStorage.getItem("skyrate-auth");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      const t = parsed?.state?.token;
+      if (typeof t === "string" && t) return t;
+    }
+  } catch {
+    /* ignore */
+  }
+  // Fallback for any legacy callers
+  return localStorage.getItem("access_token");
+}
+
 async function dhFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+  const token = getAuthToken();
   const url = `${API_BASE}/api/v1/admin/denial-hunter${path}`;
   const res = await fetch(url, {
     ...init,
