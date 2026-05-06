@@ -510,20 +510,82 @@ export default function DenialHunterDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">Denial Hunter</h1>
-            <p className="text-xs text-slate-500">
-              USAC E-Rate denial monitoring &middot; reads from Hostinger MySQL written by the
-              denial-hunter worker
-            </p>
+      {/* Header — matches /admin shell */}
+      <header className="bg-slate-950 text-white sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src="/images/logos/logo-icon-transparent.png" alt="" width={32} height={32} className="rounded-lg" />
+            <span className="font-bold text-xl">SkyRate<span className="text-purple-400">.AI</span></span>
+            <span className="ml-2 text-xs bg-red-600 px-2 py-0.5 rounded-full font-semibold">ADMIN</span>
           </div>
-          <div className="text-xs text-slate-500">
-            Logged in as <span className="font-medium text-slate-700">{user?.email}</span>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-slate-400">{user?.email}</span>
+            <button
+              onClick={() => { useAuthStore.getState().logout(); router.push("/"); }}
+              className="text-sm text-slate-400 hover:text-white transition-colors"
+            >
+              Sign Out
+            </button>
           </div>
         </div>
       </header>
+
+      {/* Tab Navigation — same nav as /admin so super/admin can jump back */}
+      <nav className="bg-white border-b shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 flex gap-1 flex-wrap">
+          {[
+            { key: "overview", label: "Overview", icon: "📊" },
+            { key: "users", label: "Users", icon: "👥" },
+            { key: "tickets", label: "Support Tickets", icon: "🎫" },
+            { key: "frn", label: "FRN Monitor", icon: "📡" },
+            { key: "promo", label: "Promo Invites", icon: "🎟️" },
+            { key: "communications", label: "Communications", icon: "📧" },
+            { key: "blog", label: "Blog Manager", icon: "📝" },
+          ].map((tab) => (
+            <a
+              key={tab.key}
+              href={`/admin?tab=${tab.key}`}
+              className="px-4 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition-colors"
+            >
+              {tab.icon} {tab.label}
+            </a>
+          ))}
+          {user?.role === "super" && (
+            <>
+              <a
+                href="/superadmin/leads"
+                className="px-4 py-3 text-sm font-medium border-b-2 border-transparent text-amber-600 hover:text-amber-700 hover:border-amber-300 transition-colors"
+              >
+                📥 Leads
+              </a>
+              <a
+                href="/superadmin/mail-campaigns"
+                className="px-4 py-3 text-sm font-medium border-b-2 border-transparent text-amber-600 hover:text-amber-700 hover:border-amber-300 transition-colors"
+              >
+                ✉️ Mail Campaigns
+              </a>
+            </>
+          )}
+          {(user?.role === "admin" || user?.role === "super") && (
+            <span
+              className="px-4 py-3 text-sm font-medium border-b-2 border-rose-500 text-rose-600"
+              aria-current="page"
+            >
+              🎯 Denial Hunter
+            </span>
+          )}
+        </div>
+      </nav>
+
+      {/* Sub-header — original page caption */}
+      <div className="bg-white border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-6 py-3">
+          <p className="text-xs text-slate-500">
+            USAC E-Rate denial monitoring &middot; reads from Hostinger MySQL written by the
+            denial-hunter worker
+          </p>
+        </div>
+      </div>
 
       {error ? (
         <div className="max-w-7xl mx-auto px-6 mt-4">
