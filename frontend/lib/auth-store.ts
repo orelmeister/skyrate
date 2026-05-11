@@ -67,7 +67,11 @@ interface AuthState {
   
   // Actions
   login: (email: string, password: string) => Promise<boolean>;
-  loginWithGoogle: (credential: string, role?: "consultant" | "vendor" | "applicant") => Promise<boolean>;
+  loginWithGoogle: (
+    credential: string,
+    role?: "consultant" | "vendor" | "applicant",
+    identifier?: string,
+  ) => Promise<boolean>;
   register: (data: RegisterData) => Promise<boolean>;
   logout: () => void;
   clearError: () => void;
@@ -135,7 +139,11 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      loginWithGoogle: async (credential: string, role: "consultant" | "vendor" | "applicant" = "consultant") => {
+      loginWithGoogle: async (
+        credential: string,
+        role: "consultant" | "vendor" | "applicant" = "consultant",
+        identifier?: string,
+      ) => {
         set({ isLoading: true, error: null });
         
         // Clear any stale legacy tokens before login
@@ -145,11 +153,20 @@ export const useAuthStore = create<AuthState>()(
           localStorage.removeItem('token');
         }
         
+        // Map identifier -> role-specific field expected by backend.
+        const trimmed = (identifier || "").trim();
+        const payload: Record<string, string> = { id_token: credential, role };
+        if (trimmed) {
+          if (role === "consultant") payload.crn = trimmed;
+          else if (role === "vendor") payload.spin = trimmed;
+          else if (role === "applicant") payload.ben = trimmed;
+        }
+        
         try {
           const response = await fetch(`${API_URL}/api/v1/auth/google`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id_token: credential, role }),
+            body: JSON.stringify(payload),
           });
 
           const data = await response.json();

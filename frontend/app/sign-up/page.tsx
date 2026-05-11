@@ -155,12 +155,25 @@ function SignUpPage() {
   // ===== Google Sign-In (Google Identity Services) =====
   const googleBtnRef = useRef<HTMLDivElement>(null);
   const roleRef = useRef(formData.role);
+  const identifierRef = useRef(formData.identifier);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleReady, setGoogleReady] = useState(false);
+
+  // Length validation helper — must match server-side rules in /register.
+  const isIdentifierValid = (role: UserRole, value: string) => {
+    const meta = IDENTIFIER_META[role];
+    const v = value.trim();
+    return v.length >= meta.minLen && v.length <= meta.maxLen;
+  };
+  const identifierOk = isIdentifierValid(formData.role, formData.identifier);
 
   useEffect(() => {
     roleRef.current = formData.role;
   }, [formData.role]);
+
+  useEffect(() => {
+    identifierRef.current = formData.identifier;
+  }, [formData.identifier]);
 
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) return;
@@ -175,10 +188,21 @@ function SignUpPage() {
             setError("Google sign-in was canceled or failed.");
             return;
           }
+          // Enforce role-specific USAC identifier — Google signup must not
+          // bypass the CRN/SPIN/BEN gate that the email signup enforces.
+          const role = roleRef.current;
+          const identifier = (identifierRef.current || "").trim();
+          const meta = IDENTIFIER_META[role];
+          if (!identifier || !isIdentifierValid(role, identifier)) {
+            const len = meta.minLen === meta.maxLen ? `${meta.minLen} digits` : `${meta.minLen}\u2013${meta.maxLen} digits`;
+            setError(`Please enter your ${meta.key.toUpperCase()} (${len}) above before signing up with Google.`);
+            trackEvent("signup_google_error", { role, error_code: "identifier_missing" });
+            return;
+          }
           setGoogleLoading(true);
           setError("");
-          trackEvent("signup_google_attempt", { role: roleRef.current });
-          const ok = await loginWithGoogle(response.credential, roleRef.current);
+          trackEvent("signup_google_attempt", { role });
+          const ok = await loginWithGoogle(response.credential, role, identifier);
           setGoogleLoading(false);
           if (ok) {
             try {
@@ -188,12 +212,12 @@ function SignUpPage() {
             } catch {
               /* no-op */
             }
-            setUserProperties({ user_role: roleRef.current, auth_provider: "google" });
-            trackEvent("signup_google_success", { role: roleRef.current });
+            setUserProperties({ user_role: role, auth_provider: "google" });
+            trackEvent("signup_google_success", { role });
             router.push("/onboarding");
           } else {
             setError(useAuthStore.getState().error || "Google sign-in failed. Please try again.");
-            trackEvent("signup_google_error", { role: roleRef.current });
+            trackEvent("signup_google_error", { role });
           }
         },
         ux_mode: "popup",
@@ -618,9 +642,31 @@ function SignUpPage() {
               {/* Google Sign-Up */}
               {GOOGLE_CLIENT_ID && (
                 <div data-testid="google-signup-block">
-                  <div className="flex justify-center">
-                    <div ref={googleBtnRef} aria-label="Sign up with Google" />
+                  <div className="flex justify-center relative">
+                    <div
+                      ref={googleBtnRef}
+                      aria-label="Sign up with Google"
+                      className={!identifierOk ? "opacity-40 pointer-events-none select-none" : ""}
+                      aria-disabled={!identifierOk}
+                    />
+                    {!identifierOk && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const meta = IDENTIFIER_META[formData.role];
+                          const len = meta.minLen === meta.maxLen ? `${meta.minLen} digits` : `${meta.minLen}\u2013${meta.maxLen} digits`;
+                          setError(`Please enter your ${meta.key.toUpperCase()} (${len}) above before signing up with Google.`);
+                        }}
+                        className="absolute inset-0 cursor-not-allowed"
+                        aria-label={`Enter ${IDENTIFIER_META[formData.role].key.toUpperCase()} to enable Google sign-up`}
+                      />
+                    )}
                   </div>
+                  {!identifierOk && (
+                    <p className="mt-2 text-center text-xs text-amber-600">
+                      Enter your {IDENTIFIER_META[formData.role].key.toUpperCase()} above to enable Google sign-up.
+                    </p>
+                  )}
                   {googleLoading && (
                     <p className="mt-2 text-center text-xs text-slate-500">
                       <Loader2 className="inline w-3 h-3 mr-1 animate-spin" />

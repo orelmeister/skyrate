@@ -684,6 +684,11 @@ class GoogleAuthRequest(BaseModel):
     """Google OAuth token from frontend"""
     id_token: str
     role: str = Field(default="consultant", pattern="^(consultant|vendor|applicant)$")
+    # Role-specific USAC identifier. Required when this Google account does not
+    # yet exist in our DB (new user). Existing users sign in without it.
+    crn: Optional[str] = None
+    spin: Optional[str] = None
+    ben: Optional[str] = None
 
 
 @router.post("/google", response_model=TokenResponse)
@@ -772,7 +777,51 @@ async def google_auth(
             user.last_name = last_name
         db.commit()
     else:
-        # New user - register them
+        # New user - register them. Enforce role-specific USAC identifier so
+        # Google signup cannot bypass the CRN/SPIN/BEN gate that /register has.
+        from ...models.applicant import ApplicantProfile
+
+        crn_clean = (data.crn or "").strip().upper() if data.crn else ""
+        spin_clean = (data.spin or "").strip().upper() if data.spin else ""
+        ben_clean = (data.ben or "").strip() if data.ben else ""
+
+        if data.role == "consultant":
+            if not crn_clean:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="CRN (Consultant Registration Number) is required to create your account."
+                )
+            existing_crn = db.query(ConsultantProfile).filter(ConsultantProfile.crn == crn_clean).first()
+            if existing_crn:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="CRN is already registered to another account"
+                )
+        elif data.role == "vendor":
+            if not spin_clean:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="SPIN (Service Provider Identification Number) is required to create your account."
+                )
+            existing_spin = db.query(VendorProfile).filter(VendorProfile.spin == spin_clean).first()
+            if existing_spin:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="SPIN is already registered to another account"
+                )
+        elif data.role == "applicant":
+            if not ben_clean:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="BEN (Billed Entity Number) is required to create your account."
+                )
+            existing_ben = db.query(ApplicantProfile).filter(ApplicantProfile.ben == ben_clean).first()
+            if existing_ben:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="BEN is already registered to another account"
+                )
+
         user = User(
             email=email,
             password_hash="",  # No password for OAuth users
@@ -785,6 +834,25 @@ async def google_auth(
         )
         db.add(user)
         db.flush()
+
+        # Create role-specific profile with the supplied USAC identifier.
+        if data.role == "consultant":
+            db.add(ConsultantProfile(
+                user_id=user.id,
+                crn=crn_clean,
+                contact_name=f"{first_name or ''} {last_name or ''}".strip() or None,
+            ))
+        elif data.role == "vendor":
+            db.add(VendorProfile(
+                user_id=user.id,
+                spin=spin_clean,
+                contact_name=f"{first_name or ''} {last_name or ''}".strip() or None,
+            ))
+        elif data.role == "applicant":
+            db.add(ApplicantProfile(
+                user_id=user.id,
+                ben=ben_clean,
+            ))
         
         # Create trial subscription
         trial_end = datetime.utcnow() + timedelta(days=14)
