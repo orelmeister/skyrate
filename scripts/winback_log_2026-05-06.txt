@@ -1,0 +1,15 @@
+
+=== Winback run 2026-05-06T22:16:45.470679Z ===
+Targets: [7, 8, 9, 12, 13, 14, 15, 16]
+From: david@skyrate.ai
+Frontend: https://skyrate.ai
+[OK]  user_id=7 email=s***a@usac.org role=consultant expires=2026-05-07T22:16:53.021882Z event=winback_email_sent
+[OK]  user_id=8 email=s***2@gmail.com role=consultant expires=2026-05-07T22:16:57.291907Z event=winback_email_sent
+[OK]  user_id=9 email=s***a@gmail.com role=consultant expires=2026-05-07T22:17:01.492766Z event=winback_email_sent
+[OK]  user_id=12 email=r***z@ncsu.edu role=consultant expires=2026-05-07T22:17:05.940668Z event=winback_email_sent
+[OK]  user_id=13 email=b***e@eratefirst.com role=consultant expires=2026-05-07T22:17:10.685965Z event=winback_email_sent
+[OK]  user_id=14 email=b***r@eratefirst.com role=consultant expires=2026-05-07T22:17:14.773365Z event=winback_email_sent
+[OK]  user_id=15 email=r***e@hwc-consultants.com role=consultant expires=2026-05-07T22:17:19.087238Z event=winback_email_sent
+[OK]  user_id=16 email=e***n@gmail.com role=consultant expires=2026-05-07T22:17:24.093422Z event=winback_email_sent
+
+Summary: sent=8 skipped=0 failed=0

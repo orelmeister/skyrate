@@ -1,0 +1,7 @@
+﻿
+> skyrate-ai-frontend@2.0.0 build
+> next build
+
+   Γû▓ Next.js 14.1.0
+   - Environments: .env.local, .env
+

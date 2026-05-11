@@ -439,7 +439,7 @@ async def send_phone_verification(
     
     if not sms_service.is_configured:
         raise HTTPException(
-            status_code=503,
+            status_code=400,
             detail="SMS verification is not yet available. Please use email verification instead."
         )
     
@@ -471,7 +471,7 @@ async def verify_phone_code(
     sms_service = get_sms_service()
     
     if not sms_service.is_configured:
-        raise HTTPException(status_code=503, detail="SMS verification not available")
+        raise HTTPException(status_code=400, detail="SMS verification not available")
     
     result = sms_service.check_verification_code(data.phone_number, data.code)
     

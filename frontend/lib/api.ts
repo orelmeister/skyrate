@@ -933,6 +933,21 @@ class ApiClient {
         headers,
       });
 
+      // Defense-in-depth: if origin (DO/Cloudflare) returns HTML for an error,
+      // do not try to JSON.parse it. Surface a clean message instead.
+      const isJsonResponse = (res: Response): boolean => {
+        const ct = res.headers.get('content-type') || '';
+        return ct.toLowerCase().includes('application/json');
+      };
+      const nonJsonError = async (res: Response): Promise<ApiResponse<T>> => {
+        const text = await res.text().catch(() => '');
+        const snippet = text.slice(0, 160).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        return {
+          success: false,
+          error: `Server error (HTTP ${res.status}).${snippet ? ' ' + snippet : ''}`,
+        };
+      };
+
       // Handle 401 - try to refresh token
       const refreshToken = this.getRefreshToken();
       if (response.status === 401 && refreshToken) {
@@ -941,9 +956,16 @@ class ApiClient {
           const newToken = this.getAccessToken();
           headers['Authorization'] = `Bearer ${newToken}`;
           const retryResponse = await fetch(url, { ...options, headers });
+          if (!isJsonResponse(retryResponse)) {
+            return await nonJsonError(retryResponse);
+          }
           const retryData = await retryResponse.json();
           return { success: retryResponse.ok, data: retryData };
         }
+      }
+
+      if (!isJsonResponse(response)) {
+        return await nonJsonError(response);
       }
 
       const data = await response.json();
@@ -1020,6 +1042,12 @@ class ApiClient {
       });
 
       if (!response.ok) {
+        this.clearTokens();
+        return false;
+      }
+
+      const ct = response.headers.get('content-type') || '';
+      if (!ct.toLowerCase().includes('application/json')) {
         this.clearTokens();
         return false;
       }
