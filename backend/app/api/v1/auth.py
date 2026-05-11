@@ -306,14 +306,28 @@ async def register(
     """
     Register a new user account.
     Creates user and starts 14-day free trial.
-    CRN/SPIN/BEN are OPTIONAL — collected later in onboarding.
+    CRN/SPIN/BEN are REQUIRED — must match the user's role.
     Rate limited to 3 requests per minute.
     """
     from ...models.applicant import ApplicantProfile
 
-    # CRN/SPIN/BEN are now collected in onboarding. We only validate uniqueness
-    # if the user happens to supply them at registration time.
-    
+    # Enforce role-specific identifier (CRN for consultants, SPIN for vendors, BEN for applicants).
+    if data.role == "consultant" and not (data.crn and data.crn.strip()):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CRN (Consultant Registration Number) is required for consultant accounts"
+        )
+    if data.role == "vendor" and not (data.spin and data.spin.strip()):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SPIN (Service Provider Identification Number) is required for vendor accounts"
+        )
+    if data.role == "applicant" and not (data.ben and data.ben.strip()):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="BEN (Billed Entity Number) is required for applicant accounts"
+        )
+
     # Check if email exists
     existing = db.query(User).filter(User.email == data.email.lower()).first()
     if existing:

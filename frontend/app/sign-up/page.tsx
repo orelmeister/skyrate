@@ -22,7 +22,7 @@ const IDENTIFIER_META: Record<UserRole, {
   consultant: {
     key: "crn",
     label: "Your USAC Consultant Registration Number (CRN)",
-    helper: "Don't have one? You can add it later.",
+    helper: "Required — we use this to auto-pull your school portfolio.",
     placeholder: "e.g. 16016019",
     minLen: 6,
     maxLen: 15,
@@ -30,7 +30,7 @@ const IDENTIFIER_META: Record<UserRole, {
   vendor: {
     key: "spin",
     label: "Your USAC Service Provider Identification Number (SPIN)",
-    helper: "Find it on your USAC profile.",
+    helper: "Required — find it on your USAC profile.",
     placeholder: "e.g. 143005551",
     minLen: 9,
     maxLen: 9,
@@ -38,7 +38,7 @@ const IDENTIFIER_META: Record<UserRole, {
   applicant: {
     key: "ben",
     label: "Your Billed Entity Number (BEN)",
-    helper: "Look it up at usac.org if unsure.",
+    helper: "Required — look it up at usac.org if unsure.",
     placeholder: "e.g. 16002074",
     minLen: 6,
     maxLen: 9,
@@ -174,6 +174,30 @@ function SignUpPage() {
       });
       return;
     }
+    if (!hasIdentifier) {
+      setError(`${meta.key.toUpperCase()} is required to create your account.`);
+      trackEvent("signup_submit_error", {
+        role: formData.role,
+        error_code: "identifier_missing",
+        error_message: `${meta.key.toUpperCase()} required`,
+      });
+      return;
+    }
+    if (identifier.length < meta.minLen || identifier.length > meta.maxLen) {
+      setError(
+        `${meta.key.toUpperCase()} must be ${
+          meta.minLen === meta.maxLen
+            ? `${meta.minLen} digits`
+            : `${meta.minLen}–${meta.maxLen} digits`
+        }.`,
+      );
+      trackEvent("signup_submit_error", {
+        role: formData.role,
+        error_code: "identifier_format",
+        error_message: "Identifier format invalid",
+      });
+      return;
+    }
 
     setSubmitting(true);
     const success = await register({
@@ -262,7 +286,7 @@ function SignUpPage() {
             )}
           </h1>
           <p className="text-lg text-purple-100 max-w-md">
-            Just email and password. We&apos;ll set up CRN/SPIN/BEN verification after you&apos;re inside.
+            Enter your USAC identifier (CRN, SPIN, or BEN) and we&apos;ll auto-import your portfolio in seconds.
           </p>
 
           <div className="grid grid-cols-3 gap-4 pt-4">
@@ -340,7 +364,7 @@ function SignUpPage() {
                 Start your free FY2026 E-Rate AI account in 30 seconds
               </h1>
               <p className="text-slate-500 mt-2 text-sm">
-                Just email and password. Verify your USAC entity later.
+                Verify your USAC entity (CRN, SPIN, or BEN) to activate your account.
               </p>
             </div>
 
@@ -446,16 +470,17 @@ function SignUpPage() {
                 </div>
               </div>
 
-              {/* Role-aware identifier (CRN / SPIN / BEN) — optional but prominent */}
+              {/* Role-aware identifier (CRN / SPIN / BEN) — required */}
               <div data-testid="identifier-field">
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   {IDENTIFIER_META[formData.role].label}{" "}
-                  <span className="text-slate-400 font-normal">(optional)</span>
+                  <span className="text-red-500 font-normal">*</span>
                 </label>
                 <input
                   type="text"
                   inputMode="numeric"
                   name="identifier"
+                  required
                   value={formData.identifier}
                   onChange={(e) => {
                     const cleaned = e.target.value.replace(/\D/g, "").slice(0, 20);
@@ -498,7 +523,7 @@ function SignUpPage() {
                   autoComplete="off"
                 />
                 <p className="mt-1 text-xs text-purple-700">
-                  Add your number now — we&apos;ll auto-pull your portfolio in seconds.
+                  Required — we&apos;ll auto-pull your portfolio in seconds.
                 </p>
                 <p className="mt-0.5 text-xs text-slate-500">
                   {IDENTIFIER_META[formData.role].helper}
