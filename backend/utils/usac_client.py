@@ -259,6 +259,88 @@ class USACDataClient:
             limit=100
         )
     
+    def get_c2_budgets_by_state(
+        self,
+        state: str,
+        cycle: Optional[str] = None,
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Batch-fetch C2 Budget Tool data (USAC dataset 6brt-5pbv) for every BEN
+        in a state. Used by the Form 470 leads endpoint to attach
+        "available C2 budget" as a dollar-size proxy for each lead.
+        
+        Args:
+            state: Two-letter state code (e.g., 'NY')
+            cycle: Optional explicit c2_budget_cycle (e.g., 'FY2026-FY2030').
+                   When omitted, picks the row with the latest cycle per BEN.
+        
+        Returns:
+            Dict mapping BEN (str) -> {
+                'c2_budget': float,
+                'available_c2_budget_amount': float,
+                'funded_c2_budget_amount': float,
+                'c2_budget_cycle': str,
+            }
+        """
+        if not state:
+            return {}
+        
+        try:
+            where_parts = [f"state = '{state.upper()}'"]
+            if cycle:
+                where_parts.append(f"c2_budget_cycle = '{cycle}'")
+            
+            url = USAC_ENDPOINTS['c2_budget']
+            all_rows: List[Dict[str, Any]] = []
+            fetch_offset = 0
+            fetch_limit = 5000  # Sodapy max per request
+            
+            while True:
+                params = {
+                    '$where': ' AND '.join(where_parts),
+                    '$limit': fetch_limit,
+                    '$offset': fetch_offset,
+                    '$order': 'c2_budget_cycle DESC',
+                }
+                resp = self.session.get(url, params=params, timeout=60)
+                resp.raise_for_status()
+                batch = resp.json()
+                if not batch:
+                    break
+                all_rows.extend(batch)
+                if len(batch) < fetch_limit:
+                    break
+                fetch_offset += fetch_limit
+                if fetch_offset > 50000:
+                    logger.warning(f"Hit 50k C2-budget rows cap for state={state}")
+                    break
+            
+            # Reduce to one row per BEN — the latest cycle (already DESC-ordered).
+            by_ben: Dict[str, Dict[str, Any]] = {}
+            for row in all_rows:
+                ben = str(row.get('ben') or '').strip()
+                if not ben or ben in by_ben:
+                    continue
+                try:
+                    by_ben[ben] = {
+                        'c2_budget': float(row.get('c2_budget') or 0),
+                        'available_c2_budget_amount': float(row.get('available_c2_budget_amount') or 0),
+                        'funded_c2_budget_amount': float(row.get('funded_c2_budget_amount') or 0),
+                        'c2_budget_cycle': row.get('c2_budget_cycle') or '',
+                    }
+                except (TypeError, ValueError):
+                    continue
+            
+            logger.info(f"C2 budgets loaded for state={state}: {len(by_ben)} BENs from {len(all_rows)} rows")
+            return by_ben
+        
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error batch-fetching C2 budgets for state {state}: {e}")
+            return {}
+        except Exception as e:
+            logger.error(f"Unexpected error in get_c2_budgets_by_state({state}): {e}")
+            return {}
+    
     def validate_spin(self, spin: str) -> Dict[str, Any]:
         """
         Validate a SPIN and get service provider information.
@@ -1643,7 +1725,9 @@ class USACDataClient:
         max_speed: Optional[str] = None,
         sort_by: Optional[str] = None,
         limit: int = 2000,
-        offset: int = 0
+        offset: int = 0,
+        min_deal_value: Optional[float] = None,
+        max_deal_value: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Get Form 470 postings for lead generation.
@@ -1865,9 +1949,63 @@ class USACDataClient:
                 lead['categories'] = list(lead['categories'])
                 leads.append(lead)
             
+            # ---- C2 Budget enrichment (USAC dataset 6brt-5pbv) ----
+            # When the caller scoped by state, batch-fetch the C2 Budget Tool data
+            # for that state in one call, then attach `available_c2_budget_amount`
+            # to each lead as a dollar-size proxy for the opportunity. Without a
+            # state filter we'd have to do an N+1 fetch across the entire country,
+            # so we skip enrichment in that case.
+            c2_filter_active = (
+                (min_deal_value is not None and min_deal_value > 0) or
+                (max_deal_value is not None and max_deal_value > 0)
+            )
+            if state:
+                try:
+                    c2_map = self.get_c2_budgets_by_state(state)
+                except Exception as e:
+                    logger.warning(f"C2 budget enrichment failed for state {state}: {e}")
+                    c2_map = {}
+                for lead in leads:
+                    ben_key = str(lead.get('ben') or '').strip()
+                    info = c2_map.get(ben_key)
+                    if info:
+                        lead['c2_budget_total'] = info.get('c2_budget')
+                        lead['c2_budget_available'] = info.get('available_c2_budget_amount')
+                        lead['c2_budget_cycle'] = info.get('c2_budget_cycle')
+                    else:
+                        lead['c2_budget_total'] = None
+                        lead['c2_budget_available'] = None
+                        lead['c2_budget_cycle'] = None
+            else:
+                # No state scope — leave fields None; tell the UI we did not enrich.
+                for lead in leads:
+                    lead['c2_budget_total'] = None
+                    lead['c2_budget_available'] = None
+                    lead['c2_budget_cycle'] = None
+            
+            # Apply $-range filter against C2 budget available. When the filter is
+            # active, rows with no C2 data are excluded (so users see only matches
+            # they can actually evaluate).
+            if c2_filter_active:
+                lo = float(min_deal_value) if (min_deal_value and min_deal_value > 0) else None
+                hi = float(max_deal_value) if (max_deal_value and max_deal_value > 0) else None
+                filtered: List[Dict[str, Any]] = []
+                for lead in leads:
+                    avail = lead.get('c2_budget_available')
+                    if avail is None:
+                        continue
+                    if lo is not None and avail < lo:
+                        continue
+                    if hi is not None and avail > hi:
+                        continue
+                    filtered.append(lead)
+                leads = filtered
+            
             # Sort based on sort_by parameter (Item 10: ABC sorting)
             if sort_by == 'entity_name':
                 leads.sort(key=lambda x: (x.get('entity_name') or '').lower())
+            elif sort_by == 'c2_budget_available':
+                leads.sort(key=lambda x: (x.get('c2_budget_available') or 0), reverse=True)
             else:
                 # Default: Sort by posting date (newest first)
                 leads.sort(key=lambda x: x.get('posting_date') or '', reverse=True)
@@ -1892,6 +2030,8 @@ class USACDataClient:
                     'min_speed': min_speed,
                     'max_speed': max_speed,
                     'sort_by': sort_by,
+                    'min_deal_value': min_deal_value,
+                    'max_deal_value': max_deal_value,
                 }
             }
             

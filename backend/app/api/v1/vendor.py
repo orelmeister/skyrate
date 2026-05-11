@@ -588,6 +588,8 @@ async def get_470_leads(
     sort_by: Optional[str] = None,
     limit: int = 2000,
     offset: int = 0,
+    min_deal_value: Optional[float] = None,
+    max_deal_value: Optional[float] = None,
     current_user: User = Depends(require_role("admin", "vendor", "super")),
 ):
     """
@@ -621,6 +623,7 @@ async def get_470_leads(
             "equipment_type": equipment_type, "service_function": service_function,
             "min_speed": min_speed, "max_speed": max_speed,
             "sort_by": sort_by, "limit": limit, "offset": offset,
+            "min_deal_value": min_deal_value, "max_deal_value": max_deal_value,
         }
         result = get_or_cache(
             namespace="470_leads",
@@ -639,6 +642,8 @@ async def get_470_leads(
                 sort_by=sort_by,
                 limit=limit,
                 offset=offset,
+                min_deal_value=min_deal_value,
+                max_deal_value=max_deal_value,
             ),
         )
 

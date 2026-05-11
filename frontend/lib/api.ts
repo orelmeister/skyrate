@@ -524,6 +524,11 @@ export interface Form470Lead {
   manufacturers: string[];
   service_types: string[];
   categories: string[];
+  // C2 Budget enrichment (USAC dataset 6brt-5pbv) — populated when state filter
+  // is applied. `c2_budget_available` is the remaining headroom we filter on.
+  c2_budget_total?: number | null;
+  c2_budget_available?: number | null;
+  c2_budget_cycle?: string | null;
 }
 
 export interface Form470LeadsResponse {
@@ -2053,6 +2058,8 @@ class ApiClient {
     sort_by?: string;
     limit?: number;
     offset?: number;
+    min_deal_value?: number;
+    max_deal_value?: number;
   }): Promise<ApiResponse<Form470LeadsResponse>> {
     const params = new URLSearchParams();
     if (filters.year) params.append('year', filters.year.toString());
@@ -2067,6 +2074,8 @@ class ApiClient {
     if (filters.sort_by) params.append('sort_by', filters.sort_by);
     if (filters.limit) params.append('limit', filters.limit.toString());
     if (filters.offset) params.append('offset', filters.offset.toString());
+    if (filters.min_deal_value != null) params.append('min_deal_value', filters.min_deal_value.toString());
+    if (filters.max_deal_value != null) params.append('max_deal_value', filters.max_deal_value.toString());
     const queryString = params.toString();
     return this.request(`/api/v1/vendor/470/leads${queryString ? '?' + queryString : ''}`);
   }

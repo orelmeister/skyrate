@@ -205,6 +205,8 @@ function VendorPortalPage() {
     min_speed?: string;
     max_speed?: string;
     sort_by?: string;
+    min_deal_value?: number;
+    max_deal_value?: number;
   }>({});
   const [form470TotalLeads, setForm470TotalLeads] = useState(0);
   const [form470Detail, setForm470Detail] = useState<Form470DetailResponse | null>(null);
@@ -549,6 +551,8 @@ function VendorPortalPage() {
     min_speed?: string;
     max_speed?: string;
     sort_by?: string;
+    min_deal_value?: number;
+    max_deal_value?: number;
   }) => {
     setForm470Loading(true);
     setForm470Error(null);
@@ -2181,6 +2185,48 @@ function VendorPortalPage() {
                 </div>
               </div>
 
+              {/* Deal-size ($) filters — uses USAC C2 Budget Tool data (6brt-5pbv).
+                  Requires a State filter (we only enrich state-scoped queries). */}
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Min $ (C2 Budget Available)
+                  </label>
+                  <input
+                    type="number"
+                    value={form470Filters.min_deal_value ?? ""}
+                    onChange={(e) => setForm470Filters({
+                      ...form470Filters,
+                      min_deal_value: e.target.value ? parseFloat(e.target.value) : undefined,
+                    })}
+                    onKeyDown={(e) => { if (e.key === 'Enter') load470Leads(form470Filters); }}
+                    placeholder="e.g., 50000"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Max $ (C2 Budget Available)
+                  </label>
+                  <input
+                    type="number"
+                    value={form470Filters.max_deal_value ?? ""}
+                    onChange={(e) => setForm470Filters({
+                      ...form470Filters,
+                      max_deal_value: e.target.value ? parseFloat(e.target.value) : undefined,
+                    })}
+                    onKeyDown={(e) => { if (e.key === 'Enter') load470Leads(form470Filters); }}
+                    placeholder="e.g., 500000"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <p className="text-xs text-slate-500">
+                    $ filters use the BEN&apos;s available C2 budget from USAC. Pair with a State filter.
+                  </p>
+                </div>
+              </div>
+
               {/* Sort + Search Row */}
               <div className="flex flex-wrap items-end gap-4 mt-4">
                 <div>
@@ -2192,6 +2238,7 @@ function VendorPortalPage() {
                   >
                     <option value="">Newest First</option>
                     <option value="entity_name">Applicant Name (A→Z)</option>
+                    <option value="c2_budget_available">Highest C2 Budget Available</option>
                   </select>
                 </div>
                 <button
@@ -2309,6 +2356,7 @@ function VendorPortalPage() {
                         <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Year</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Manufacturers</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Services</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">C2 Budget Available</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Contact</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">Actions</th>
                       </tr>
@@ -2364,6 +2412,20 @@ function VendorPortalPage() {
                             <div className="text-xs text-slate-500 mt-1">
                               {lead.service_types?.slice(0, 2).join(', ')}
                             </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            {lead.c2_budget_available != null ? (
+                              <>
+                                <div className="font-medium text-emerald-700">
+                                  ${Math.round(lead.c2_budget_available).toLocaleString()}
+                                </div>
+                                {lead.c2_budget_cycle && (
+                                  <div className="text-xs text-slate-500">{lead.c2_budget_cycle}</div>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-xs text-slate-400">—</span>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             <div className="text-sm text-slate-700">{lead.contact_name || '-'}</div>
