@@ -148,7 +148,8 @@ class ApplicantProfile(Base):
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
     
     # The golden key - BEN (Billed Entity Number)
-    ben = Column(String(50), nullable=False, index=True)
+    # nullable=True: BEN is optional at registration; collected during onboarding
+    ben = Column(String(50), nullable=True, index=True)
     
     # Organization info (auto-populated from USAC)
     organization_name = Column(String(255))
