@@ -10,6 +10,7 @@ import { useTabParam } from "@/hooks/useTabParam";
 import PredictedLeadsTab from "@/components/PredictedLeadsTab";
 import { TableExportBar } from "@/components/TableExportBar";
 import MissingIdentifierBanner from "@/components/MissingIdentifierBanner";
+import { SkeletonRows, SkeletonTable, SkeletonStatCards } from "@/components/Skeleton";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 
 const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "470-leads", "predicted-leads", "competitive", "search", "leads", "settings"] as const;
@@ -321,7 +322,12 @@ function VendorPortalPage() {
       loadFRNWatches();
       loadReportHistory();
     }
-  }, [activeTab]);
+    // Perf (A4): only fetch serviced entities (USAC roundtrip) when the user
+    // actually opens the "my-entities" tab, not on every dashboard mount.
+    if (activeTab === 'my-entities' && profile?.spin && servicedEntities.length === 0 && !servicedEntitiesLoading) {
+      loadServicedEntities();
+    }
+  }, [activeTab, profile?.spin]);
 
   const loadProfile = async () => {
     setIsLoading(true);
@@ -329,11 +335,13 @@ function VendorPortalPage() {
       const response = await api.getVendorProfile();
       if (response.success && response.data) {
         setProfile(response.data.profile);
-        // Initialize SPIN input with profile SPIN if exists
+        // Initialize SPIN input with profile SPIN if exists.
+        // Perf (A4): we used to also fire `loadServicedEntities()` here, which
+        // triggers a USAC roundtrip and was the biggest single contributor to
+        // slow dashboard loads. It is now lazy-loaded only when the
+        // "my-entities" tab is selected (see useEffect below).
         if (response.data.profile.spin) {
           setSpinInput(response.data.profile.spin);
-          // Auto-load serviced entities if SPIN is configured
-          loadServicedEntities();
         }
       }
     } catch (error) {
@@ -1079,10 +1087,16 @@ function VendorPortalPage() {
 
   if (isLoading && !profile) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading your dashboard...</p>
+      <div className="min-h-screen bg-slate-50 px-4 py-8">
+        <div className="max-w-7xl mx-auto space-y-6">
+          {/* Dashboard skeleton — Phase A4 loading UX */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
+            <SkeletonRows rows={1} height="h-7" gap="" />
+            <SkeletonRows rows={1} height="h-4" gap="" />
+          </div>
+          <SkeletonStatCards count={4} />
+          <SkeletonTable rows={6} columns={5} />
+          <div className="text-center text-slate-400 text-sm">Loading your dashboard…</div>
         </div>
       </div>
     );
@@ -2230,6 +2244,11 @@ function VendorPortalPage() {
               </div>
             )}
 
+            {/* Loading skeleton (Phase A4) */}
+            {form470Loading && form470Leads.length === 0 && (
+              <SkeletonTable rows={8} columns={6} />
+            )}
+
             {/* Results Summary */}
             {form470TotalLeads > 0 && (
               <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
@@ -2818,6 +2837,11 @@ function VendorPortalPage() {
                 ) : "Search Schools"}
               </button>
             </form>
+
+            {/* Loading skeleton for first-page search (Phase A4) */}
+            {isLoading && searchResults.length === 0 && (
+              <SkeletonTable rows={8} columns={6} />
+            )}
 
             {/* Search Results */}
             {searchResults.length > 0 && (

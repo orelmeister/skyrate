@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
+import { SkeletonRows, SkeletonStatCards } from "@/components/Skeleton";
 
 // Types
 interface PredictedLead {
@@ -534,10 +535,7 @@ export default function PredictedLeadsTab() {
         {/* Lead List */}
         <div className="lg:col-span-3 space-y-3">
           {isLoading ? (
-            <div className="text-center py-16">
-              <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-slate-500">Analyzing USAC data...</p>
-            </div>
+            <SkeletonRows rows={6} height="h-28" />
           ) : leads.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
               <span className="text-5xl mb-4 block">🔮</span>

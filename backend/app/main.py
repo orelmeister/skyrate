@@ -856,6 +856,27 @@ class ApiPrefixRewriteMiddleware(BaseHTTPMiddleware):
 # Add the rewrite middleware BEFORE routes are processed
 app.add_middleware(ApiPrefixRewriteMiddleware)
 
+# Request timing middleware (Phase A4 perf diagnosis).
+# Logs server-side wall time for every /v1/* request. Logs to stderr at INFO so
+# DigitalOcean runtime logs capture it. Adds an X-Server-Time-Ms response header
+# so Playwright tests / browsers can read it without log access.
+import time as _time_for_perf
+@app.middleware("http")
+async def request_timing_middleware(request: Request, call_next):
+    path = request.scope.get("path", "")
+    started = _time_for_perf.perf_counter()
+    response = await call_next(request)
+    elapsed_ms = (_time_for_perf.perf_counter() - started) * 1000.0
+    response.headers["X-Server-Time-Ms"] = f"{elapsed_ms:.1f}"
+    # Only log API paths to reduce noise
+    if path.startswith("/v1/") or path.startswith("/api/"):
+        # Threshold-aware log: warn if >1s, info otherwise
+        if elapsed_ms >= 1000:
+            logger.warning(f"[perf] SLOW {request.method} {path} = {elapsed_ms:.0f}ms (status={response.status_code})")
+        elif elapsed_ms >= 200:
+            logger.info(f"[perf] {request.method} {path} = {elapsed_ms:.0f}ms")
+    return response
+
 # Primary routes at /v1 (this is what DO sends after stripping /api)
 app.include_router(auth.router, prefix="/v1")
 app.include_router(subscriptions.router, prefix="/v1")
