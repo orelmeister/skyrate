@@ -659,6 +659,15 @@ def _run_schema_migrations(engine):
                 with engine.begin() as conn:
                     conn.execute(text(f"ALTER TABLE `{table}` ADD COLUMN `{column}` {col_type}"))
                 logger.info(f"Migration: Added column {table}.{column}")
+
+        # Make applicant_profiles.ben nullable so users can sign up without a BEN
+        # (BEN is collected during onboarding, not at registration)
+        if inspector.has_table("applicant_profiles"):
+            ben_col = next((c for c in inspector.get_columns("applicant_profiles") if c["name"] == "ben"), None)
+            if ben_col and ben_col.get("nullable") is False:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE `applicant_profiles` MODIFY COLUMN `ben` VARCHAR(20) NULL"))
+                logger.info("Migration: Made applicant_profiles.ben nullable")
     except Exception as e:
         logger.error(f"Schema migration error (non-fatal): {e}")
 
