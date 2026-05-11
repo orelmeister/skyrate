@@ -464,7 +464,7 @@ async def register(
         background_tasks.add_task(auto_import_schools_from_crn, user.id, data.crn.upper().strip())
     
     # Send welcome email and verification email in background
-    from ..services.email_service import get_email_service
+    from ...services.email_service import get_email_service
     email_svc = get_email_service()
     background_tasks.add_task(email_svc.send_welcome_email, user.email, user.first_name or "there", data.role)
     background_tasks.add_task(email_svc.send_admin_new_user_notification, user.email, user.full_name or user.email, data.role)
