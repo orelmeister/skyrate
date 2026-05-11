@@ -612,23 +612,36 @@ async def get_470_leads(
     """
     try:
         from utils.usac_client import USACDataClient
-        
+        from utils.usac_cache import get_or_cache
+
         client = USACDataClient()
-        result = client.get_470_leads(
-            year=year,
-            state=state,
-            category=category,
-            service_type=service_type,
-            manufacturer=manufacturer,
-            equipment_type=equipment_type,
-            service_function=service_function,
-            min_speed=min_speed,
-            max_speed=max_speed,
-            sort_by=sort_by,
-            limit=limit,
-            offset=offset
+        cache_params = {
+            "year": year, "state": state, "category": category,
+            "service_type": service_type, "manufacturer": manufacturer,
+            "equipment_type": equipment_type, "service_function": service_function,
+            "min_speed": min_speed, "max_speed": max_speed,
+            "sort_by": sort_by, "limit": limit, "offset": offset,
+        }
+        result = get_or_cache(
+            namespace="470_leads",
+            params=cache_params,
+            ttl_hours=6,
+            fetch_fn=lambda: client.get_470_leads(
+                year=year,
+                state=state,
+                category=category,
+                service_type=service_type,
+                manufacturer=manufacturer,
+                equipment_type=equipment_type,
+                service_function=service_function,
+                min_speed=min_speed,
+                max_speed=max_speed,
+                sort_by=sort_by,
+                limit=limit,
+                offset=offset,
+            ),
         )
-        
+
         return result
         
     except Exception as e:
