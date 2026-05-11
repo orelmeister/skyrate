@@ -281,7 +281,7 @@ function SignUpPage() {
               <>
                 Start in 30 seconds.
                 <br />
-                <span className="text-blue-200">Add details later.</span>
+                <span className="text-blue-200">Activate with USAC ID.</span>
               </>
             )}
           </h1>
@@ -522,10 +522,7 @@ function SignUpPage() {
                   placeholder={IDENTIFIER_META[formData.role].placeholder}
                   autoComplete="off"
                 />
-                <p className="mt-1 text-xs text-purple-700">
-                  Required — we&apos;ll auto-pull your portfolio in seconds.
-                </p>
-                <p className="mt-0.5 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-slate-500">
                   {IDENTIFIER_META[formData.role].helper}
                 </p>
                 {identifierWarning && (
