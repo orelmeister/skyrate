@@ -742,10 +742,15 @@ class PredictionService:
             if sort_by not in SORTABLE_COLUMNS:
                 sort_by = 'confidence_score'
             sort_column = getattr(PredictedLead, sort_by, PredictedLead.confidence_score)
+            # MySQL-compatible "NULLS LAST" — MySQL sorts NULLs first by default,
+            # so prepend an `IS NULL` ordering to push them to the end regardless
+            # of asc/desc. (SQLAlchemy's nullslast() emits PostgreSQL-only syntax
+            # that fails on MySQL with error 1064.)
+            null_last = sort_column.is_(None).asc()
             if sort_order == 'asc':
-                query = query.order_by(nullslast(sort_column.asc()))
+                query = query.order_by(null_last, sort_column.asc())
             else:
-                query = query.order_by(nullslast(sort_column.desc()))
+                query = query.order_by(null_last, sort_column.desc())
             
             # Apply pagination
             leads = query.offset(offset).limit(limit).all()
