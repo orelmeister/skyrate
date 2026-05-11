@@ -1,15 +1,90 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
 
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
+
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
+
 export default function SignInPage() {
   const router = useRouter();
   const { login, isAuthenticated, isLoading, error, clearError, user } = useAuthStore();
+  const loginWithGoogle = useAuthStore((s) => s.loginWithGoogle);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const googleBtnRef = useRef<HTMLDivElement>(null);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleError, setGoogleError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID) return;
+    if (typeof window === "undefined") return;
+
+    const initGoogle = () => {
+      if (!window.google?.accounts?.id || !googleBtnRef.current) return;
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: async (response: { credential?: string }) => {
+          if (!response.credential) {
+            setGoogleError("Google sign-in was canceled or failed.");
+            return;
+          }
+          setGoogleError(null);
+          clearError();
+          setGoogleLoading(true);
+          const ok = await loginWithGoogle(response.credential);
+          setGoogleLoading(false);
+          if (!ok) {
+            const storeErr = (useAuthStore.getState().error || "").toLowerCase();
+            if (
+              storeErr.includes("not found") ||
+              storeErr.includes("required") ||
+              storeErr.includes("crn") ||
+              storeErr.includes("spin") ||
+              storeErr.includes("ben")
+            ) {
+              setGoogleError("No SkyRate account is linked to that Google login. Please sign up first.");
+            } else {
+              setGoogleError(useAuthStore.getState().error || "Google sign-in failed. Please try again.");
+            }
+          }
+        },
+        ux_mode: "popup",
+        auto_select: false,
+      });
+      googleBtnRef.current.innerHTML = "";
+      window.google.accounts.id.renderButton(googleBtnRef.current, {
+        type: "standard",
+        theme: "outline",
+        size: "large",
+        text: "signin_with",
+        shape: "rectangular",
+        logo_alignment: "left",
+        width: 360,
+      });
+    };
+
+    const existing = document.getElementById("google-gsi-script") as HTMLScriptElement | null;
+    if (existing) {
+      if (window.google?.accounts?.id) initGoogle();
+      else existing.addEventListener("load", initGoogle, { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.id = "google-gsi-script";
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = initGoogle;
+    document.head.appendChild(script);
+  }, [loginWithGoogle, clearError]);
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -114,12 +189,23 @@ export default function SignInPage() {
               <p className="text-slate-500 mt-2">Sign in to your account to continue</p>
             </div>
 
-            {error && (
+            {(error || googleError) && (
               <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
                 <span className="text-red-500 text-lg">⚠️</span>
                 <div>
                   <div className="font-medium text-red-700">Sign in failed</div>
-                  <div className="text-sm text-red-600">{error}</div>
+                  <div className="text-sm text-red-600">
+                    {googleError || error}
+                    {googleError && googleError.toLowerCase().includes("sign up") && (
+                      <>
+                        {" "}
+                        <Link href="/sign-up" className="underline font-semibold text-red-700 hover:text-red-800">
+                          Create an account
+                        </Link>
+                        .
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -192,6 +278,31 @@ export default function SignInPage() {
                 )}
               </button>
             </form>
+
+            {GOOGLE_CLIENT_ID && (
+              <div className="mt-6">
+                <div className="relative flex items-center">
+                  <div className="flex-grow border-t border-slate-200"></div>
+                  <span className="flex-shrink mx-4 text-xs uppercase tracking-wider text-slate-500">
+                    Or continue with
+                  </span>
+                  <div className="flex-grow border-t border-slate-200"></div>
+                </div>
+                <div className="mt-4 flex justify-center min-h-[44px]">
+                  {googleLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Signing in with Google...
+                    </div>
+                  ) : (
+                    <div id="google-signin-btn" ref={googleBtnRef}></div>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="mt-8 pt-6 border-t border-slate-200 text-center">
               <p className="text-slate-600">
