@@ -51,6 +51,8 @@ class SearchRequest(BaseModel):
     min_amount: Optional[float] = None
     max_amount: Optional[float] = None
     limit: int = 100
+    page: int = 1
+    page_size: Optional[int] = None
 
 
 class SaveSearchRequest(BaseModel):
@@ -903,6 +905,15 @@ async def search_schools(
         
         transformed_results = [transform_result(r) for r in results]
         
+        # Pagination: slice transformed_results so total_count reflects post-filter total
+        total_count = len(transformed_results)
+        page_size = data.page_size if (data.page_size and data.page_size > 0) else data.limit
+        page = max(1, data.page or 1)
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paginated_results = transformed_results[start_idx:end_idx]
+        total_pages = max(1, (total_count + page_size - 1) // page_size) if total_count else 1
+        
         # Save search to history (optional - don't fail if DB issue)
         search_id = None
         try:
@@ -915,7 +926,7 @@ async def search_schools(
                     "service_type": data.service_type,
                     "equipment_keyword": data.equipment_keyword,
                 },
-                results_count=len(transformed_results)
+                results_count=total_count
             )
             db.add(search_record)
             db.commit()
@@ -927,8 +938,13 @@ async def search_schools(
         
         return {
             "success": True,
-            "count": len(transformed_results),
-            "results": transformed_results[:data.limit],
+            "count": len(paginated_results),
+            "total_count": total_count,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+            "has_more": end_idx < total_count,
+            "results": paginated_results,
             "search_id": search_id
         }
     
@@ -2214,6 +2230,7 @@ async def get_predicted_leads(
     entity_type: Optional[str] = None,
     min_confidence: float = 0.0,
     min_deal_value: float = 0.0,
+    max_deal_value: Optional[float] = None,
     sort_by: str = "confidence_score",
     sort_order: str = "desc",
     limit: int = 50,
@@ -2258,6 +2275,7 @@ async def get_predicted_leads(
         entity_types=entity_types_list,
         min_confidence=min_confidence,
         min_deal_value=min_deal_value,
+        max_deal_value=max_deal_value,
         sort_by=sort_by,
         sort_order=sort_order,
         limit=min(limit, 100),

@@ -60,9 +60,13 @@ function VendorPortalPage() {
   const [searchState, setSearchState] = useState("");
   const [searchStatus, setSearchStatus] = useState("");
   const [searchServiceType, setSearchServiceType] = useState("");
-  const [searchYear, setSearchYear] = useState(2025);
+  const [searchYear, setSearchYear] = useState(2026);
   const [searchMinAmount, setSearchMinAmount] = useState("");
   const [searchMaxAmount, setSearchMaxAmount] = useState("");
+  const [searchPage, setSearchPage] = useState(1);
+  const [searchPageSize, setSearchPageSize] = useState(25);
+  const [searchTotalCount, setSearchTotalCount] = useState(0);
+  const [searchTotalPages, setSearchTotalPages] = useState(1);
   
   // SPIN state
   const [spinInput, setSpinInput] = useState("");
@@ -826,9 +830,10 @@ function VendorPortalPage() {
     return `https://www.linkedin.com/search/results/people/?keywords=${encodedKeywords}`;
   };
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearch = async (e: React.FormEvent | null, opts?: { page?: number }) => {
+    if (e && 'preventDefault' in e) e.preventDefault();
     setIsLoading(true);
+    const targetPage = opts?.page ?? 1;
     
     try {
       const response = await api.searchSchools({
@@ -838,11 +843,16 @@ function VendorPortalPage() {
         year: searchYear,
         min_amount: searchMinAmount ? parseInt(searchMinAmount) : undefined,
         max_amount: searchMaxAmount ? parseInt(searchMaxAmount) : undefined,
-        limit: 100,
+        limit: 2000,
+        page: targetPage,
+        page_size: searchPageSize,
       });
       
       if (response.success && response.data) {
         setSearchResults(response.data.results || []);
+        setSearchPage(response.data.page || targetPage);
+        setSearchTotalCount(response.data.total_count ?? (response.data.results?.length || 0));
+        setSearchTotalPages(response.data.total_pages || 1);
       }
     } catch (error) {
       console.error("Search failed:", error);
@@ -2764,6 +2774,7 @@ function VendorPortalPage() {
                     onChange={(e) => setSearchYear(parseInt(e.target.value))}
                     className="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
                   >
+                    <option value={2026}>2026</option>
                     <option value={2025}>2025</option>
                     <option value={2024}>2024</option>
                     <option value={2023}>2023</option>
@@ -2905,6 +2916,53 @@ function VendorPortalPage() {
                   </table>
                 </div>
               </div>
+              {/* Pagination controls */}
+              {searchTotalCount > 0 && (
+                <div className="flex items-center justify-between bg-white rounded-2xl border border-slate-200 px-4 py-3 mt-3">
+                  <span className="text-sm text-slate-500">
+                    Page {searchPage} of {searchTotalPages} · {searchTotalCount.toLocaleString()} total results
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSearch(null, { page: Math.max(1, searchPage - 1) })}
+                      disabled={isLoading || searchPage <= 1}
+                      className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      ← Previous
+                    </button>
+                    {Array.from({ length: Math.min(5, searchTotalPages) }, (_, i) => {
+                      // window of 5 pages around current
+                      const start = Math.max(1, Math.min(searchPage - 2, searchTotalPages - 4));
+                      const p = start + i;
+                      if (p > searchTotalPages) return null;
+                      return (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => handleSearch(null, { page: p })}
+                          disabled={isLoading}
+                          className={`min-w-[34px] px-2 py-1.5 text-sm rounded-lg border ${
+                            p === searchPage
+                              ? 'bg-purple-600 text-white border-purple-600'
+                              : 'border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => handleSearch(null, { page: Math.min(searchTotalPages, searchPage + 1) })}
+                      disabled={isLoading || searchPage >= searchTotalPages}
+                      className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Next →
+                    </button>
+                  </div>
+                </div>
+              )}
               </div>
             )}
 
@@ -2915,7 +2973,9 @@ function VendorPortalPage() {
                 </div>
                 <h2 className="text-lg font-semibold text-slate-900">No Results Yet</h2>
                 <p className="text-slate-500 mt-2 max-w-md mx-auto">
-                  Use the filters above to search for schools with E-Rate funding and find your next customers.
+                  {searchYear === 2026
+                    ? "No results for FY 2026 yet. USAC FY 2026 data is partially populated — try FY 2025 if you don't see results."
+                    : "Use the filters above to search for schools with E-Rate funding and find your next customers."}
                 </p>
               </div>
             )}

@@ -166,6 +166,8 @@ export default function PredictedLeadsTab() {
   const [filterState, setFilterState] = useState<string>("");
   const [filterManufacturer, setFilterManufacturer] = useState<string>("");
   const [filterEntityType, setFilterEntityType] = useState<string>("");
+  const [filterMinAmount, setFilterMinAmount] = useState<string>("");
+  const [filterMaxAmount, setFilterMaxAmount] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("confidence_score");
   const [sortOrder, setSortOrder] = useState<string>("desc");
   const [offset, setOffset] = useState(0);
@@ -179,6 +181,12 @@ export default function PredictedLeadsTab() {
       if (filterState) params.append("state", filterState);
       if (filterManufacturer) params.append("manufacturer", filterManufacturer);
       if (filterEntityType) params.append("entity_type", filterEntityType);
+      if (filterMinAmount && !isNaN(Number(filterMinAmount))) {
+        params.append("min_deal_value", filterMinAmount);
+      }
+      if (filterMaxAmount && !isNaN(Number(filterMaxAmount))) {
+        params.append("max_deal_value", filterMaxAmount);
+      }
       params.append("sort_by", sortBy);
       params.append("sort_order", sortOrder);
       params.append("limit", String(limit));
@@ -198,7 +206,7 @@ export default function PredictedLeadsTab() {
     } finally {
       setIsLoading(false);
     }
-  }, [filterType, filterState, filterManufacturer, filterEntityType, sortBy, sortOrder]);
+  }, [filterType, filterState, filterManufacturer, filterEntityType, filterMinAmount, filterMaxAmount, sortBy, sortOrder]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -492,9 +500,28 @@ export default function PredictedLeadsTab() {
             <option value="confidence_score:asc">Confidence (Low → High)</option>
             <option value="estimated_deal_value:desc">Value (High → Low)</option>
             <option value="estimated_deal_value:asc">Value (Low → High)</option>
+            <option value="c2_budget_total:desc">C2 Budget (High → Low)</option>
+            <option value="c2_budget_total:asc">C2 Budget (Low → High)</option>
+            <option value="organization_name:asc">Entity Name (A → Z)</option>
+            <option value="organization_name:desc">Entity Name (Z → A)</option>
             <option value="predicted_action_date:asc">Action Date (Soonest)</option>
             <option value="created_at:desc">Newest First</option>
           </select>
+
+          <input
+            type="number"
+            placeholder="Min funding $"
+            value={filterMinAmount}
+            onChange={(e) => { setFilterMinAmount(e.target.value); setOffset(0); }}
+            className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm w-32 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          />
+          <input
+            type="number"
+            placeholder="Max funding $"
+            value={filterMaxAmount}
+            onChange={(e) => { setFilterMaxAmount(e.target.value); setOffset(0); }}
+            className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm w-32 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          />
 
           <span className="ml-auto text-sm text-slate-500">
             {total.toLocaleString()} results

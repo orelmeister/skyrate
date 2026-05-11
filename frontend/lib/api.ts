@@ -1898,6 +1898,8 @@ class ApiClient {
     min_amount?: number;
     max_amount?: number;
     limit?: number;
+    page?: number;
+    page_size?: number;
   }): Promise<ApiResponse<any>> {
     return this.request('/api/v1/vendor/search', {
       method: 'POST',

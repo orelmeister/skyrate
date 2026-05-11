@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, func
+from sqlalchemy import and_, or_, func, nullslast, nullsfirst
 
 # Add backend directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -639,6 +639,7 @@ class PredictionService:
         entity_types: Optional[List[str]] = None,
         min_confidence: float = 0.0,
         min_deal_value: float = 0.0,
+        max_deal_value: Optional[float] = None,
         status_filter: Optional[List[PredictionStatus]] = None,
         sort_by: str = 'confidence_score',
         sort_order: str = 'desc',
@@ -672,15 +673,29 @@ class PredictionService:
             if entity_types:
                 et_conditions = []
                 for et in entity_types:
-                    if et.lower() == "charter school":
+                    et_lower = et.lower()
+                    if et_lower == "charter school":
                         # Charter schools often have entity_type="School" with "charter" in name
                         et_conditions.append(or_(
                             func.lower(PredictedLead.entity_type).contains("charter"),
                             func.lower(PredictedLead.organization_name).contains("charter")
                         ))
+                    elif et_lower == "private school":
+                        # Private schools often have entity_type="School" or NULL — fall back
+                        # to matching organization name keywords (private, academy, prep,
+                        # parochial, christian, catholic, montessori, hebrew, day school).
+                        et_conditions.append(or_(
+                            func.lower(PredictedLead.entity_type).contains("private"),
+                            func.lower(PredictedLead.organization_name).contains("private"),
+                            func.lower(PredictedLead.organization_name).contains("academy"),
+                            func.lower(PredictedLead.organization_name).contains("parochial"),
+                            func.lower(PredictedLead.organization_name).contains("montessori"),
+                            func.lower(PredictedLead.organization_name).contains(" prep "),
+                            func.lower(PredictedLead.organization_name).contains("day school"),
+                        ))
                     else:
                         et_conditions.append(
-                            func.lower(PredictedLead.entity_type).contains(et.lower())
+                            func.lower(PredictedLead.entity_type).contains(et_lower)
                         )
                 query = query.filter(or_(*et_conditions))
             
@@ -689,6 +704,10 @@ class PredictionService:
             
             if min_deal_value > 0:
                 query = query.filter(PredictedLead.estimated_deal_value >= min_deal_value)
+            
+            # Optional max funding filter (used by $-range UI filter)
+            if max_deal_value is not None and max_deal_value > 0:
+                query = query.filter(PredictedLead.estimated_deal_value <= max_deal_value)
             
             if status_filter:
                 query = query.filter(PredictedLead.status.in_(status_filter))
@@ -713,12 +732,20 @@ class PredictionService:
             # Get total count before pagination
             total = query.count()
             
-            # Apply sorting
+            # Apply sorting — whitelist columns; push NULLs to the end so sorts on
+            # sparse columns (e.g. c2_budget_total) don't appear to "return 0 results".
+            SORTABLE_COLUMNS = {
+                'confidence_score', 'estimated_deal_value', 'predicted_action_date',
+                'created_at', 'organization_name', 'c2_budget_total',
+                'c2_budget_remaining', 'contract_expiration_date', 'state',
+            }
+            if sort_by not in SORTABLE_COLUMNS:
+                sort_by = 'confidence_score'
             sort_column = getattr(PredictedLead, sort_by, PredictedLead.confidence_score)
             if sort_order == 'asc':
-                query = query.order_by(sort_column.asc())
+                query = query.order_by(nullslast(sort_column.asc()))
             else:
-                query = query.order_by(sort_column.desc())
+                query = query.order_by(nullslast(sort_column.desc()))
             
             # Apply pagination
             leads = query.offset(offset).limit(limit).all()
