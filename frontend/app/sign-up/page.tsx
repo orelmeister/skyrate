@@ -1,12 +1,20 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuthStore } from "@/lib/auth-store";
 import { api } from "@/lib/api";
 import { trackEvent, setUserProperties } from "@/lib/analytics";
+
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
+
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 
 type UserRole = "consultant" | "vendor" | "applicant";
 
@@ -69,6 +77,7 @@ function SignUpPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { register, isLoading, error: authError } = useAuthStore();
+  const loginWithGoogle = useAuthStore((s) => s.loginWithGoogle);
 
   const [promoToken, setPromoToken] = useState<string | null>(null);
   const [promoData, setPromoData] = useState<{ email: string; role: string; trial_days: number } | null>(null);
@@ -142,6 +151,82 @@ function SignUpPage() {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
+
+  // ===== Google Sign-In (Google Identity Services) =====
+  const googleBtnRef = useRef<HTMLDivElement>(null);
+  const roleRef = useRef(formData.role);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleReady, setGoogleReady] = useState(false);
+
+  useEffect(() => {
+    roleRef.current = formData.role;
+  }, [formData.role]);
+
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID) return;
+    if (typeof window === "undefined") return;
+
+    const initGoogle = () => {
+      if (!window.google?.accounts?.id || !googleBtnRef.current) return;
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: async (response: { credential?: string }) => {
+          if (!response.credential) {
+            setError("Google sign-in was canceled or failed.");
+            return;
+          }
+          setGoogleLoading(true);
+          setError("");
+          trackEvent("signup_google_attempt", { role: roleRef.current });
+          const ok = await loginWithGoogle(response.credential, roleRef.current);
+          setGoogleLoading(false);
+          if (ok) {
+            try {
+              if (typeof window !== "undefined" && !sessionStorage.getItem("signup_started_at")) {
+                sessionStorage.setItem("signup_started_at", String(Date.now()));
+              }
+            } catch {
+              /* no-op */
+            }
+            setUserProperties({ user_role: roleRef.current, auth_provider: "google" });
+            trackEvent("signup_google_success", { role: roleRef.current });
+            router.push("/onboarding");
+          } else {
+            setError(useAuthStore.getState().error || "Google sign-in failed. Please try again.");
+            trackEvent("signup_google_error", { role: roleRef.current });
+          }
+        },
+        ux_mode: "popup",
+        auto_select: false,
+      });
+      googleBtnRef.current.innerHTML = "";
+      window.google.accounts.id.renderButton(googleBtnRef.current, {
+        type: "standard",
+        theme: "outline",
+        size: "large",
+        text: "signup_with",
+        shape: "rectangular",
+        logo_alignment: "left",
+        width: 360,
+      });
+      setGoogleReady(true);
+    };
+
+    // Load the GIS script if not already loaded
+    const existing = document.getElementById("google-gsi-script") as HTMLScriptElement | null;
+    if (existing) {
+      if (window.google?.accounts?.id) initGoogle();
+      else existing.addEventListener("load", initGoogle, { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.id = "google-gsi-script";
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = initGoogle;
+    document.head.appendChild(script);
+  }, [loginWithGoogle, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -529,6 +614,34 @@ function SignUpPage() {
                   <p className="mt-1 text-xs text-amber-600">{identifierWarning}</p>
                 )}
               </div>
+
+              {/* Google Sign-Up */}
+              {GOOGLE_CLIENT_ID && (
+                <div data-testid="google-signup-block">
+                  <div className="flex justify-center">
+                    <div ref={googleBtnRef} aria-label="Sign up with Google" />
+                  </div>
+                  {googleLoading && (
+                    <p className="mt-2 text-center text-xs text-slate-500">
+                      <Loader2 className="inline w-3 h-3 mr-1 animate-spin" />
+                      Signing you in with Google…
+                    </p>
+                  )}
+                  {!googleReady && !googleLoading && (
+                    <p className="mt-2 text-center text-xs text-slate-400">Loading Google sign-in…</p>
+                  )}
+                  <div className="relative my-5">
+                    <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                      <div className="w-full border-t border-slate-200" />
+                    </div>
+                    <div className="relative flex justify-center text-xs">
+                      <span className="bg-white px-3 text-slate-500 uppercase tracking-wider">
+                        Or sign up with email
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Email */}
               <div>

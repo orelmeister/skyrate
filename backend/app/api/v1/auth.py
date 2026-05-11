@@ -683,7 +683,7 @@ async def logout(current_user: User = Depends(get_current_user)):
 class GoogleAuthRequest(BaseModel):
     """Google OAuth token from frontend"""
     id_token: str
-    role: str = Field(default="consultant", pattern="^(consultant|vendor)$")
+    role: str = Field(default="consultant", pattern="^(consultant|vendor|applicant)$")
 
 
 @router.post("/google", response_model=TokenResponse)

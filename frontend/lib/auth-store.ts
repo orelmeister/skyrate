@@ -67,7 +67,7 @@ interface AuthState {
   
   // Actions
   login: (email: string, password: string) => Promise<boolean>;
-  loginWithGoogle: (credential: string) => Promise<boolean>;
+  loginWithGoogle: (credential: string, role?: "consultant" | "vendor" | "applicant") => Promise<boolean>;
   register: (data: RegisterData) => Promise<boolean>;
   logout: () => void;
   clearError: () => void;
@@ -135,7 +135,7 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      loginWithGoogle: async (credential: string) => {
+      loginWithGoogle: async (credential: string, role: "consultant" | "vendor" | "applicant" = "consultant") => {
         set({ isLoading: true, error: null });
         
         // Clear any stale legacy tokens before login
@@ -149,7 +149,7 @@ export const useAuthStore = create<AuthState>()(
           const response = await fetch(`${API_URL}/api/v1/auth/google`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ credential }),
+            body: JSON.stringify({ id_token: credential, role }),
           });
 
           const data = await response.json();
