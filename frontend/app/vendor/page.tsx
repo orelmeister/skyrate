@@ -110,6 +110,7 @@ function VendorPortalPage() {
   const [frnStatusYear, setFrnStatusYear] = useState<number | undefined>(undefined);
   const [frnStatusFilter, setFrnStatusFilter] = useState<string>("");
   const [frnPendingReason, setFrnPendingReason] = useState<string>("");
+  const [frnSearch, setFrnSearch] = useState<string>("");
   const [selectedFRN, setSelectedFRN] = useState<FRNStatusRecord | null>(null);
   const [showFRNDetailModal, setShowFRNDetailModal] = useState(false);
   const [frnTableSort, setFrnTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
@@ -118,10 +119,21 @@ function VendorPortalPage() {
   const sortedFrnData = useMemo(() => {
     if (!frnStatusData?.frns?.length) return [];
     
-    // First filter by status if a filter is selected
     let filtered = frnStatusData.frns;
+
+    // Client-side search by FRN / Entity / BEN
+    if (frnSearch.trim()) {
+      const search = frnSearch.trim().toLowerCase();
+      filtered = filtered.filter(frn =>
+        (frn.frn || '').toLowerCase().includes(search) ||
+        (frn.entity_name || '').toLowerCase().includes(search) ||
+        (frn.ben || '').toLowerCase().includes(search)
+      );
+    }
+
+    // Filter by status if a filter is selected
     if (frnStatusFilter) {
-      filtered = frnStatusData.frns.filter(frn => {
+      filtered = filtered.filter(frn => {
         const status = (frn.status || '').toLowerCase();
         const filter = frnStatusFilter.toLowerCase();
         if (filter === 'funded') return status.includes('funded') || status.includes('committed');
@@ -141,7 +153,7 @@ function VendorPortalPage() {
       return frnTableSort.dir === 'asc' ? cmp : -cmp;
     });
     return sorted;
-  }, [frnStatusData?.frns, frnTableSort, frnStatusFilter]);
+  }, [frnStatusData?.frns, frnTableSort, frnStatusFilter, frnSearch]);
 
   // Toggle FRN table sort
   const toggleFrnTableSort = (field: string) => {
@@ -504,14 +516,15 @@ function VendorPortalPage() {
   };
 
   // FRN Status Monitoring functions (Sprint 2)
-  const loadFRNStatus = async (year?: number, status?: string, pendingReason?: string) => {
-    if (!profile?.spin) {
+  const loadFRNStatus = async (year?: number, status?: string, pendingReason?: string, ben?: string) => {
+    // Allow loading even without SPIN when a BEN is provided
+    if (!profile?.spin && !ben) {
       return;
     }
     
     setFrnStatusLoading(true);
     try {
-      const response = await api.getFRNStatus(year, status || undefined, pendingReason || undefined);
+      const response = await api.getFRNStatus(year, status || undefined, pendingReason || undefined, 500, ben);
       if (response.success && response.data) {
         setFrnStatusData(response.data);
       }
@@ -1561,16 +1574,16 @@ function VendorPortalPage() {
               </div>
             </div>
 
-            {!profile?.spin ? (
+            {!profile?.spin && (
               <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200 p-6">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
                     <span className="text-2xl">⚠️</span>
                   </div>
                   <div className="flex-1">
-                    <h2 className="text-lg font-semibold text-slate-900">SPIN Required</h2>
+                    <h2 className="text-lg font-semibold text-slate-900">SPIN Not Configured</h2>
                     <p className="text-sm text-slate-600 mt-1">
-                      Configure your SPIN number in settings to view FRN status
+                      Configure your SPIN in settings to load your own FRNs automatically, or search any BEN below.
                     </p>
                   </div>
                   <button
@@ -1581,7 +1594,7 @@ function VendorPortalPage() {
                   </button>
                 </div>
               </div>
-            ) : (
+            )}
               <>
                 {/* Filters */}
                 <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
@@ -1629,8 +1642,28 @@ function VendorPortalPage() {
                         className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-56"
                       />
                     </div>
+                    <div>
+                      <label className="text-sm text-slate-600 mb-1 block">Search FRN / Entity / BEN</label>
+                      <input
+                        type="text"
+                        value={frnSearch}
+                        onChange={(e) => setFrnSearch(e.target.value)}
+                        placeholder="e.g., 2699061470"
+                        className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-56"
+                      />
+                    </div>
                     <button
-                      onClick={() => loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason)}
+                      onClick={() => {
+                        const searchTerm = frnSearch.trim();
+                        // Detect a BEN-like search (all digits, 5-10 chars)
+                        const looksLikeBen = /^\d{5,10}$/.test(searchTerm);
+                        if (looksLikeBen) {
+                          // Pass ben to backend for server-side lookup
+                          loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason, searchTerm);
+                        } else {
+                          loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason);
+                        }
+                      }}
                       disabled={frnStatusLoading}
                       className="mt-5 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium flex items-center gap-2"
                     >
@@ -1840,20 +1873,23 @@ function VendorPortalPage() {
                     <div className="w-16 h-16 rounded-full bg-teal-100 flex items-center justify-center mx-auto mb-4">
                       <span className="text-3xl">📈</span>
                     </div>
-                    <h3 className="text-lg font-semibold text-slate-900">Load FRN Status</h3>
+                    <h3 className="text-lg font-semibold text-slate-900">{profile?.spin ? 'Load FRN Status' : 'Search Any BEN'}</h3>
                     <p className="text-sm text-slate-600 mt-2 mb-4">
-                      Click the button below to load your FRN status data
+                      {profile?.spin
+                        ? 'Click the button below to load your FRN status data'
+                        : 'Enter a BEN in the search box above and click Apply Filters to look up any entity\'s FRN status'}
                     </p>
-                    <button
-                      onClick={() => loadFRNStatus()}
-                      className="px-6 py-2.5 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-colors font-medium"
-                    >
-                      Load FRN Status
-                    </button>
+                    {profile?.spin && (
+                      <button
+                        onClick={() => loadFRNStatus()}
+                        className="px-6 py-2.5 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-colors font-medium"
+                      >
+                        Load FRN Status
+                      </button>
+                    )}
                   </div>
                 )}
               </>
-            )}
 
               {/* FRN Report Monitors Section */}
               <div className="mt-8 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">

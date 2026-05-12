@@ -435,27 +435,48 @@ async def get_frn_status(
     status: Optional[str] = None,
     pending_reason: Optional[str] = None,
     limit: int = 500,
+    ben: Optional[str] = None,
     profile: VendorProfile = Depends(get_vendor_profile),
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
     db: Session = Depends(get_db),
 ):
     """
-    Get FRN status for all your contracts (filtered by your SPIN).
-    This shows the commitment status, disbursement status, and key dates.
-    
-    Useful for operations team to:
-    - Track which FRNs are funded/denied/pending
-    - See disbursement status
-    - Follow up with clients based on status
+    Get FRN status for all your contracts (filtered by your SPIN),
+    or look up any BEN's FRN status (super/admin can query any BEN).
     
     Args:
         year: Optional funding year filter
         status: Optional status filter ('Funded', 'Denied', 'Pending')
         pending_reason: Optional pending reason filter (partial match)
         limit: Maximum records (default 500)
+        ben: Optional BEN to look up directly (bypasses SPIN filter)
     """
+    is_privileged = current_user.role in ("super", "admin")
+
+    # Direct BEN lookup
+    if ben:
+        try:
+            from utils.usac_client import USACDataClient
+            from app.services.cache_service import get_cached, set_cached, make_cache_key
+
+            client = USACDataClient()
+            cache_key = make_cache_key("vendor_frn_ben", ben=ben, year=year)
+            cached = get_cached(db, cache_key)
+            if cached:
+                return cached
+
+            result = client.get_frn_status_by_ben(ben, year)
+            set_cached(db, cache_key, result, ttl_hours=1)
+            return result
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to fetch FRN status for BEN {ben}: {str(e)}"
+            )
+
     if not profile.spin:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=400,
             detail="No SPIN configured in your profile. Please add your SPIN in settings first."
         )
     
@@ -479,7 +500,7 @@ async def get_frn_status(
         
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=500,
             detail=f"Failed to fetch FRN status: {str(e)}"
         )
 

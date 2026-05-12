@@ -2013,12 +2013,13 @@ class ApiClient {
   /**
    * Get FRN status for all your contracts (filtered by your SPIN)
    */
-  async getFRNStatus(year?: number, status?: string, pendingReason?: string, limit: number = 500): Promise<ApiResponse<FRNStatusResponse>> {
+  async getFRNStatus(year?: number, status?: string, pendingReason?: string, limit: number = 500, ben?: string): Promise<ApiResponse<FRNStatusResponse>> {
     const params = new URLSearchParams();
     if (year) params.set('year', String(year));
     if (status) params.set('status', status);
     if (pendingReason) params.set('pending_reason', pendingReason);
     if (limit) params.set('limit', String(limit));
+    if (ben) params.set('ben', ben);
     const queryString = params.toString() ? `?${params.toString()}` : '';
     return this.request(`/api/v1/vendor/frn-status${queryString}`);
   }
