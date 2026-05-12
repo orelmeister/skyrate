@@ -8,8 +8,8 @@ subscriptions can fire.
 
 Checkpoint strategy:
   - Look up the most recent `vendor_alert_scan_runs.started_at`.
-  - Pull rows with `certified_date > last_started_at - 1h` to absorb any
-    late-arriving data the prior pass missed.
+  - Pull rows with `certified_date_time > last_started_at - 1h` to absorb
+    any late-arriving data the prior pass missed.
   - First-ever run (no prior scan rows): pull the last 7 days.
 
 Idempotency:
@@ -168,12 +168,12 @@ def _compute_checkpoint(db: Session) -> datetime:
 # ============================================================
 
 def _fetch_page(session: requests.Session, since: datetime, offset: int) -> List[Dict[str, Any]]:
-    where = f"certified_date > '{since.strftime('%Y-%m-%dT%H:%M:%S')}'"
+    where = f"certified_date_time > '{since.strftime('%Y-%m-%dT%H:%M:%S')}'"
     params = {
         "$where": where,
         "$limit": USAC_PAGE_LIMIT,
         "$offset": offset,
-        "$order": "certified_date ASC",
+        "$order": "certified_date_time ASC",
     }
     resp = session.get(USAC_FORM_470_URL, params=params, timeout=USAC_REQUEST_TIMEOUT)
     resp.raise_for_status()
@@ -232,7 +232,11 @@ def _upsert_row(db: Session, row: Dict[str, Any]) -> Optional[int]:
         ben=_coerce_str(row.get("ben") or row.get("billed_entity_number"), max_len=20),
         applicant_name=_coerce_str(row.get("applicant_name") or row.get("billed_entity_name"), max_len=255),
         state=(_coerce_str(row.get("state") or row.get("billed_entity_state"), max_len=2) or None),
-        certified_date=_coerce_datetime(row.get("certified_date") or row.get("posting_date")),
+        certified_date=_coerce_datetime(
+            row.get("certified_date_time")
+            or row.get("certified_date")
+            or row.get("posting_date")
+        ),
         allowable_contract_date=_coerce_datetime(row.get("allowable_contract_date")),
         total_pre_discount_cost=_coerce_decimal(
             row.get("total_pre_discount_cost")

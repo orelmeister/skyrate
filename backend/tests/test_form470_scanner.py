@@ -110,7 +110,7 @@ def _usac_row(app_no: str, **kw) -> dict:
         "ben": kw.get("ben", "12345"),
         "applicant_name": kw.get("applicant_name", "Foo School District"),
         "state": kw.get("state", "TX"),
-        "certified_date": kw.get("certified_date", "2026-05-10T12:00:00.000"),
+        "certified_date_time": kw.get("certified_date_time", "2026-05-10T12:00:00.000"),
         "total_pre_discount_cost": kw.get("total_pre_discount_cost", "10000.00"),
         "service_category": kw.get("service_category", ["Category 1"]),
         "applicant_type": kw.get("applicant_type", "School District"),
