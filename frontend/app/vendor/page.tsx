@@ -325,9 +325,13 @@ function VendorPortalPage() {
       loadFRNWatches();
       loadReportHistory();
     }
-    // Perf (A4): only fetch serviced entities (USAC roundtrip) when the user
-    // actually opens the "my-entities" tab, not on every dashboard mount.
-    if (activeTab === 'my-entities' && profile?.spin && servicedEntities.length === 0 && !servicedEntitiesLoading) {
+    // Perf (A4): fetch serviced entities (USAC roundtrip) lazily — only when
+    // the dashboard or "my-entities" tab is open. The dashboard needs the
+    // stats payload to render its purple success banner; without it, the
+    // banner would fall back to the "Complete Your Profile" warning even
+    // when a SPIN is already saved. The length/loading guard prevents a
+    // double-fire when switching between dashboard and my-entities.
+    if ((activeTab === 'dashboard' || activeTab === 'my-entities') && profile?.spin && servicedEntities.length === 0 && !servicedEntitiesLoading) {
       loadServicedEntities();
     }
   }, [activeTab, profile?.spin]);
@@ -1285,50 +1289,88 @@ function VendorPortalPage() {
           {activeTab === "dashboard" && (
             <div className="space-y-6">
               {/* Company Info Banner */}
-              {profile?.spin && servicedEntitiesStats ? (
-                <div className="bg-gradient-to-r from-purple-600 via-purple-700 to-pink-600 rounded-2xl p-6 text-white shadow-lg">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
-                        <span className="text-3xl">🏢</span>
-                      </div>
-                      <div>
-                        <h1 className="text-2xl font-bold">{servicedEntitiesStats.service_provider_name || profile.company_name || 'Your Company'}</h1>
-                        <div className="flex items-center gap-3 mt-1 text-purple-100">
-                          <span className="font-mono bg-white/20 px-2 py-0.5 rounded text-sm">SPIN: {profile.spin}</span>
-                          <span className="flex items-center gap-1 text-sm">
-                            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                            Active Service Provider
-                          </span>
+              {profile?.spin ? (
+                servicedEntitiesStats ? (
+                  <div className="bg-gradient-to-r from-purple-600 via-purple-700 to-pink-600 rounded-2xl p-6 text-white shadow-lg">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
+                          <span className="text-3xl">🏢</span>
+                        </div>
+                        <div>
+                          <h1 className="text-2xl font-bold">{servicedEntitiesStats.service_provider_name || profile.company_name || 'Your Company'}</h1>
+                          <div className="flex items-center gap-3 mt-1 text-purple-100">
+                            <span className="font-mono bg-white/20 px-2 py-0.5 rounded text-sm">SPIN: {profile.spin}</span>
+                            <span className="flex items-center gap-1 text-sm">
+                              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                              Active Service Provider
+                            </span>
+                          </div>
                         </div>
                       </div>
+                      <button
+                        onClick={() => setActiveTab("my-entities")}
+                        className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
+                      >
+                        View All Entities →
+                      </button>
                     </div>
-                    <button
-                      onClick={() => setActiveTab("my-entities")}
-                      className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
-                    >
-                      View All Entities →
-                    </button>
+                    <div className="grid grid-cols-4 gap-6 mt-6 pt-6 border-t border-white/20">
+                      <div>
+                        <div className="text-3xl font-bold">{servicedEntitiesStats.total_entities}</div>
+                        <div className="text-sm text-purple-200 mt-1">Entities Serviced</div>
+                      </div>
+                      <div>
+                        <div className="text-3xl font-bold">${(servicedEntitiesStats.total_authorized / 1000000).toFixed(2)}M</div>
+                        <div className="text-sm text-purple-200 mt-1">Total E-Rate Authorized</div>
+                      </div>
+                      <div>
+                        <div className="text-3xl font-bold">{servicedEntitiesStats.funding_years.length}</div>
+                        <div className="text-sm text-purple-200 mt-1">Years Active</div>
+                      </div>
+                      <div>
+                        <div className="text-3xl font-bold">{servicedEntitiesStats.funding_years[0] || 'N/A'}</div>
+                        <div className="text-sm text-purple-200 mt-1">Most Recent Year</div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-4 gap-6 mt-6 pt-6 border-t border-white/20">
-                    <div>
-                      <div className="text-3xl font-bold">{servicedEntitiesStats.total_entities}</div>
-                      <div className="text-sm text-purple-200 mt-1">Entities Serviced</div>
+                ) : (
+                  // Loading variant of the success banner — shown while
+                  // serviced-entity stats are still being fetched. Keeps the
+                  // purple gradient so it never flashes as a warning when a
+                  // SPIN is set.
+                  <div className="bg-gradient-to-r from-purple-600 via-purple-700 to-pink-600 rounded-2xl p-6 text-white shadow-lg">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
+                          <span className="text-3xl">🏢</span>
+                        </div>
+                        <div>
+                          <h1 className="text-2xl font-bold">{profile.company_name || 'Your Company'}</h1>
+                          <div className="flex items-center gap-3 mt-1 text-purple-100">
+                            <span className="font-mono bg-white/20 px-2 py-0.5 rounded text-sm">SPIN: {profile.spin}</span>
+                            <span className="flex items-center gap-1 text-sm">
+                              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                              Active Service Provider
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setActiveTab("my-entities")}
+                        className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
+                      >
+                        View All Entities →
+                      </button>
                     </div>
-                    <div>
-                      <div className="text-3xl font-bold">${(servicedEntitiesStats.total_authorized / 1000000).toFixed(2)}M</div>
-                      <div className="text-sm text-purple-200 mt-1">Total E-Rate Authorized</div>
-                    </div>
-                    <div>
-                      <div className="text-3xl font-bold">{servicedEntitiesStats.funding_years.length}</div>
-                      <div className="text-sm text-purple-200 mt-1">Years Active</div>
-                    </div>
-                    <div>
-                      <div className="text-3xl font-bold">{servicedEntitiesStats.funding_years[0] || 'N/A'}</div>
-                      <div className="text-sm text-purple-200 mt-1">Most Recent Year</div>
+                    <div className="mt-6 pt-6 border-t border-white/20 flex items-center gap-3 text-purple-100">
+                      <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      <span className="text-sm">Loading your E-Rate portfolio…</span>
                     </div>
                   </div>
-                </div>
+                )
               ) : (
                 <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200 p-6">
                   <div className="flex items-center gap-4">
