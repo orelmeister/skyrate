@@ -152,15 +152,21 @@ def _service_types_from_row(row: Dict[str, Any]) -> List[str]:
 # ============================================================
 
 def _compute_checkpoint(db: Session) -> datetime:
-    """Return the lower-bound certified_date filter for this scan."""
-    last_run = (
+    """Return the lower-bound certified_date_time filter for this scan.
+
+    Only considers runs that completed without error so that a string of
+    failed runs (e.g. bad field-name causing 400) does not prevent the
+    initial 7-day backfill from ever executing.
+    """
+    last_ok = (
         db.query(VendorAlertScanRun)
+        .filter(VendorAlertScanRun.error.is_(None))
         .order_by(VendorAlertScanRun.started_at.desc())
         .first()
     )
-    if not last_run:
+    if not last_ok:
         return datetime.utcnow() - timedelta(days=FIRST_RUN_LOOKBACK_DAYS)
-    return last_run.started_at - timedelta(hours=OVERLAP_HOURS)
+    return last_ok.started_at - timedelta(hours=OVERLAP_HOURS)
 
 
 # ============================================================
