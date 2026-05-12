@@ -3,6 +3,14 @@ from .user import User, UserRole
 from .subscription import Subscription, SubscriptionStatus, SubscriptionPlan
 from .consultant import ConsultantProfile, ConsultantSchool, ConsultantCRN
 from .vendor import VendorProfile, VendorSearch, SavedLead, OrganizationEnrichmentCache
+from .vendor_alerts import (
+    VendorAlertSubscription,
+    VendorAlertMatch,
+    VendorAlertScanRun,
+    VendorPushSubscription,
+    VendorInAppNotification,
+    DEFAULT_ALERT_CHANNELS,
+)
 from .application import SchoolSnapshot, Application, AppealRecord, QueryHistory
 from .alert import Alert, AlertConfig, AlertType, AlertPriority
 from .support_ticket import SupportTicket, TicketMessage, TicketStatus, TicketPriority, TicketCategory, TicketSource
@@ -37,6 +45,13 @@ __all__ = [
     "VendorSearch",
     "SavedLead",
     "OrganizationEnrichmentCache",
+    # Vendor alerts (P1 of Vendor Parity Plan v2)
+    "VendorAlertSubscription",
+    "VendorAlertMatch",
+    "VendorAlertScanRun",
+    "VendorPushSubscription",
+    "VendorInAppNotification",
+    "DEFAULT_ALERT_CHANNELS",
     "SchoolSnapshot",
     "Application",
     "AppealRecord",

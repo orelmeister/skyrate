@@ -2696,3 +2696,414 @@ async def enrich_predicted_lead(
         "enrichment": enrichment_result,
         "prediction": prediction.to_dict()
     }
+
+
+# ==================== ALERT SUBSCRIPTIONS ====================
+# Phase 1 of the Vendor Parity Plan v2. Stores the subscription configs;
+# the actual scanner that fills `vendor_alert_matches` lives in P2, and
+# the dispatcher (email/SMS/push) lives in P3-P7. These endpoints only
+# expose the CRUD + read surface.
+
+from ...models.vendor_alerts import (
+    VendorAlertSubscription,
+    VendorAlertMatch,
+    VendorPushSubscription,
+    VendorInAppNotification,
+    DEFAULT_ALERT_CHANNELS,
+)
+
+
+class AlertChannels(BaseModel):
+    email: bool = True
+    sms: bool = False
+    push: bool = False
+    in_app: bool = False
+
+
+class AlertSubscriptionCreate(BaseModel):
+    name: str
+    mode: str = "filter"  # 'filter' or 'watchlist'
+    states: Optional[List[str]] = None
+    service_categories: Optional[List[str]] = None
+    applicant_types: Optional[List[str]] = None
+    min_amount: Optional[float] = None
+    max_amount: Optional[float] = None
+    watchlist_bens: Optional[List[str]] = None
+    channels: Optional[AlertChannels] = None
+    email: Optional[str] = None
+    phone_e164: Optional[str] = None
+    active: bool = True
+
+
+class AlertSubscriptionUpdate(BaseModel):
+    name: Optional[str] = None
+    mode: Optional[str] = None
+    states: Optional[List[str]] = None
+    service_categories: Optional[List[str]] = None
+    applicant_types: Optional[List[str]] = None
+    min_amount: Optional[float] = None
+    max_amount: Optional[float] = None
+    watchlist_bens: Optional[List[str]] = None
+    channels: Optional[AlertChannels] = None
+    email: Optional[str] = None
+    phone_e164: Optional[str] = None
+    active: Optional[bool] = None
+
+
+class AlertSubscriptionResponse(BaseModel):
+    id: int
+    name: str
+    mode: str
+    active: bool
+
+
+class AlertPreviewRequest(BaseModel):
+    """Shape-only schema; preview implementation lands in P2."""
+    mode: str = "filter"
+    states: Optional[List[str]] = None
+    service_categories: Optional[List[str]] = None
+    applicant_types: Optional[List[str]] = None
+    min_amount: Optional[float] = None
+    max_amount: Optional[float] = None
+    watchlist_bens: Optional[List[str]] = None
+
+
+class PushSubscriptionCreate(BaseModel):
+    endpoint: str
+    p256dh: str
+    auth: str
+    ua: Optional[str] = None
+
+
+class InAppNotificationResponse(BaseModel):
+    id: int
+    title: str
+    body: str
+    link: Optional[str] = None
+    read_at: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+def _has_any_filter_criteria(data) -> bool:
+    return any(
+        getattr(data, field, None)
+        for field in (
+            "states",
+            "service_categories",
+            "applicant_types",
+            "min_amount",
+            "max_amount",
+        )
+    )
+
+
+def _normalize_channels(channels: Optional[AlertChannels]) -> dict:
+    if channels is None:
+        return dict(DEFAULT_ALERT_CHANNELS)
+    return {
+        "email": bool(channels.email),
+        "sms": bool(channels.sms),
+        "push": bool(channels.push),
+        "in_app": bool(channels.in_app),
+    }
+
+
+def _get_owned_subscription(
+    sub_id: int,
+    profile: VendorProfile,
+    db: Session,
+) -> VendorAlertSubscription:
+    sub = db.query(VendorAlertSubscription).filter(
+        VendorAlertSubscription.id == sub_id,
+        VendorAlertSubscription.vendor_profile_id == profile.id,
+    ).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="Alert subscription not found")
+    return sub
+
+
+@router.get("/alerts")
+async def list_alert_subscriptions(
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
+):
+    """List all alert subscriptions for the current vendor."""
+    rows = db.query(VendorAlertSubscription).filter(
+        VendorAlertSubscription.vendor_profile_id == profile.id,
+    ).order_by(VendorAlertSubscription.created_at.desc()).all()
+
+    return {
+        "success": True,
+        "subscriptions": [s.to_dict() for s in rows],
+    }
+
+
+@router.post("/alerts")
+async def create_alert_subscription(
+    data: AlertSubscriptionCreate,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
+    db: Session = Depends(get_db),
+):
+    """Create a new alert subscription."""
+    if data.mode not in ("filter", "watchlist"):
+        raise HTTPException(status_code=400, detail="mode must be 'filter' or 'watchlist'")
+
+    if data.mode == "watchlist":
+        if not data.watchlist_bens or len(data.watchlist_bens) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="watchlist_bens is required and must be non-empty for watchlist mode",
+            )
+    else:  # filter
+        if not _has_any_filter_criteria(data):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "At least one of states, service_categories, applicant_types, "
+                    "min_amount, or max_amount must be set for filter mode"
+                ),
+            )
+
+    channels = _normalize_channels(data.channels)
+
+    email = data.email
+    if channels.get("email"):
+        email = email or getattr(current_user, "email", None)
+        if not email:
+            raise HTTPException(
+                status_code=400,
+                detail="email is required when the email channel is enabled",
+            )
+
+    if channels.get("sms") and not data.phone_e164:
+        raise HTTPException(
+            status_code=400,
+            detail="phone_e164 is required when the SMS channel is enabled",
+        )
+
+    sub = VendorAlertSubscription(
+        vendor_profile_id=profile.id,
+        name=data.name,
+        mode=data.mode,
+        states=data.states,
+        service_categories=data.service_categories,
+        applicant_types=data.applicant_types,
+        min_amount=data.min_amount,
+        max_amount=data.max_amount,
+        watchlist_bens=data.watchlist_bens,
+        channels=channels,
+        email=email,
+        phone_e164=data.phone_e164,
+        active=data.active,
+    )
+    db.add(sub)
+    db.commit()
+    db.refresh(sub)
+
+    return {"success": True, "subscription": sub.to_dict()}
+
+
+@router.get("/alerts/{sub_id}")
+async def get_alert_subscription(
+    sub_id: int,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
+):
+    """Get a single subscription by id (vendor-scoped)."""
+    sub = _get_owned_subscription(sub_id, profile, db)
+    return {"success": True, "subscription": sub.to_dict()}
+
+
+@router.patch("/alerts/{sub_id}")
+async def update_alert_subscription(
+    sub_id: int,
+    data: AlertSubscriptionUpdate,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
+):
+    """Partial-update an existing subscription."""
+    sub = _get_owned_subscription(sub_id, profile, db)
+
+    if data.mode is not None and data.mode not in ("filter", "watchlist"):
+        raise HTTPException(status_code=400, detail="mode must be 'filter' or 'watchlist'")
+
+    payload = data.dict(exclude_unset=True)
+    if "channels" in payload:
+        payload["channels"] = _normalize_channels(data.channels)
+
+    # Apply scalar fields.
+    for field in (
+        "name", "mode", "states", "service_categories", "applicant_types",
+        "min_amount", "max_amount", "watchlist_bens", "channels",
+        "email", "phone_e164", "active",
+    ):
+        if field in payload:
+            setattr(sub, field, payload[field])
+
+    # Re-validate channel-required fields against the *resulting* row.
+    final_channels = sub.channels or dict(DEFAULT_ALERT_CHANNELS)
+    if final_channels.get("sms") and not sub.phone_e164:
+        raise HTTPException(
+            status_code=400,
+            detail="phone_e164 is required when the SMS channel is enabled",
+        )
+    if final_channels.get("email") and not sub.email:
+        raise HTTPException(
+            status_code=400,
+            detail="email is required when the email channel is enabled",
+        )
+
+    db.commit()
+    db.refresh(sub)
+    return {"success": True, "subscription": sub.to_dict()}
+
+
+@router.delete("/alerts/{sub_id}")
+async def delete_alert_subscription(
+    sub_id: int,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
+):
+    """Delete a subscription (cascade removes its matches)."""
+    sub = _get_owned_subscription(sub_id, profile, db)
+    db.delete(sub)
+    db.commit()
+    return {"success": True}
+
+
+@router.get("/alerts/{sub_id}/matches")
+async def list_alert_matches(
+    sub_id: int,
+    limit: int = 50,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
+):
+    """List matches recorded for this subscription. Empty until the P2
+    scanner is enabled."""
+    sub = _get_owned_subscription(sub_id, profile, db)
+    if limit < 1:
+        limit = 1
+    if limit > 500:
+        limit = 500
+
+    rows = db.query(VendorAlertMatch).filter(
+        VendorAlertMatch.subscription_id == sub.id,
+    ).order_by(VendorAlertMatch.matched_at.desc()).limit(limit).all()
+
+    return {
+        "success": True,
+        "subscription_id": sub.id,
+        "matches": [m.to_dict() for m in rows],
+    }
+
+
+@router.post("/alerts/preview")
+async def preview_alert_subscription(
+    data: AlertPreviewRequest,
+    profile: VendorProfile = Depends(get_vendor_profile),
+):
+    """Preview the matches a subscription would produce. Stubbed in P1;
+    the real preview implementation arrives with the P2 scanner."""
+    return {"status": "not_implemented", "phase": "P2"}
+
+
+# ==================== VENDOR PUSH SUBSCRIPTIONS ====================
+
+@router.post("/push/subscribe")
+async def create_vendor_push_subscription(
+    data: PushSubscriptionCreate,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
+):
+    """Store a Web Push subscription for the current vendor. The actual
+    push dispatcher lands in P6."""
+    if not data.endpoint or not data.p256dh or not data.auth:
+        raise HTTPException(
+            status_code=400,
+            detail="endpoint, p256dh, and auth are all required",
+        )
+
+    push = VendorPushSubscription(
+        vendor_profile_id=profile.id,
+        endpoint=data.endpoint,
+        p256dh=data.p256dh,
+        auth=data.auth,
+        ua=data.ua,
+    )
+    db.add(push)
+    db.commit()
+    db.refresh(push)
+    return {"success": True, "push_subscription": push.to_dict()}
+
+
+@router.delete("/push/{push_id}")
+async def delete_vendor_push_subscription(
+    push_id: int,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
+):
+    """Delete a vendor push subscription (vendor-scoped)."""
+    push = db.query(VendorPushSubscription).filter(
+        VendorPushSubscription.id == push_id,
+        VendorPushSubscription.vendor_profile_id == profile.id,
+    ).first()
+    if not push:
+        raise HTTPException(status_code=404, detail="Push subscription not found")
+    db.delete(push)
+    db.commit()
+    return {"success": True}
+
+
+# ==================== IN-APP NOTIFICATIONS ====================
+
+@router.get("/notifications")
+async def list_vendor_notifications(
+    unread_only: bool = False,
+    limit: int = 50,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
+):
+    """List in-app notifications for the current vendor."""
+    if limit < 1:
+        limit = 1
+    if limit > 500:
+        limit = 500
+
+    q = db.query(VendorInAppNotification).filter(
+        VendorInAppNotification.vendor_profile_id == profile.id,
+    )
+    if unread_only:
+        q = q.filter(VendorInAppNotification.read_at.is_(None))
+    rows = q.order_by(VendorInAppNotification.created_at.desc()).limit(limit).all()
+
+    unread_count = db.query(VendorInAppNotification).filter(
+        VendorInAppNotification.vendor_profile_id == profile.id,
+        VendorInAppNotification.read_at.is_(None),
+    ).count()
+
+    return {
+        "success": True,
+        "notifications": [n.to_dict() for n in rows],
+        "unread_count": unread_count,
+    }
+
+
+@router.post("/notifications/{notif_id}/read")
+async def mark_vendor_notification_read(
+    notif_id: int,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
+):
+    """Mark a vendor in-app notification as read (vendor-scoped)."""
+    notif = db.query(VendorInAppNotification).filter(
+        VendorInAppNotification.id == notif_id,
+        VendorInAppNotification.vendor_profile_id == profile.id,
+    ).first()
+    if not notif:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    if not notif.read_at:
+        notif.read_at = datetime.utcnow()
+        db.commit()
+        db.refresh(notif)
+    return {"success": True, "notification": notif.to_dict()}
