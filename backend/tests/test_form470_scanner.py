@@ -231,8 +231,10 @@ def test_first_run_uses_seven_day_lookback():
 
 
 def test_subsequent_run_uses_overlap_checkpoint():
-    # First run.
-    with _patch_fetch([]):
+    # First run: must return at least 1 row so postings table is non-empty,
+    # otherwise the checkpoint always falls back to 7-day lookback.
+    sample_row = _usac_row("990000001")
+    with _patch_fetch([sample_row]):
         scanner_mod.run_scanner()
 
     # Second run: should use last_started_at - 1h as the since filter.

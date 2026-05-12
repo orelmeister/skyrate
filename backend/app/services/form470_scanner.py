@@ -154,10 +154,17 @@ def _service_types_from_row(row: Dict[str, Any]) -> List[str]:
 def _compute_checkpoint(db: Session) -> datetime:
     """Return the lower-bound certified_date_time filter for this scan.
 
-    Only considers runs that completed without error so that a string of
-    failed runs (e.g. bad field-name causing 400) does not prevent the
-    initial 7-day backfill from ever executing.
+    Falls back to a 7-day lookback when:
+    - No successful (error IS NULL) run exists, OR
+    - The postings table is still empty (meaning no backfill has ever
+      completed, even if prior runs succeeded with 0 rows due to a
+      narrow checkpoint window).
     """
+    # If the postings table is empty, always do the full backfill
+    posting_count = db.query(Form470Posting).count()
+    if posting_count == 0:
+        return datetime.utcnow() - timedelta(days=FIRST_RUN_LOOKBACK_DAYS)
+
     last_ok = (
         db.query(VendorAlertScanRun)
         .filter(VendorAlertScanRun.error.is_(None))
