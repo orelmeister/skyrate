@@ -1420,6 +1420,8 @@ class USACDataClient:
                 frns.append({
                     'frn': record.get('funding_request_number', ''),
                     'application_number': record.get('application_number', ''),
+                    'ben': ben,
+                    'entity_name': record.get('organization_name', entity_name),
                     'funding_year': year_val,
                     'spin_name': record.get('spin_name', ''),
                     'service_type': record.get('form_471_service_type_name', ''),

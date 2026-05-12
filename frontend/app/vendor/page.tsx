@@ -527,6 +527,11 @@ function VendorPortalPage() {
       const response = await api.getFRNStatus(year, status || undefined, pendingReason || undefined, 500, ben);
       if (response.success && response.data) {
         setFrnStatusData(response.data);
+        // When a BEN lookup was performed, clear the search field so
+        // the client-side filter doesn't re-filter the BEN-scoped results.
+        if (ben) {
+          setFrnSearch("");
+        }
       }
     } catch (error) {
       console.error("Failed to load FRN status:", error);
