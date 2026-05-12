@@ -2706,12 +2706,18 @@ async def get_school_frn_status(
     
     try:
         from utils.usac_client import USACDataClient
-        
+        from utils.usac_cache import get_or_cache
+
         client = USACDataClient()
-        result = client.get_frn_status_by_ben(ben, year)
-        
+        result = get_or_cache(
+            namespace="consultant_frn_status_by_ben",
+            params={"ben": ben, "year": year},
+            ttl_hours=1,
+            fetch_fn=lambda: client.get_frn_status_by_ben(ben, year),
+        )
+
         return result
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -2851,15 +2857,28 @@ async def get_school_budget_data(
         )
     
     try:
-        # Fetch C2 budget data directly from USAC
-        url = 'https://opendata.usac.org/resource/6brt-5pbv.json'
-        params = {
-            '$limit': 10,
-            '$where': f"ben = '{ben}'"
-        }
-        
-        response = requests.get(url, params=params, timeout=30)
-        c2_data = response.json() if response.ok else []
+        from utils.usac_cache import get_or_cache
+
+        # Fetch C2 budget data directly from USAC (cached by BEN, 24h TTL)
+        def _fetch_c2_budget():
+            url = 'https://opendata.usac.org/resource/6brt-5pbv.json'
+            params = {
+                '$limit': 10,
+                '$where': f"ben = '{ben}'"
+            }
+            response = requests.get(url, params=params, timeout=30)
+            return {
+                "success": bool(response.ok),
+                "data": response.json() if response.ok else [],
+            }
+
+        cached = get_or_cache(
+            namespace="consultant_school_c2_budget",
+            params={"ben": ben, "limit": 10},
+            ttl_hours=24,
+            fetch_fn=_fetch_c2_budget,
+        )
+        c2_data = cached.get("data", []) if cached.get("success") else []
         
         # Process budget data by cycle
         budget_cycles = {}
@@ -2935,26 +2954,50 @@ async def get_comprehensive_school_data(
         )
     
     try:
-        # Fetch Form 471 data for funding history
-        url_471 = 'https://opendata.usac.org/resource/srbr-2d59.json'
-        params_471 = {
-            '$limit': 100,
-            '$where': f"ben = '{ben}'",
-            '$order': 'funding_year DESC'
-        }
-        
-        response_471 = requests.get(url_471, params=params_471, timeout=30)
-        applications = response_471.json() if response_471.ok else []
-        
-        # Fetch C2 budget data
-        url_c2 = 'https://opendata.usac.org/resource/6brt-5pbv.json'
-        params_c2 = {
-            '$limit': 10,
-            '$where': f"ben = '{ben}'"
-        }
-        
-        response_c2 = requests.get(url_c2, params=params_c2, timeout=30)
-        c2_data = response_c2.json() if response_c2.ok else []
+        from utils.usac_cache import get_or_cache
+
+        # Fetch Form 471 funding history (cached by BEN, 6h TTL)
+        def _fetch_471_history():
+            url_471 = 'https://opendata.usac.org/resource/srbr-2d59.json'
+            params_471 = {
+                '$limit': 100,
+                '$where': f"ben = '{ben}'",
+                '$order': 'funding_year DESC'
+            }
+            response_471 = requests.get(url_471, params=params_471, timeout=30)
+            return {
+                "success": bool(response_471.ok),
+                "data": response_471.json() if response_471.ok else [],
+            }
+
+        cached_471 = get_or_cache(
+            namespace="consultant_school_471_history",
+            params={"ben": ben, "limit": 100},
+            ttl_hours=6,
+            fetch_fn=_fetch_471_history,
+        )
+        applications = cached_471.get("data", []) if cached_471.get("success") else []
+
+        # Fetch C2 budget data (cached by BEN, 24h TTL — same namespace as /budget)
+        def _fetch_c2_for_comprehensive():
+            url_c2 = 'https://opendata.usac.org/resource/6brt-5pbv.json'
+            params_c2 = {
+                '$limit': 10,
+                '$where': f"ben = '{ben}'"
+            }
+            response_c2 = requests.get(url_c2, params=params_c2, timeout=30)
+            return {
+                "success": bool(response_c2.ok),
+                "data": response_c2.json() if response_c2.ok else [],
+            }
+
+        cached_c2 = get_or_cache(
+            namespace="consultant_school_c2_budget",
+            params={"ben": ben, "limit": 10},
+            ttl_hours=24,
+            fetch_fn=_fetch_c2_for_comprehensive,
+        )
+        c2_data = cached_c2.get("data", []) if cached_c2.get("success") else []
         
         # Process C2 budget by cycle
         c2_budgets = {}
@@ -3093,40 +3136,53 @@ async def search_institutions(
     view their budget data, and potentially add them to their portfolio.
     """
     try:
+        from utils.usac_cache import get_or_cache
+
         # Build search query - search in C2 budget data which has all entities
         url = 'https://opendata.usac.org/resource/6brt-5pbv.json'
-        
+
         # Build WHERE clause for search
         where_parts = []
-        
+
         # Search by name (contains)
         if query:
             # Escape single quotes in query
             safe_query = query.replace("'", "''").upper()
             where_parts.append(f"upper(billed_entity_name) like '%{safe_query}%'")
-        
+
         # Filter by state if provided
         if state:
             where_parts.append(f"state = '{state.upper()}'")
-        
+
         where_clause = ' AND '.join(where_parts) if where_parts else '1=1'
-        
+
         params = {
             '$limit': limit,
             '$where': where_clause,
             '$order': 'billed_entity_name ASC',
             '$select': 'ben, billed_entity_name, city, state, applicant_type, c2_budget_cycle, c2_budget, funded_c2_budget_amount, available_c2_budget_amount, consulting_firm_name_crn'
         }
-        
-        response = requests.get(url, params=params, timeout=30)
-        
-        if not response.ok:
+
+        def _fetch_institutions():
+            response = requests.get(url, params=params, timeout=30)
+            if not response.ok:
+                return {"success": False, "status_code": response.status_code, "text": response.text, "data": []}
+            return {"success": True, "data": response.json()}
+
+        cached = get_or_cache(
+            namespace="consultant_search_institutions",
+            params={"q": (query or "").upper(), "state": (state or "").upper(), "limit": limit},
+            ttl_hours=6,
+            fetch_fn=_fetch_institutions,
+        )
+
+        if not cached.get("success"):
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"USAC API error: {response.text}"
+                detail=f"USAC API error: {cached.get('text', '')}"
             )
-        
-        data = response.json()
+
+        data = cached.get("data", [])
         
         # Deduplicate by BEN (may have multiple cycles)
         institutions = {}
@@ -3191,26 +3247,50 @@ async def get_institution_details(
     Does not require the school to be in the consultant's portfolio.
     """
     try:
-        # Fetch Form 471 data
-        url_471 = 'https://opendata.usac.org/resource/srbr-2d59.json'
-        params_471 = {
-            '$limit': 50,
-            '$where': f"ben = '{ben}'",
-            '$order': 'funding_year DESC'
-        }
-        
-        response_471 = requests.get(url_471, params=params_471, timeout=30)
-        applications = response_471.json() if response_471.ok else []
-        
-        # Fetch C2 budget data
-        url_c2 = 'https://opendata.usac.org/resource/6brt-5pbv.json'
-        params_c2 = {
-            '$limit': 10,
-            '$where': f"ben = '{ben}'"
-        }
-        
-        response_c2 = requests.get(url_c2, params=params_c2, timeout=30)
-        c2_data = response_c2.json() if response_c2.ok else []
+        from utils.usac_cache import get_or_cache
+
+        # Fetch Form 471 data (cached by BEN, 6h TTL)
+        def _fetch_institution_471():
+            url_471 = 'https://opendata.usac.org/resource/srbr-2d59.json'
+            params_471 = {
+                '$limit': 50,
+                '$where': f"ben = '{ben}'",
+                '$order': 'funding_year DESC'
+            }
+            response_471 = requests.get(url_471, params=params_471, timeout=30)
+            return {
+                "success": bool(response_471.ok),
+                "data": response_471.json() if response_471.ok else [],
+            }
+
+        cached_471 = get_or_cache(
+            namespace="consultant_institution_471",
+            params={"ben": ben, "limit": 50},
+            ttl_hours=6,
+            fetch_fn=_fetch_institution_471,
+        )
+        applications = cached_471.get("data", []) if cached_471.get("success") else []
+
+        # Fetch C2 budget data (cached by BEN, 24h TTL — shared namespace)
+        def _fetch_institution_c2():
+            url_c2 = 'https://opendata.usac.org/resource/6brt-5pbv.json'
+            params_c2 = {
+                '$limit': 10,
+                '$where': f"ben = '{ben}'"
+            }
+            response_c2 = requests.get(url_c2, params=params_c2, timeout=30)
+            return {
+                "success": bool(response_c2.ok),
+                "data": response_c2.json() if response_c2.ok else [],
+            }
+
+        cached_c2 = get_or_cache(
+            namespace="consultant_school_c2_budget",
+            params={"ben": ben, "limit": 10},
+            ttl_hours=24,
+            fetch_fn=_fetch_institution_c2,
+        )
+        c2_data = cached_c2.get("data", []) if cached_c2.get("success") else []
         
         if not applications and not c2_data:
             raise HTTPException(
@@ -3393,16 +3473,33 @@ async def service_search(
                     break
         
         where_clause = " AND ".join(where_parts) if where_parts else "1=1"
-        
+
         params = {
             "$limit": min(data.limit, 500),
             "$where": where_clause,
             "$order": "funding_year DESC",
         }
-        
-        response = requests.get(url, params=params, timeout=30)
-        response.raise_for_status()
-        raw_results = response.json()
+
+        from utils.usac_cache import get_or_cache
+
+        def _fetch_service_search():
+            response = requests.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            return {"success": True, "data": response.json()}
+
+        cached = get_or_cache(
+            namespace="consultant_service_search",
+            params={
+                "bens": sorted(ben_list),
+                "year": data.year,
+                "status_filter": (data.status_filter or "").lower(),
+                "service_type": (data.service_type or "").lower(),
+                "limit": min(data.limit, 500),
+            },
+            ttl_hours=6,
+            fetch_fn=_fetch_service_search,
+        )
+        raw_results = cached.get("data", []) if cached.get("success") else []
         
         if not raw_results:
             return {"success": True, "count": 0, "results": []}
