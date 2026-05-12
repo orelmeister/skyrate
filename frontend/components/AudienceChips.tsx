@@ -4,9 +4,9 @@ import Link from "next/link";
 import { trackEvent } from "@/lib/analytics";
 
 const CHIPS: { audience: "consultant" | "applicant" | "vendor"; href: string; label: string; primary?: boolean }[] = [
-  { audience: "consultant", href: "/features/consultants", label: "Consultants", primary: true },
-  { audience: "applicant", href: "/features/applicants", label: "Applicants" },
-  { audience: "vendor", href: "/features/vendors", label: "Vendors" },
+  { audience: "consultant", href: "/sign-up?role=consultant&source=hero-chip", label: "Consultants", primary: true },
+  { audience: "applicant", href: "/sign-up?role=applicant&source=hero-chip", label: "Applicants" },
+  { audience: "vendor", href: "/sign-up?role=vendor&source=hero-chip", label: "Vendors" },
 ];
 
 export default function AudienceChips() {

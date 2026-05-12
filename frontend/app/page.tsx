@@ -81,7 +81,7 @@ export default function HomePage() {
             <Link href="/sign-in" className="hidden sm:inline text-slate-400 hover:text-white transition font-medium text-sm">
               Sign In
             </Link>
-            <Link href="/sign-up" className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-500 hover:to-purple-500 transition shadow-lg shadow-indigo-500/25 font-medium text-sm">
+            <Link href="/sign-up?source=header" className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-500 hover:to-purple-500 transition shadow-lg shadow-indigo-500/25 font-medium text-sm">
               Start Free Trial
             </Link>
             <MobileMenuButton />
@@ -125,28 +125,33 @@ export default function HomePage() {
               <p className="text-base sm:text-lg lg:text-xl text-slate-400 mb-8 sm:mb-10 max-w-xl mx-auto lg:mx-0 leading-relaxed">
                 Track 500+ FRNs in real time, automate Form 470 reviews, generate PIA-ready appeals, and never miss a filing window — the platform built for serious E-Rate consultants.
               </p>
+              {/* Audience selector chips — above CTA to let visitors self-select role */}
+              <div className="mb-6">
+                <AudienceChips />
+              </div>
               <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 sm:gap-4 mb-5">
                 <Link
-                  href="/sign-up?role=consultant"
+                  href="/sign-up?source=hero"
                   className="w-full sm:w-auto px-6 sm:px-8 py-3.5 sm:py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-500 hover:to-purple-500 transition shadow-xl shadow-indigo-500/30 text-base sm:text-lg animate-gentle-bounce"
                 >
                   Start Free Trial
                 </Link>
                 <Link
                   href="/tools/frn-tracker"
-                  className="w-full sm:w-auto px-6 sm:px-8 py-3.5 sm:py-4 border-2 border-white/30 rounded-xl font-semibold text-white hover:bg-white/10 transition text-base sm:text-lg flex items-center justify-center gap-2"
+                  className="inline-flex items-center gap-1.5 text-slate-300 hover:text-white transition text-sm sm:text-base font-medium underline-offset-4 hover:underline"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
                   </svg>
                   Track an FRN free
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                  </svg>
                 </Link>
               </div>
               <p className="text-xs sm:text-sm text-slate-500 mb-6">
                 No credit card required · Cancel anytime · Full access
               </p>
-              {/* Audience selector chips */}
-              <AudienceChips />
             </div>
 
             {/* Right: Dashboard illustration */}
