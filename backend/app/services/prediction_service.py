@@ -811,11 +811,22 @@ class PredictionService:
             logger.error(f"Error updating prediction status: {e}")
             return False
     
+    # In-memory TTL cache for prediction stats (cheap, no DB roundtrip)
+    _stats_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+    _STATS_TTL_SECONDS = 300  # 5 minutes
+
     def get_prediction_stats(
         self,
         db: Session
     ) -> Dict[str, Any]:
-        """Get summary statistics for the prediction dashboard."""
+        """Get summary statistics for the prediction dashboard.
+        Cached in-process for 5 minutes since stats only change on refresh.
+        """
+        import time
+        cache_key = "global"
+        cached = self._stats_cache.get(cache_key)
+        if cached and (time.time() - cached[0]) < self._STATS_TTL_SECONDS:
+            return cached[1]
         try:
             # Total active predictions
             total = db.query(PredictedLead).filter(
@@ -886,7 +897,7 @@ class PredictionService:
                 PredictionRefreshLog.started_at.desc()
             ).first()
             
-            return {
+            result = {
                 'success': True,
                 'total_predictions': total,
                 'by_type': type_counts,
@@ -904,6 +915,8 @@ class PredictionService:
                     'duration_seconds': last_refresh.duration_seconds,
                 } if last_refresh else None,
             }
+            self._stats_cache[cache_key] = (time.time(), result)
+            return result
             
         except Exception as e:
             logger.error(f"Error getting prediction stats: {e}")

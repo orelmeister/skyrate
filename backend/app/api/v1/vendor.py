@@ -124,9 +124,15 @@ async def validate_spin(
     """
     try:
         from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
         
         client = USACDataClient()
-        result = client.validate_spin(data.spin)
+        result = get_or_cache(
+            namespace="spin_validate",
+            params={"spin": data.spin},
+            ttl_hours=24,
+            fetch_fn=lambda: client.validate_spin(data.spin),
+        )
         
         if not result.get('valid'):
             return {
@@ -217,9 +223,15 @@ async def get_entity_detail(
     
     try:
         from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
         
         client = USACDataClient()
-        result = client.get_entity_detail(profile.spin, ben)
+        result = get_or_cache(
+            namespace="spin_entity_detail",
+            params={"spin": profile.spin, "ben": ben},
+            ttl_hours=6,
+            fetch_fn=lambda: client.get_entity_detail(profile.spin, ben),
+        )
         
         if not result.get('success'):
             return {
@@ -267,9 +279,15 @@ async def get_471_by_entity(
     """
     try:
         from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
         
         client = USACDataClient()
-        result = client.get_471_by_ben(ben, year)
+        result = get_or_cache(
+            namespace="471_by_ben",
+            params={"ben": ben, "year": year},
+            ttl_hours=24,
+            fetch_fn=lambda: client.get_471_by_ben(ben, year),
+        )
         
         if not result.get('success'):
             return {
@@ -306,9 +324,15 @@ async def get_471_by_state(
     """
     try:
         from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
         
         client = USACDataClient()
-        result = client.get_471_by_state(state, year, category, limit)
+        result = get_or_cache(
+            namespace="471_by_state",
+            params={"state": state, "year": year, "category": category, "limit": limit},
+            ttl_hours=6,
+            fetch_fn=lambda: client.get_471_by_state(state, year, category, limit),
+        )
         
         return result
         
@@ -338,9 +362,15 @@ async def get_competitors(
     
     try:
         from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
         
         client = USACDataClient()
-        result = client.get_471_competitors_for_spin(profile.spin, year)
+        result = get_or_cache(
+            namespace="471_competitors",
+            params={"spin": profile.spin, "year": year},
+            ttl_hours=6,
+            fetch_fn=lambda: client.get_471_competitors_for_spin(profile.spin, year),
+        )
         
         return result
         
@@ -362,15 +392,26 @@ async def search_471(
     """
     try:
         from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
         
         client = USACDataClient()
         
         # If BEN is specified, search by entity
         if data.ben:
-            result = client.get_471_by_ben(data.ben, data.year, data.limit)
+            result = get_or_cache(
+                namespace="471_by_ben",
+                params={"ben": data.ben, "year": data.year, "limit": data.limit},
+                ttl_hours=24,
+                fetch_fn=lambda: client.get_471_by_ben(data.ben, data.year, data.limit),
+            )
         # Otherwise search by state
         elif data.state:
-            result = client.get_471_by_state(data.state, data.year, data.category, data.limit)
+            result = get_or_cache(
+                namespace="471_by_state",
+                params={"state": data.state, "year": data.year, "category": data.category, "limit": data.limit},
+                ttl_hours=6,
+                fetch_fn=lambda: client.get_471_by_state(data.state, data.year, data.category, data.limit),
+            )
         else:
             return {
                 "success": False,
@@ -465,9 +506,15 @@ async def get_entity_frn_status(
     
     try:
         from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
         
         client = USACDataClient()
-        result = client.get_entity_frn_summary(profile.spin, ben)
+        result = get_or_cache(
+            namespace="vendor_entity_frn_summary",
+            params={"spin": profile.spin, "ben": ben, "year": year},
+            ttl_hours=1,
+            fetch_fn=lambda: client.get_entity_frn_summary(profile.spin, ben),
+        )
         
         return result
         
@@ -498,9 +545,15 @@ async def get_frn_status_summary(
     
     try:
         from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
         
         client = USACDataClient()
-        result = client.get_frn_status_by_spin(profile.spin, year)
+        result = get_or_cache(
+            namespace="vendor_frn_status_summary",
+            params={"spin": profile.spin, "year": year},
+            ttl_hours=1,
+            fetch_fn=lambda: client.get_frn_status_by_spin(profile.spin, year),
+        )
         
         if not result.get('success'):
             return result
@@ -676,9 +729,15 @@ async def get_470_by_state(
     """
     try:
         from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
         
         client = USACDataClient()
-        result = client.get_470_by_state(state, year, category, limit)
+        result = get_or_cache(
+            namespace="470_by_state",
+            params={"state": state, "year": year, "category": category, "limit": limit},
+            ttl_hours=6,
+            fetch_fn=lambda: client.get_470_by_state(state, year, category, limit),
+        )
         
         return result
         
@@ -717,9 +776,15 @@ async def get_470_by_manufacturer(
     """
     try:
         from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
         
         client = USACDataClient()
-        result = client.get_470_by_manufacturer(manufacturer, year, state, limit)
+        result = get_or_cache(
+            namespace="470_by_manufacturer",
+            params={"manufacturer": manufacturer, "year": year, "state": state, "limit": limit},
+            ttl_hours=6,
+            fetch_fn=lambda: client.get_470_by_manufacturer(manufacturer, year, state, limit),
+        )
         
         return result
         
@@ -746,9 +811,15 @@ async def get_470_detail(
     """
     try:
         from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
         
         client = USACDataClient()
-        result = client.get_470_detail(application_number)
+        result = get_or_cache(
+            namespace="470_detail",
+            params={"application_number": application_number},
+            ttl_hours=24,
+            fetch_fn=lambda: client.get_470_detail(application_number),
+        )
         
         if not result.get('success'):
             raise HTTPException(
@@ -778,15 +849,25 @@ async def search_470(
     """
     try:
         from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
         
         client = USACDataClient()
-        result = client.get_470_leads(
-            year=data.year,
-            state=data.state,
-            category=data.category,
-            service_type=data.service_type,
-            manufacturer=data.manufacturer,
-            limit=data.limit
+        result = get_or_cache(
+            namespace="470_search",
+            params={
+                "year": data.year, "state": data.state, "category": data.category,
+                "service_type": data.service_type, "manufacturer": data.manufacturer,
+                "limit": data.limit,
+            },
+            ttl_hours=6,
+            fetch_fn=lambda: client.get_470_leads(
+                year=data.year,
+                state=data.state,
+                category=data.category,
+                service_type=data.service_type,
+                manufacturer=data.manufacturer,
+                limit=data.limit,
+            ),
         )
         
         return result
