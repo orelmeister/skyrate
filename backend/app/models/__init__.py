@@ -9,6 +9,7 @@ from .vendor_alerts import (
     VendorAlertScanRun,
     VendorPushSubscription,
     VendorInAppNotification,
+    Form470Posting,
     DEFAULT_ALERT_CHANNELS,
 )
 from .application import SchoolSnapshot, Application, AppealRecord, QueryHistory
@@ -51,6 +52,7 @@ __all__ = [
     "VendorAlertScanRun",
     "VendorPushSubscription",
     "VendorInAppNotification",
+    "Form470Posting",
     "DEFAULT_ALERT_CHANNELS",
     "SchoolSnapshot",
     "Application",

@@ -271,3 +271,50 @@ class VendorInAppNotification(Base):
             "read_at": self.read_at.isoformat() if self.read_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+
+class Form470Posting(Base):
+    """One row per Form 470 application pulled from USAC opendata
+    (dataset jt8s-3q52). Populated by the P2 scanner; consumed by the
+    matcher to fire vendor alerts."""
+
+    __tablename__ = "form470_postings"
+    __table_args__ = (
+        Index("ix_form470_postings_ben", "ben"),
+        Index("ix_form470_postings_state", "state"),
+        Index("ix_form470_postings_certified_date", "certified_date"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    application_number = Column(String(64), unique=True, nullable=False)
+    ben = Column(String(20), nullable=True)
+    applicant_name = Column(String(255), nullable=True)
+    state = Column(String(2), nullable=True)
+    certified_date = Column(DateTime, nullable=True)
+    allowable_contract_date = Column(DateTime, nullable=True)
+    total_pre_discount_cost = Column(DECIMAL(14, 2), nullable=True)
+    service_categories = Column(JSON, nullable=True)
+    service_types = Column(JSON, nullable=True)
+    applicant_type = Column(String(50), nullable=True)
+    rfp_url = Column(String(500), nullable=True)
+    raw = Column(JSON, nullable=True)
+    first_seen_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_synced_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "application_number": self.application_number,
+            "ben": self.ben,
+            "applicant_name": self.applicant_name,
+            "state": self.state,
+            "certified_date": self.certified_date.isoformat() if self.certified_date else None,
+            "allowable_contract_date": self.allowable_contract_date.isoformat() if self.allowable_contract_date else None,
+            "total_pre_discount_cost": float(self.total_pre_discount_cost) if self.total_pre_discount_cost is not None else None,
+            "service_categories": self.service_categories or [],
+            "service_types": self.service_types or [],
+            "applicant_type": self.applicant_type,
+            "rfp_url": self.rfp_url,
+            "first_seen_at": self.first_seen_at.isoformat() if self.first_seen_at else None,
+            "last_synced_at": self.last_synced_at.isoformat() if self.last_synced_at else None,
+        }

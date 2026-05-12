@@ -1105,6 +1105,24 @@ def process_frn_watch_reports():
         db.close()
 
 
+def run_form470_scanner_job():
+    """Pull USAC Form 470 dataset and match against vendor alert subs.
+    Runs every 15 minutes via APScheduler (P2 of Vendor Parity Plan v2)."""
+    logger.info("[form470_scanner] starting scheduled run")
+    try:
+        from .form470_scanner import run_scanner
+        result = run_scanner()
+        logger.info(
+            "[form470_scanner] done pulled=%s inserted=%s matches=%s error=%s",
+            result.get("rows_pulled"),
+            result.get("rows_inserted"),
+            result.get("matches_created"),
+            result.get("error"),
+        )
+    except Exception as e:
+        logger.error(f"[form470_scanner] scheduled run failed: {e}")
+
+
 def init_scheduler():
     """Initialize the background scheduler with all jobs"""
     global scheduler
@@ -1194,6 +1212,19 @@ def init_scheduler():
         id='process_frn_watches',
         name='Process FRN watch email reports',
         replace_existing=True
+    )
+    
+    # Form 470 scanner - every 15 minutes (Vendor Parity Plan P2).
+    # First run is delayed 30s so the deploy gate clears before it fires.
+    scheduler.add_job(
+        run_form470_scanner_job,
+        trigger=IntervalTrigger(minutes=15),
+        id='form470_scanner',
+        name='Pull USAC Form 470 + match vendor alerts',
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+        next_run_time=datetime.utcnow() + timedelta(seconds=30),
     )
     
     scheduler.start()

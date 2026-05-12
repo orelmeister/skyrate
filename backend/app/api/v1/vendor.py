@@ -2758,7 +2758,10 @@ class AlertSubscriptionResponse(BaseModel):
 
 
 class AlertPreviewRequest(BaseModel):
-    """Shape-only schema; preview implementation lands in P2."""
+    """Either reference an existing saved subscription via `subscription_id`,
+    OR supply a transient payload (the same fields as a create body) so a
+    vendor can preview matches before saving the alert."""
+    subscription_id: Optional[int] = None
     mode: str = "filter"
     states: Optional[List[str]] = None
     service_categories: Optional[List[str]] = None
@@ -3002,10 +3005,56 @@ async def list_alert_matches(
 async def preview_alert_subscription(
     data: AlertPreviewRequest,
     profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
 ):
-    """Preview the matches a subscription would produce. Stubbed in P1;
-    the real preview implementation arrives with the P2 scanner."""
-    return {"status": "not_implemented", "phase": "P2"}
+    """Preview the matches a subscription would produce against postings
+    from the last 30 days. Accepts either an existing `subscription_id`
+    or a transient subscription payload."""
+    from ...services.alert_matcher import preview_matches
+
+    if data.subscription_id is not None:
+        sub = _get_owned_subscription(data.subscription_id, profile, db)
+    else:
+        # Build a transient (unsaved) subscription instance from the body.
+        mode = data.mode or "filter"
+        if mode not in ("filter", "watchlist"):
+            raise HTTPException(status_code=400, detail="mode must be 'filter' or 'watchlist'")
+        if mode == "watchlist":
+            if not data.watchlist_bens:
+                raise HTTPException(
+                    status_code=400,
+                    detail="watchlist_bens required for watchlist mode preview",
+                )
+        else:
+            if not _has_any_filter_criteria(data):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "At least one of states, service_categories, applicant_types, "
+                        "min_amount, or max_amount must be set for filter mode preview"
+                    ),
+                )
+        sub = VendorAlertSubscription(
+            vendor_profile_id=profile.id,
+            name="__preview__",
+            mode=mode,
+            states=data.states,
+            service_categories=data.service_categories,
+            applicant_types=data.applicant_types,
+            min_amount=data.min_amount,
+            max_amount=data.max_amount,
+            watchlist_bens=data.watchlist_bens,
+            channels=dict(DEFAULT_ALERT_CHANNELS),
+            active=True,
+        )
+
+    result = preview_matches(sub, days_back=30, limit=25, db=db)
+    return {
+        "success": True,
+        "count": result["count"],
+        "matches": result["sample"],
+        "window_days": result["window_days"],
+    }
 
 
 # ==================== VENDOR PUSH SUBSCRIPTIONS ====================

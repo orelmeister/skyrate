@@ -297,12 +297,16 @@ def test_list_patch_delete_round_trip(client):
     assert r_matches.status_code == 200
     assert r_matches.json()["matches"] == []
 
-    # preview is stubbed
+    # preview now returns a real (empty) result against form470_postings
     r_preview = client.post("/api/v1/vendor/alerts/preview", json={
         "mode": "filter", "states": ["WA"],
     })
     assert r_preview.status_code == 200
-    assert r_preview.json() == {"status": "not_implemented", "phase": "P2"}
+    body = r_preview.json()
+    assert body["success"] is True
+    assert body["count"] == 0
+    assert body["matches"] == []
+    assert body["window_days"] == 30
 
     # delete
     r_del = client.delete(f"/api/v1/vendor/alerts/{sub_id}")
