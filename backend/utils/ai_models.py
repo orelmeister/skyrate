@@ -267,14 +267,17 @@ class AIModelManager:
 Query: {query}
 
 Return a JSON object with:
-- year: funding year (integer, null if not specified or if "all years")
-- filters: object with applicable filters. Valid keys and values:
-  * state: 2-letter US state code (e.g. "NJ", "NY", "CA")
+- year: single funding year as integer (use null only if absolutely no year context). If MULTIPLE years are mentioned, set year to null and use the "years" field instead.
+- years: array of funding year integers when multiple years are mentioned (e.g. [2025, 2026]). Omit this field (or set to null) when only one year or no year is specified.
+- filters: object with applicable filters. ALWAYS extract ALL filters mentioned in the query, even when multiple years are present. Valid keys and values:
+  * state: 2-letter US state abbreviation ONLY (e.g. "NJ", "NY", "CA"). Convert full state names: California→CA, Florida→FL, Texas→TX, New York→NY, etc.
   * city: city name string
   * ben: billed entity number string
   * organization_name: school or district name string
   * frn_status: one of "Funded", "Denied", "Pending", "Cancelled" (use this for any question about approval, denial, commitment, or funding status)
 - explanation: one sentence explaining what you understood
+
+CRITICAL: Always include the state filter if a state is mentioned, regardless of how many years are in the query.
 
 Return only valid JSON, no markdown, no code blocks."""
 

@@ -115,6 +115,7 @@ class USACDataClient:
         self,
         dataset: str = 'form_471',
         year: Optional[int] = None,
+        years: Optional[List[int]] = None,
         filters: Optional[Dict[str, Any]] = None,
         limit: int = 1000,
         offset: int = 0,
@@ -125,7 +126,8 @@ class USACDataClient:
         
         Args:
             dataset: Dataset key ('form_471', 'form_470', 'c2_budget')
-            year: Funding year filter
+            year: Single funding year filter (integer)
+            years: Multiple funding year filter (list of integers); overrides year when provided
             filters: Dictionary of field filters
             limit: Maximum records to return
             offset: Number of records to skip
@@ -146,7 +148,13 @@ class USACDataClient:
         # Build WHERE clause
         where_conditions = []
         
-        if year:
+        if years and len(years) > 1:
+            # Multi-year: use IN clause
+            quoted_years = [f"'{y}'" for y in years]
+            where_conditions.append(f"funding_year IN ({', '.join(quoted_years)})")
+        elif years and len(years) == 1:
+            where_conditions.append(f"funding_year = '{years[0]}'")
+        elif year:
             where_conditions.append(f"funding_year = '{year}'")
         
         if filters:

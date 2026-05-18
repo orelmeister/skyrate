@@ -45,7 +45,7 @@ router = APIRouter(prefix="/query", tags=["Query"])
 class QueryRequest(BaseModel):
     query: str
     year: Optional[int] = None
-    limit: int = 100
+    limit: int = 500
 
 
 class DirectSearchRequest(BaseModel):
@@ -56,7 +56,7 @@ class DirectSearchRequest(BaseModel):
     service_type: Optional[str] = None
     applicant_name: Optional[str] = None
     consultant_name: Optional[str] = None
-    limit: int = 100
+    limit: int = 500
 
 
 class AnalysisRequest(BaseModel):
@@ -99,8 +99,17 @@ async def natural_language_query(
         filters = interpretation.get("filters", {})
         year = data.year or (int(interpretation.get("year")) if interpretation.get("year") else None)
         
+        # Multi-year support: use 'years' array from AI if present
+        years_raw = interpretation.get("years")
+        years = [int(y) for y in years_raw if y] if years_raw else None
+        
+        # If years has exactly one entry, treat as single year
+        if years and len(years) == 1:
+            year = years[0]
+            years = None
+        
         # Fetch data
-        df = client.fetch_data(year=year, filters=filters, limit=data.limit)
+        df = client.fetch_data(year=year, years=years, filters=filters, limit=data.limit)
         
         # Convert to list and sanitize for JSON (handle NaN values)
         results = sanitize_for_json(df.to_dict('records')) if not df.empty else []

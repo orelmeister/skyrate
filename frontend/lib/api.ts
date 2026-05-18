@@ -2321,7 +2321,7 @@ class ApiClient {
   async naturalLanguageQuery(query: string, year?: number): Promise<ApiResponse<any>> {
     return this.request('/api/v1/query/natural', {
       method: 'POST',
-      body: JSON.stringify({ query, year }),
+      body: JSON.stringify({ query, year, limit: 500 }),
     });
   }
 
