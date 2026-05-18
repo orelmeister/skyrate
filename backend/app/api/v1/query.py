@@ -48,7 +48,8 @@ router = APIRouter(prefix="/query", tags=["Query"])
 class QueryRequest(BaseModel):
     query: str
     year: Optional[int] = None
-    limit: int = 1000
+    limit: int = 100
+    offset: int = 0
 
 
 class DirectSearchRequest(BaseModel):
@@ -111,30 +112,34 @@ async def natural_language_query(
             year = years[0]
             years = None
         
-        # Fetch data
-        df = client.fetch_data(year=year, years=years, filters=filters, limit=data.limit)
+        # Fetch data — with offset for pagination
+        df = client.fetch_data(year=year, years=years, filters=filters, limit=data.limit, offset=data.offset)
         
         # Convert to list and sanitize for JSON (handle NaN values)
         results = sanitize_for_json(df.to_dict('records')) if not df.empty else []
         
-        # Generate title for history
-        title = interpretation.get("explanation", data.query)[:100]
+        # has_more: if we got exactly `limit` records, there are likely more
+        has_more = len(results) == data.limit
         
-        # Save to history
-        history = QueryHistory(
-            user_id=current_user.id,
-            query_text=data.query,
-            display_title=title,
-            interpretation=interpretation,
-            results_count=len(results)
-        )
-        db.add(history)
-        db.commit()
+        # Only save to history on the first page
+        if data.offset == 0:
+            title = interpretation.get("explanation", data.query)[:100]
+            history = QueryHistory(
+                user_id=current_user.id,
+                query_text=data.query,
+                display_title=title,
+                interpretation=interpretation,
+                results_count=len(results)
+            )
+            db.add(history)
+            db.commit()
         
         return {
             "success": True,
             "interpretation": interpretation,
             "count": len(results),
+            "offset": data.offset,
+            "has_more": has_more,
             "data": results
         }
     

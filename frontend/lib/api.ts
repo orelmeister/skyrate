@@ -2318,10 +2318,10 @@ class ApiClient {
 
   // ==================== QUERY ====================
 
-  async naturalLanguageQuery(query: string, year?: number): Promise<ApiResponse<any>> {
+  async naturalLanguageQuery(query: string, year?: number, offset: number = 0, limit: number = 100): Promise<ApiResponse<any>> {
     return this.request('/api/v1/query/natural', {
       method: 'POST',
-      body: JSON.stringify({ query, year, limit: 1000 }),
+      body: JSON.stringify({ query, year, limit, offset }),
     });
   }
 

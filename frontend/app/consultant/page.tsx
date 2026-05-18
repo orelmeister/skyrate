@@ -212,6 +212,7 @@ function ConsultantPortalPage() {
   const [selectedFRN, setSelectedFRN] = useState<any>(null);
   const [showFRNDetailModal, setShowFRNDetailModal] = useState(false);
   const [frnTableSort, setFrnTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
+  const [visibleFrnCount, setVisibleFrnCount] = useState<number>(25);
   const [schoolsTableSort, setSchoolsTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
   const [serviceSearchSort, setServiceSearchSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
   const [fundingSchoolSort, setFundingSchoolSort] = useState<{ field: string; dir: 'asc' | 'desc' }>({ field: 'school_name', dir: 'asc' });
@@ -251,8 +252,12 @@ function ConsultantPortalPage() {
   const [queryInput, setQueryInput] = useState("");
   const [queryResults, setQueryResults] = useState<any>(null);
   const [isQuerying, setIsQuerying] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [queryHistory, setQueryHistory] = useState<Array<{query: string; timestamp: Date; resultCount: number}>>([]);
+  const [queryOffset, setQueryOffset] = useState(0);
+  const [queryHasMore, setQueryHasMore] = useState(false);
+  const [lastQueryInput, setLastQueryInput] = useState("");
 
   // Funding overview state
   const [fundingSummary, setFundingSummary] = useState<{
@@ -1396,11 +1401,16 @@ function ConsultantPortalPage() {
     setIsQuerying(true);
     setQueryError(null);
     setQueryResults(null);
+    setQueryOffset(0);
+    setQueryHasMore(false);
+    setLastQueryInput(queryInput.trim());
     
     try {
-      const response = await api.naturalLanguageQuery(queryInput);
+      const response = await api.naturalLanguageQuery(queryInput, undefined, 0, 100);
       if (response.success && response.data) {
         setQueryResults(response.data);
+        setQueryOffset(response.data.count || 0);
+        setQueryHasMore(response.data.has_more || false);
         // Save to history
         const newHistory = [
           { query: queryInput.trim(), timestamp: new Date(), resultCount: response.data.count || response.data.data?.length || 0 },
@@ -1415,6 +1425,27 @@ function ConsultantPortalPage() {
       setQueryError(error instanceof Error ? error.message : "Query failed");
     } finally {
       setIsQuerying(false);
+    }
+  };
+
+  const handleLoadMore = async () => {
+    if (!lastQueryInput || isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      const response = await api.naturalLanguageQuery(lastQueryInput, undefined, queryOffset, 100);
+      if (response.success && response.data) {
+        setQueryResults((prev: any) => ({
+          ...prev,
+          data: [...(prev?.data || []), ...(response.data.data || [])],
+          count: (prev?.data?.length || 0) + (response.data.data?.length || 0),
+        }));
+        setQueryOffset(queryOffset + (response.data.count || 0));
+        setQueryHasMore(response.data.has_more || false);
+      }
+    } catch (error) {
+      setQueryError(error instanceof Error ? error.message : "Load more failed");
+    } finally {
+      setIsLoadingMore(false);
     }
   };
 
@@ -2469,7 +2500,19 @@ function ConsultantPortalPage() {
                   
                   {queryResults.count !== undefined && (
                     <div className="mt-4 text-center text-sm text-slate-500">
-                      Found {queryResults.count.toLocaleString()} matching records
+                      Showing {queryResults.data?.length?.toLocaleString() || 0} records loaded
+                    </div>
+                  )}
+
+                  {queryHasMore && (
+                    <div className="mt-4 text-center">
+                      <button
+                        onClick={handleLoadMore}
+                        disabled={isLoadingMore}
+                        className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl text-sm font-medium hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      >
+                        {isLoadingMore ? "Loading more..." : "Load Next 100"}
+                      </button>
                     </div>
                   )}
                 </div>
