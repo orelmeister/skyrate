@@ -1,0 +1,36 @@
+name: USAC Nightly Cache Refresh
+
+on:
+  schedule:
+    # 07:00 UTC daily = 03:00 EDT / 02:00 EST
+    - cron: '0 7 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: POST /v1/admin/jobs/usac-nightly-refresh
+        env:
+          NIGHTLY_JOB_TOKEN: ${{ secrets.NIGHTLY_JOB_TOKEN }}
+        run: |
+          set -e
+          if [ -z "$NIGHTLY_JOB_TOKEN" ]; then
+            echo "::error::NIGHTLY_JOB_TOKEN secret is not set"
+            exit 1
+          fi
+          echo "Submitting nightly refresh job..."
+          HTTP_CODE=$(curl -s -o /tmp/resp.json -w "%{http_code}" \
+            -X POST \
+            -H "X-Job-Token: $NIGHTLY_JOB_TOKEN" \
+            -H "Content-Type: application/json" \
+            "https://api.skyrate.ai/v1/admin/jobs/usac-nightly-refresh")
+          echo "HTTP $HTTP_CODE"
+          cat /tmp/resp.json
+          echo ""
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "::error::Nightly refresh failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
+          echo "::notice::Nightly refresh queued successfully"
