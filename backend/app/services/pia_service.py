@@ -55,6 +55,10 @@ class PIAService:
             "name": "Discount Rate / E-Rate Percentage",
             "description": "Questions about NSLP data, urban/rural classification, and discount calculations",
         },
+        "student_count": {
+            "name": "Student Count & NSLP Documentation",
+            "description": "Questions about enrollment counts, NSLP percentages, CEP, direct certification, and how PIA verifies student data for discount-rate purposes",
+        },
         "contracts": {
             "name": "Contract Documentation",
             "description": "Questions about contract terms, execution dates, CABIO amendments, and pricing",
@@ -67,14 +71,17 @@ class PIAService:
             "name": "Ineligible Services / 30% Rule",
             "description": "Questions about ineligible cost components and the two-in-five C2 budget rule",
         },
+        "general": {
+            "name": "General PIA Question",
+            "description": "PIA questions that do not clearly match a specific category",
+        },
     }
 
     # ==================== CLASSIFICATION ====================
 
     def classify_question(self, question_text: str) -> Dict[str, Any]:
         """
-        Classify a PIA question into one of 8 categories using keyword analysis.
-        Falls back to AI classification if keywords are ambiguous.
+        Classify a PIA question into one of the defined categories using keyword analysis.
 
         Args:
             question_text: The PIA reviewer's question text.
@@ -89,42 +96,62 @@ class PIAService:
                 "form 470", "470", "competitive bidding", "28-day", "28 day",
                 "waiting period", "bid", "solicitation", "rfp", "posting",
                 "allowable contract date", "how did you solicit",
+                "posted your form 470", "signed a contract",
             ],
             "cost_effectiveness": [
                 "cost effective", "cost-effective", "bid evaluation",
                 "evaluation criteria", "price as primary", "lowest bid",
                 "why did you select", "selection criteria", "bid matrix",
-                "sole bid", "only bid",
+                "sole bid", "only bid", "most cost-effective",
+                "bid evaluation matrix", "how you determined",
             ],
             "entity_eligibility": [
                 "entity eligib", "eligible entity", "nces", "school type",
-                "non-profit", "nonprofit", "private school", "student count",
+                "non-profit", "nonprofit", "private school",
                 "library eligible", "imls", "consortium",
+                "your entity", "eligibility requirements", "meets the eligibility",
+                "school or library", "confirm that your entity",
+                "eligible for e-rate", "eligible school",
             ],
             "service_eligibility": [
                 "service eligib", "eligible service", "esl", "eligible services list",
                 "category 1", "category 2", "c1", "c2", "educational purpose",
-                "product type", "function",
+                "product type", "function", "requested services are eligible",
+                "services are eligible", "eligible under", "services requested",
+                "explain how the requested", "falls under category",
+            ],
+            "student_count": [
+                "student count", "enrollment", "enrolled", "students enrolled",
+                "student enrollment", "enrollment count", "nslp roster",
+                "direct certification", "cep", "community eligibility",
+                "source documentation", "state report", "lunch roster",
+                "how many students", "number of students",
             ],
             "discount_rate": [
                 "discount", "nslp", "free lunch", "reduced lunch",
-                "urban", "rural", "student count", "percentage",
-                "discount rate", "e-rate percentage",
+                "urban", "rural", "percentage",
+                "discount rate", "e-rate percentage", "school lunch",
+                "free and reduced", "f&rl", "lunch data",
+                "discount band", "verify the school lunch",
             ],
             "contracts": [
                 "contract", "execution date", "term", "extension",
                 "cabio", "amendment", "pricing", "contract date",
-                "voluntary extension", "evergreen",
+                "voluntary extension", "evergreen", "signed contract",
+                "amounts match", "contract and explain",
             ],
             "cipa": [
                 "cipa", "internet safety", "filtering", "technology protection",
                 "public hearing", "internet safety policy", "minors",
                 "children's internet", "content filter",
+                "adopted an internet safety", "required public hearing",
             ],
             "ineligible_services": [
                 "ineligible", "30%", "thirty percent", "30 percent",
                 "ineligible component", "two-in-five", "2-in-5",
                 "budget", "non-eligible", "ancillary",
+                "eligible and ineligible components", "cost allocation",
+                "eligible and ineligible portions", "breakdown showing",
             ],
         }
 
@@ -137,9 +164,25 @@ class PIAService:
                 matched[category] = hits
 
         if scores:
-            best_category = max(scores, key=scores.get)  # type: ignore[arg-type]
-            best_score = scores[best_category]
+            best_score = max(scores.values())
             if best_score > 0:
+                # Handle ties: prefer more specific category
+                tied_categories = [c for c, s in scores.items() if s == best_score]
+                if len(tied_categories) == 1:
+                    best_category = tied_categories[0]
+                else:
+                    # Specificity priority for tie-breaking
+                    specificity_order = [
+                        "student_count", "cipa", "ineligible_services",
+                        "cost_effectiveness", "contracts", "service_eligibility",
+                        "entity_eligibility", "discount_rate", "competitive_bidding",
+                    ]
+                    best_category = tied_categories[0]
+                    for preferred in specificity_order:
+                        if preferred in tied_categories:
+                            best_category = preferred
+                            break
+
                 return {
                     "category": best_category,
                     "category_name": self.PIA_CATEGORIES[best_category]["name"],
@@ -148,11 +191,11 @@ class PIAService:
                     "all_matches": {k: v for k, v in matched.items() if v},
                 }
 
-        # Default fallback
+        # Default fallback — general, NOT competitive_bidding
         return {
-            "category": "competitive_bidding",
-            "category_name": self.PIA_CATEGORIES["competitive_bidding"]["name"],
-            "confidence": 0.1,
+            "category": "general",
+            "category_name": self.PIA_CATEGORIES["general"]["name"],
+            "confidence": 0.0,
             "matched_keywords": [],
             "all_matches": {},
         }
@@ -260,6 +303,19 @@ class PIAService:
                 {"name": "FRN cost calculation", "description": "Showing ineligible portion is under 30% or properly split", "priority": "high"},
                 {"name": "Product specs for mixed-use items", "description": "Technical documentation showing eligible functions", "priority": "high"},
             ],
+            "student_count": [
+                {"name": "Student enrollment report", "description": "Official state enrollment report or October BEDS count for the applicable year", "priority": "critical"},
+                {"name": "NSLP source documentation", "description": "CEP notification letter, direct certification letter, or income survey results", "priority": "critical"},
+                {"name": "School-by-school student counts", "description": "Per-building enrollment and NSLP breakdown if multi-school application", "priority": "critical"},
+                {"name": "Form 471 Block 4 worksheet", "description": "Showing student counts entered on the application match source docs", "priority": "high"},
+                {"name": "State NSLP verification letter", "description": "Letter from state DOE confirming CEP or NSLP percentages", "priority": "high"},
+                {"name": "Direct certification data export", "description": "If using direct cert, the data extract showing matched students", "priority": "medium"},
+            ],
+            "general": [
+                {"name": "Relevant USAC correspondence", "description": "All communications with USAC about this FRN", "priority": "high"},
+                {"name": "Form 471 filing documentation", "description": "Complete Form 471 with all attachments", "priority": "high"},
+                {"name": "Supporting evidence", "description": "Any documentation relevant to the question asked", "priority": "high"},
+            ],
         }
 
         return checklists.get(category, [
@@ -310,6 +366,13 @@ class PIAService:
             "ineligible_services": [
                 {"question": "The services on this FRN appear to include ineligible components. Please provide a cost allocation showing the eligible and ineligible portions.", "category": "ineligible_services"},
                 {"question": "Please explain how the costs on this FRN comply with the rules regarding ineligible services.", "category": "ineligible_services"},
+            ],
+            "student_count": [
+                {"question": "Please provide your current student enrollment count and the source documentation supporting the student counts used on Form 471.", "category": "student_count"},
+                {"question": "Provide verification that the NSLP student counts on your application match your state enrollment report or direct certification data.", "category": "student_count"},
+            ],
+            "general": [
+                {"question": "Please provide additional documentation to support your E-Rate application for this FRN.", "category": "general"},
             ],
         }
 

@@ -5,12 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
-import { PERF_V2_ENABLED } from "@/lib/featureFlags";
-// SyncFromUsacButton is available for manual cache refresh. Drop
-// `<SyncFromUsacButton onComplete={() => loadData()} />` into a header
-// when the perf_v2 UI surfaces this control.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-import SyncFromUsacButton from "@/components/SyncFromUsacButton";
 import { api, ConsultantSchool, ConsultantProfile, AppealRecord, PIAResponseRecord, PIAFRNRecord, FRNWatch, FRNReportHistory } from "@/lib/api";
 import { SearchResultsTable } from "@/components/SearchResultsTable";
 import { AppealChat } from "@/components/AppealChat";
@@ -248,12 +242,19 @@ function ConsultantPortalPage() {
   const [serviceSearchBen, setServiceSearchBen] = useState("");
   const [serviceSearchStatus, setServiceSearchStatus] = useState("");
   const [serviceSearchType, setServiceSearchType] = useState("");
-  const [serviceSearchYear, setServiceSearchYear] = useState(2025);
+  const [serviceSearchYear, setServiceSearchYear] = useState<number>(new Date().getFullYear());
   const [serviceSearchMinAmount, setServiceSearchMinAmount] = useState("");
   const [serviceSearchMaxAmount, setServiceSearchMaxAmount] = useState("");
   const [serviceSearchResults, setServiceSearchResults] = useState<any[]>([]);
   const [serviceSearchLoading, setServiceSearchLoading] = useState(false);
   const [serviceSearchBensSearched, setServiceSearchBensSearched] = useState(0);
+  // Per-column filters for the results table (Excel-style)
+  const [serviceColBen, setServiceColBen] = useState("");
+  const [serviceColName, setServiceColName] = useState("");
+  const [serviceColFrn, setServiceColFrn] = useState("");
+  const [serviceColYear, setServiceColYear] = useState("");
+  const [serviceColStatus, setServiceColStatus] = useState("");
+  const [serviceColService, setServiceColService] = useState("");
 
   // Row selection for CSV export
   const [selectedSchoolBens, setSelectedSchoolBens] = useState<Set<string>>(new Set());
@@ -612,16 +613,49 @@ function ConsultantPortalPage() {
     return result;
   }, [schools, schoolSearchQuery, statusFilter, schoolsTableSort, schoolColStateFilter, schoolColStatusFilter]);
 
-  // Sorted service search results
+  // Filtered + sorted service search results (Excel-style column filters + sort)
   const sortedServiceSearchResults = useMemo(() => {
-    if (!serviceSearchResults.length || !serviceSearchSort) return serviceSearchResults;
-    return [...serviceSearchResults].sort((a, b) => {
-      const aVal = (a.name || '').toString().toLowerCase();
-      const bVal = (b.name || '').toString().toLowerCase();
-      const cmp = aVal.localeCompare(bVal);
-      return serviceSearchSort.dir === 'asc' ? cmp : -cmp;
-    });
-  }, [serviceSearchResults, serviceSearchSort]);
+    let result = serviceSearchResults;
+    if (serviceColBen.trim()) {
+      const q = serviceColBen.toLowerCase().trim();
+      result = result.filter(r => (r.ben || '').toString().toLowerCase().includes(q));
+    }
+    if (serviceColName.trim()) {
+      const q = serviceColName.toLowerCase().trim();
+      result = result.filter(r => (r.name || '').toString().toLowerCase().includes(q));
+    }
+    if (serviceColFrn.trim()) {
+      const q = serviceColFrn.toLowerCase().trim();
+      result = result.filter(r => (r.frn || '').toString().toLowerCase().includes(q));
+    }
+    if (serviceColYear) {
+      result = result.filter(r => (r.funding_year || '').toString() === serviceColYear);
+    }
+    if (serviceColStatus) {
+      result = result.filter(r => (r.status || '').toString() === serviceColStatus);
+    }
+    if (serviceColService.trim()) {
+      const q = serviceColService.toLowerCase().trim();
+      result = result.filter(r => (r.service_type || '').toString().toLowerCase().includes(q));
+    }
+    if (serviceSearchSort) {
+      const { field, dir } = serviceSearchSort;
+      result = [...result].sort((a, b) => {
+        let cmp = 0;
+        if (field === 'funding_amount') {
+          cmp = (Number(a.funding_amount) || 0) - (Number(b.funding_amount) || 0);
+        } else if (field === 'funding_year') {
+          cmp = parseInt(a.funding_year || '0') - parseInt(b.funding_year || '0');
+        } else {
+          const aVal = (a[field] || '').toString().toLowerCase();
+          const bVal = (b[field] || '').toString().toLowerCase();
+          cmp = aVal.localeCompare(bVal);
+        }
+        return dir === 'asc' ? cmp : -cmp;
+      });
+    }
+    return result;
+  }, [serviceSearchResults, serviceSearchSort, serviceColBen, serviceColName, serviceColFrn, serviceColYear, serviceColStatus, serviceColService]);
 
   // Load query history from localStorage on mount
   useEffect(() => {
@@ -1566,7 +1600,7 @@ function ConsultantPortalPage() {
       if (serviceSearchYear) filters.year = serviceSearchYear;
       if (serviceSearchMinAmount) filters.min_amount = parseFloat(serviceSearchMinAmount);
       if (serviceSearchMaxAmount) filters.max_amount = parseFloat(serviceSearchMaxAmount);
-      filters.limit = 100;
+      filters.limit = 500;
       
       const response = await api.consultantServiceSearch(filters);
       if (response.success && response.data) {
@@ -1581,9 +1615,7 @@ function ConsultantPortalPage() {
   };
 
   // Show loading state while checking payment status
-  // perf_v2: with the flag enabled, skip the full-screen flash — the page
-  // renders immediately and the payment check runs in the background.
-  if (!PERF_V2_ENABLED && (!_hasHydrated || checkingPayment)) {
+  if (!_hasHydrated || checkingPayment) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
@@ -1594,7 +1626,7 @@ function ConsultantPortalPage() {
     );
   }
 
-  if (!PERF_V2_ENABLED && isLoading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
@@ -4551,16 +4583,18 @@ function ConsultantPortalPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Year</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Funding Year</label>
                     <select
                       value={serviceSearchYear}
                       onChange={(e) => setServiceSearchYear(parseInt(e.target.value))}
                       className="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                     >
-                      <option value={2025}>2025</option>
-                      <option value={2024}>2024</option>
-                      <option value={2023}>2023</option>
-                      <option value={2022}>2022</option>
+                      {(() => {
+                        const cy = new Date().getFullYear();
+                        const years: number[] = [];
+                        for (let y = cy + 1; y >= cy - 6; y--) years.push(y);
+                        return years.map(y => <option key={y} value={y}>{y}</option>);
+                      })()}
                     </select>
                   </div>
                   <div>
@@ -4604,39 +4638,117 @@ function ConsultantPortalPage() {
               {/* Service Search Results */}
               {serviceSearchResults.length > 0 && (
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+                  <div className="p-4 border-b border-slate-200 flex items-center justify-between gap-3 flex-wrap">
                     <h2 className="text-lg font-semibold text-slate-900">
-                      Results ({serviceSearchResults.length})
+                      Results <span className="text-slate-500 font-normal">({sortedServiceSearchResults.length}{sortedServiceSearchResults.length !== serviceSearchResults.length ? ` of ${serviceSearchResults.length}` : ''}{serviceSearchResults.length >= 500 ? ' — capped at 500' : ''})</span>
                     </h2>
-                    <span className="text-sm text-slate-500">
-                      {serviceSearchBensSearched > 0 && `Searched across ${serviceSearchBensSearched} school(s)`}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      {(serviceColBen || serviceColName || serviceColFrn || serviceColYear || serviceColStatus || serviceColService) && (
+                        <button
+                          onClick={() => { setServiceColBen(""); setServiceColName(""); setServiceColFrn(""); setServiceColYear(""); setServiceColStatus(""); setServiceColService(""); }}
+                          className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                        >
+                          Clear column filters
+                        </button>
+                      )}
+                      <span className="text-sm text-slate-500">
+                        {serviceSearchBensSearched > 0 && `Searched across ${serviceSearchBensSearched} school(s)`}
+                      </span>
+                    </div>
                   </div>
                   
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead className="bg-slate-50">
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">BEN</th>
-                          <th 
-                            className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors"
-                            onClick={() => toggleServiceSearchSort('name')}
-                          >
-                            <span className="flex items-center gap-1">
-                              School Name
-                              {serviceSearchSort?.field === 'name' && (
-                                <span className="text-blue-600">{serviceSearchSort.dir === 'asc' ? '↑' : '↓'}</span>
-                              )}
-                              {serviceSearchSort?.field !== 'name' && (
-                                <span className="text-slate-300">↕</span>
-                              )}
-                            </span>
+                          {[
+                            { field: 'ben', label: 'BEN' },
+                            { field: 'name', label: 'School Name' },
+                            { field: 'frn', label: 'FRN' },
+                            { field: 'funding_year', label: 'Year' },
+                            { field: 'status', label: 'Status' },
+                            { field: 'funding_amount', label: 'Funding' },
+                            { field: 'service_type', label: 'Service' },
+                          ].map(col => (
+                            <th
+                              key={col.field}
+                              className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                              onClick={() => toggleServiceSearchSort(col.field)}
+                            >
+                              <span className="flex items-center gap-1">
+                                {col.label}
+                                {serviceSearchSort?.field === col.field ? (
+                                  <span className="text-indigo-600">{serviceSearchSort.dir === 'asc' ? '↑' : '↓'}</span>
+                                ) : (
+                                  <span className="text-slate-300">↕</span>
+                                )}
+                              </span>
+                            </th>
+                          ))}
+                        </tr>
+                        {/* Per-column filter row */}
+                        <tr className="bg-white border-t border-slate-200">
+                          <th className="px-3 py-2">
+                            <input
+                              type="text"
+                              value={serviceColBen}
+                              onChange={(e) => setServiceColBen(e.target.value)}
+                              placeholder="Filter BEN..."
+                              className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-indigo-500 focus:outline-none font-normal normal-case"
+                            />
                           </th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">FRN</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Year</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Funding</th>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Service</th>
+                          <th className="px-3 py-2">
+                            <input
+                              type="text"
+                              value={serviceColName}
+                              onChange={(e) => setServiceColName(e.target.value)}
+                              placeholder="Filter name..."
+                              className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-indigo-500 focus:outline-none font-normal normal-case"
+                            />
+                          </th>
+                          <th className="px-3 py-2">
+                            <input
+                              type="text"
+                              value={serviceColFrn}
+                              onChange={(e) => setServiceColFrn(e.target.value)}
+                              placeholder="Filter FRN..."
+                              className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-indigo-500 focus:outline-none font-normal normal-case"
+                            />
+                          </th>
+                          <th className="px-3 py-2">
+                            <select
+                              value={serviceColYear}
+                              onChange={(e) => setServiceColYear(e.target.value)}
+                              className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-indigo-500 focus:outline-none font-normal normal-case bg-white"
+                            >
+                              <option value="">All</option>
+                              {Array.from(new Set(serviceSearchResults.map(r => (r.funding_year || '').toString()).filter(Boolean))).sort().reverse().map(y => (
+                                <option key={y} value={y}>{y}</option>
+                              ))}
+                            </select>
+                          </th>
+                          <th className="px-3 py-2">
+                            <select
+                              value={serviceColStatus}
+                              onChange={(e) => setServiceColStatus(e.target.value)}
+                              className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-indigo-500 focus:outline-none font-normal normal-case bg-white"
+                            >
+                              <option value="">All</option>
+                              {Array.from(new Set(serviceSearchResults.map(r => (r.status || '').toString()).filter(Boolean))).sort().map(s => (
+                                <option key={s} value={s}>{s}</option>
+                              ))}
+                            </select>
+                          </th>
+                          <th className="px-3 py-2 text-xs text-slate-400 italic font-normal normal-case">sort only</th>
+                          <th className="px-3 py-2">
+                            <input
+                              type="text"
+                              value={serviceColService}
+                              onChange={(e) => setServiceColService(e.target.value)}
+                              placeholder="Filter service..."
+                              className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-indigo-500 focus:outline-none font-normal normal-case"
+                            />
+                          </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200">

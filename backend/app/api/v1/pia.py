@@ -62,6 +62,7 @@ class GeneratePIARequest(BaseModel):
     frn: Optional[str] = None
     funding_year: Optional[int] = 2026
     additional_context: Optional[str] = None
+    category: Optional[str] = None
 
 
 class PIAChatRequest(BaseModel):
@@ -85,6 +86,7 @@ class UpdatePIAStatusRequest(BaseModel):
 class AnalyzeQuestionRequest(BaseModel):
     """Request to analyze/classify a PIA question without generating a full response"""
     question: str
+    category: Optional[str] = None
 
 
 class PIAChatResponse(BaseModel):
@@ -497,9 +499,19 @@ async def generate_pia_response(
 
     pia_service = get_pia_service()
 
-    # Classify the question
-    classification = pia_service.classify_question(question)
-    category = classification["category"]
+    # Classify the question — use explicit category if provided and valid
+    if request.category and request.category in pia_service.PIA_CATEGORIES:
+        category = request.category
+        classification = {
+            "category": category,
+            "category_name": pia_service.PIA_CATEGORIES[category]["name"],
+            "confidence": 1.0,
+            "matched_keywords": ["user_selected"],
+            "all_matches": {},
+        }
+    else:
+        classification = pia_service.classify_question(question)
+        category = classification["category"]
 
     # Fetch USAC data if BEN or FRN provided
     usac_data = _build_usac_context(request.ben, request.frn, request.funding_year or 2026)
