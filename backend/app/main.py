@@ -24,7 +24,7 @@ from app.core.config import settings
 from app.core.database import engine, Base
 
 # Import API routers - services are imported lazily within these
-from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals, alerts, applicant, notifications, support, onboarding, blog, frn_reports, usac, portfolio_analyzer, pia, mail_campaigns, leads, public_tools, denial_hunter, denial_hunter_tracking
+from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals, alerts, applicant, notifications, support, onboarding, blog, frn_reports, usac, portfolio_analyzer, pia, mail_campaigns, leads, public_tools, denial_hunter, denial_hunter_tracking, admin_jobs
 
 # Configure logging
 logging.basicConfig(
@@ -883,6 +883,7 @@ app.include_router(subscriptions.router, prefix="/v1")
 app.include_router(consultant.router, prefix="/v1")
 app.include_router(vendor.router, prefix="/v1")
 app.include_router(admin.router, prefix="/v1")
+app.include_router(admin_jobs.router, prefix="/v1")
 app.include_router(query.router, prefix="/v1")
 app.include_router(schools.router, prefix="/v1")
 app.include_router(appeals.router, prefix="/v1")

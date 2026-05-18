@@ -27,6 +27,7 @@ from .applicant import (
 )
 from .blog import BlogPost, BlogStatus
 from .usac_cache import USACCache
+from .user_usac_cache import UserUsacCache, UsacSyncJob
 from .admin_frn_snapshot import AdminFRNSnapshot
 from .promo_invite import PromoInvite, PromoInviteStatus
 from .prediction import PredictedLead, PredictionRefreshLog, PredictionType, PredictionStatus
@@ -82,6 +83,9 @@ __all__ = [
     "BlogStatus",
     # USAC Cache
     "USACCache",
+    # perf_v2 per-user USAC cache + sync job log
+    "UserUsacCache",
+    "UsacSyncJob",
     # Admin FRN Snapshot
     "AdminFRNSnapshot",
     # Promo Invites

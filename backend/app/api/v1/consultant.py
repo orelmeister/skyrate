@@ -3,7 +3,7 @@ Consultant Portal API Endpoints
 Handles school portfolios, funding data, and appeal generation
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -29,10 +29,38 @@ from ...core.security import get_current_user, require_role
 from ...models.user import User
 from ...models.consultant import ConsultantProfile, ConsultantSchool, ConsultantCRN
 from ...models.application import SchoolSnapshot, Application, AppealRecord
+from ...models.user_usac_cache import UserUsacCache, UsacSyncJob
 from ...core.config import get_settings
 
 # Import USAC service for validation
 from ...services.usac_service import get_usac_service
+from ...services.usac_hydration import get_usac_hydration_service, hydrate_user_background
+
+settings_cached = get_settings()
+
+
+def _perf_v2_serve_cached(
+    db: Session,
+    user_id: int,
+    field: str,
+) -> Optional[Dict[str, Any]]:
+    """Return parsed cached payload for ``field`` if perf_v2 is enabled and
+    the user has a fresh cache row, else None (caller falls back to live).
+
+    ``field`` is one of: 'schools_json', 'dashboard_stats_json', 'crns_json'.
+    """
+    if not settings_cached.PERF_V2_ENABLED:
+        return None
+    row = db.query(UserUsacCache).filter(UserUsacCache.user_id == user_id).first()
+    if row is None or row.status != "fresh":
+        return None
+    raw = getattr(row, field, None)
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except Exception:
+        return None
 
 # Stripe for additional CRN subscriptions
 try:
@@ -643,6 +671,17 @@ async def list_crns(
 
     is_privileged = current_user.role in ("admin", "super")
 
+    # perf_v2: regular consultants can be served from cache. Privileged
+    # users always run the live path because their response includes the
+    # cross-tenant owner info that isn't part of the per-user cache.
+    if not is_privileged:
+        cached = _perf_v2_serve_cached(db, current_user.id, "crns_json")
+        if cached is not None:
+            cached["is_free_user"] = _is_free_crn_user(current_user)
+            cached["can_add_free"] = cached["is_free_user"] or cached.get("count", 0) == 0
+            cached["scope"] = "self"
+            return cached
+
     if is_privileged:
         crns = db.query(ConsultantCRN).order_by(
             ConsultantCRN.is_primary.desc(), ConsultantCRN.created_at
@@ -1185,6 +1224,13 @@ async def get_dashboard_stats(
     # Default to current calendar year when not specified
     target_year = year if year is not None else datetime.utcnow().year
 
+    # perf_v2: serve cached payload when the user requested the default
+    # year (the cache only stores the default-year snapshot).
+    if year is None:
+        cached = _perf_v2_serve_cached(db, profile.user_id, "dashboard_stats_json")
+        if cached is not None and cached.get("year") == target_year:
+            return cached
+
     schools = db.query(ConsultantSchool).filter(
         ConsultantSchool.consultant_profile_id == profile.id
     ).all()
@@ -1658,6 +1704,11 @@ async def list_schools(
     If include_usac_data=true, forces fresh sync for ALL schools regardless of status.
     OPTIMIZED: Uses batch query to fetch all schools at once instead of one-by-one.
     """
+    # perf_v2: serve cached payload when fresh and caller didn't force live.
+    if not include_usac_data:
+        cached = _perf_v2_serve_cached(db, profile.user_id, "schools_json")
+        if cached is not None:
+            return cached
     schools = db.query(ConsultantSchool).filter(
         ConsultantSchool.consultant_profile_id == profile.id
     ).order_by(ConsultantSchool.school_name).all()
@@ -3606,3 +3657,125 @@ async def cleanup_orphaned_schools(
 
     logger.info(f"Cleaned up {count} orphaned schools for user {current_user.id}")
     return {"deleted": count, "message": f"Removed {count} orphaned schools"}
+
+
+# ==================== perf_v2: Manual USAC Sync ====================
+
+@router.post("/sync-usac")
+async def sync_usac(
+    background_tasks: BackgroundTasks,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
+    db: Session = Depends(get_db),
+):
+    """Trigger a background hydration of the user's USAC cache.
+
+    Returns the job_id immediately so the frontend can poll
+    `GET /v1/consultant/sync-usac/{job_id}` for progress.
+    """
+    import uuid as _uuid
+
+    job_id = str(_uuid.uuid4())
+    # Pre-insert a pending row so the GET endpoint always finds a record
+    # even if the BackgroundTask hasn't started yet.
+    pending = UsacSyncJob(
+        job_id=job_id,
+        user_id=current_user.id,
+        trigger="manual",
+        status="pending",
+    )
+    db.add(pending)
+    db.commit()
+
+    def _run(user_id: int):
+        from ...core.database import SessionLocal
+        bg_db = SessionLocal()
+        try:
+            # The hydration service creates its own job row, so delete the
+            # placeholder and let it run normally. (Keeping a one-to-one
+            # mapping with the job_id we returned isn't critical — the
+            # caller can poll by user_id via the /last endpoint too.)
+            placeholder = bg_db.query(UsacSyncJob).filter(UsacSyncJob.job_id == job_id).first()
+            if placeholder is not None:
+                bg_db.delete(placeholder)
+                bg_db.commit()
+            get_usac_hydration_service().hydrate_user(bg_db, user_id=user_id, trigger="manual")
+        finally:
+            bg_db.close()
+
+    background_tasks.add_task(_run, current_user.id)
+    return {"success": True, "job_id": job_id, "status": "pending"}
+
+
+@router.get("/sync-usac/{job_id}")
+async def sync_usac_status(
+    job_id: str,
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
+    db: Session = Depends(get_db),
+):
+    """Poll the status of a USAC sync job."""
+    job = db.query(UsacSyncJob).filter(UsacSyncJob.job_id == job_id).first()
+    if job is None:
+        # The placeholder may have been deleted in favor of the service's
+        # own row; report the most recent job for this user instead.
+        job = (
+            db.query(UsacSyncJob)
+            .filter(UsacSyncJob.user_id == current_user.id)
+            .order_by(UsacSyncJob.created_at.desc())
+            .first()
+        )
+        if job is None:
+            raise HTTPException(status_code=404, detail="job not found")
+    if job.user_id != current_user.id and current_user.role not in ("admin", "super"):
+        raise HTTPException(status_code=403, detail="forbidden")
+    return {
+        "success": True,
+        "job_id": job.job_id,
+        "status": job.status,
+        "trigger": job.trigger,
+        "started_at": job.started_at.isoformat() if job.started_at else None,
+        "finished_at": job.finished_at.isoformat() if job.finished_at else None,
+        "duration_ms": job.duration_ms,
+        "error": job.error,
+    }
+
+
+@router.get("/sync-usac/_last/status")
+async def sync_usac_last_status(
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
+    db: Session = Depends(get_db),
+):
+    """Return the most recent sync job + current cache freshness for the user."""
+    job = (
+        db.query(UsacSyncJob)
+        .filter(UsacSyncJob.user_id == current_user.id)
+        .order_by(UsacSyncJob.created_at.desc())
+        .first()
+    )
+    cache = db.query(UserUsacCache).filter(UserUsacCache.user_id == current_user.id).first()
+    return {
+        "success": True,
+        "last_job": (
+            {
+                "job_id": job.job_id,
+                "status": job.status,
+                "trigger": job.trigger,
+                "started_at": job.started_at.isoformat() if job.started_at else None,
+                "finished_at": job.finished_at.isoformat() if job.finished_at else None,
+                "duration_ms": job.duration_ms,
+                "error": job.error,
+            }
+            if job is not None
+            else None
+        ),
+        "cache": (
+            {
+                "status": cache.status,
+                "last_synced_at": cache.last_synced_at.isoformat() if cache.last_synced_at else None,
+                "last_error": cache.last_error,
+            }
+            if cache is not None
+            else None
+        ),
+    }
+
