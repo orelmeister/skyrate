@@ -214,6 +214,10 @@ function ConsultantPortalPage() {
   const [frnTableSort, setFrnTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
   const [visibleFrnCount, setVisibleFrnCount] = useState<number>(25);
   const [schoolsTableSort, setSchoolsTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
+  // In-column filters for the schools table (empty Set = no filter for that column)
+  const [schoolColStateFilter, setSchoolColStateFilter] = useState<Set<string>>(new Set());
+  const [schoolColStatusFilter, setSchoolColStatusFilter] = useState<Set<string>>(new Set());
+  const [openSchoolColMenu, setOpenSchoolColMenu] = useState<'state' | 'status' | null>(null);
   const [serviceSearchSort, setServiceSearchSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
   const [fundingSchoolSort, setFundingSchoolSort] = useState<{ field: string; dir: 'asc' | 'desc' }>({ field: 'school_name', dir: 'asc' });
   const [showBenUpgradeModal, setShowBenUpgradeModal] = useState(false);
@@ -440,6 +444,34 @@ function ConsultantPortalPage() {
     });
   };
 
+  // Unique values for in-column State / Status filter dropdowns
+  const uniqueSchoolStates = useMemo(() => {
+    const vals = new Set<string>();
+    schools.forEach(s => {
+      const v = (s.state || '').toString().toUpperCase().trim();
+      if (v) vals.add(v);
+    });
+    return Array.from(vals).sort();
+  }, [schools]);
+
+  const uniqueSchoolStatuses = useMemo(() => {
+    const vals = new Set<string>();
+    schools.forEach(s => {
+      const v = (s.status || 'Unknown').toString().trim() || 'Unknown';
+      vals.add(v);
+    });
+    return Array.from(vals).sort();
+  }, [schools]);
+
+  // Toggle one value in a Set-based filter
+  const toggleSetValue = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, value: string) => {
+    setter(prev => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value); else next.add(value);
+      return next;
+    });
+  };
+
   // Toggle funding school table sort
   const toggleFundingSchoolSort = (field: string) => {
     setFundingSchoolSort(prev => {
@@ -530,18 +562,45 @@ function ConsultantPortalPage() {
       });
     }
     
-    // Apply school name sorting if active
+    // Apply in-column State filter (empty Set = show all)
+    if (schoolColStateFilter.size > 0) {
+      result = result.filter(school => {
+        const st = (school.state || '').toString().toUpperCase();
+        return schoolColStateFilter.has(st);
+      });
+    }
+    
+    // Apply in-column Status filter (empty Set = show all)
+    if (schoolColStatusFilter.size > 0) {
+      result = result.filter(school => {
+        const st = (school.status || 'Unknown').toString();
+        return schoolColStatusFilter.has(st);
+      });
+    }
+    
+    // Apply column sorting (school_name | state | status)
     if (schoolsTableSort) {
+      const field = schoolsTableSort.field;
       result = [...result].sort((a, b) => {
-        const aVal = (a.school_name || a.name || '').toString().toLowerCase();
-        const bVal = (b.school_name || b.name || '').toString().toLowerCase();
+        let aVal = '';
+        let bVal = '';
+        if (field === 'school_name') {
+          aVal = (a.school_name || a.name || '').toString().toLowerCase();
+          bVal = (b.school_name || b.name || '').toString().toLowerCase();
+        } else if (field === 'state') {
+          aVal = (a.state || '').toString().toLowerCase();
+          bVal = (b.state || '').toString().toLowerCase();
+        } else if (field === 'status') {
+          aVal = (a.status || '').toString().toLowerCase();
+          bVal = (b.status || '').toString().toLowerCase();
+        }
         const cmp = aVal.localeCompare(bVal);
         return schoolsTableSort.dir === 'asc' ? cmp : -cmp;
       });
     }
     
     return result;
-  }, [schools, schoolSearchQuery, statusFilter, schoolsTableSort]);
+  }, [schools, schoolSearchQuery, statusFilter, schoolsTableSort, schoolColStateFilter, schoolColStatusFilter]);
 
   // Sorted service search results
   const sortedServiceSearchResults = useMemo(() => {
@@ -2079,8 +2138,108 @@ function ConsultantPortalPage() {
                         </span>
                       </th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase w-24">BEN</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase w-16">State</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase w-32">Status</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase w-28 relative">
+                        <button
+                          type="button"
+                          onClick={() => setOpenSchoolColMenu(openSchoolColMenu === 'state' ? null : 'state')}
+                          className="flex items-center gap-1 uppercase text-xs font-semibold text-slate-500 hover:text-slate-700"
+                        >
+                          State
+                          {schoolsTableSort?.field === 'state' && (
+                            <span className="text-blue-600">{schoolsTableSort.dir === 'asc' ? '↑' : '↓'}</span>
+                          )}
+                          {schoolColStateFilter.size > 0 && (
+                            <span className="ml-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-indigo-600 text-white text-[10px] leading-none">
+                              {schoolColStateFilter.size}
+                            </span>
+                          )}
+                          <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                        {openSchoolColMenu === 'state' && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setOpenSchoolColMenu(null)} />
+                            <div className="absolute left-0 mt-2 z-50 w-56 bg-white border border-slate-200 rounded-lg shadow-xl p-2 normal-case">
+                              <div className="flex items-center justify-between gap-1 pb-2 border-b border-slate-100 mb-2">
+                                <button onClick={() => { toggleSchoolsTableSort('state'); }} className="text-xs font-medium text-slate-700 hover:bg-slate-50 px-2 py-1 rounded flex-1 text-left">
+                                  Sort {schoolsTableSort?.field === 'state' && schoolsTableSort.dir === 'asc' ? 'Z → A' : 'A → Z'}
+                                </button>
+                                <button onClick={() => setSchoolColStateFilter(new Set())} className="text-xs text-indigo-600 hover:underline px-2 py-1" disabled={schoolColStateFilter.size === 0}>
+                                  Clear
+                                </button>
+                              </div>
+                              <div className="max-h-56 overflow-y-auto">
+                                {uniqueSchoolStates.length === 0 && (
+                                  <div className="text-xs text-slate-400 px-2 py-1">No states</div>
+                                )}
+                                {uniqueSchoolStates.map(st => (
+                                  <label key={st} className="flex items-center gap-2 px-2 py-1 hover:bg-slate-50 rounded cursor-pointer text-sm text-slate-700">
+                                    <input
+                                      type="checkbox"
+                                      className="w-3.5 h-3.5 rounded border-slate-300"
+                                      checked={schoolColStateFilter.has(st)}
+                                      onChange={() => toggleSetValue(setSchoolColStateFilter, st)}
+                                    />
+                                    <span>{st}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase w-40 relative">
+                        <button
+                          type="button"
+                          onClick={() => setOpenSchoolColMenu(openSchoolColMenu === 'status' ? null : 'status')}
+                          className="flex items-center gap-1 uppercase text-xs font-semibold text-slate-500 hover:text-slate-700"
+                        >
+                          Status
+                          {schoolsTableSort?.field === 'status' && (
+                            <span className="text-blue-600">{schoolsTableSort.dir === 'asc' ? '↑' : '↓'}</span>
+                          )}
+                          {schoolColStatusFilter.size > 0 && (
+                            <span className="ml-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-indigo-600 text-white text-[10px] leading-none">
+                              {schoolColStatusFilter.size}
+                            </span>
+                          )}
+                          <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                        {openSchoolColMenu === 'status' && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setOpenSchoolColMenu(null)} />
+                            <div className="absolute left-0 mt-2 z-50 w-60 bg-white border border-slate-200 rounded-lg shadow-xl p-2 normal-case">
+                              <div className="flex items-center justify-between gap-1 pb-2 border-b border-slate-100 mb-2">
+                                <button onClick={() => { toggleSchoolsTableSort('status'); }} className="text-xs font-medium text-slate-700 hover:bg-slate-50 px-2 py-1 rounded flex-1 text-left">
+                                  Sort {schoolsTableSort?.field === 'status' && schoolsTableSort.dir === 'asc' ? 'Z → A' : 'A → Z'}
+                                </button>
+                                <button onClick={() => setSchoolColStatusFilter(new Set())} className="text-xs text-indigo-600 hover:underline px-2 py-1" disabled={schoolColStatusFilter.size === 0}>
+                                  Clear
+                                </button>
+                              </div>
+                              <div className="max-h-56 overflow-y-auto">
+                                {uniqueSchoolStatuses.length === 0 && (
+                                  <div className="text-xs text-slate-400 px-2 py-1">No statuses</div>
+                                )}
+                                {uniqueSchoolStatuses.map(st => (
+                                  <label key={st} className="flex items-center gap-2 px-2 py-1 hover:bg-slate-50 rounded cursor-pointer text-sm text-slate-700">
+                                    <input
+                                      type="checkbox"
+                                      className="w-3.5 h-3.5 rounded border-slate-300"
+                                      checked={schoolColStatusFilter.has(st)}
+                                      onChange={() => toggleSetValue(setSchoolColStatusFilter, st)}
+                                    />
+                                    <span>{st}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </th>
                       <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase w-24">Actions</th>
                     </tr>
                   </thead>
