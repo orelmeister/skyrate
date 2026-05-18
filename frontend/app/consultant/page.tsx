@@ -1884,30 +1884,30 @@ function ConsultantPortalPage() {
               </div>
 
               {/* Stats Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
-                      <span className="text-2xl">🏫</span>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
+                      <span className="text-xl">🏫</span>
                     </div>
-                    <span className="text-xs text-green-600 font-medium px-2 py-1 bg-green-50 rounded-full">{schools.length} total</span>
+                    <span className="text-[10px] text-green-600 font-medium px-2 py-0.5 bg-green-50 rounded-full">{schools.length} total</span>
                   </div>
-                  <div className="text-3xl font-bold text-slate-900">{schools.length}</div>
+                  <div className="text-2xl font-bold text-slate-900">{schools.length}</div>
                   <div className="text-sm text-slate-500 mt-1">Total Schools</div>
                 </div>
 
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-                      <span className="text-2xl">📡</span>
+                <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                      <span className="text-xl">📡</span>
                     </div>
                     {isLoadingStats ? (
-                      <span className="text-xs text-slate-400 font-medium px-2 py-1 bg-slate-50 rounded-full">Loading...</span>
+                      <span className="text-[10px] text-slate-400 font-medium px-2 py-0.5 bg-slate-50 rounded-full">Loading...</span>
                     ) : (
-                      <span className="text-xs text-blue-600 font-medium px-2 py-1 bg-blue-50 rounded-full">C1 · FY{dashboardYear}</span>
+                      <span className="text-[10px] text-blue-600 font-medium px-2 py-0.5 bg-blue-50 rounded-full">C1 · FY{dashboardYear}</span>
                     )}
                   </div>
-                  <div className="text-3xl font-bold text-slate-900">
+                  <div className="text-2xl font-bold text-slate-900">
                     {isLoadingStats ? (
                       <span className="text-slate-400">...</span>
                     ) : dashboardStats ? (
@@ -1929,18 +1929,18 @@ function ConsultantPortalPage() {
                   )}
                 </div>
 
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
-                      <span className="text-2xl">💰</span>
+                <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+                      <span className="text-xl">💰</span>
                     </div>
                     {isLoadingStats ? (
-                      <span className="text-xs text-slate-400 font-medium px-2 py-1 bg-slate-50 rounded-full">Loading...</span>
+                      <span className="text-[10px] text-slate-400 font-medium px-2 py-0.5 bg-slate-50 rounded-full">Loading...</span>
                     ) : (
-                      <span className="text-xs text-green-600 font-medium px-2 py-1 bg-green-50 rounded-full">C2 · 5-yr cycle</span>
+                      <span className="text-[10px] text-green-600 font-medium px-2 py-0.5 bg-green-50 rounded-full">C2 · 5-yr cycle</span>
                     )}
                   </div>
-                  <div className="text-3xl font-bold text-slate-900">
+                  <div className="text-2xl font-bold text-slate-900">
                     {isLoadingStats ? (
                       <span className="text-slate-400">...</span>
                     ) : dashboardStats ? (
@@ -1958,39 +1958,39 @@ function ConsultantPortalPage() {
                 </div>
                 
                 <div 
-                  className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer hover:border-red-300"
+                  className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer hover:border-red-300"
                   onClick={() => setActiveTab("appeals")}
                 >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center">
-                      <span className="text-2xl">⚠️</span>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
+                      <span className="text-xl">⚠️</span>
                     </div>
                     {isLoadingStats ? (
-                      <span className="text-xs text-slate-400 font-medium px-2 py-1 bg-slate-50 rounded-full">Loading...</span>
+                      <span className="text-[10px] text-slate-400 font-medium px-2 py-0.5 bg-slate-50 rounded-full">Loading...</span>
                     ) : dashboardStats && dashboardStats.schools_with_denials > 0 ? (
-                      <span className="text-xs text-red-600 font-medium px-2 py-1 bg-red-50 rounded-full">Action needed</span>
+                      <span className="text-[10px] text-red-600 font-medium px-2 py-0.5 bg-red-50 rounded-full">Action needed</span>
                     ) : (
-                      <span className="text-xs text-green-600 font-medium px-2 py-1 bg-green-50 rounded-full">All clear</span>
+                      <span className="text-[10px] text-green-600 font-medium px-2 py-0.5 bg-green-50 rounded-full">All clear</span>
                     )}
                   </div>
-                  <div className="text-3xl font-bold text-slate-900">
+                  <div className="text-2xl font-bold text-slate-900">
                     {isLoadingStats ? "..." : (dashboardStats?.schools_with_denials || 0)}
                   </div>
                   <div className="text-sm text-slate-500 mt-1">Schools with Denials</div>
                 </div>
                 
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center">
-                      <span className="text-2xl">📊</span>
+                <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
+                      <span className="text-xl">📊</span>
                     </div>
                     {isLoadingStats ? (
-                      <span className="text-xs text-slate-400 font-medium px-2 py-1 bg-slate-50 rounded-full">Loading...</span>
+                      <span className="text-[10px] text-slate-400 font-medium px-2 py-0.5 bg-slate-50 rounded-full">Loading...</span>
                     ) : (
-                      <span className="text-xs text-indigo-600 font-medium px-2 py-1 bg-indigo-50 rounded-full">FY{dashboardYear} · {dashboardStats?.funded_count || 0} funded</span>
+                      <span className="text-[10px] text-indigo-600 font-medium px-2 py-0.5 bg-indigo-50 rounded-full">FY{dashboardYear} · {dashboardStats?.funded_count || 0} funded</span>
                     )}
                   </div>
-                  <div className="text-3xl font-bold text-slate-900">
+                  <div className="text-2xl font-bold text-slate-900">
                     {isLoadingStats ? "..." : (dashboardStats?.total_applications || 0)}
                   </div>
                   <div className="text-sm text-slate-500 mt-1">FY{dashboardYear} Applications</div>
