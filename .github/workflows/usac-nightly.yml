@@ -25,7 +25,7 @@ jobs:
             -X POST \
             -H "X-Job-Token: $NIGHTLY_JOB_TOKEN" \
             -H "Content-Type: application/json" \
-            "https://api.skyrate.ai/v1/admin/jobs/usac-nightly-refresh")
+            "https://skyrate.ai/api/v1/admin/jobs/usac-nightly-refresh")
           echo "HTTP $HTTP_CODE"
           cat /tmp/resp.json
           echo ""
