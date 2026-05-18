@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>perf_v2 single-shot — status</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+:root { --bg:#0b1020; --panel:#121830; --ink:#e7ecf3; --mute:#9aa6b2; --ok:#37d39b; --warn:#ffc857; --line:#1e2748; --link:#7cc4ff; --code:#161e3a; }
+* { box-sizing:border-box; }
+body { background:var(--bg); color:var(--ink); font:14px/1.55 -apple-system,Segoe UI,Inter,system-ui,sans-serif; margin:0; padding:32px; }
+.wrap { max-width: 980px; margin: 0 auto; }
+h1 { font-size:26px; margin:0 0 6px; }
+h2 { font-size:18px; margin:28px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--line); }
+h3 { font-size:15px; margin:18px 0 8px; color:#cfd8e5; }
+.pill { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; margin-right:6px; }
+.pill.ok { background:rgba(55,211,155,.15); color:var(--ok); border:1px solid rgba(55,211,155,.4); }
+.pill.warn { background:rgba(255,200,87,.15); color:var(--warn); border:1px solid rgba(255,200,87,.4); }
+.meta { color:var(--mute); margin-bottom:18px; }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin:12px 0; }
+table { border-collapse:collapse; width:100%; margin:8px 0 16px; }
+th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+th { color:var(--mute); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+code, pre { font-family: SFMono-Regular,Consolas,Menlo,monospace; }
+code { background:var(--code); border:1px solid var(--line); padding:1px 6px; border-radius:4px; font-size:12.5px; }
+pre { background:var(--code); border:1px solid var(--line); padding:12px; border-radius:8px; overflow:auto; font-size:12.5px; }
+ol li, ul li { margin:4px 0; }
+.k { color:var(--warn); }
+a { color:var(--link); }
+.small { color:var(--mute); font-size:12px; }
+.grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+@media (max-width:780px){ .grid { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>perf_v2 single-shot — implementation status</h1>
+<p class="meta">
+  <span class="pill ok">Code complete</span>
+  <span class="pill warn">Deploy in progress (this run)</span>
+  Branch <code>perf/v2-single-shot</code> · App <code>8f201fb9-f0f1-4b58-a329-e1fb41ef9f69</code> ·
+  Backup <code>_backups/skylimi5_skyrate_pre_perfv2_20260518_092017.sql</code>
+</p>
+
+<h2>What landed in the branch</h2>
+<table>
+  <thead><tr><th>Step</th><th>Description</th><th>Commit</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Alembic migration + ORM models for <code>user_usac_cache</code> + <code>usac_sync_jobs</code></td><td><code>5b64d4c</code></td></tr>
+    <tr><td>2</td><td><code>UsacHydrationService</code> — pre-computes schools / dashboard-stats / crns payloads</td><td><code>5b64d4c</code></td></tr>
+    <tr><td>3</td><td>Cache-first reads on <code>/crns</code>, <code>/schools</code>, <code>/dashboard-stats</code> + <code>/sync-usac</code> endpoints + signup/login background hooks</td><td><code>5b64d4c</code></td></tr>
+    <tr><td>4</td><td><code>admin_jobs</code> router: nightly-refresh, backfill, last-run, perf-summary (X-Job-Token gated)</td><td><code>5b64d4c</code> + <code>0a6f25f</code></td></tr>
+    <tr><td>5</td><td><code>lib/featureFlags.ts</code> + API helpers <code>syncUsacCache</code> / <code>getSyncUsacStatus</code></td><td><code>55e88ce</code></td></tr>
+    <tr><td>6</td><td>Flag-gated flash suppression on <code>/consultant</code> and <code>/vendor</code> + reusable <code>SyncFromUsacButton</code></td><td><code>55e88ce</code></td></tr>
+    <tr><td>7</td><td><code>.env.example</code> updates for <code>PERF_V2_ENABLED</code>, <code>NIGHTLY_JOB_TOKEN</code>, <code>NEXT_PUBLIC_PERF_V2_ENABLED</code></td><td><code>0a6f25f</code></td></tr>
+    <tr><td>8</td><td><code>PerfTimingMiddleware</code> + ring buffer + <code>GET /v1/admin/jobs/perf-summary</code></td><td><code>0a6f25f</code></td></tr>
+    <tr><td>9</td><td><code>tests/perf/perf_audit.py</code> Playwright harness + README</td><td><code>0a6f25f</code></td></tr>
+  </tbody>
+</table>
+
+<h2>Endpoints (all under <code>api.skyrate.ai</code>)</h2>
+<div class="card">
+  <h3>Admin jobs — header <code>X-Job-Token</code> required</h3>
+  <ul>
+    <li><code>POST /v1/admin/jobs/usac-nightly-refresh</code> — refresh every user's cache</li>
+    <li><code>POST /v1/admin/jobs/usac-backfill/run?only_missing=true</code> — seed cache</li>
+    <li><code>GET /v1/admin/jobs/usac-nightly-refresh/last-run</code> — stats from the most recent run</li>
+    <li><code>GET /v1/admin/jobs/perf-summary</code> — p50/p95/p99 + cache-hit ratio per endpoint</li>
+  </ul>
+  <h3>User-facing — JWT auth</h3>
+  <ul>
+    <li><code>POST /v1/consultant/sync-usac</code> · <code>GET /v1/consultant/sync-usac/{job_id}</code> · <code>GET /v1/consultant/sync-usac/_last/status</code></li>
+  </ul>
+</div>
+
+<h2>Flags</h2>
+<table>
+  <thead><tr><th>Flag</th><th>Where</th><th>Initial</th><th>Effect when ON</th></tr></thead>
+  <tbody>
+    <tr><td><code>PERF_V2_ENABLED</code></td><td>Backend env</td><td><code>false</code></td><td>Endpoints serve from <code>user_usac_cache</code> first; signup/login fire background hydration</td></tr>
+    <tr><td><code>NEXT_PUBLIC_PERF_V2_ENABLED</code></td><td>Frontend env (build-time)</td><td><code>false</code></td><td>Skips full-screen "Verifying your subscription..." and "Loading your dashboard..." spinners</td></tr>
+    <tr><td><code>NIGHTLY_JOB_TOKEN</code></td><td>Backend secret</td><td>random urlsafe-32</td><td>Enables <code>/v1/admin/jobs/*</code> — endpoints return 503 if unset</td></tr>
+  </tbody>
+</table>
+
+<h2>Rollback</h2>
+<div class="card">
+  <ul>
+    <li><strong>Live (zero-rebuild backend):</strong> flip <code>PERF_V2_ENABLED=false</code> → backend reverts to live USAC reads immediately.</li>
+    <li><strong>Frontend:</strong> flip <code>NEXT_PUBLIC_PERF_V2_ENABLED=false</code> → triggers rebuild → restores spinners.</li>
+    <li><strong>Schema:</strong> <code>alembic downgrade -1</code> on the migration <code>e0f1a2b3c4d5_perf_v2_user_usac_cache_and_sync_jobs</code>.</li>
+    <li><strong>Code:</strong> revert commits <code>5b64d4c</code>, <code>55e88ce</code>, <code>0a6f25f</code>.</li>
+  </ul>
+</div>
+
+<h2>Audit thresholds</h2>
+<table>
+  <thead><tr><th>Metric</th><th>Pass</th><th>Source</th></tr></thead>
+  <tbody>
+    <tr><td>Cold sign-in to dashboard ready (p95)</td><td>&le; 3000&nbsp;ms</td><td><code>perf_audit.py --cold-threshold</code></td></tr>
+    <tr><td>Warm re-nav between portal pages (p95)</td><td>&le; 800&nbsp;ms</td><td><code>perf_audit.py --warm-threshold</code></td></tr>
+    <tr><td>Flash-screen occurrences (cold + warm)</td><td>0</td><td>DOM probe in <code>perf_audit.py</code></td></tr>
+    <tr><td>Backend cache-hit ratio on <code>/v1/consultant/*</code></td><td>&ge; 0.85</td><td><code>GET /v1/admin/jobs/perf-summary</code></td></tr>
+  </tbody>
+</table>
+
+<h2>Live status</h2>
+<p class="small">This page is regenerated whenever <code>PERF_V2_STATUS.md</code> changes. For the audit
+report after the flag flip, see <a href="PERFORMANCE_AUDIT_RESULTS.html">PERFORMANCE_AUDIT_RESULTS.html</a>
+(created in step 11).</p>
+
+</div>
+</body>
+</html>
