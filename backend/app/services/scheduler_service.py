@@ -522,18 +522,20 @@ def send_daily_digests():
     try:
         alert_service = AlertService(db)
         
-        # Get all users with daily digest enabled
-        configs = db.query(AlertConfig).filter(
-            AlertConfig.daily_digest == True
-        ).all()
+        # Iterate all active users; auto-create AlertConfig if missing,
+        # then respect the per-user daily_digest flag.
+        users = db.query(User).filter(User.is_active == True).all()
         
         sent_count = 0
-        for config in configs:
+        for user in users:
             try:
-                if alert_service.send_daily_digest(config.user_id):
+                config = alert_service.get_or_create_alert_config(user.id)
+                if not config.daily_digest:
+                    continue
+                if alert_service.send_daily_digest(user.id):
                     sent_count += 1
             except Exception as e:
-                logger.error(f"Error sending digest to user {config.user_id}: {e}")
+                logger.error(f"Error sending digest to user {user.id}: {e}")
         
         logger.info(f"Daily digest complete. Sent {sent_count} digests.")
         
@@ -554,18 +556,20 @@ def send_weekly_summaries():
     try:
         alert_service = AlertService(db)
         
-        # Get all users with digest enabled (same flag)
-        configs = db.query(AlertConfig).filter(
-            AlertConfig.daily_digest == True
-        ).all()
+        # Iterate all active users; auto-create AlertConfig if missing,
+        # then respect the per-user daily_digest flag (used for weekly too).
+        users = db.query(User).filter(User.is_active == True).all()
         
         sent_count = 0
-        for config in configs:
+        for user in users:
             try:
-                if alert_service.send_weekly_summary(config.user_id):
+                config = alert_service.get_or_create_alert_config(user.id)
+                if not config.daily_digest:
+                    continue
+                if alert_service.send_weekly_summary(user.id):
                     sent_count += 1
             except Exception as e:
-                logger.error(f"Error sending summary to user {config.user_id}: {e}")
+                logger.error(f"Error sending summary to user {user.id}: {e}")
         
         logger.info(f"Weekly summary complete. Sent {sent_count} summaries.")
         
