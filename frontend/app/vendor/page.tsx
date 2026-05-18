@@ -30,6 +30,32 @@ interface SearchResult {
   _raw?: any; // Raw USAC data for detail view
 }
 
+// Force-download a remote file via fetch + Blob.
+// Falls back to opening the URL in a new tab if the fetch fails (e.g. CORS).
+async function forceDownloadFile(url: string, suggestedFilename?: string): Promise<void> {
+  try {
+    const response = await fetch(url, { method: "GET" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+
+    let filename = suggestedFilename || url.split("/").pop() || "document.pdf";
+    try { filename = decodeURIComponent(filename); } catch { /* leave as-is */ }
+
+    const a = document.createElement("a");
+    a.style.display = "none";
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(blobUrl);
+    document.body.removeChild(a);
+  } catch (err) {
+    console.error("forceDownloadFile failed, falling back to new-tab open:", err);
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+}
+
 export default function VendorPortalWrapper() {
   return (
     <Suspense fallback={
@@ -4804,15 +4830,14 @@ function VendorPortalPage() {
                                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                                         View on USAC
                                       </a>
-                                      <a
-                                        href={docUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-600 text-xs font-medium rounded-lg hover:bg-slate-200 transition-colors"
+                                      <button
+                                        type="button"
+                                        onClick={() => forceDownloadFile(docUrl, filename)}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700 transition-colors"
                                       >
-                                        Direct link
-                                      </a>
-                                      <span className="text-xs text-slate-400 italic">(may redirect)</span>
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" /></svg>
+                                        Download
+                                      </button>
                                     </div>
                                   </div>
                                 ) : (
