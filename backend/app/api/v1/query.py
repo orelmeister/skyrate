@@ -90,7 +90,6 @@ async def natural_language_query(
         
         # Interpret query with AI
         interpretation = ai_manager.interpret_query(data.query)
-        logger.info(f"[natural_query] interpretation={interpretation}")
         
         if not interpretation:
             interpretation = {
@@ -113,7 +112,6 @@ async def natural_language_query(
             years = None
         
         # Fetch data
-        logger.info(f"[natural_query] fetch year={year} years={years} filters={filters} limit={data.limit}")
         df = client.fetch_data(year=year, years=years, filters=filters, limit=data.limit)
         
         # Convert to list and sanitize for JSON (handle NaN values)

@@ -177,7 +177,6 @@ class USACDataClient:
         
         if where_conditions:
             params['$where'] = ' AND '.join(where_conditions)
-            logger.info(f"[usac_client] WHERE: {params['$where']}")
         
         if order_by:
             params['$order'] = order_by
