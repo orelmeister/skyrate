@@ -500,6 +500,15 @@ async def send_test_alert(
         except Exception as e:
             email_error = str(e)
     
+    # Try to send test SMS if SMS notifications are enabled
+    sms_sent = False
+    sms_error = None
+    if config.sms_notifications:
+        if not config.notification_phone:
+            sms_error = "SMS enabled but no notification_phone set"
+        else:
+            sms_sent, sms_error = alert_service._send_alert_sms(alert, config)
+
     # Build response message
     messages = []
     if in_app_sent:
@@ -512,7 +521,11 @@ async def send_test_alert(
         messages.append(f"Email FAILED: {email_error}")
     elif not config.email_notifications:
         messages.append("Email notifications disabled in your settings")
-    
+    if sms_sent:
+        messages.append(f"SMS sent to {config.notification_phone}")
+    elif config.sms_notifications and sms_error:
+        messages.append(f"SMS FAILED: {sms_error}")
+
     return {
         "success": True,
         "message": ". ".join(messages),
@@ -521,8 +534,11 @@ async def send_test_alert(
             "in_app_sent": in_app_sent,
             "email_sent": email_sent,
             "push_sent": push_sent,
+            "sms_sent": sms_sent,
             "email_enabled": config.email_notifications,
+            "sms_enabled": config.sms_notifications,
             "daily_digest": config.daily_digest,
-            "email_error": email_error
+            "email_error": email_error,
+            "sms_error": sms_error,
         }
     }

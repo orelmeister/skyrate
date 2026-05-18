@@ -104,7 +104,11 @@ class AlertService:
         
         if send_email:
             self._send_alert_email(alert, config)
-        
+
+        # Send SMS if requested
+        if config.sms_notifications and config.notification_phone:
+            self._send_alert_sms(alert, config)
+
         return alert
     
     def _should_alert(self, config: AlertConfig, alert_type: AlertType) -> bool:
@@ -638,7 +642,36 @@ class AlertService:
             
         except Exception as e:
             logger.error(f"Failed to send alert email: {e}")
-    
+
+    # ==================== SMS NOTIFICATIONS ====================
+
+    def _send_alert_sms(self, alert: Alert, config: AlertConfig) -> tuple[bool, Optional[str]]:
+        """Send SMS notification for an alert via Twilio. Returns (sent, error)."""
+        try:
+            from ..core.config import settings
+            phone = config.notification_phone
+            if not phone:
+                return False, "No notification_phone configured"
+            if not (settings.TWILIO_ACCOUNT_SID and settings.TWILIO_AUTH_TOKEN and settings.TWILIO_FROM_NUMBER):
+                return False, "Twilio not configured (missing TWILIO_ACCOUNT_SID/AUTH_TOKEN/FROM_NUMBER)"
+
+            from twilio.rest import Client
+            client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+            # SMS hard limit 1600 chars; trim title+message to ~300
+            body_text = f"[SkyRate] {alert.title}\n{alert.message}"
+            if len(body_text) > 300:
+                body_text = body_text[:297] + "..."
+            client.messages.create(
+                body=body_text,
+                from_=settings.TWILIO_FROM_NUMBER,
+                to=phone,
+            )
+            logger.info(f"Sent alert SMS to {phone} for alert {alert.id}")
+            return True, None
+        except Exception as e:
+            logger.error(f"Failed to send alert SMS: {e}")
+            return False, str(e)
+
     def send_daily_digest(self, user_id: int) -> bool:
         """Send daily digest email with all unread alerts"""
         config = self.get_or_create_alert_config(user_id)
