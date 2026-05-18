@@ -417,6 +417,11 @@ function ConsultantPortalPage() {
     return sorted;
   }, [flattenedFrns, frnTableSort, portfolioFrnStatusFilter, portfolioFrnSearch]);
 
+  // Reset visible count when the underlying dataset/filters change
+  useEffect(() => {
+    setVisibleFrnCount(25);
+  }, [flattenedFrns, portfolioFrnStatusFilter, portfolioFrnSearch]);
+
   // Toggle FRN table sort
   const toggleFrnTableSort = (field: string) => {
     setFrnTableSort(prev => {
@@ -3049,10 +3054,10 @@ function ConsultantPortalPage() {
                             <input
                               type="checkbox"
                               className="w-4 h-4 rounded border-slate-300"
-                              checked={sortedFlattenedFrns.length > 0 && selectedPortfolioFrns.size === sortedFlattenedFrns.slice(0, 100).length}
+                              checked={sortedFlattenedFrns.length > 0 && selectedPortfolioFrns.size === Math.min(visibleFrnCount, sortedFlattenedFrns.length)}
                               onChange={(e) => {
                                 if (e.target.checked) {
-                                  setSelectedPortfolioFrns(new Set(sortedFlattenedFrns.slice(0, 100).map(f => f.frn)));
+                                  setSelectedPortfolioFrns(new Set(sortedFlattenedFrns.slice(0, visibleFrnCount).map(f => f.frn)));
                                 } else {
                                   setSelectedPortfolioFrns(new Set());
                                 }
@@ -3083,7 +3088,7 @@ function ConsultantPortalPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {sortedFlattenedFrns.slice(0, 100).map((frn, idx) => (
+                        {sortedFlattenedFrns.slice(0, visibleFrnCount).map((frn, idx) => (
                           <tr 
                             key={`${frn.frn}-${idx}`} 
                             className="hover:bg-slate-50 cursor-pointer transition-colors"
@@ -3151,9 +3156,54 @@ function ConsultantPortalPage() {
                         ))}
                       </tbody>
                     </table>
-                    {sortedFlattenedFrns.length > 100 && (
-                      <div className="p-4 text-center text-sm text-slate-500 bg-slate-50 border-t border-slate-200">
-                        Showing first 100 of {sortedFlattenedFrns.length} FRNs{portfolioFrnStatusFilter && ` (filtered from ${flattenedFrns.length} total)`}
+                    {sortedFlattenedFrns.length > 0 && (
+                      <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div className="text-sm text-slate-600">
+                          Showing <span className="font-medium text-slate-900">{Math.min(visibleFrnCount, sortedFlattenedFrns.length)}</span> of <span className="font-medium text-slate-900">{sortedFlattenedFrns.length}</span> FRNs
+                          {portfolioFrnStatusFilter && <span className="text-slate-500"> (filtered from {flattenedFrns.length} total)</span>}
+                        </div>
+                        {visibleFrnCount < sortedFlattenedFrns.length && (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs text-slate-500 mr-1">Load more:</span>
+                            <button
+                              type="button"
+                              onClick={() => setVisibleFrnCount(c => Math.min(c + 25, sortedFlattenedFrns.length))}
+                              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 transition-colors"
+                            >
+                              +25
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setVisibleFrnCount(c => Math.min(c + 50, sortedFlattenedFrns.length))}
+                              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 transition-colors"
+                            >
+                              +50
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setVisibleFrnCount(c => Math.min(c + 100, sortedFlattenedFrns.length))}
+                              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 transition-colors"
+                            >
+                              +100
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setVisibleFrnCount(sortedFlattenedFrns.length)}
+                              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-colors"
+                            >
+                              View all ({sortedFlattenedFrns.length})
+                            </button>
+                          </div>
+                        )}
+                        {visibleFrnCount >= sortedFlattenedFrns.length && sortedFlattenedFrns.length > 25 && (
+                          <button
+                            type="button"
+                            onClick={() => setVisibleFrnCount(25)}
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 transition-colors self-start sm:self-auto"
+                          >
+                            Collapse to 25
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
