@@ -1421,7 +1421,8 @@ function ConsultantPortalPage() {
         piaBen || undefined,
         piaFrn || undefined,
         undefined,
-        piaAdditionalContext || undefined
+        piaAdditionalContext || undefined,
+        detectedCategory?.category || undefined
       );
       if (res.success && res.data) {
         setPiaResponses(prev => [res.data!, ...prev]);
@@ -1453,9 +1454,11 @@ function ConsultantPortalPage() {
       entity_eligibility: "Entity Eligibility",
       service_eligibility: "Service Eligibility",
       discount_rate: "Discount Rate",
+      student_count: "Student Count & NSLP",
       contracts: "Contracts",
       cipa: "CIPA Compliance",
-      thirty_percent_rule: "30% Rule",
+      ineligible_services: "30% Rule",
+      general: "General PIA Question",
     };
     setDetectedCategory({ category, name: categoryNames[category] || category });
   };

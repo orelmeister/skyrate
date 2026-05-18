@@ -94,8 +94,8 @@ class PIAService:
         keyword_map: Dict[str, List[str]] = {
             "competitive_bidding": [
                 "form 470", "470", "competitive bidding", "28-day", "28 day",
-                "waiting period", "bid", "solicitation", "rfp", "posting",
-                "allowable contract date", "how did you solicit",
+                "waiting period", "solicitation", "rfp", "posting",
+                "how did you solicit", "bids",
                 "posted your form 470", "signed a contract",
             ],
             "cost_effectiveness": [
@@ -104,6 +104,7 @@ class PIAService:
                 "why did you select", "selection criteria", "bid matrix",
                 "sole bid", "only bid", "most cost-effective",
                 "bid evaluation matrix", "how you determined",
+                "primary factor", "one bid", "solicit additional",
             ],
             "entity_eligibility": [
                 "entity eligib", "eligible entity", "nces", "school type",
@@ -111,7 +112,7 @@ class PIAService:
                 "library eligible", "imls", "consortium",
                 "your entity", "eligibility requirements", "meets the eligibility",
                 "school or library", "confirm that your entity",
-                "eligible for e-rate", "eligible school",
+                "eligible for e-rate", "eligible school", "school id",
             ],
             "service_eligibility": [
                 "service eligib", "eligible service", "esl", "eligible services list",
@@ -121,8 +122,8 @@ class PIAService:
                 "explain how the requested", "falls under category",
             ],
             "student_count": [
-                "student count", "enrollment", "enrolled", "students enrolled",
-                "student enrollment", "enrollment count", "nslp roster",
+                "student count", "enrollment count", "students enrolled",
+                "student enrollment", "nslp roster",
                 "direct certification", "cep", "community eligibility",
                 "source documentation", "state report", "lunch roster",
                 "how many students", "number of students",
@@ -139,6 +140,7 @@ class PIAService:
                 "cabio", "amendment", "pricing", "contract date",
                 "voluntary extension", "evergreen", "signed contract",
                 "amounts match", "contract and explain",
+                "contract was executed", "executed on", "allowable contract date",
             ],
             "cipa": [
                 "cipa", "internet safety", "filtering", "technology protection",
@@ -394,16 +396,13 @@ class PIAService:
             "entity_eligibility": self._get_entity_eligibility_knowledge(),
             "service_eligibility": self._get_service_eligibility_knowledge(),
             "discount_rate": self._get_discount_rate_knowledge(),
+            "student_count": self._get_student_count_knowledge(),
             "contracts": self._get_contracts_knowledge(),
             "cipa": self._get_cipa_knowledge(),
             "ineligible_services": self._get_ineligible_services_knowledge(),
+            "general": self._get_general_knowledge(),
         }
-        return knowledge_map.get(category, {
-            "what_they_want": "General PIA compliance documentation.",
-            "key_points": ["Provide clear, specific answers", "Attach supporting documentation"],
-            "common_mistakes": ["Vague answers without evidence"],
-            "relevant_rules": [],
-        })
+        return knowledge_map.get(category, self._get_general_knowledge())
 
     def _get_competitive_bidding_knowledge(self) -> Dict[str, Any]:
         """Knowledge base for competitive bidding PIA questions."""
@@ -411,17 +410,20 @@ class PIAService:
             "what_they_want": (
                 "PIA wants to verify that the applicant followed the competitive bidding process: "
                 "posted Form 470, waited 28 days, solicited bids fairly, and selected a vendor based "
-                "on price as the primary factor. They need the Form 470 number, certification date, "
-                "allowable contract date, number of bids received, how bids were solicited, evidence "
-                "of equal treatment, and confirmation the RFP was uploaded to EPC."
+                "on price as the primary factor. The reviewer uses USAC's Competitive Bidding Checklist "
+                "to verify the Form 470 number, certification date, allowable contract date, number of "
+                "bids received, how bids were solicited, evidence of equal treatment, and confirmation "
+                "the RFP was uploaded to EPC if one was used."
             ),
             "key_points": [
-                "Provide Form 470 number and certification date",
+                "Provide Form 470 number and certification date in MM/DD/YYYY format",
                 "Show 28-day waiting period was observed (cert date to contract/selection date)",
-                "State the number of bids received",
+                "State the exact number of bids received and list each bidder name",
                 "Describe how you solicited bids (Form 470 posting, direct outreach, newspaper, etc.)",
                 "Confirm all bidders received equal information and treatment",
-                "If RFP was used, confirm it was uploaded to EPC",
+                "If RFP was used, confirm it was uploaded to EPC before the 470 was certified",
+                "Provide a screenshot of the EPC Form 470 details page showing certified status",
+                "State the allowable contract date and confirm contract was signed on or after that date",
             ],
             "common_mistakes": [
                 "Not providing the actual Form 470 certification date",
@@ -429,12 +431,21 @@ class PIAService:
                 "Signing contract before the allowable contract date",
                 "Not documenting outreach to potential vendors",
                 "Failing to upload RFP to EPC when one was used",
+                "Not keeping records of all bids received (even rejected ones)",
+                "Evaluating bids before the 28-day window closed",
             ],
             "relevant_rules": [
-                "FCC Fifth Report and Order (FCC 04-190) - competitive bidding requirements",
                 "47 CFR 54.503 - Competitive bidding requirement",
-                "USAC Competitive Bidding Process guide",
+                "FCC Fifth Report and Order (FCC 04-190) - competitive bidding requirements",
+                "FCC Order 19-117 para. 40-48 - competitive bidding process clarifications",
+                "USAC Competitive Bidding Process guide (Schools and Libraries Division)",
             ],
+            "winning_phrases": [
+                "We respectfully provide the following competitive bidding documentation demonstrating full compliance with 47 CFR 54.503.",
+                "Our Form 470 (number [X]) was certified on [date], establishing an allowable contract date of [date], and we executed our contract on [date] -- fully observing the required 28-day waiting period.",
+                "We received [X] bids in response to our Form 470 posting and evaluated all bids using price of eligible goods and services as the primary factor.",
+            ],
+            "attachments_note": "Upload the Form 470 certification screenshot, all bids/proposals received, RFP document (if used), and bid evaluation matrix to the EPC document section.",
         }
 
     def _get_cost_effectiveness_knowledge(self) -> Dict[str, Any]:
@@ -444,14 +455,19 @@ class PIAService:
                 "PIA wants to see that the applicant evaluated all bids using price of the eligible "
                 "goods and services as the primary factor, documented a bid evaluation matrix with "
                 "criteria and weights, and can justify why the selected vendor was chosen. If only "
-                "one bid was received, they want a sole bid memo explaining outreach efforts."
+                "one bid was received, they want a sole bid memo explaining outreach efforts. The "
+                "reviewer uses USAC's Cost-Effectiveness Checklist to verify price weighting, documented "
+                "criteria, and that the evaluation was completed before vendor selection."
             ),
             "key_points": [
-                "Show bid evaluation matrix with criteria, weights, and scores",
-                "Demonstrate price was weighted as the primary (highest-weighted) factor",
-                "Explain the rationale for each evaluation criterion",
-                "Document why the winning vendor was selected",
-                "If sole bid: provide memo explaining additional outreach efforts made",
+                "Show bid evaluation matrix with criteria, weights, and scores for each bidder",
+                "Demonstrate price was weighted as the primary (highest-weighted) factor -- typically 40%+ weight",
+                "Explain the rationale for each non-price evaluation criterion used",
+                "Document why the winning vendor was selected with specific scores",
+                "If sole bid: provide memo explaining additional outreach efforts made beyond Form 470",
+                "Include the date the evaluation was completed and who participated",
+                "Show that evaluation criteria were established before bids were received",
+                "If not selecting lowest price, provide detailed justification for each non-price factor that outweighed cost",
             ],
             "common_mistakes": [
                 "Not making price the primary (most heavily weighted) factor",
@@ -459,12 +475,21 @@ class PIAService:
                 "Not documenting the evaluation process at all",
                 "Selecting a higher-cost vendor without strong documented justification",
                 "Not explaining sole bid situations proactively",
+                "Creating the evaluation matrix after vendor selection (must exist beforehand)",
+                "Price weight below 30% without compelling justification",
             ],
             "relevant_rules": [
                 "47 CFR 54.503(c)(2)(ii) - Price must be primary factor",
-                "FCC Sixth Report and Order - bid evaluation requirements",
+                "FCC Sixth Report and Order (FCC 10-175) - bid evaluation requirements",
+                "FCC Order 19-117 para. 49-55 - cost-effectiveness review standards",
                 "USAC Applicant Process guide - Cost-effectiveness review",
             ],
+            "winning_phrases": [
+                "We respectfully provide our bid evaluation documentation demonstrating that price of eligible goods and services was the primary factor per 47 CFR 54.503(c)(2)(ii).",
+                "The attached bid evaluation matrix shows that price was weighted at [X]% -- the highest-weighted criterion -- and all [X] bids were scored consistently against pre-established criteria.",
+                "As documented in the attached evaluation, [Vendor] received the highest overall score of [X] points, with price accounting for [X] of those points.",
+            ],
+            "attachments_note": "Upload the bid evaluation matrix, selection justification memo, all bid proposals, and sole-bid memo (if applicable) to the EPC document section.",
         }
 
     def _get_entity_eligibility_knowledge(self) -> Dict[str, Any]:
@@ -474,26 +499,40 @@ class PIAService:
                 "PIA wants to confirm the applicant is an eligible E-Rate entity: a school (public or "
                 "private non-profit) with an NCES ID and state accreditation, a public library with IMLS "
                 "listing, or an eligible consortium. For private schools, they need non-profit documentation "
-                "and student enrollment counts."
+                "and student enrollment counts. The reviewer uses USAC's Entity Eligibility Checklist to "
+                "verify entity type, NCES/IMLS ID, accreditation status, and non-profit status where required."
             ),
             "key_points": [
-                "Provide entity type (public school, private school, library, consortium)",
-                "Include NCES ID for schools or IMLS FSCS ID for libraries",
-                "Show eligible entity status in state records",
-                "For private schools: provide non-profit status documentation (IRS letter)",
-                "Include current student enrollment count from official state reporting",
+                "Provide entity type (public school, private non-profit school, library, consortium)",
+                "Include NCES ID for schools or IMLS FSCS ID for libraries -- provide screenshot from NCES/IMLS database",
+                "Show eligible entity status in state records or state accreditation documentation",
+                "For private schools: provide IRS determination letter (501(c)(3)) or state equivalent",
+                "Include current student enrollment count from official state reporting with date",
+                "If entity recently opened or changed status, provide documentation of the change",
+                "For consortia: provide consortium membership documentation and lead entity identification",
+                "Confirm entity information in EPC profile matches source documentation",
             ],
             "common_mistakes": [
                 "Not having an NCES ID on file or providing the wrong one",
                 "For private schools: lacking current non-profit documentation",
                 "Enrollment figures not matching what was reported on the application",
                 "Not updating entity information in EPC when changes occur",
+                "For new schools: not providing state accreditation documentation",
+                "Pre-K-only programs that are not eligible for E-Rate",
             ],
             "relevant_rules": [
                 "47 CFR 54.501 - Eligible schools and libraries",
-                "USAC Entity Eligibility guide",
+                "47 CFR 54.501(a)(3) - Non-profit requirement for private schools",
+                "FCC Order 19-117 para. 20-28 - entity eligibility verification",
+                "USAC Entity Eligibility guide (Schools and Libraries Division)",
                 "NCES school identification requirements",
             ],
+            "winning_phrases": [
+                "We respectfully confirm that [Entity Name] is an eligible entity for E-Rate purposes under 47 CFR 54.501.",
+                "Our NCES ID is [X], as verified in the attached NCES database screenshot, confirming our status as a [public/private non-profit] school.",
+                "The attached documentation confirms our entity meets all eligibility requirements, including [state accreditation/non-profit status/IMLS listing].",
+            ],
+            "attachments_note": "Upload the NCES/IMLS database screenshot, state accreditation letter, IRS determination letter (if private), and current enrollment report to the EPC document section.",
         }
 
     def _get_service_eligibility_knowledge(self) -> Dict[str, Any]:
@@ -503,26 +542,38 @@ class PIAService:
                 "PIA wants to verify that the requested services/products appear on the Eligible Services "
                 "List (ESL) for the applicable funding year. They check Category 1 vs Category 2 "
                 "classification, whether the product type and function match ESL entries, and whether "
-                "services serve an educational purpose."
+                "services serve an educational purpose. The reviewer uses USAC's Service Eligibility "
+                "Checklist to match each line item to a specific ESL entry."
             ),
             "key_points": [
-                "Reference the specific ESL entry that covers the requested service/product",
+                "Reference the specific ESL entry (page number, section) that covers the requested service/product",
                 "Clarify Category 1 (internet/telecom) vs Category 2 (internal connections) classification",
-                "Provide product specifications showing the item matches the ESL category",
-                "Explain the educational purpose if it is not obvious",
-                "If mixed-use, show which components are eligible vs ineligible",
+                "Provide product specifications or data sheets showing the item matches the ESL category",
+                "Explain the educational purpose if it is not obvious from the product name",
+                "If mixed-use, show which components are eligible vs ineligible with cost allocation",
+                "Identify the product by manufacturer, model number, and function",
+                "For managed services, explain what is included and confirm all components are eligible",
+                "Reference the correct funding year ESL (ESL changes annually)",
             ],
             "common_mistakes": [
                 "Requesting items not on the current year's ESL",
                 "Misclassifying C1 vs C2 services",
                 "Not providing product specs to prove ESL match",
                 "Bundling ineligible items without cost allocation",
+                "Using a prior year's ESL as reference instead of the current year",
             ],
             "relevant_rules": [
-                "Eligible Services List for the applicable funding year",
                 "47 CFR 54.502 - Eligible services",
-                "FCC Modernization Orders (2014) - C2 eligible services",
+                "Eligible Services List for the applicable funding year (published annually by USAC)",
+                "FCC Modernization Orders (2014, FCC 14-99) - C2 eligible services",
+                "FCC Order 19-117 para. 56-62 - service eligibility determinations",
             ],
+            "winning_phrases": [
+                "We respectfully provide the following documentation demonstrating that the requested services are eligible under 47 CFR 54.502 and the FY[X] Eligible Services List.",
+                "The attached product specifications confirm that [product/service] matches the ESL entry for [category/function], classified as Category [1/2].",
+                "Each line item on this FRN corresponds to a specific ESL entry as detailed in the table below.",
+            ],
+            "attachments_note": "Upload product specification sheets, ESL reference highlighting the applicable entry, and network diagram (if applicable) to the EPC document section.",
         }
 
     def _get_discount_rate_knowledge(self) -> Dict[str, Any]:
@@ -532,14 +583,18 @@ class PIAService:
                 "PIA wants to verify the discount rate claimed on the application by checking NSLP "
                 "percentage data and its source, urban/rural classification, and student counts. They "
                 "need to see the actual data source (CEP letter, direct cert, income survey) and verify "
-                "the numbers match what was reported."
+                "the numbers match what was reported. The reviewer uses USAC's Discount Rate Checklist "
+                "to cross-reference the claimed discount band against the NSLP percentage and locale code."
             ),
             "key_points": [
                 "Provide NSLP percentage and identify the data source (CEP, direct cert, survey, etc.)",
                 "Include the urban/rural classification and its basis (Census block or NCES locale code)",
-                "Show student count verification matching Form 471 figures",
+                "Show student count verification matching Form 471 figures exactly",
                 "For multi-school applications, provide school-by-school NSLP breakdown",
                 "If using CEP, provide the CEP notification letter from the state",
+                "Show the discount band calculation: NSLP% + urban/rural = discount rate",
+                "Confirm data is from an allowable year (within 3 years per USAC rules)",
+                "If using a different NSLP source than prior year, explain the change",
             ],
             "common_mistakes": [
                 "Using outdated NSLP data (must be from within 3 years)",
@@ -547,13 +602,22 @@ class PIAService:
                 "Urban/rural classification not matching NCES or Census data",
                 "Student counts not matching state enrollment reports",
                 "Applying wrong discount band for the NSLP percentage",
+                "Confusing school-level vs district-level NSLP calculation",
+                "Not providing the actual source document (just stating the percentage)",
             ],
             "relevant_rules": [
                 "47 CFR 54.505 - Discount matrix",
                 "47 CFR 54.507 - Discount rate determination",
-                "USAC Discount Rate guide",
-                "FCC Order on CEP eligibility for E-Rate",
+                "FCC Order 14-99 (Modernization Order) para. 154-160 - CEP for E-Rate",
+                "FCC Order 19-117 para. 88-92 - discount rate verification",
+                "USAC Discount Rate guide - acceptable data sources and timeframes",
             ],
+            "winning_phrases": [
+                "We respectfully provide the following NSLP and discount rate documentation per 47 CFR 54.505 and 54.507.",
+                "Our discount rate of [X]% is based on an NSLP percentage of [X]% (urban/rural classification: [X]), as supported by the attached [CEP letter/direct certification data/state report].",
+                "The attached documentation verifies that our student counts and NSLP data match the figures entered on Form 471, placing us in the [X]% discount band per the FCC discount matrix.",
+            ],
+            "attachments_note": "Upload the NSLP source documentation (CEP letter, direct cert data, or survey), urban/rural classification source, and student count verification to the EPC document section.",
         }
 
     def _get_contracts_knowledge(self) -> Dict[str, Any]:
@@ -563,14 +627,18 @@ class PIAService:
                 "PIA wants to see the executed contract and verify: the execution date is on or after "
                 "the allowable contract date from Form 470, the contract term and any extensions are "
                 "documented, amounts match what was requested on Form 471, and any amendments (CABIO) "
-                "are properly documented."
+                "are properly documented. The reviewer uses USAC's Contract Checklist to verify all "
+                "required contract elements are present and dates are in proper sequence."
             ),
             "key_points": [
-                "Provide the full executed contract with signature dates",
+                "Provide the full executed contract with signature dates clearly visible",
                 "Show contract execution date is on or after the Form 470 allowable contract date",
                 "Document the contract term, start/end dates, and any extension options",
-                "Confirm contract amounts match Form 471 FRN amounts",
-                "If contract was amended, provide all CABIO (Change After Bid Information Only) documentation",
+                "Confirm contract amounts match Form 471 FRN amounts exactly",
+                "If contract was amended, provide all CABIO documentation with dates",
+                "Identify all parties to the contract and confirm SPIN matches",
+                "Show contract covers the specific services/products on the FRN",
+                "For voluntary extensions, provide documentation that extension was exercised before expiration",
             ],
             "common_mistakes": [
                 "Contract signed before the allowable contract date",
@@ -578,12 +646,21 @@ class PIAService:
                 "Missing CABIO documentation for contract changes",
                 "Evergreen contracts without proper documentation",
                 "Contract terms extending beyond what was filed on the application",
+                "Contract signed by unauthorized person",
+                "SPIN on contract not matching Form 471 SPIN",
             ],
             "relevant_rules": [
                 "47 CFR 54.503(c)(4) - Contract requirements",
-                "USAC Contract guidance",
-                "CABIO rules per FCC Orders",
+                "FCC Order 19-117 para. 63-72 - contract documentation standards",
+                "USAC Contract guidance (Schools and Libraries Division)",
+                "CABIO rules per FCC Orders (FCC 04-190, FCC 10-175)",
             ],
+            "winning_phrases": [
+                "We respectfully provide the executed contract documentation per 47 CFR 54.503(c)(4).",
+                "The attached contract was executed on [date], which is on or after the allowable contract date of [date] established by our Form 470 (number [X]).",
+                "Contract amounts of $[X] match the funding commitment request on FRN [X] as filed on Form 471, application number [X].",
+            ],
+            "attachments_note": "Upload the fully executed contract (all pages with signatures), any CABIO amendments, and board approval documentation (if required) to the EPC document section.",
         }
 
     def _get_cipa_knowledge(self) -> Dict[str, Any]:
@@ -593,27 +670,42 @@ class PIAService:
                 "PIA wants to verify CIPA (Children's Internet Protection Act) compliance: the entity "
                 "adopted an Internet Safety Policy (ISP), held a public hearing (for schools/districts) "
                 "or public meeting (for libraries), deployed technology protection measures (filtering), "
-                "and certified CIPA compliance on Form 486."
+                "and certified CIPA compliance on Form 486. The reviewer uses USAC's CIPA Checklist to "
+                "verify all four components: policy adoption, public hearing, filtering deployment, and "
+                "Form 486 certification."
             ),
             "key_points": [
-                "Provide the ISP adoption date and board resolution/minutes",
-                "Document the public hearing date and meeting notice/minutes",
-                "Describe the technology protection measures (filtering solution) deployed",
-                "Confirm policies address minors' online activity and visual depictions",
-                "Show CIPA certification was completed on Form 486",
+                "Provide the ISP adoption date and board resolution/minutes showing the vote",
+                "Document the public hearing date, meeting notice (published in advance), and minutes",
+                "Describe the technology protection measures (filtering solution) deployed by name and vendor",
+                "Confirm policies address all required elements: minors' online activity, visual depictions, unauthorized access",
+                "Show CIPA certification was completed on Form 486 with the certification date",
+                "For libraries: confirm public meeting notice was posted in advance per state requirements",
+                "Distinguish between the public hearing (required) and a regular board meeting",
+                "Confirm filtering is active on all devices with internet access funded by E-Rate",
             ],
             "common_mistakes": [
-                "Not having documented board adoption of the ISP",
+                "Not having documented board adoption of the ISP (just having a policy is not enough)",
                 "No evidence of a public hearing (or confusing a board meeting with a public hearing)",
                 "ISP adopted after the Form 471 filing window",
                 "Not describing the specific filtering technology deployed",
-                "CIPA policy not addressing all required elements",
+                "CIPA policy not addressing all required elements per 47 USC 254(h)(5)",
+                "Public hearing notice not published sufficiently in advance",
+                "Filtering not covering all E-Rate funded internet access points",
             ],
             "relevant_rules": [
                 "Children's Internet Protection Act (CIPA) - 47 USC 254(h)(5)",
-                "47 CFR 54.520 - CIPA requirements",
-                "FCC CIPA compliance guide for E-Rate",
+                "47 CFR 54.520 - CIPA requirements for E-Rate",
+                "FCC Order 19-117 para. 95-102 - CIPA compliance verification",
+                "FCC CIPA compliance guide for E-Rate (Schools and Libraries Division)",
+                "Neighborhood Children's Internet Protection Act (NCIPA) requirements",
             ],
+            "winning_phrases": [
+                "We respectfully confirm full CIPA compliance per 47 CFR 54.520 and 47 USC 254(h)(5).",
+                "Our Internet Safety Policy was adopted by the Board of [Education/Trustees] on [date], following a public hearing held on [date] that was noticed to the community on [date].",
+                "Technology protection measures ([filtering solution name]) are deployed on all internet access points funded by E-Rate, and CIPA compliance was certified on Form 486 on [date].",
+            ],
+            "attachments_note": "Upload the Internet Safety Policy document, board minutes showing adoption vote, public hearing notice and minutes, and Form 486 certification screenshot to the EPC document section.",
         }
 
     def _get_ineligible_services_knowledge(self) -> Dict[str, Any]:
@@ -623,14 +715,19 @@ class PIAService:
                 "PIA wants to verify that any ineligible components bundled with eligible services are "
                 "properly cost-allocated and do not exceed program rules. For Category 2 equipment, they "
                 "check budget compliance and the two-in-five rule. They need a clear breakdown of "
-                "eligible vs ineligible costs and the calculation methodology."
+                "eligible vs ineligible costs and the calculation methodology. The PIA reviewer uses "
+                "USAC's cost allocation checklist to verify the applicant identified all ineligible "
+                "components and applied a reasonable allocation method."
             ),
             "key_points": [
-                "Provide a clear eligible vs ineligible cost breakdown",
-                "Show the calculation methodology for cost allocation",
+                "Provide a clear eligible vs ineligible cost breakdown with line-item detail",
+                "Show the calculation methodology for cost allocation (per-unit, percentage, or function-based)",
                 "If ineligible components are present, confirm they are under applicable limits",
                 "For mixed-use equipment, provide specs showing primary eligible function",
                 "Suggest FRN splitting if needed to separate eligible from ineligible",
+                "Reference the specific ESL entry that establishes eligibility for the primary function",
+                "Include vendor quote showing line-item pricing to support the allocation",
+                "For C2 budget questions, show remaining budget using the USAC C2 Budget Tool",
             ],
             "common_mistakes": [
                 "Not breaking out ineligible components at all",
@@ -638,13 +735,109 @@ class PIAService:
                 "Including clearly ineligible items (furniture, electrical work) without noting it",
                 "Exceeding C2 budget caps without awareness",
                 "Not splitting FRNs when items have different eligibility",
+                "Using a flat percentage allocation without justification",
+                "Failing to account for installation of ineligible components",
             ],
             "relevant_rules": [
                 "47 CFR 54.504 - Eligible services cost allocation",
-                "FCC Modernization Orders (2014) - C2 budgets and rules",
+                "FCC Modernization Orders (2014, FCC 14-99) - C2 budgets and rules",
                 "Eligible Services List - ineligible components section",
                 "USAC C2 Budget Tool guidance",
+                "FCC Order 19-117 (para. 60-65) - cost allocation requirements",
             ],
+            "winning_phrases": [
+                "We respectfully provide the following cost allocation demonstrating compliance with 47 CFR 54.504.",
+                "The attached cost allocation worksheet identifies all ineligible components and applies a per-unit pricing methodology based on vendor line-item detail.",
+                "As documented below, the ineligible portion has been properly excluded from the E-Rate funding request on this FRN.",
+            ],
+            "attachments_note": "Upload the cost allocation worksheet, vendor quote with line-item pricing, and product specifications to the EPC document section for this FRN.",
+        }
+
+    def _get_student_count_knowledge(self) -> Dict[str, Any]:
+        """Knowledge base for student count and NSLP documentation PIA questions."""
+        return {
+            "what_they_want": (
+                "PIA wants to verify the student enrollment counts and NSLP (National School Lunch Program) "
+                "data used to calculate the applicant's discount rate. The reviewer checks that the student "
+                "counts on Form 471 match an official source document (state enrollment report, October BEDS "
+                "count, or state DOE verification), and that the NSLP percentage is supported by CEP notification, "
+                "direct certification data, or an approved income survey. This is one of the most common PIA "
+                "questions because incorrect student counts directly affect the discount rate and funding amount."
+            ),
+            "key_points": [
+                "Provide the official student enrollment count and identify its source (state report, BEDS, district records)",
+                "Show that student counts on Form 471 exactly match the source documentation",
+                "Identify the NSLP data methodology: CEP, direct certification, Provision 2/3, or household income survey",
+                "If using CEP, provide the CEP notification letter from the state Department of Education",
+                "If using direct certification, provide the data extract or state letter showing matched student count",
+                "For multi-school districts, provide a per-building breakdown of enrollment and NSLP counts",
+                "Confirm the data is from the correct school year (within allowable timeframe per USAC rules)",
+                "If student counts changed from prior year, explain the reason (new building, boundary change, etc.)",
+                "Reference the specific date the enrollment snapshot was taken",
+                "Show calculation: NSLP-eligible students / total enrolled students = NSLP percentage",
+            ],
+            "common_mistakes": [
+                "Student counts on Form 471 not matching the source documentation",
+                "Using NSLP data from the wrong school year (must be within allowable period)",
+                "Not providing the actual source document (just stating the number without evidence)",
+                "Confusing free lunch count with free-and-reduced combined count",
+                "For CEP schools, not providing the identified student percentage (ISP) documentation",
+                "Enrollment figures including pre-K students who are not eligible for E-Rate",
+                "Not breaking out individual school data for consortium or multi-building applications",
+            ],
+            "relevant_rules": [
+                "47 CFR 54.505 - Discount matrix and NSLP data requirements",
+                "47 CFR 54.507(e) - Student count and NSLP percentage determination",
+                "FCC Order 14-99 (Modernization Order) para. 154-160 - CEP applicability to E-Rate",
+                "USAC Discount Rate guide - acceptable NSLP data sources",
+                "USDA CEP guidance - Community Eligibility Provision documentation",
+                "FCC Order 19-117 para. 88-92 - discount rate verification procedures",
+            ],
+            "winning_phrases": [
+                "We respectfully provide the following student enrollment and NSLP documentation to verify the discount rate claimed on Form 471 per 47 CFR 54.505.",
+                "The attached state enrollment report confirms [X] total students enrolled as of [date], which matches the student count entered on our Form 471 application.",
+                "Our NSLP percentage of [X]% is based on [CEP/direct certification/income survey] as documented in the attached [state letter/data export], consistent with 47 CFR 54.507(e).",
+                "We provide the per-building breakdown below demonstrating that each school's student count and NSLP data matches our official state reporting.",
+            ],
+            "attachments_note": "Upload the state enrollment report, NSLP source documentation (CEP letter, direct cert data, or survey results), and Form 471 Block 4 worksheet to the EPC document section.",
+        }
+
+    def _get_general_knowledge(self) -> Dict[str, Any]:
+        """Knowledge base for general/unclassified PIA questions."""
+        return {
+            "what_they_want": (
+                "The PIA reviewer is requesting additional information or documentation to verify "
+                "compliance with E-Rate program rules. While this question does not fall into a standard "
+                "category, the reviewer needs clear, specific, and well-documented responses that directly "
+                "address each point raised. PIA reviews follow USAC's standard review checklist and are "
+                "focused on verifying facts, not challenging the applicant."
+            ),
+            "key_points": [
+                "Read the question carefully and address every specific point raised",
+                "Provide concrete evidence and documentation for each claim",
+                "Reference specific dates, numbers, form numbers, and USAC records",
+                "Attach all supporting documents mentioned in your response",
+                "Maintain a cooperative, professional tone throughout",
+                "If the question references a specific rule, cite that rule in your response",
+            ],
+            "common_mistakes": [
+                "Providing vague answers without supporting documentation",
+                "Not addressing all parts of a multi-part question",
+                "Missing the 15-day response deadline",
+                "Uploading documents without referencing them in the response text",
+                "Being defensive or adversarial in tone (PIA is not adversarial)",
+            ],
+            "relevant_rules": [
+                "47 CFR 54.500-54.523 - Universal Service E-Rate program rules",
+                "USAC PIA Process Overview",
+                "FCC Order 19-117 - E-Rate program modernization",
+            ],
+            "winning_phrases": [
+                "We respectfully provide the following information in response to your review question.",
+                "The attached documentation substantiates our compliance with the applicable program requirements.",
+                "We are pleased to provide the requested evidence and remain available for any follow-up questions.",
+            ],
+            "attachments_note": "Upload all referenced supporting documents to the EPC document section for this FRN.",
         }
 
 

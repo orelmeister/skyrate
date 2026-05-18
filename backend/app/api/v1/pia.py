@@ -296,10 +296,17 @@ def _generate_pia_response_template(
     """Template-based PIA response generation (fallback when AI is unavailable)."""
     pia_service = get_pia_service()
     cat_info = pia_service.PIA_CATEGORIES.get(category, {})
+    category_knowledge = pia_service._get_category_knowledge(category)
     org_name = usac_data.get("organization_name", "[Organization Name]")
     frn_record = usac_data.get("frn_data", {})
     frn = frn_record.get("funding_request_number", "[FRN]")
     funding_year = frn_record.get("funding_year", "[Funding Year]")
+
+    # Use winning_phrases if available for a professional opener
+    winning_phrases = category_knowledge.get("winning_phrases", [])
+    opener = winning_phrases[0] if winning_phrases else (
+        "We respectfully provide the following information in response to your review question."
+    )
 
     response = f"""PIA RESPONSE
 
@@ -315,24 +322,35 @@ PIA Reviewer's Question:
 
 Response:
 
-Thank you for your question regarding {cat_info.get('name', 'this matter').lower()}. We are pleased to provide the following information and documentation in response.
+{opener}
 
 """
 
-    # Add category-specific template content
+    # Add category-specific content from key points
     key_points = strategy.get("key_response_points", [])
     if key_points:
         for i, point in enumerate(key_points, 1):
             response += f"{i}. {point}\n\n"
 
-    response += """
+    # Add attachments note if available
+    attachments_note = category_knowledge.get("attachments_note", "")
+    doc_section = f"""
 Supporting Documentation:
 
-The following documents are attached to support this response:
+{attachments_note if attachments_note else 'The following documents are attached to support this response:'}
 
-[ATTACH: See document checklist for required attachments]
+"""
+    response += doc_section
 
-Please do not hesitate to contact us if any additional information is needed.
+    # Add document checklist items
+    doc_checklist = pia_service.get_document_checklist(category, usac_data)
+    if doc_checklist:
+        for doc in doc_checklist:
+            priority_label = f"[{doc['priority'].upper()}]" if doc.get('priority') else ""
+            response += f"  - {priority_label} {doc['name']}: {doc['description']}\n"
+        response += "\n"
+
+    response += """Please do not hesitate to contact us if any additional information is needed.
 
 Respectfully,
 

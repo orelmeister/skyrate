@@ -1701,7 +1701,8 @@ class ApiClient {
     ben?: string,
     frn?: string,
     fundingYear?: number,
-    additionalContext?: string
+    additionalContext?: string,
+    category?: string
   ): Promise<ApiResponse<PIAResponseRecord>> {
     return this.request('/api/v1/pia/generate', {
       method: 'POST',
@@ -1711,6 +1712,7 @@ class ApiClient {
         frn: frn || undefined,
         funding_year: fundingYear || undefined,
         additional_context: additionalContext || undefined,
+        category: category || undefined,
       }),
     });
   }
