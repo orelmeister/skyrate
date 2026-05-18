@@ -252,6 +252,79 @@ class AIModelManager:
             prompt = messages[-1].get('content', '') if messages else ''
             return self._stub_response(prompt, "Claude", str(e))
     
+    def _rule_based_parse(self, query: str) -> Dict[str, Any]:
+        """
+        Parse a natural language query using rule-based extraction.
+        Used as fallback when AI models are unavailable.
+        """
+        import re
+
+        result: Dict[str, Any] = {"year": None, "filters": {}}
+        query_lower = query.lower()
+
+        # State extraction — full names mapped to 2-letter codes
+        state_map = {
+            'alabama': 'AL', 'alaska': 'AK', 'arizona': 'AZ', 'arkansas': 'AR',
+            'california': 'CA', 'colorado': 'CO', 'connecticut': 'CT', 'delaware': 'DE',
+            'florida': 'FL', 'georgia': 'GA', 'hawaii': 'HI', 'idaho': 'ID',
+            'illinois': 'IL', 'indiana': 'IN', 'iowa': 'IA', 'kansas': 'KS',
+            'kentucky': 'KY', 'louisiana': 'LA', 'maine': 'ME', 'maryland': 'MD',
+            'massachusetts': 'MA', 'michigan': 'MI', 'minnesota': 'MN', 'mississippi': 'MS',
+            'missouri': 'MO', 'montana': 'MT', 'nebraska': 'NE', 'nevada': 'NV',
+            'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY',
+            'north carolina': 'NC', 'north dakota': 'ND', 'ohio': 'OH', 'oklahoma': 'OK',
+            'oregon': 'OR', 'pennsylvania': 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
+            'south dakota': 'SD', 'tennessee': 'TN', 'texas': 'TX', 'utah': 'UT',
+            'vermont': 'VT', 'virginia': 'VA', 'washington': 'WA', 'west virginia': 'WV',
+            'wisconsin': 'WI', 'wyoming': 'WY', 'district of columbia': 'DC',
+        }
+        # Multi-word states first to avoid partial matches
+        for state_name in sorted(state_map.keys(), key=len, reverse=True):
+            if state_name in query_lower:
+                result['filters']['state'] = state_map[state_name]
+                break
+        # Also check for bare 2-letter abbreviations (e.g. "in CA")
+        if 'state' not in result['filters']:
+            all_abbrs = set(state_map.values())
+            for word in re.findall(r'\b([A-Z]{2})\b', query):
+                if word in all_abbrs:
+                    result['filters']['state'] = word
+                    break
+
+        # Year extraction
+        years_found = [int(y) for y in re.findall(r'\b(20\d{2})\b', query)]
+        if len(years_found) > 1:
+            result['years'] = years_found
+            result['year'] = None
+        elif len(years_found) == 1:
+            result['year'] = years_found[0]
+
+        # Status extraction
+        if any(w in query_lower for w in ['denied', 'denial', 'rejected', 'reject']):
+            result['filters']['frn_status'] = 'Denied'
+        elif any(w in query_lower for w in ['funded', 'approved', 'committed', 'awarded']):
+            result['filters']['frn_status'] = 'Funded'
+        elif any(w in query_lower for w in ['pending', 'in review', 'under review']):
+            result['filters']['frn_status'] = 'Pending'
+        elif any(w in query_lower for w in ['cancelled', 'canceled']):
+            result['filters']['frn_status'] = 'Cancelled'
+
+        # Build explanation
+        parts = []
+        if result['filters'].get('state'):
+            parts.append(f"state={result['filters']['state']}")
+        if result['filters'].get('frn_status'):
+            parts.append(f"status={result['filters']['frn_status']}")
+        if result.get('years'):
+            parts.append(f"years={result['years']}")
+        elif result.get('year'):
+            parts.append(f"year={result['year']}")
+        result['explanation'] = (
+            f"Rule-based parsing (AI unavailable): {', '.join(parts)}"
+            if parts else "Rule-based parsing: no filters extracted"
+        )
+        return result
+
     def interpret_query(self, query: str) -> Dict[str, Any]:
         """
         Interpret a natural language query into structured filters.
@@ -282,7 +355,12 @@ CRITICAL: Always include the state filter if a state is mentioned, regardless of
 Return only valid JSON, no markdown, no code blocks."""
 
         response = self.call_gemini(prompt)
-        
+
+        # If Gemini is unavailable (stub response), use rule-based fallback immediately
+        if self._is_stub_response(response):
+            logger.info("Gemini unavailable for query interpretation, using rule-based fallback")
+            return self._rule_based_parse(query)
+
         try:
             # Try to parse JSON from response
             response = response.strip()
@@ -301,12 +379,9 @@ Return only valid JSON, no markdown, no code blocks."""
                 return json.loads(response[start:end + 1])
             raise json.JSONDecodeError("No JSON found", response, 0)
         except json.JSONDecodeError:
-            # Return a default interpretation — no year/state so query is unfiltered
-            return {
-                "year": None,
-                "filters": {},
-                "explanation": f"Could not parse query: {query}. Please use structured filters."
-            }
+            # Last resort: rule-based parsing
+            logger.warning("JSON parse failed for Gemini response, using rule-based fallback")
+            return self._rule_based_parse(query)
     
     def deep_analysis(self, data: str, prompt: str, model: str = None) -> str:
         """
