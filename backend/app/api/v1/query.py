@@ -48,7 +48,7 @@ router = APIRouter(prefix="/query", tags=["Query"])
 class QueryRequest(BaseModel):
     query: str
     year: Optional[int] = None
-    limit: int = 500
+    limit: int = 1000
 
 
 class DirectSearchRequest(BaseModel):

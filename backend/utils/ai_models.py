@@ -278,18 +278,25 @@ class AIModelManager:
             'vermont': 'VT', 'virginia': 'VA', 'washington': 'WA', 'west virginia': 'WV',
             'wisconsin': 'WI', 'wyoming': 'WY', 'district of columbia': 'DC',
         }
-        # Multi-word states first to avoid partial matches
+        # Collect ALL mentioned states (multi-state queries like "Florida and Idaho")
+        found_states = []
+        remaining = query_lower
         for state_name in sorted(state_map.keys(), key=len, reverse=True):
-            if state_name in query_lower:
-                result['filters']['state'] = state_map[state_name]
-                break
+            if state_name in remaining:
+                found_states.append(state_map[state_name])
+                # Remove matched text to avoid double-matching substrings
+                remaining = remaining.replace(state_name, ' ', 1)
         # Also check for bare 2-letter abbreviations (e.g. "in CA")
-        if 'state' not in result['filters']:
+        if not found_states:
             all_abbrs = set(state_map.values())
             for word in re.findall(r'\b([A-Z]{2})\b', query):
                 if word in all_abbrs:
-                    result['filters']['state'] = word
-                    break
+                    found_states.append(word)
+        # Store single state as string, multiple as list
+        if len(found_states) == 1:
+            result['filters']['state'] = found_states[0]
+        elif len(found_states) > 1:
+            result['filters']['state'] = list(dict.fromkeys(found_states))  # dedupe, preserve order
 
         # Year extraction
         years_found = [int(y) for y in re.findall(r'\b(20\d{2})\b', query)]
@@ -312,7 +319,8 @@ class AIModelManager:
         # Build explanation
         parts = []
         if result['filters'].get('state'):
-            parts.append(f"state={result['filters']['state']}")
+            s = result['filters']['state']
+            parts.append(f"states={s}" if isinstance(s, list) else f"state={s}")
         if result['filters'].get('frn_status'):
             parts.append(f"status={result['filters']['frn_status']}")
         if result.get('years'):
