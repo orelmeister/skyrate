@@ -5,6 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
+import { PERF_V2_ENABLED } from "@/lib/featureFlags";
+// SyncFromUsacButton is available for manual cache refresh. Drop
+// `<SyncFromUsacButton onComplete={() => loadData()} />` into a header
+// when the perf_v2 UI surfaces this control.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import SyncFromUsacButton from "@/components/SyncFromUsacButton";
 import { api, ConsultantSchool, ConsultantProfile, AppealRecord, PIAResponseRecord, PIAFRNRecord, FRNWatch, FRNReportHistory } from "@/lib/api";
 import { SearchResultsTable } from "@/components/SearchResultsTable";
 import { AppealChat } from "@/components/AppealChat";
@@ -1575,7 +1581,9 @@ function ConsultantPortalPage() {
   };
 
   // Show loading state while checking payment status
-  if (!_hasHydrated || checkingPayment) {
+  // perf_v2: with the flag enabled, skip the full-screen flash — the page
+  // renders immediately and the payment check runs in the background.
+  if (!PERF_V2_ENABLED && (!_hasHydrated || checkingPayment)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
@@ -1586,7 +1594,7 @@ function ConsultantPortalPage() {
     );
   }
 
-  if (isLoading) {
+  if (!PERF_V2_ENABLED && isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">

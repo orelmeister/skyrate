@@ -1180,6 +1180,30 @@ class ApiClient {
     return this.request(`/api/v1/consultant/schools${params}`);
   }
 
+  // perf_v2: trigger a background USAC cache refresh for the current user.
+  async syncUsacCache(): Promise<ApiResponse<{ job_id: string; status: string }>> {
+    return this.request('/api/v1/consultant/sync-usac', { method: 'POST' });
+  }
+
+  async getSyncUsacStatus(jobId: string): Promise<ApiResponse<{
+    job_id: string;
+    status: string;
+    trigger: string;
+    started_at: string | null;
+    finished_at: string | null;
+    duration_ms: number | null;
+    error: string | null;
+  }>> {
+    return this.request(`/api/v1/consultant/sync-usac/${encodeURIComponent(jobId)}`);
+  }
+
+  async getSyncUsacLastStatus(): Promise<ApiResponse<{
+    last_job: any | null;
+    cache: { status: string; last_synced_at: string | null; last_error: string | null } | null;
+  }>> {
+    return this.request('/api/v1/consultant/sync-usac/_last/status');
+  }
+
   async addConsultantSchool(ben: string, notes?: string): Promise<ApiResponse<{ school: ConsultantSchool }>> {
     return this.request('/api/v1/consultant/schools', {
       method: 'POST',

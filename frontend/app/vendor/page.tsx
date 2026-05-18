@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
+import { PERF_V2_ENABLED } from "@/lib/featureFlags";
 import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse, FRNStatusResponse, FRNStatusSummaryResponse, FRNStatusRecord, Form470Lead, Form470LeadsResponse, Form470DetailResponse, SavedLead, EnrichedContactData, FRNWatch, CreateWatchRequest, FRNReportHistory } from "@/lib/api";
 import { useTabParam } from "@/hooks/useTabParam";
 import PredictedLeadsTab from "@/components/PredictedLeadsTab";
@@ -1127,7 +1128,8 @@ function VendorPortalPage() {
   };
 
   // Show loading state while checking payment status
-  if (!_hasHydrated || checkingPayment) {
+  // perf_v2: gated — see consultant/page.tsx for rationale.
+  if (!PERF_V2_ENABLED && (!_hasHydrated || checkingPayment)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
@@ -1138,7 +1140,7 @@ function VendorPortalPage() {
     );
   }
 
-  if (isLoading && !profile) {
+  if (!PERF_V2_ENABLED && isLoading && !profile) {
     return (
       <div className="min-h-screen bg-slate-50 px-4 py-8">
         <div className="max-w-7xl mx-auto space-y-6">
