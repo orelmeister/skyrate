@@ -214,6 +214,7 @@ function ConsultantPortalPage() {
   const [frnTableSort, setFrnTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
   const [schoolsTableSort, setSchoolsTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
   const [serviceSearchSort, setServiceSearchSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
+  const [fundingSchoolSort, setFundingSchoolSort] = useState<{ field: string; dir: 'asc' | 'desc' }>({ field: 'school_name', dir: 'asc' });
   const [showBenUpgradeModal, setShowBenUpgradeModal] = useState(false);
   const [upgradeBen, setUpgradeBen] = useState<string>('');
 
@@ -428,6 +429,31 @@ function ConsultantPortalPage() {
       return null;
     });
   };
+
+  // Toggle funding school table sort
+  const toggleFundingSchoolSort = (field: string) => {
+    setFundingSchoolSort(prev => {
+      if (prev.field !== field) return { field, dir: 'asc' };
+      return { field, dir: prev.dir === 'asc' ? 'desc' : 'asc' };
+    });
+  };
+
+  // Sorted funding schools
+  const sortedFundingSchools = useMemo(() => {
+    if (!fundingSummary?.schools) return [];
+    const list = [...fundingSummary.schools];
+    return list.sort((a: any, b: any) => {
+      const { field, dir } = fundingSchoolSort;
+      if (field === 'total_funding_committed' || field === 'total_funding_requested') {
+        const diff = (a[field] || 0) - (b[field] || 0);
+        return dir === 'asc' ? diff : -diff;
+      }
+      const aVal = (field === 'school_name' ? (a.school_name || a.name || '') : (a[field] || '')).toString().toLowerCase();
+      const bVal = (field === 'school_name' ? (b.school_name || b.name || '') : (b[field] || '')).toString().toLowerCase();
+      const cmp = aVal.localeCompare(bVal);
+      return dir === 'asc' ? cmp : -cmp;
+    });
+  }, [fundingSummary?.schools, fundingSchoolSort]);
 
   // Toggle service search sort
   const toggleServiceSearchSort = (field: string) => {
@@ -2276,17 +2302,27 @@ function ConsultantPortalPage() {
                     <table className="w-full text-sm">
                       <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">School</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">BEN</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">State</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Committed</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Requested</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase cursor-pointer hover:text-slate-900 select-none" onClick={() => toggleFundingSchoolSort('school_name')}>
+                            School {fundingSchoolSort.field === 'school_name' && (fundingSchoolSort.dir === 'asc' ? '↑' : '↓')}
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase cursor-pointer hover:text-slate-900 select-none" onClick={() => toggleFundingSchoolSort('ben')}>
+                            BEN {fundingSchoolSort.field === 'ben' && (fundingSchoolSort.dir === 'asc' ? '↑' : '↓')}
+                          </th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase cursor-pointer hover:text-slate-900 select-none" onClick={() => toggleFundingSchoolSort('state')}>
+                            State {fundingSchoolSort.field === 'state' && (fundingSchoolSort.dir === 'asc' ? '↑' : '↓')}
+                          </th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase cursor-pointer hover:text-slate-900 select-none" onClick={() => toggleFundingSchoolSort('total_funding_committed')}>
+                            Committed {fundingSchoolSort.field === 'total_funding_committed' && (fundingSchoolSort.dir === 'asc' ? '↑' : '↓')}
+                          </th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase cursor-pointer hover:text-slate-900 select-none" onClick={() => toggleFundingSchoolSort('total_funding_requested')}>
+                            Requested {fundingSchoolSort.field === 'total_funding_requested' && (fundingSchoolSort.dir === 'asc' ? '↑' : '↓')}
+                          </th>
                           <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Funding Years</th>
                           <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {fundingSummary.schools.map((school: any) => (
+                        {sortedFundingSchools.map((school: any) => (
                           <tr key={school.ben} className="hover:bg-slate-50 transition-colors">
                             <td className="px-4 py-3">
                               <div className="font-medium text-slate-900">{school.school_name || school.name || 'Unknown'}</div>

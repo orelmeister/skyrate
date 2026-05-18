@@ -47,10 +47,11 @@ FIELD_NAME_MAPPING = {
     'funding_year': 'funding_year',
     'application_number': 'application_number',
     'funding_request_number': 'funding_request_number',
-    'application_status': 'application_status',
+    'application_status': 'form_471_frn_status_name',
+    'frn_status': 'form_471_frn_status_name',
+    'funding_status': 'form_471_frn_status_name',
     'original_total_pre_discount_costs': 'original_total_pre_discount_costs',
     'fcdl_comment': 'fcdl_comment',
-    'frn_status': 'frn_status',
     'service_type': 'service_type',
     'applicant_type': 'applicant_type',
     
@@ -153,8 +154,10 @@ class USACDataClient:
                 mapped_field = map_field_name(field)
                 if isinstance(value, str):
                     # Handle special status values
-                    if field == 'application_status' and value.lower() == 'denied':
-                        where_conditions.append(f"{mapped_field} = 'Denied'")
+                    if field in ('application_status', 'frn_status', 'funding_status', 'form_471_frn_status_name'):
+                        # Normalize capitalization to match USAC values
+                        normalized = value.strip().capitalize()
+                        where_conditions.append(f"{mapped_field} = '{normalized}'")
                     else:
                         where_conditions.append(f"{mapped_field} = '{value}'")
                 elif isinstance(value, (int, float)):

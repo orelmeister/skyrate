@@ -267,11 +267,16 @@ class AIModelManager:
 Query: {query}
 
 Return a JSON object with:
-- year: funding year (integer, default to current year if not specified)
-- filters: object with applicable filters (state, city, ben, applicant_name, funding_status)
-- explanation: brief explanation of what you understood
+- year: funding year (integer, null if not specified or if "all years")
+- filters: object with applicable filters. Valid keys and values:
+  * state: 2-letter US state code (e.g. "NJ", "NY", "CA")
+  * city: city name string
+  * ben: billed entity number string
+  * organization_name: school or district name string
+  * frn_status: one of "Funded", "Denied", "Pending", "Cancelled" (use this for any question about approval, denial, commitment, or funding status)
+- explanation: one sentence explaining what you understood
 
-Return only valid JSON, no markdown."""
+Return only valid JSON, no markdown, no code blocks."""
 
         response = self.call_gemini(prompt)
         
