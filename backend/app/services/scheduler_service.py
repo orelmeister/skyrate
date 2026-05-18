@@ -45,13 +45,26 @@ def check_upcoming_deadlines():
     db = SessionLocal()
     try:
         alert_service = AlertService(db)
-        
-        # Get all users with deadline alerts enabled
-        configs = db.query(AlertConfig).filter(
-            AlertConfig.alert_on_deadline == True
+
+        # FIX (2026-05-18): iterate ALL active users, auto-creating their AlertConfig
+        # via get_or_create_alert_config. Previously this filtered db.query(AlertConfig)
+        # which silently skipped every user who had never visited /alerts/config -
+        # 75%+ of accounts never received any scheduled alert.
+        users = db.query(User).filter(
+            User.is_active == True
         ).all()
-        
-        for config in configs:
+
+        processed = 0
+        for user in users:
+            try:
+                config = alert_service.get_or_create_alert_config(user.id)
+            except Exception as e:
+                logger.error(f"Failed to get/create alert config for user {user.id}: {e}")
+                continue
+
+            if not config.alert_on_deadline:
+                continue
+
             try:
                 _check_user_deadlines(db, alert_service, config)
             except Exception as e:
@@ -64,8 +77,9 @@ def check_upcoming_deadlines():
                 _check_vendor_deadlines(db, alert_service, config)
             except Exception as e:
                 logger.error(f"Error checking vendor deadlines for user {config.user_id}: {e}")
-        
-        logger.info(f"Deadline check complete. Processed {len(configs)} users.")
+            processed += 1
+
+        logger.info(f"Deadline check complete. Processed {processed} of {len(users)} users.")
         
     except Exception as e:
         logger.error(f"Deadline check job failed: {e}")
@@ -1132,16 +1146,24 @@ def init_scheduler():
         return
     
     scheduler = BackgroundScheduler()
-    
-    # Deadline check - every 6 hours
+
+    # FIX (2026-05-18): Every IntervalTrigger job now sets next_run_time so the
+    # first execution happens shortly after boot. Previously, IntervalTrigger(hours=N)
+    # deferred the first run by N hours after scheduler.start(). Because the
+    # production worker restarts on every deploy (usually < 6h apart), the 6h and
+    # 12h jobs almost never fired - which is why scheduled alerts never reached users.
+    boot = datetime.utcnow()
+
+    # Deadline check - every 6 hours (first run 90s after boot)
     scheduler.add_job(
         check_upcoming_deadlines,
         trigger=IntervalTrigger(hours=6),
         id='check_deadlines',
         name='Check upcoming deadlines',
-        replace_existing=True
+        replace_existing=True,
+        next_run_time=boot + timedelta(seconds=90),
     )
-    
+
     # Daily digest - 8 AM every day
     scheduler.add_job(
         send_daily_digests,
@@ -1150,7 +1172,7 @@ def init_scheduler():
         name='Send daily digest emails',
         replace_existing=True
     )
-    
+
     # Weekly summary - Monday 9 AM
     scheduler.add_job(
         send_weekly_summaries,
@@ -1159,41 +1181,45 @@ def init_scheduler():
         name='Send weekly summary emails',
         replace_existing=True
     )
-    
-    # FRN status sync - every hour
+
+    # FRN status sync - every hour (first run 2 min after boot)
     scheduler.add_job(
         sync_frn_statuses,
         trigger=IntervalTrigger(hours=1),
         id='sync_frn_statuses',
         name='Sync FRN statuses from USAC',
-        replace_existing=True
+        replace_existing=True,
+        next_run_time=boot + timedelta(minutes=2),
     )
-    
-    # Consultant FRN status sync - every 2 hours
+
+    # Consultant FRN status sync - every 2 hours (first run 3 min after boot)
     scheduler.add_job(
         sync_consultant_frn_statuses,
         trigger=IntervalTrigger(hours=2),
         id='sync_consultant_frn_statuses',
         name='Sync consultant school FRN statuses from USAC',
-        replace_existing=True
+        replace_existing=True,
+        next_run_time=boot + timedelta(minutes=3),
     )
-    
-    # Long-pending FRN check - every 12 hours
+
+    # Long-pending FRN check - every 12 hours (first run 4 min after boot)
     scheduler.add_job(
         check_long_pending_frns,
         trigger=IntervalTrigger(hours=12),
         id='check_long_pending',
         name='Check FRNs pending > 15 days',
-        replace_existing=True
+        replace_existing=True,
+        next_run_time=boot + timedelta(minutes=4),
     )
-    
-    # Admin FRN snapshot refresh - every 6 hours
+
+    # Admin FRN snapshot refresh - every 6 hours (first run 5 min after boot)
     scheduler.add_job(
         refresh_admin_frn_snapshot,
         trigger=IntervalTrigger(hours=6),
         id='refresh_admin_frn_snapshot',
         name='Refresh admin FRN snapshot from USAC',
-        replace_existing=True
+        replace_existing=True,
+        next_run_time=boot + timedelta(minutes=5),
     )
     
     # Predictive leads refresh - weekly on Sunday 2 AM
@@ -1205,13 +1231,14 @@ def init_scheduler():
         replace_existing=True
     )
     
-    # FRN watch report processing - every hour
+    # FRN watch report processing - every hour (first run 6 min after boot)
     scheduler.add_job(
         process_frn_watch_reports,
         trigger=IntervalTrigger(hours=1),
         id='process_frn_watches',
         name='Process FRN watch email reports',
-        replace_existing=True
+        replace_existing=True,
+        next_run_time=boot + timedelta(minutes=6),
     )
     
     # Form 470 scanner - every 15 minutes (Vendor Parity Plan P2).
