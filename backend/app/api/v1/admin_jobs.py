@@ -222,3 +222,19 @@ def usac_backfill_run(
 
     background_tasks.add_task(_run)
     return {"success": True, "accepted": True, "started_at": datetime.utcnow().isoformat()}
+
+
+@router.get("/perf-summary")
+def perf_summary(
+    path_prefix: Optional[str] = None,
+    x_job_token: Optional[str] = Header(default=None, alias="X-Job-Token"),
+):
+    """perf_v2 in-memory latency summary (p50/p95/p99 + cache-hit ratio).
+
+    Used by the before/after audit script. Same X-Job-Token auth as the
+    nightly job so we don't have to thread an admin JWT through the audit
+    harness.
+    """
+    _verify_job_token(x_job_token)
+    from ...core import perf_metrics  # local import to avoid cycles at boot
+    return {"success": True, "summary": perf_metrics.summary(path_prefix=path_prefix)}

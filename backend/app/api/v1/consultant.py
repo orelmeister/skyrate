@@ -58,9 +58,17 @@ def _perf_v2_serve_cached(
     if not raw:
         return None
     try:
-        return json.loads(raw)
+        payload = json.loads(raw)
     except Exception:
         return None
+    # perf_v2 observability: tag this request as a cache hit so the
+    # PerfTimingMiddleware can record it. ContextVar is set per-request.
+    try:
+        from ...core.perf_metrics_context import set_cache_hit
+        set_cache_hit(True)
+    except Exception:
+        pass
+    return payload
 
 # Stripe for additional CRN subscriptions
 try:
