@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 import logging
 import sys
 import os
+import time
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -22,9 +23,10 @@ from starlette.responses import Response
 # Import core modules
 from app.core.config import settings
 from app.core.database import engine, Base
+from app.core import perf_metrics
 
 # Import API routers - services are imported lazily within these
-from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals, alerts, applicant, notifications, support, onboarding, blog, frn_reports, usac, portfolio_analyzer, pia, mail_campaigns, leads, public_tools, denial_hunter, denial_hunter_tracking
+from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals, alerts, applicant, notifications, support, onboarding, blog, frn_reports, usac, portfolio_analyzer, pia, mail_campaigns, leads, public_tools, denial_hunter, denial_hunter_tracking, admin_jobs
 
 # Configure logging
 logging.basicConfig(
@@ -69,6 +71,47 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
         
         return response
+
+
+class PerfTimingMiddleware(BaseHTTPMiddleware):
+    """perf_v2: record per-request latency + cache-hit flag for /v1 endpoints.
+
+    Endpoint code calls ``perf_metrics_context.set_cache_hit(True)`` when it
+    serves a response from user_usac_cache. The contextvar is read here.
+    A response header ``X-Cache: hit`` is also emitted for client visibility.
+    """
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        from app.core import perf_metrics_context
+        perf_metrics_context.reset_cache_hit()
+        start = time.perf_counter()
+        try:
+            response = await call_next(request)
+            duration_ms = (time.perf_counter() - start) * 1000.0
+            cache_hit = perf_metrics_context.get_cache_hit()
+            path = request.url.path
+            if path.startswith("/v1") or path.startswith("/api/v1"):
+                perf_metrics.record(
+                    method=request.method,
+                    path=path,
+                    duration_ms=duration_ms,
+                    status_code=response.status_code,
+                    cache_hit=cache_hit,
+                )
+            if cache_hit:
+                response.headers["X-Cache"] = "hit"
+            response.headers["Server-Timing"] = f"app;dur={duration_ms:.1f}"
+            return response
+        except Exception:
+            duration_ms = (time.perf_counter() - start) * 1000.0
+            perf_metrics.record(
+                method=request.method,
+                path=request.url.path,
+                duration_ms=duration_ms,
+                status_code=500,
+                cache_hit=False,
+            )
+            raise
 
 
 def seed_demo_accounts():
@@ -783,6 +826,9 @@ app = FastAPI(
 # Add security headers middleware
 app.add_middleware(SecurityHeadersMiddleware)
 
+# perf_v2: record per-request latency / cache-hit telemetry.
+app.add_middleware(PerfTimingMiddleware)
+
 # CORS for frontend (after security headers so they're applied)
 app.add_middleware(
     CORSMiddleware,
@@ -883,6 +929,7 @@ app.include_router(subscriptions.router, prefix="/v1")
 app.include_router(consultant.router, prefix="/v1")
 app.include_router(vendor.router, prefix="/v1")
 app.include_router(admin.router, prefix="/v1")
+app.include_router(admin_jobs.router, prefix="/v1")
 app.include_router(query.router, prefix="/v1")
 app.include_router(schools.router, prefix="/v1")
 app.include_router(appeals.router, prefix="/v1")

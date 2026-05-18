@@ -126,6 +126,13 @@ class Settings(BaseSettings):
     
     # USAC / Socrata
     SOCRATA_APP_TOKEN: Optional[str] = None
+
+    # perf_v2 single-shot performance overhaul
+    # Master flag for cache-first portal reads + USAC hydration service.
+    # When false, all new code paths fall back to the legacy live-fetch behavior.
+    PERF_V2_ENABLED: bool = False
+    # Shared secret for /v1/admin/jobs/usac-nightly-refresh (Cloud Scheduler).
+    NIGHTLY_JOB_TOKEN: Optional[str] = None
     
     # Hunter.io API for contact enrichment
     HUNTER_API_KEY: Optional[str] = None

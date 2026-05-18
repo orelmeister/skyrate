@@ -476,6 +476,15 @@ async def register(
     # Auto-import schools in background for consultants
     if data.role == "consultant" and data.crn:
         background_tasks.add_task(auto_import_schools_from_crn, user.id, data.crn.upper().strip())
+
+    # perf_v2: hydrate user_usac_cache so the first portal load is instant.
+    # Gated behind PERF_V2_ENABLED — no-op when the flag is off.
+    if settings.PERF_V2_ENABLED:
+        try:
+            from ...services.usac_hydration import hydrate_user_background
+            background_tasks.add_task(hydrate_user_background, user.id, "signup")
+        except Exception as _exc:  # pragma: no cover
+            print(f"[perf_v2] signup hydration enqueue failed: {_exc}")
     
     # Send welcome email and verification email in background
     from ...services.email_service import get_email_service
@@ -505,6 +514,7 @@ async def register(
 async def login(
     request: Request,
     data: UserLogin,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """
@@ -538,7 +548,25 @@ async def login(
     refresh_token = create_refresh_token(data={"sub": str(user.id), "role": user.role})
     
     print(f"[DEBUG] login: generated tokens for user {user.id} with role {user.role}")
-    
+
+    # perf_v2: opportunistically refresh user_usac_cache when the cache is
+    # stale (>6h) or missing. Background — never blocks login response.
+    if settings.PERF_V2_ENABLED:
+        try:
+            from ...services.usac_hydration import hydrate_user_background
+            from ...models.user_usac_cache import UserUsacCache
+            cache_row = db.query(UserUsacCache).filter(UserUsacCache.user_id == user.id).first()
+            stale = (
+                cache_row is None
+                or cache_row.last_synced_at is None
+                or (datetime.utcnow() - cache_row.last_synced_at).total_seconds() > 6 * 3600
+                or cache_row.status in ("stale", "error")
+            )
+            if stale:
+                background_tasks.add_task(hydrate_user_background, user.id, "login")
+        except Exception as _exc:  # pragma: no cover
+            print(f"[perf_v2] login hydration check failed: {_exc}")
+
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
