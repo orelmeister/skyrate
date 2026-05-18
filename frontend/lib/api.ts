@@ -1137,9 +1137,11 @@ class ApiClient {
     });
   }
 
-  async getDashboardStats(): Promise<ApiResponse<{
+  async getDashboardStats(year?: number): Promise<ApiResponse<{
+    year: number;
     total_schools: number;
     total_c2_funding: number;
+    total_c2_funding_year: number;
     total_c1_funding: number;
     total_funding: number;
     total_applications: number;
@@ -1148,7 +1150,8 @@ class ApiClient {
     pending_count: number;
     schools_with_denials: number;
   }>> {
-    return this.request('/api/v1/consultant/dashboard-stats');
+    const qs = year !== undefined && year !== null ? `?year=${year}` : '';
+    return this.request(`/api/v1/consultant/dashboard-stats${qs}`);
   }
 
   async getDeniedApplications(year?: number): Promise<ApiResponse<{

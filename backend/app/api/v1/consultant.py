@@ -1169,13 +1169,22 @@ async def validate_bens(
 
 @router.get("/dashboard-stats")
 async def get_dashboard_stats(
+    year: Optional[int] = Query(None, description="Funding year to scope Form 471 stats (defaults to current calendar year)"),
     profile: ConsultantProfile = Depends(get_consultant_profile),
     db: Session = Depends(get_db)
 ):
     """
     Get dashboard statistics for the consultant including total Category 2 funding.
     Uses C2 Budget Tool API for accurate C2 funding and Form 471 API for denials.
+
+    The Form 471 stats (total_applications, total_c1_funding, total_c2_funding_year,
+    denied_count, funded_count, pending_count) are scoped to ``year`` (default: current
+    calendar year). ``total_c2_funding`` reflects the 5-year C2 budget cycle and is NOT
+    year-scoped.
     """
+    # Default to current calendar year when not specified
+    target_year = year if year is not None else datetime.utcnow().year
+
     schools = db.query(ConsultantSchool).filter(
         ConsultantSchool.consultant_profile_id == profile.id
     ).all()
@@ -1183,8 +1192,10 @@ async def get_dashboard_stats(
     if not schools:
         return {
             "success": True,
+            "year": target_year,
             "total_schools": 0,
             "total_c2_funding": 0,
+            "total_c2_funding_year": 0,
             "total_c1_funding": 0,
             "total_applications": 0,
             "denied_count": 0,
@@ -1197,7 +1208,7 @@ async def get_dashboard_stats(
     
     # Check cache first (dashboard stats are expensive — 2 USAC API calls)
     from app.services.cache_service import get_cached, set_cached, make_cache_key
-    cache_key = make_cache_key("dashboard_stats", bens=all_bens)
+    cache_key = make_cache_key("dashboard_stats", bens=all_bens, year=target_year)
     cached = get_cached(db, cache_key)
     if cached:
         # Update total_schools from DB (may have changed)
@@ -1205,6 +1216,7 @@ async def get_dashboard_stats(
         return cached
     
     total_c2_funding = 0
+    total_c2_funding_year = 0
     total_c1_funding = 0
     total_applications = 0
     denied_count = 0
@@ -1244,11 +1256,11 @@ async def get_dashboard_stats(
             ben_filter = f"({' OR '.join(or_conditions)})"
         
         # Query Form 471 with year filter - funding_year is a string field in this dataset
-        where_clause = f"{ben_filter} AND funding_year='2025'"
+        where_clause = f"{ben_filter} AND funding_year='{target_year}'"
         form_471_data = fetch_usac_data('form_471', where_clause, limit=len(all_bens) * 50)
         
         total_applications = len(form_471_data)
-        print(f"DEBUG dashboard: Found {total_applications} Form 471 applications for 2025")
+        print(f"DEBUG dashboard: Found {total_applications} Form 471 applications for {target_year}")
         
         # Debug: Print all unique statuses in dashboard
         all_statuses = set()
@@ -1275,6 +1287,9 @@ async def get_dashboard_stats(
             # Only add C1 funding (C2 comes from C2 Budget Tool)
             if not is_c2 and status == "funded":
                 total_c1_funding += committed
+            # Year-scoped C2 funded (from Form 471) — distinct from 5-year c2_budget total
+            if is_c2 and status == "funded":
+                total_c2_funding_year += committed
             
             # Count by status
             if "denied" in status:
@@ -1291,8 +1306,10 @@ async def get_dashboard_stats(
     
     result = {
         "success": True,
+        "year": target_year,
         "total_schools": len(schools),
         "total_c2_funding": total_c2_funding,
+        "total_c2_funding_year": total_c2_funding_year,
         "total_c1_funding": total_c1_funding,
         "total_funding": total_c2_funding + total_c1_funding,
         "total_applications": total_applications,

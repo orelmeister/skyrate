@@ -75,8 +75,10 @@ interface Application {
 
 // Dashboard stats type
 interface DashboardStats {
+  year: number;
   total_schools: number;
   total_c2_funding: number;
+  total_c2_funding_year: number;
   total_c1_funding: number;
   total_funding: number;
   total_applications: number;
@@ -111,6 +113,8 @@ function ConsultantPortalPage() {
   const [schools, setSchools] = useState<EnhancedSchool[]>([]);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [dashboardYear, setDashboardYear] = useState<number>(new Date().getFullYear());
+  const [prevYearStats, setPrevYearStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddSchool, setShowAddSchool] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -697,6 +701,14 @@ function ConsultantPortalPage() {
     }
   }, [frnParam, benParam, isLoading, checkingPayment]);
 
+  // Reload dashboard stats whenever the user picks a different funding year
+  useEffect(() => {
+    if (!checkingPayment) {
+      loadDashboardStats(dashboardYear);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dashboardYear]);
+
   const loadData = async (withUsacData: boolean = false) => {
     setIsLoading(true);
     try {
@@ -728,12 +740,21 @@ function ConsultantPortalPage() {
     }
   };
 
-  const loadDashboardStats = async () => {
+  const loadDashboardStats = async (year?: number) => {
+    const targetYear = year ?? dashboardYear;
     setIsLoadingStats(true);
     try {
-      const response = await api.getDashboardStats();
+      const [response, prevResponse] = await Promise.all([
+        api.getDashboardStats(targetYear),
+        api.getDashboardStats(targetYear - 1),
+      ]);
       if (response.success && response.data) {
         setDashboardStats(response.data);
+      }
+      if (prevResponse.success && prevResponse.data) {
+        setPrevYearStats(prevResponse.data);
+      } else {
+        setPrevYearStats(null);
       }
     } catch (error) {
       console.error("Failed to load dashboard stats:", error);
@@ -1777,7 +1798,7 @@ function ConsultantPortalPage() {
             <div className="space-y-6">
               {/* Hero Banner */}
               <div className="bg-gradient-to-r from-purple-600 via-purple-700 to-pink-600 rounded-2xl p-6 text-white shadow-lg">
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between flex-wrap gap-3">
                   <div className="flex items-center gap-4">
                     <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
                       <span className="text-3xl">📋</span>
@@ -1795,35 +1816,69 @@ function ConsultantPortalPage() {
                       </div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => setActiveTab("schools")}
-                    className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
-                  >
-                    View All Schools →
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="dashboard-year" className="text-sm text-purple-100 font-medium">Funding Year:</label>
+                    <select
+                      id="dashboard-year"
+                      value={dashboardYear}
+                      onChange={(e) => setDashboardYear(parseInt(e.target.value, 10))}
+                      className="bg-white/20 hover:bg-white/30 border border-white/30 rounded-lg px-3 py-1.5 text-sm font-semibold text-white backdrop-blur cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/40"
+                    >
+                      {(() => {
+                        const currentYear = new Date().getFullYear();
+                        const years: number[] = [];
+                        for (let y = currentYear + 1; y >= currentYear - 6; y--) years.push(y);
+                        return years.map((y) => (
+                          <option key={y} value={y} className="text-slate-900">FY{y}</option>
+                        ));
+                      })()}
+                    </select>
+                    <button
+                      onClick={() => setActiveTab("schools")}
+                      className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
+                    >
+                      View All Schools →
+                    </button>
+                  </div>
                 </div>
-                <div className="grid grid-cols-4 gap-6 mt-6 pt-6 border-t border-white/20">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-6 mt-6 pt-6 border-t border-white/20">
                   <div>
                     <div className="text-3xl font-bold">{schools.length}</div>
                     <div className="text-sm text-purple-200 mt-1">Total Schools</div>
                   </div>
                   <div>
                     <div className="text-3xl font-bold">
-                      {isLoadingStats ? '...' : dashboardStats ? `$${(dashboardStats.total_c2_funding / 1000000).toFixed(1)}M` : '$0'}
-                    </div>
-                    <div className="text-sm text-purple-200 mt-1">C2 Funding</div>
-                  </div>
-                  <div>
-                    <div className="text-3xl font-bold">
                       {isLoadingStats ? '...' : (dashboardStats?.total_applications || 0)}
                     </div>
-                    <div className="text-sm text-purple-200 mt-1">Total Applications</div>
+                    <div className="text-sm text-purple-200 mt-1">FY{dashboardYear} Applications</div>
+                    {prevYearStats && !isLoadingStats && (
+                      <div className="text-xs text-purple-200/80 mt-0.5">
+                        {(() => {
+                          const delta = (dashboardStats?.total_applications || 0) - (prevYearStats.total_applications || 0);
+                          const sign = delta > 0 ? '+' : '';
+                          const color = delta > 0 ? 'text-green-300' : delta < 0 ? 'text-red-300' : 'text-purple-200/80';
+                          return <span className={color}>{sign}{delta} vs FY{dashboardYear - 1}</span>;
+                        })()}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <div className="text-3xl font-bold">
                       {isLoadingStats ? '...' : `${dashboardStats?.funded_count || 0}`}
                     </div>
                     <div className="text-sm text-purple-200 mt-1">Funded Apps</div>
+                  </div>
+                  <div>
+                    <div className="text-3xl font-bold">
+                      {isLoadingStats ? '...' : dashboardStats ? `$${(dashboardStats.total_c1_funding / 1000000).toFixed(1)}M` : '$0'}
+                    </div>
+                    <div className="text-sm text-purple-200 mt-1">C1 Funded (FY{dashboardYear})</div>
+                  </div>
+                  <div>
+                    <div className="text-3xl font-bold">
+                      {isLoadingStats ? '...' : dashboardStats ? `$${(dashboardStats.total_c2_funding / 1000000).toFixed(1)}M` : '$0'}
+                    </div>
+                    <div className="text-sm text-purple-200 mt-1">C2 Budget (5-yr)</div>
                   </div>
                 </div>
               </div>
@@ -1843,25 +1898,63 @@ function ConsultantPortalPage() {
 
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
                   <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
-                      <span className="text-2xl">💰</span>
+                    <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
+                      <span className="text-2xl">📡</span>
                     </div>
                     {isLoadingStats ? (
                       <span className="text-xs text-slate-400 font-medium px-2 py-1 bg-slate-50 rounded-full">Loading...</span>
                     ) : (
-                      <span className="text-xs text-green-600 font-medium px-2 py-1 bg-green-50 rounded-full">C2</span>
+                      <span className="text-xs text-blue-600 font-medium px-2 py-1 bg-blue-50 rounded-full">C1 · FY{dashboardYear}</span>
                     )}
                   </div>
                   <div className="text-3xl font-bold text-slate-900">
                     {isLoadingStats ? (
                       <span className="text-slate-400">...</span>
                     ) : dashboardStats ? (
-                      `$${(dashboardStats.total_c2_funding / 1000000).toFixed(1)}M`
+                      `$${(dashboardStats.total_c1_funding / 1000000).toFixed(2)}M`
                     ) : (
                       "$0"
                     )}
                   </div>
-                  <div className="text-sm text-slate-500 mt-1">Category 2 Funding</div>
+                  <div className="text-sm text-slate-500 mt-1">Category 1 Funded</div>
+                  {prevYearStats && !isLoadingStats && (
+                    <div className="text-xs text-slate-400 mt-1">
+                      {(() => {
+                        const delta = (dashboardStats?.total_c1_funding || 0) - (prevYearStats.total_c1_funding || 0);
+                        const sign = delta > 0 ? '+' : '';
+                        const color = delta > 0 ? 'text-green-600' : delta < 0 ? 'text-red-600' : 'text-slate-400';
+                        return <span className={color}>{sign}${(delta / 1000000).toFixed(2)}M vs FY{dashboardYear - 1}</span>;
+                      })()}
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
+                      <span className="text-2xl">💰</span>
+                    </div>
+                    {isLoadingStats ? (
+                      <span className="text-xs text-slate-400 font-medium px-2 py-1 bg-slate-50 rounded-full">Loading...</span>
+                    ) : (
+                      <span className="text-xs text-green-600 font-medium px-2 py-1 bg-green-50 rounded-full">C2 · 5-yr cycle</span>
+                    )}
+                  </div>
+                  <div className="text-3xl font-bold text-slate-900">
+                    {isLoadingStats ? (
+                      <span className="text-slate-400">...</span>
+                    ) : dashboardStats ? (
+                      `$${(dashboardStats.total_c2_funding / 1000000).toFixed(2)}M`
+                    ) : (
+                      "$0"
+                    )}
+                  </div>
+                  <div className="text-sm text-slate-500 mt-1">Category 2 Funded</div>
+                  {!isLoadingStats && dashboardStats && dashboardStats.total_c2_funding_year > 0 && (
+                    <div className="text-xs text-slate-400 mt-1">
+                      ${(dashboardStats.total_c2_funding_year / 1000000).toFixed(2)}M committed in FY{dashboardYear}
+                    </div>
+                  )}
                 </div>
                 
                 <div 
@@ -1888,19 +1981,29 @@ function ConsultantPortalPage() {
                 
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
                   <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center">
                       <span className="text-2xl">📊</span>
                     </div>
                     {isLoadingStats ? (
                       <span className="text-xs text-slate-400 font-medium px-2 py-1 bg-slate-50 rounded-full">Loading...</span>
                     ) : (
-                      <span className="text-xs text-blue-600 font-medium px-2 py-1 bg-blue-50 rounded-full">{dashboardStats?.funded_count || 0} funded</span>
+                      <span className="text-xs text-indigo-600 font-medium px-2 py-1 bg-indigo-50 rounded-full">FY{dashboardYear} · {dashboardStats?.funded_count || 0} funded</span>
                     )}
                   </div>
                   <div className="text-3xl font-bold text-slate-900">
                     {isLoadingStats ? "..." : (dashboardStats?.total_applications || 0)}
                   </div>
-                  <div className="text-sm text-slate-500 mt-1">Total Applications</div>
+                  <div className="text-sm text-slate-500 mt-1">FY{dashboardYear} Applications</div>
+                  {prevYearStats && !isLoadingStats && (
+                    <div className="text-xs text-slate-400 mt-1">
+                      {(() => {
+                        const delta = (dashboardStats?.total_applications || 0) - (prevYearStats.total_applications || 0);
+                        const sign = delta > 0 ? '+' : '';
+                        const color = delta > 0 ? 'text-green-600' : delta < 0 ? 'text-red-600' : 'text-slate-400';
+                        return <span className={color}>{sign}{delta} vs FY{dashboardYear - 1}</span>;
+                      })()}
+                    </div>
+                  )}
                 </div>
               </div>
 
