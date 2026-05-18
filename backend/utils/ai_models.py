@@ -286,13 +286,24 @@ Return only valid JSON, no markdown, no code blocks."""
         try:
             # Try to parse JSON from response
             response = response.strip()
+            # Strip markdown code fences if present
             if response.startswith('```'):
                 response = response.split('\n', 1)[1].rsplit('\n', 1)[0]
-            return json.loads(response)
+            # Try direct parse first
+            try:
+                return json.loads(response)
+            except json.JSONDecodeError:
+                pass
+            # Fallback: extract JSON object from anywhere in the response
+            start = response.find('{')
+            end = response.rfind('}')
+            if start != -1 and end != -1 and end > start:
+                return json.loads(response[start:end + 1])
+            raise json.JSONDecodeError("No JSON found", response, 0)
         except json.JSONDecodeError:
-            # Return a default interpretation
+            # Return a default interpretation — no year/state so query is unfiltered
             return {
-                "year": 2025,
+                "year": None,
                 "filters": {},
                 "explanation": f"Could not parse query: {query}. Please use structured filters."
             }
