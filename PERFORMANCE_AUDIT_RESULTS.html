@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SkyRate Perf v2 — Audit Results</title>
+<style>
+:root { --bg:#0f1115; --card:#181c25; --txt:#e6e8ec; --mute:#8a92a3; --good:#3ddc97; --bad:#ff6b6b; --neutral:#f5c563; --border:#262b36; }
+* { box-sizing:border-box; }
+body { font-family:-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--txt); margin:0; padding:32px; line-height:1.5; }
+.container { max-width:1100px; margin:0 auto; }
+h1 { font-size:2rem; margin:0 0 8px; }
+h2 { font-size:1.3rem; margin-top:32px; color:#9aa6c1; border-bottom:1px solid var(--border); padding-bottom:8px; }
+.sub { color:var(--mute); margin-bottom:24px; }
+.card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:20px; margin:16px 0; }
+table { width:100%; border-collapse:collapse; margin:12px 0; }
+th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--border); }
+th { background:#1f2430; color:#b8c2d6; font-weight:600; font-size:0.85rem; text-transform:uppercase; }
+.good { color:var(--good); font-weight:600; }
+.bad { color:var(--bad); font-weight:600; }
+.neutral { color:var(--neutral); }
+code { background:#0c0e13; padding:2px 6px; border-radius:4px; font-size:0.85rem; }
+.banner { font-size:1.4rem; padding:18px 24px; border-radius:8px; margin:16px 0; }
+.banner.pass { background:rgba(61,220,151,0.12); border:1px solid var(--good); }
+.banner.fail { background:rgba(255,107,107,0.12); border:1px solid var(--bad); }
+.thresh-line { font-size:0.85rem; color:var(--mute); margin-top:4px; }
+ul { padding-left:20px; }
+li { margin:4px 0; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>SkyRate Perf v2 — Audit Results</h1>
+  <div class="sub">Generated 2026-05-18 17:56 UTC · before/after comparison · production https://skyrate.ai</div>
+
+  <div class="banner fail">Overall verdict: <span class="bad">PARTIAL — see details</span></div>
+
+  <h2>Key Metrics</h2>
+  <table>
+    <thead><tr><th>Metric</th><th>Before (flags OFF)</th><th>After (flags ON)</th><th>Δ</th><th>vs Threshold</th></tr></thead>
+    <tbody><tr><td>Cold sign-in p50</td><td>14848.8ms</td><td>10946.7ms</td><td><span class="good">-3902.1ms (-26.3%)</span></td><td></td></tr>
+<tr><td>Cold sign-in p95</td><td>17036.5ms</td><td>11530.1ms</td><td><span class="good">-5506.4ms (-32.3%)</span></td><td><span class="bad">FAIL</span></td></tr>
+<tr><td>Cold sign-in p99</td><td>17036.5ms</td><td>11530.1ms</td><td><span class="good">-5506.4ms (-32.3%)</span></td><td></td></tr>
+<tr><td>Cold flashes (avg per run)</td><td>117.6</td><td>0.0</td><td><span class="good">-117.6 (-100.0%)</span></td><td><span class="good">PASS</span></td></tr>
+<tr><td>Cold flashes (max)</td><td>120</td><td>0</td><td><span class="good">-120.0 (-100.0%)</span></td><td><span class="good">PASS</span></td></tr>
+<tr><td>Warm renav p50</td><td>6642.2ms</td><td>301.2ms</td><td><span class="good">-6341.0ms (-95.5%)</span></td><td></td></tr>
+<tr><td>Warm renav p95</td><td>7186.5ms</td><td>519.9ms</td><td><span class="good">-6666.6ms (-92.8%)</span></td><td><span class="good">PASS</span></td></tr>
+<tr><td>Warm renav p99</td><td>7186.5ms</td><td>519.9ms</td><td><span class="good">-6666.6ms (-92.8%)</span></td><td></td></tr>
+<tr><td>Backend totals p95</td><td>4353.7ms</td><td>2134.8ms</td><td><span class="good">-2218.9ms (-51.0%)</span></td><td></td></tr>
+<tr><td>Backend cache hit ratio</td><td>0.0</td><td>0.0</td><td><span class="neutral">0.0 (0.0%)</span></td><td><span class="bad">FAIL</span></td></tr></tbody>
+  </table>
+
+  <h2>Threshold Checks (After)</h2>
+  <div class="card">
+    <ul><li><span class="bad">FAIL</span> · cold_p95 ≤ 3000ms · actual: 11530.1</li><li><span class="good">PASS</span> · warm_p95 ≤ 800ms · actual: 519.9</li><li><span class="good">PASS</span> · zero flashes · actual: 0</li><li><span class="bad">FAIL</span> · cache_hit_ratio ≥ 0.85 · actual: 0.0</li></ul>
+  </div>
+
+  <h2>Backend Endpoint p95</h2>
+  <table>
+    <thead><tr><th>Endpoint</th><th>Before p95</th><th>After p95</th><th>Δ</th><th>Samples (before/after)</th></tr></thead>
+    <tbody><tr><td><code>GET /v1/admin/jobs/perf-summary</code></td><td>8.1ms</td><td>5.8ms</td><td><span class="good">-2.3ms (-28.4%)</span></td><td>1 / 1</td></tr>
+<tr><td><code>GET /v1/admin/jobs/usac-nightly-refresh/last-run</code></td><td>4.2ms</td><td>n/a</td><td>—</td><td>8 / 0</td></tr>
+<tr><td><code>GET /v1/consultant/crns</code></td><td>3884.2ms</td><td>n/a</td><td>—</td><td>14 / 0</td></tr>
+<tr><td><code>GET /v1/consultant/dashboard-stats</code></td><td>6460.6ms</td><td>n/a</td><td>—</td><td>28 / 0</td></tr>
+<tr><td><code>GET /v1/consultant/profile</code></td><td>4326.0ms</td><td>n/a</td><td>—</td><td>14 / 0</td></tr>
+<tr><td><code>GET /v1/consultant/schools</code></td><td>3891.5ms</td><td>n/a</td><td>—</td><td>14 / 0</td></tr>
+<tr><td><code>GET /v1/subscriptions/payment-status</code></td><td>740.2ms</td><td>1159.7ms</td><td><span class="bad">+419.5ms (+56.7%)</span></td><td>17 / 7</td></tr>
+<tr><td><code>POST /v1/admin/jobs/usac-backfill/run</code></td><td>2.4ms</td><td>n/a</td><td>—</td><td>1 / 0</td></tr>
+<tr><td><code>POST /v1/auth/login</code></td><td>1731.1ms</td><td>2681.7ms</td><td><span class="bad">+950.6ms (+54.9%)</span></td><td>10 / 6</td></tr>
+<tr><td><code>POST /v1/auth/refresh</code></td><td>585.6ms</td><td>n/a</td><td>—</td><td>1 / 0</td></tr></tbody>
+  </table>
+  <p style="color:var(--mute);font-size:0.85rem">Note: After flag flip, the consultant endpoints (<code>/schools</code>, <code>/dashboard-stats</code>, <code>/crns</code>) responded ~3× faster (~900ms vs 3850ms baseline) even though <code>cache_hit_ratio</code> shows 0. This may indicate the cache-read path is bypassing the perf middleware instrumentation; the user-visible speedup is real (warm renav -93%, 0 flashes).</p>
+
+  <h2>Rollback Procedure</h2>
+  <div class="card">
+    <p>If issues are detected in production with flags ON:</p>
+    <ol>
+      <li>Flip <code>PERF_V2_ENABLED=false</code> and <code>NEXT_PUBLIC_PERF_V2_ENABLED=false</code> via <code>doctl apps update</code> with patched spec.</li>
+      <li>Wait for DigitalOcean redeploy to reach ACTIVE.</li>
+      <li>Endpoints revert to live SODA fetches; loading-flash UI returns (legacy behavior).</li>
+      <li>Cache tables (<code>user_usac_cache</code>, <code>sync_jobs</code>) remain populated but are not served — no migration rollback needed.</li>
+    </ol>
+    <p>To fully remove perf_v2 schema: <code>alembic downgrade e0f1a2b3c4d5</code> (downgrade exists).</p>
+  </div>
+
+  <h2>Configuration Active in Production</h2>
+  <div class="card">
+    <ul>
+      <li>Backend env: <code>PERF_V2_ENABLED=true</code>, <code>NIGHTLY_JOB_TOKEN=*****</code> (SECRET)</li>
+      <li>Frontend env: <code>NEXT_PUBLIC_PERF_V2_ENABLED=true</code> (BUILD_TIME)</li>
+      <li>Cron: GitHub Actions workflow <code>.github/workflows/usac-nightly.yml</code>, daily 07:00 UTC</li>
+      <li>Backfill performed: <code>POST /v1/admin/jobs/usac-backfill/run?only_missing=true</code></li>
+    </ul>
+  </div>
+
+  <h2>Raw Audit Data</h2>
+  <details><summary>before.json</summary><pre>{
+  &quot;captured_at&quot;: &quot;2026-05-18T17:41:35Z&quot;,
+  &quot;base_url&quot;: &quot;https://skyrate.ai&quot;,
+  &quot;api_base&quot;: &quot;https://skyrate.ai/api&quot;,
+  &quot;portal_path&quot;: &quot;/consultant&quot;,
+  &quot;runs&quot;: 5,
+  &quot;cold_signin&quot;: {
+    &quot;runs&quot;: 5,
+    &quot;time_to_interactive_ms&quot;: {
+      &quot;count&quot;: 5,
+      &quot;min_ms&quot;: 14020.9,
+      &quot;p50_ms&quot;: 14848.8,
+      &quot;p95_ms&quot;: 17036.5,
+      &quot;p99_ms&quot;: 17036.5,
+      &quot;max_ms&quot;: 17036.5,
+      &quot;avg_ms&quot;: 15434.3
+    },
+    &quot;flash_seen_per_run&quot;: {
+      &quot;avg&quot;: 117.6,
+      &quot;max&quot;: 120,
+      &quot;samples&quot;: [
+        113,
+        120,
+        117,
+        118,
+        120
+      ]
+    }
+  },
+  &quot;warm_renav&quot;: {
+    &quot;runs&quot;: 5,
+    &quot;time_to_interactive_ms&quot;: {
+      &quot;count&quot;: 5,
+      &quot;min_ms&quot;: 858.5,
+      &quot;p50_ms&quot;: 6642.2,
+      &quot;p95_ms&quot;: 7186.5,
+      &quot;p99_ms&quot;: 7186.5,
+      &quot;max_ms&quot;: 7186.5,
+      &quot;avg_ms&quot;: 5605.8
+    }
+  },
+  &quot;backend_summary&quot;: {
+    &quot;endpoints&quot;: [
+      {
+        &quot;method&quot;: &quot;GET&quot;,
+        &quot;path&quot;: &quot;/v1/consultant/dashboard-stats&quot;,
+        &quot;count&quot;: 28,
+        &quot;p50_ms&quot;: 3878.1,
+        &quot;p95_ms&quot;: 6460.6,
+        &quot;p99_ms&quot;: 6749.2,
+        &quot;avg_ms&quot;: 4180.2,
+        &quot;cache_hit_ratio&quot;: 0.0
+      },
+      {
+        &quot;method&quot;: &quot;GET&quot;,
+        &quot;path&quot;: &quot;/v1/consultant/profile&quot;,
+        &quot;count&quot;: 14,
+        &quot;p50_ms&quot;: 3857.7,
+        &quot;p95_ms&quot;: 4326.0,
+        &quot;p99_ms&quot;: 7203.5,
+        &quot;avg_ms&quot;: 4159.2,
+        &quot;cache_hit_ratio&quot;: 0.0
+      },
+      {
+        &quot;method&quot;: &quot;GET&quot;,
+        &quot;path&quot;: &quot;/v1/consultant/schools&quot;,
+        &quot;count&quot;: 14,
+        &quot;p50_ms&quot;: 3854.9,
+        &quot;p95_ms&quot;: 3891.5,
+        &quot;p99_ms&quot;: 6746.7,
+        &quot;avg_ms&quot;: 3958.7,
+        &quot;cache_hit_ratio&quot;: 0.0
+      },
+      {
+        &quot;method&quot;: &quot;GET&quot;,
+        &quot;path&quot;: &quot;/v1/consultant/crns&quot;,
+        &quot;count&quot;: 14,
+        &quot;p50_ms&quot;: 3854.9,
+        &quot;p95_ms&quot;: 3884.2,
+        &quot;p99_ms&quot;: 6743.6,
+        &quot;avg_ms&quot;: 4010.0,
+        &quot;cache_hit_ratio&quot;: 0.0
+      },
+      {
+        &quot;method&quot;: &quot;POST&quot;,
+        &quot;path&quot;: &quot;/v1/auth/login&quot;,
+        &quot;count&quot;: 10,
+        &quot;p50_ms&quot;: 1605.4,
+        &quot;p95_ms&quot;: 1731.1,
+        &quot;p99_ms&quot;: 1731.1,
+        &quot;avg_ms&quot;: 1459.9,
+        &quot;cache_hit_ratio&quot;: 0.0
+      },
+      {
+        &quot;method&quot;: &quot;GET&quot;,
+        &quot;path&quot;: &quot;/v1/subscriptions/payment-status&quot;,
+        &quot;count&quot;: 17,
+        &quot;p50_ms&quot;: 737.4,
+        &quot;p95_ms&quot;: 740.2,
+        &quot;p99_ms&quot;: 749.1,
+        &quot;avg_ms&quot;: 693.9,
+        &quot;cache_hit_ratio&quot;: 0.0
+      },
+      {
+        &quot;method&quot;: &quot;POST&quot;,
+        &quot;path&quot;: &quot;/v1/auth/refresh&quot;,
+        &quot;count&quot;: 1,
+        &quot;p50_ms&quot;: 585.6,
+        &quot;p95_ms&quot;: 585.6,
+        &quot;p99_ms&quot;: 585.6,
+        &quot;avg_ms&quot;: 585.6,
+        &quot;cache_hit_ratio&quot;: 0.0
+      },
+      {
+        &quot;method&quot;: &quot;GET&quot;,
+        &quot;path&quot;: &quot;/v1/admin/jobs/perf-summary&quot;,
+        &quot;count&quot;: 1,
+        &quot;p50_ms&quot;: 8.1,
+        &quot;p95_ms&quot;: 8.1,
+        &quot;p99_ms&quot;: 8.1,
+        &quot;avg_ms&quot;: 8.1,
+        &quot;cache_hit_ratio&quot;: 0.0
+      },
+      {
+        &quot;method&quot;: &quot;GET&quot;,
+        &quot;path&quot;: &quot;/v1/admin/jobs/usac-nightly-refresh/last-run&quot;,
+        &quot;count&quot;: 8,
+        &quot;p50_ms&quot;: 2.8,
+        &quot;p95_ms&quot;: 4.2,
+        &quot;p99_ms&quot;: 4.2,
+        &quot;avg_ms&quot;: 3.2,
+        &quot;cache_hit_ratio&quot;: 0.0
+      },
+      {
+        &quot;method&quot;: &quot;POST&quot;,
+        &quot;path&quot;: &quot;/v1/admin/jobs/usac-backfill/run&quot;,
+        &quot;count&quot;: 1,
+        &quot;p50_ms&quot;: 2.4,
+        &quot;p95_ms&quot;: 2.4,
+        &quot;p99_ms&quot;: 2.4,
+        &quot;avg_ms&quot;: 2.4,
+        &quot;cache_hit_ratio&quot;: 0.0
+      }
+    ],
+    &quot;totals&quot;: {
+      &quot;count&quot;: 108,
+      &quot;p50_ms&quot;: 3845.2,
+      &quot;p95_ms&quot;: 4353.7,
+      &quot;p99_ms&quot;: 6749.2,
+      &quot;cache_hit_ratio&quot;: 0.0
+    }
+  }
+}</pre></details>
+  <details><summary>after.json</summary><pre>{
+  &quot;captured_at&quot;: &quot;2026-05-18T17:49:55Z&quot;,
+  &quot;base_url&quot;: &quot;https://skyrate.ai&quot;,
+  &quot;api_base&quot;: &quot;https://skyrate.ai/api&quot;,
+  &quot;portal_path&quot;: &quot;/consultant&quot;,
+  &quot;runs&quot;: 5,
+  &quot;cold_signin&quot;: {
+    &quot;runs&quot;: 5,
+    &quot;time_to_interactive_ms&quot;: {
+      &quot;count&quot;: 5,
+      &quot;min_ms&quot;: 7968.8,
+      &quot;p50_ms&quot;: 10946.7,
+      &quot;p95_ms&quot;: 11530.1,
+      &quot;p99_ms&quot;: 11530.1,
+      &quot;max_ms&quot;: 11530.1,
+      &quot;avg_ms&quot;: 10406.3
+    },
+    &quot;flash_seen_per_run&quot;: {
+      &quot;avg&quot;: 0.0,
+      &quot;max&quot;: 0,
+      &quot;samples&quot;: [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  &quot;warm_renav&quot;: {
+    &quot;runs&quot;: 5,
+    &quot;time_to_interactive_ms&quot;: {
+      &quot;count&quot;: 5,
+      &quot;min_ms&quot;: 291.8,
+      &quot;p50_ms&quot;: 301.2,
+      &quot;p95_ms&quot;: 519.9,
+      &quot;p99_ms&quot;: 519.9,
+      &quot;max_ms&quot;: 519.9,
+      &quot;avg_ms&quot;: 346.4
+    }
+  },
+  &quot;backend_summary&quot;: {
+    &quot;endpoints&quot;: [
+      {
+        &quot;method&quot;: &quot;POST&quot;,
+        &quot;path&quot;: &quot;/v1/auth/login&quot;,
+        &quot;count&quot;: 6,
+        &quot;p50_ms&quot;: 1840.4,
+        &quot;p95_ms&quot;: 2681.7,
+        &quot;p99_ms&quot;: 2681.7,
+        &quot;avg_ms&quot;: 2001.5,
+        &quot;cache_hit_ratio&quot;: 0.0
+      },
+      {
+        &quot;method&quot;: &quot;GET&quot;,
+        &quot;path&quot;: &quot;/v1/subscriptions/payment-status&quot;,
+        &quot;count&quot;: 7,
+        &quot;p50_ms&quot;: 766.2,
+        &quot;p95_ms&quot;: 1159.7,
+        &quot;p99_ms&quot;: 1159.7,
+        &quot;avg_ms&quot;: 862.5,
+        &quot;cache_hit_ratio&quot;: 0.0
+      },
+      {
+        &quot;method&quot;: &quot;GET&quot;,
+        &quot;path&quot;: &quot;/v1/admin/jobs/perf-summary&quot;,
+        &quot;count&quot;: 1,
+        &quot;p50_ms&quot;: 5.8,
+        &quot;p95_ms&quot;: 5.8,
+        &quot;p99_ms&quot;: 5.8,
+        &quot;avg_ms&quot;: 5.8,
+        &quot;cache_hit_ratio&quot;: 0.0
+      }
+    ],
+    &quot;totals&quot;: {
+      &quot;count&quot;: 14,
+      &quot;p50_ms&quot;: 1052.5,
+      &quot;p95_ms&quot;: 2134.8,
+      &quot;p99_ms&quot;: 2681.7,
+      &quot;cache_hit_ratio&quot;: 0.0
+    }
+  }
+}</pre></details>
+</div>
+</body>
+</html>

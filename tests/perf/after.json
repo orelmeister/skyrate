@@ -1,0 +1,83 @@
+{
+  "captured_at": "2026-05-18T17:49:55Z",
+  "base_url": "https://skyrate.ai",
+  "api_base": "https://skyrate.ai/api",
+  "portal_path": "/consultant",
+  "runs": 5,
+  "cold_signin": {
+    "runs": 5,
+    "time_to_interactive_ms": {
+      "count": 5,
+      "min_ms": 7968.8,
+      "p50_ms": 10946.7,
+      "p95_ms": 11530.1,
+      "p99_ms": 11530.1,
+      "max_ms": 11530.1,
+      "avg_ms": 10406.3
+    },
+    "flash_seen_per_run": {
+      "avg": 0.0,
+      "max": 0,
+      "samples": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  },
+  "warm_renav": {
+    "runs": 5,
+    "time_to_interactive_ms": {
+      "count": 5,
+      "min_ms": 291.8,
+      "p50_ms": 301.2,
+      "p95_ms": 519.9,
+      "p99_ms": 519.9,
+      "max_ms": 519.9,
+      "avg_ms": 346.4
+    }
+  },
+  "backend_summary": {
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/v1/auth/login",
+        "count": 6,
+        "p50_ms": 1840.4,
+        "p95_ms": 2681.7,
+        "p99_ms": 2681.7,
+        "avg_ms": 2001.5,
+        "cache_hit_ratio": 0.0
+      },
+      {
+        "method": "GET",
+        "path": "/v1/subscriptions/payment-status",
+        "count": 7,
+        "p50_ms": 766.2,
+        "p95_ms": 1159.7,
+        "p99_ms": 1159.7,
+        "avg_ms": 862.5,
+        "cache_hit_ratio": 0.0
+      },
+      {
+        "method": "GET",
+        "path": "/v1/admin/jobs/perf-summary",
+        "count": 1,
+        "p50_ms": 5.8,
+        "p95_ms": 5.8,
+        "p99_ms": 5.8,
+        "avg_ms": 5.8,
+        "cache_hit_ratio": 0.0
+      }
+    ],
+    "totals": {
+      "count": 14,
+      "p50_ms": 1052.5,
+      "p95_ms": 2134.8,
+      "p99_ms": 2681.7,
+      "cache_hit_ratio": 0.0
+    }
+  }
+}

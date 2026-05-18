@@ -98,55 +98,73 @@ async def measure_cold_signin(
                 # navigation runs in parallel. We count appearances so the
                 # before-vs-after delta reflects the UX improvement.
                 nonlocal flash_count
-                deadline = time.perf_counter() + 15.0
-                while time.perf_counter() < deadline:
-                    try:
-                        text = await page.inner_text("body", timeout=250)
-                        if (
-                            "Verifying your subscription" in text
-                            or "Loading your dashboard" in text
-                        ):
-                            flash_count += 1
-                            await asyncio.sleep(0.05)
-                            continue
-                        if portal_path.strip("/") and page.url.endswith(portal_path):
-                            return
-                    except Exception:
-                        pass
-                    await asyncio.sleep(0.1)
+                deadline = time.perf_counter() + 25.0
+                try:
+                    while time.perf_counter() < deadline:
+                        try:
+                            text = await page.inner_text("body", timeout=250)
+                            if (
+                                "Verifying your subscription" in text
+                                or "Loading your dashboard" in text
+                            ):
+                                flash_count += 1
+                                await asyncio.sleep(0.05)
+                                continue
+                            if portal_path.strip("/") and page.url.endswith(portal_path):
+                                return
+                        except Exception:
+                            pass
+                        await asyncio.sleep(0.1)
+                except asyncio.CancelledError:
+                    return
 
-            start = time.perf_counter()
-            await page.goto(f"{base_url}/sign-in", wait_until="domcontentloaded")
-            await page.fill('input[type="email"]', email)
-            await page.fill('input[type="password"]', password)
-            # Kick off flash probe in parallel.
-            probe_task = asyncio.create_task(_flash_probe())
-            await page.click('button[type="submit"]')
-
-            # Wait until URL matches portal AND no flash text is visible.
+            probe_task = None
             try:
-                await page.wait_for_url(f"**{portal_path}*", timeout=20_000)
+                start = time.perf_counter()
+                await page.goto(f"{base_url}/sign-in", wait_until="networkidle")
+                # Wait for React to hydrate the form
+                await page.wait_for_selector('button[type="submit"]:not([disabled])', timeout=10_000)
+                await page.fill('input[type="email"]', email)
+                await page.fill('input[type="password"]', password)
+                # Kick off flash probe in parallel.
+                probe_task = asyncio.create_task(_flash_probe())
+                # Submit via Enter key on password field (form onSubmit handler)
+                await page.press('input[type="password"]', "Enter")
+
+                # Wait until URL matches portal AND no flash text is visible.
+                await page.wait_for_url(f"**{portal_path}*", timeout=25_000)
                 await page.wait_for_function(
                     """() => {
                         const t = document.body && document.body.innerText || '';
                         return !t.includes('Verifying your subscription') &&
                                !t.includes('Loading your dashboard');
                     }""",
-                    timeout=20_000,
+                    timeout=25_000,
                 )
                 elapsed_ms = (time.perf_counter() - start) * 1000.0
                 timings_to_interactive_ms.append(elapsed_ms)
             except Exception as exc:
-                sys.stderr.write(f"[WARN] cold-signin run {i+1} failed: {exc}\n")
-            finally:
-                probe_task.cancel()
+                sys.stderr.write(f"[WARN] cold-signin run {i+1} failed: {type(exc).__name__}: {str(exc)[:200]}\n")
                 try:
-                    await probe_task
+                    sys.stderr.write(f"[WARN] final url: {page.url}\n")
                 except Exception:
                     pass
+            finally:
+                if probe_task is not None:
+                    probe_task.cancel()
+                    try:
+                        await asyncio.wait_for(probe_task, timeout=1.0)
+                    except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
+                        pass
                 flash_seen_counts.append(flash_count)
-                await context.close()
-                await browser.close()
+                try:
+                    await context.close()
+                except Exception:
+                    pass
+                try:
+                    await browser.close()
+                except Exception:
+                    pass
 
     return {
         "runs": runs,
@@ -172,7 +190,8 @@ async def measure_warm_renav(
         browser = await pw.chromium.launch(headless=True)
         context = await browser.new_context()
         page = await context.new_page()
-        await page.goto(f"{base_url}/sign-in", wait_until="domcontentloaded")
+        await page.goto(f"{base_url}/sign-in", wait_until="networkidle")
+        await page.wait_for_selector('button[type="submit"]:not([disabled])', timeout=10_000)
         await page.fill('input[type="email"]', email)
         await page.fill('input[type="password"]', password)
         await page.click('button[type="submit"]')
