@@ -316,10 +316,10 @@ function ConsultantPortalPage() {
   // Status filter options
   const statusOptions = [
     { value: "all", label: "All Statuses" },
-    { value: "denied", label: "🔴 Denied / Unfunded" },
-    { value: "funded", label: "🟢 Funded" },
-    { value: "pending", label: "🟡 Pending" },
-    { value: "unknown", label: "⚪ Unknown" },
+    { value: "denied", label: "Has Denials" },
+    { value: "funded", label: "Funded" },
+    { value: "pending", label: "Pending / Active" },
+    { value: "unknown", label: "Unknown / Not Found" },
   ];
 
   // Smart amount formatter
@@ -504,13 +504,15 @@ function ConsultantPortalPage() {
         const statusColor = (school.status_color || '').toLowerCase();
         
         if (statusFilter === "denied") {
-          return status.includes("denied") || status.includes("unfunded") || statusColor === "red";
+          // Catches "Has Denials", "Denied", any denial variant
+          return status.includes("deni") || statusColor === "red";
         } else if (statusFilter === "funded") {
           return status === "funded" || status === "committed" || statusColor === "green";
         } else if (statusFilter === "pending") {
-          return status === "pending" || status.includes("review") || statusColor === "yellow";
+          // "Active" = has applications but no definitive funded/denied result
+          return status === "pending" || status === "active" || status.includes("review") || statusColor === "yellow";
         } else if (statusFilter === "unknown") {
-          return status === "unknown" || status === "" || (!status && statusColor === "gray");
+          return status === "unknown" || status === "not found" || status === "" || !school.status;
         }
         return true;
       });
