@@ -10,7 +10,7 @@ from typing import Optional
 
 import google.generativeai as genai
 
-from ...core.config import settings
+from ...core.config import settings, get_settings
 from .rules import run_all_rules, ENGINE_VERSION
 from .rules.base import RuleFinding
 
@@ -115,7 +115,35 @@ async def analyze_form470(
     except Exception as e:
         logger.warning("Corpus retrieval skipped: %s", str(e))
 
-    # --- Phase 1: LLM Analysis with rule grounding ---
+    # --- Phase 2A: Multi-Agent Pipeline (if enabled) ---
+    app_settings = get_settings()
+    if app_settings.COMPLIANCE_USE_AGENTS:
+        try:
+            from .agents import run_pipeline
+
+            rule_findings_dicts = [f.model_dump() for f in rule_findings]
+            # Convert severity enums to strings for agent consumption
+            for rf in rule_findings_dicts:
+                if hasattr(rf.get("severity"), "value"):
+                    rf["severity"] = rf["severity"].value
+
+            result = await run_pipeline(
+                document_text=document_text,
+                metadata=metadata,
+                rule_findings=rule_findings_dicts,
+                corpus_citations=corpus_citations,
+                engine_version=ENGINE_VERSION,
+            )
+            logger.info(
+                "Multi-agent pipeline complete: risk=%s, findings=%d, timings=%s",
+                result.overall_risk, len(result.findings), result.agent_timings,
+            )
+            return result.model_dump()
+        except Exception as e:
+            logger.error("Multi-agent pipeline failed, falling back to single LLM: %s", str(e))
+            # Fall through to single-LLM path below
+
+    # --- Phase 1: LLM Analysis with rule grounding (fallback or agents disabled) ---
     api_key = settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY
     llm_result = None
 

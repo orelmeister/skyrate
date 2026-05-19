@@ -137,6 +137,10 @@ class Settings(BaseSettings):
     # Hunter.io API for contact enrichment
     HUNTER_API_KEY: Optional[str] = None
     
+    # Compliance Module
+    COMPLIANCE_USE_AGENTS: bool = False  # Enable multi-agent pipeline (Phase 2A) — set True after adding ANTHROPIC_API_KEY
+    COMPLIANCE_USE_PRO: bool = False  # Use Gemini Pro instead of Flash for compliance officer
+    
     # CORS
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000", "https://skyrate.ai", "https://*.skyrate.ai"]
     
