@@ -43,6 +43,15 @@ const categoryColorMap: Record<string, string> = {
 
 const staticArticles = [
   {
+    title: "E-Rate Compliance AI: We Tested It on 144 Real Form 470s [FY2026 Results]",
+    teaser:
+      "We scanned 144 real Certified Form 470 filings for FCC §54.503 violations in 5 minutes. See the methodology, rule-fire rates, and what every applicant should fix before PIA review.",
+    icon: AlertTriangle,
+    color: "purple",
+    link: "/blog/erate-compliance-ai-validation-2026",
+    category: "Analysis",
+  },
+  {
     title: "How to Appeal an E-Rate Denial: Step-by-Step Guide",
     teaser:
       "Learn the exact process for crafting a winning E-Rate appeal, from analyzing your denial letter to submitting supporting documentation. Our AI-powered approach has a 98% success rate.",

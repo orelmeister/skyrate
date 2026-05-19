@@ -124,6 +124,12 @@
 
   <!-- Blog Posts -->
   <url>
+    <loc>https://skyrate.ai/blog/erate-compliance-ai-validation-2026</loc>
+    <lastmod>2026-05-19</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://skyrate.ai/blog/how-to-appeal-erate-denial</loc>
     <lastmod>2026-04-23</lastmod>
     <changefreq>monthly</changefreq>
