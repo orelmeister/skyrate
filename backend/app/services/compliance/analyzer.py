@@ -1,10 +1,11 @@
 """
-Compliance Analyzer — deterministic rule engine + Gemini LLM analysis.
-Phase 1: Rules run first, findings feed into LLM prompt for grounding.
+Compliance Analyzer — deterministic rule engine + RAG retrieval + Gemini LLM analysis.
+Phase 2B: Rules run first, corpus retrieval enriches context, findings feed into LLM prompt.
 """
 
 import json
 import logging
+import os
 from typing import Optional
 
 import google.generativeai as genai
@@ -94,6 +95,26 @@ async def analyze_form470(
     except Exception as e:
         logger.error("Rule engine failed: %s", str(e))
 
+    # --- Phase 2B: Corpus RAG Retrieval ---
+    corpus_citations = []
+    try:
+        from .retriever import retrieve, is_indexed
+        if is_indexed():
+            # Build query from rule findings + truncated text
+            query_parts = [f.description for f in rule_findings]
+            query_parts.append(document_text[:500])
+            query_text = " ".join(query_parts)[:1000]
+
+            chunks = retrieve(query_text, k=3)
+            corpus_citations = [
+                {"citation_id": c.citation_id, "source_url": c.source_url,
+                 "text": c.text, "score": c.score}
+                for c in chunks
+            ]
+            logger.info("Retrieved %d corpus chunks for context", len(corpus_citations))
+    except Exception as e:
+        logger.warning("Corpus retrieval skipped: %s", str(e))
+
     # --- Phase 1: LLM Analysis with rule grounding ---
     api_key = settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY
     llm_result = None
@@ -114,12 +135,29 @@ async def analyze_form470(
 
             # Build prompt with rule findings context
             rule_context = _format_rule_findings_for_prompt(rule_findings)
+
+            # Add corpus citations if available
+            corpus_context = ""
+            if corpus_citations:
+                corpus_lines = []
+                for cc in corpus_citations:
+                    corpus_lines.append(
+                        f"- [{cc['citation_id']}] {cc['text'][:300]} "
+                        f"(Source: {cc['source_url']})"
+                    )
+                corpus_context = (
+                    "\n\nRELEVANT CITATIONS (from indexed FCC/USAC corpus):\n"
+                    + "\n".join(corpus_lines)
+                )
+
             prompt = (
                 f"VERIFIED RULE FINDINGS (from deterministic engine — do not re-derive these):\n"
-                f"{rule_context}\n\n"
+                f"{rule_context}\n"
+                f"{corpus_context}\n\n"
                 f"---\n\n"
                 f"Analyze this Form 470 document for ADDITIONAL USAC compliance issues "
-                f"not already covered above:\n\n{text_for_llm}"
+                f"not already covered above:\n\n{text_for_llm}\n\n"
+                f"Advisory only. Not legal or USAC official guidance."
             )
 
             response = model.generate_content(
@@ -194,6 +232,7 @@ async def analyze_form470(
         "findings": merged_findings,
         "rule_findings": rule_findings_dicts,
         "llm_findings": llm_findings,
+        "corpus_citations": corpus_citations,
         "engine_version": ENGINE_VERSION,
         "disclaimer": "Advisory only. Not legal or USAC official guidance.",
     }

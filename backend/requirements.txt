@@ -121,3 +121,8 @@ twilio>=9.0.0
 # PDF Parsing (Compliance Module)
 # ==========================================
 pymupdf>=1.25.0
+
+# ==========================================
+# Embeddings (Compliance RAG)
+# ==========================================
+sentence-transformers==2.7.0
