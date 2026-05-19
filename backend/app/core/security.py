@@ -105,6 +105,10 @@ async def get_current_user(
 ):
     """Get current authenticated user from JWT token"""
     from ..models.user import User
+    from ..models.consultant import ConsultantProfile
+    from ..models.vendor import VendorProfile
+    from ..models.applicant import ApplicantProfile
+    from sqlalchemy.orm import joinedload
     
     token = credentials.credentials
     payload = decode_token(token)
@@ -122,7 +126,11 @@ async def get_current_user(
             detail="Invalid token payload",
         )
     
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    user = db.query(User).options(
+        joinedload(User.consultant_profile),
+        joinedload(User.vendor_profile),
+        joinedload(User.applicant_profile),
+    ).filter(User.id == int(user_id)).first()
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

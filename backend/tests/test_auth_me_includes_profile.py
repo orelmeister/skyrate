@@ -10,8 +10,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
 from app.core.security import hash_password
@@ -22,9 +23,13 @@ from app.models.vendor import VendorProfile
 from app.models.applicant import ApplicantProfile
 
 
-# Use SQLite for testing
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test_auth_profile.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+# Use in-memory SQLite with StaticPool so all connections share one DB
+SQLALCHEMY_DATABASE_URL = "sqlite:///"
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -39,18 +44,24 @@ def override_get_db():
 app.dependency_overrides[get_db] = override_get_db
 
 
+def _create_all_skip_dupes():
+    """prediction.py declares both Column(index=True) and Index() with same name.
+    SQLite rejects duplicates, so deduplicate before create_all."""
+    seen = set()
+    for tbl in Base.metadata.tables.values():
+        for ix in list(tbl.indexes):
+            if ix.name in seen:
+                tbl.indexes.discard(ix)
+            else:
+                seen.add(ix.name)
+    Base.metadata.create_all(bind=engine)
+
+
 @pytest.fixture(autouse=True)
 def setup_database():
-    Base.metadata.create_all(bind=engine, checkfirst=True)
+    _create_all_skip_dupes()
     yield
-    # Close all connections before dropping
-    engine.dispose()
     Base.metadata.drop_all(bind=engine)
-    if os.path.exists("./test_auth_profile.db"):
-        try:
-            os.remove("./test_auth_profile.db")
-        except PermissionError:
-            pass
 
 
 @pytest.fixture
