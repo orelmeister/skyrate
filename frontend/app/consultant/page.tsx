@@ -5,11 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
-import { api, ConsultantSchool, ConsultantProfile, AppealRecord, PIAResponseRecord, PIAFRNRecord, FRNWatch, FRNReportHistory } from "@/lib/api";
+import { api, ConsultantSchool, ConsultantProfile, AppealRecord, PIAResponseRecord, PIAFRNRecord, PIAPreview, FRNWatch, FRNReportHistory } from "@/lib/api";
 import { SearchResultsTable } from "@/components/SearchResultsTable";
 import { AppealChat } from "@/components/AppealChat";
 import { PIAChat } from "@/components/PIAChat";
 import { PIATemplateGallery } from "@/components/PIATemplateGallery";
+import { PIATemplatePreview } from "@/components/PIATemplatePreview";
 import { TableExportBar } from "@/components/TableExportBar";
 import FRNDetailModal from "@/components/FRNDetailModal";
 import MissingIdentifierBanner from "@/components/MissingIdentifierBanner";
@@ -203,6 +204,7 @@ function ConsultantPortalPage() {
   const [isLoadingPiaFRNs, setIsLoadingPiaFRNs] = useState(false);
   const [piaError, setPiaError] = useState<string | null>(null);
   const [detectedCategory, setDetectedCategory] = useState<{ category: string; name: string } | null>(null);
+  const [templatePreview, setTemplatePreview] = useState<PIAPreview | null>(null);
 
   // FRN Status Monitoring state
   const [portfolioFrnData, setPortfolioFrnData] = useState<any>(null);
@@ -1433,6 +1435,7 @@ function ConsultantPortalPage() {
         setPiaFrn("");
         setPiaAdditionalContext("");
         setDetectedCategory(null);
+        setTemplatePreview(null);
         setShowPiaTemplates(false);
       } else {
         setPiaError(res.error || "Failed to generate PIA response");
@@ -1447,7 +1450,6 @@ function ConsultantPortalPage() {
 
   const handlePIATemplateSelect = (question: string, category: string) => {
     setPiaQuestionInput(question);
-    setShowPiaTemplates(false);
     const categoryNames: Record<string, string> = {
       competitive_bidding: "Competitive Bidding",
       cost_effectiveness: "Cost-Effectiveness",
@@ -1461,6 +1463,15 @@ function ConsultantPortalPage() {
       general: "General PIA Question",
     };
     setDetectedCategory({ category, name: categoryNames[category] || category });
+
+    // Fetch preview for the selected category
+    api.getPIAPreview(category).then((res) => {
+      if (res.success && res.data) {
+        setTemplatePreview(res.data);
+      }
+    }).catch(() => {
+      // Silently ignore preview fetch errors
+    });
   };
 
   const handlePIAUpdate = (updatedPia: PIAResponseRecord) => {
@@ -4370,6 +4381,14 @@ function ConsultantPortalPage() {
                         {detectedCategory.name}
                       </span>
                     </div>
+                  )}
+
+                  {/* PIA Template Preview */}
+                  {templatePreview && (
+                    <PIATemplatePreview
+                      preview={templatePreview}
+                      onClose={() => setTemplatePreview(null)}
+                    />
                   )}
 
                   <div className="flex items-center gap-3">

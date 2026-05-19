@@ -74,8 +74,8 @@ class User(Base):
             return f"{self.first_name} {self.last_name}"
         return self.email.split("@")[0]
     
-    def to_dict(self) -> dict:
-        return {
+    def to_dict(self, include_profile: bool = False) -> dict:
+        data = {
             "id": self.id,
             "email": self.email,
             "role": self.role,
@@ -96,3 +96,14 @@ class User(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_login": self.last_login.isoformat() if self.last_login else None,
         }
+        if include_profile:
+            data["consultant_profile"] = (
+                self.consultant_profile.to_dict() if self.consultant_profile else None
+            )
+            data["vendor_profile"] = (
+                self.vendor_profile.to_dict() if self.vendor_profile else None
+            )
+            data["applicant_profile"] = (
+                self.applicant_profile.to_dict() if self.applicant_profile else None
+            )
+        return data

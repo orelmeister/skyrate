@@ -861,6 +861,16 @@ export interface PIATemplate {
   sample_questions: string[];
 }
 
+export interface PIAPreview {
+  category: string;
+  category_name: string;
+  what_pia_is_looking_for: string;
+  key_points: string[];
+  common_mistakes: string[];
+  relevant_rules: string[];
+  document_checklist: Array<{ name: string; description: string; priority: string }>;
+}
+
 class ApiClient {
   private getAccessToken(): string | null {
     if (typeof window === 'undefined') return null;
@@ -1692,6 +1702,13 @@ class ApiClient {
   }
 
   // ==================== PIA RESPONSE GENERATOR ====================
+
+  /**
+   * Get PIA category preview (key points, document checklist, etc.)
+   */
+  async getPIAPreview(category: string): Promise<ApiResponse<PIAPreview>> {
+    return this.request(`/api/v1/pia/preview?category=${encodeURIComponent(category)}`);
+  }
 
   /**
    * Generate a PIA response for a reviewer's question

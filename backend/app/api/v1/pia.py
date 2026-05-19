@@ -733,6 +733,39 @@ async def update_pia_status(
     return pia_record.to_dict()
 
 
+@router.get("/preview")
+async def get_pia_preview(
+    category: str,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    Return category-specific preview data for a PIA template tile.
+    Includes what PIA is looking for, key points, document checklist, etc.
+    """
+    pia_service = get_pia_service()
+
+    if category not in pia_service.PIA_CATEGORIES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid category: {category}. Must be one of: {', '.join(pia_service.PIA_CATEGORIES.keys())}",
+        )
+
+    cat_info = pia_service.PIA_CATEGORIES[category]
+    knowledge = pia_service._get_category_knowledge(category)
+    doc_checklist = pia_service.get_document_checklist(category, {})
+
+    return {
+        "success": True,
+        "category": category,
+        "category_name": cat_info["name"],
+        "what_pia_is_looking_for": knowledge.get("what_they_want", ""),
+        "key_points": knowledge.get("key_points", []),
+        "common_mistakes": knowledge.get("common_mistakes", []),
+        "relevant_rules": knowledge.get("relevant_rules", []),
+        "document_checklist": doc_checklist,
+    }
+
+
 @router.get("/{pia_id}")
 async def get_pia_response(
     pia_id: int,

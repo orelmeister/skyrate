@@ -505,7 +505,7 @@ async def register(
         access_token=access_token,
         refresh_token=refresh_token,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        user=user.to_dict()
+        user=user.to_dict(include_profile=True)
     )
 
 
@@ -571,7 +571,7 @@ async def login(
         access_token=access_token,
         refresh_token=refresh_token,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        user=user.to_dict()
+        user=user.to_dict(include_profile=True)
     )
 
 
@@ -608,7 +608,7 @@ async def refresh_token(
         access_token=access_token,
         refresh_token=refresh_token,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        user=user.to_dict()
+        user=user.to_dict(include_profile=True)
     )
 
 
@@ -617,7 +617,7 @@ async def get_profile(current_user: User = Depends(get_current_user)):
     """
     Get current user profile and subscription status.
     """
-    user_data = current_user.to_dict()
+    user_data = current_user.to_dict(include_profile=True)
     
     # Add subscription info
     if current_user.subscription:
@@ -673,7 +673,7 @@ async def update_profile(
     db.commit()
     db.refresh(current_user)
 
-    return {"success": True, "user": current_user.to_dict()}
+    return {"success": True, "user": current_user.to_dict(include_profile=True)}
 
 
 @router.post("/change-password")
@@ -912,7 +912,7 @@ async def google_auth(
         access_token=access_token,
         refresh_token=refresh_token,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        user=user.to_dict()
+        user=user.to_dict(include_profile=True)
     )
 
 
@@ -1254,5 +1254,5 @@ async def magic_link_exchange(
         access_token=access_token,
         refresh_token=refresh_token,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        user=user.to_dict(),
+        user=user.to_dict(include_profile=True),
     )
