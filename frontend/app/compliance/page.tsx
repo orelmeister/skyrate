@@ -34,20 +34,6 @@ export default function CompliancePage() {
   const [result, setResult] = useState<ComplianceResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Auth guard
-  if (_hasHydrated && !isAuthenticated) {
-    router.push("/sign-in");
-    return null;
-  }
-
-  if (!_hasHydrated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -83,6 +69,20 @@ export default function CompliancePage() {
       setError("Please upload a PDF file.");
     }
   }, []);
+
+  // Auth guard
+  if (_hasHydrated && !isAuthenticated) {
+    router.push("/sign-in");
+    return null;
+  }
+
+  if (!_hasHydrated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   const handleAnalyze = async () => {
     if (!file) return;
