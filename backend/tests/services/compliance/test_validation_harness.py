@@ -17,6 +17,7 @@ import pytest
 from scripts.validation.auth import get_admin_session, AuthError
 from scripts.validation.build_validation_corpus import (
     anonymize_entity_id,
+    split_form470_numbers,
     strip_applicant_names,
     build_narrative,
     fetch_form470_records,
@@ -50,7 +51,7 @@ SAMPLE_CRM_RESPONSE = {
         },
         {
             "entity_id": "67890",
-            "form470_number": "261042200",
+            "form470_number": "261042200|261042201",
             "form470_status": "Posted",
             "form470_posting_date": "2026-03-01",
             "form470_certified_date": None,
@@ -69,14 +70,16 @@ SAMPLE_CRM_RESPONSE = {
 
 SAMPLE_USAC_ROW = {
     "application_number": "261042134",
-    "narrative": "Seeking proposals for wide area network services including MPLS and internet access.",
-    "service_type": "Internet Access",
-    "type_of_service_request": "WAN",
-    "min_capacity": "100 Mbps",
-    "max_capacity": "1 Gbps",
-    "function": "Internet and Transport",
-    "manufacturer": None,
-    "installation_type": "New installation",
+    "category_one_description": "Seeking proposals for wide area network services including MPLS and internet access.",
+    "service_type": "Data Transmission and/or Internet Access",
+    "service_category": "Category 1",
+    "function": "Internet Access and Data Transmission Service",
+    "minimum_capacity": "100.00 Mbps",
+    "maximum_capacity": "1024.00 Mbps",
+    "installation_initial": False,
+    "form_nickname": "WAN Services 2026",
+    "fcc_form_470_status": "Certified",
+    "billed_entity_name": "Springfield School District",
 }
 
 SAMPLE_EVAL_RESULT = {
@@ -144,6 +147,60 @@ class TestAnonymization:
         assert result1 != result2
 
 
+class TestSplitForm470Numbers:
+    """Test pipe-delimited Form 470 number splitting."""
+
+    def test_single_number(self) -> None:
+        """Single number without pipe returns list of one."""
+        result = split_form470_numbers("261042134")
+        assert result == ["261042134"]
+
+    def test_two_pipe_delimited(self) -> None:
+        """Two pipe-delimited numbers split correctly."""
+        result = split_form470_numbers("260026339|260025521")
+        assert result == ["260026339", "260025521"]
+
+    def test_three_pipe_delimited(self) -> None:
+        """Three pipe-delimited numbers split correctly."""
+        result = split_form470_numbers("260026280|260026184|260013002")
+        assert result == ["260026280", "260026184", "260013002"]
+
+    def test_empty_string(self) -> None:
+        """Empty string returns empty list."""
+        result = split_form470_numbers("")
+        assert result == []
+
+    def test_none_input(self) -> None:
+        """None input returns empty list."""
+        result = split_form470_numbers(None)  # type: ignore[arg-type]
+        assert result == []
+
+    def test_whitespace_stripped(self) -> None:
+        """Whitespace around numbers is stripped."""
+        result = split_form470_numbers(" 260026339 | 260025521 ")
+        assert result == ["260026339", "260025521"]
+
+    def test_empty_segments_dropped(self) -> None:
+        """Empty segments from consecutive pipes are dropped."""
+        result = split_form470_numbers("260026339||260025521")
+        assert result == ["260026339", "260025521"]
+
+    def test_duplicates_removed(self) -> None:
+        """Duplicate numbers are deduplicated."""
+        result = split_form470_numbers("260026339|260026339|260025521")
+        assert result == ["260026339", "260025521"]
+
+    def test_whitespace_only(self) -> None:
+        """Whitespace-only string returns empty list."""
+        result = split_form470_numbers("   ")
+        assert result == []
+
+    def test_pipe_only(self) -> None:
+        """Pipe-only string returns empty list."""
+        result = split_form470_numbers("|")
+        assert result == []
+
+
 class TestStripApplicantNames:
     """Test name redaction from narrative text."""
 
@@ -181,16 +238,16 @@ class TestBuildNarrative:
 
     def test_all_fields_present(self) -> None:
         result = build_narrative(SAMPLE_USAC_ROW)
-        assert "narrative:" in result
-        assert "service_type: Internet Access" in result
-        assert "min_capacity: 100 Mbps" in result
-        assert "installation_type: New installation" in result
+        assert "category_one_description:" in result
+        assert "service_type: Data Transmission" in result
+        assert "minimum_capacity: 100.00 Mbps" in result
+        assert "form_nickname: WAN Services 2026" in result
 
     def test_missing_fields_skipped(self) -> None:
-        row = {"narrative": "Test narrative", "manufacturer": None}
+        row = {"category_one_description": "Test narrative", "installation_initial": None}
         result = build_narrative(row)
-        assert "narrative: Test narrative" in result
-        assert "manufacturer" not in result
+        assert "category_one_description: Test narrative" in result
+        assert "installation_initial" not in result
 
     def test_empty_row(self) -> None:
         result = build_narrative({})
@@ -220,10 +277,12 @@ class TestManifestConstruction:
         # Mock Socrata
         mock_client = MagicMock()
         mock_socrata_cls.return_value = mock_client
-        # First record found, second not found
+        # First record found (entity 12345, single form470),
+        # second record has pipe-delimited "261042200|261042201" -> 2 lookups
         mock_client.get.side_effect = [
             [SAMPLE_USAC_ROW],  # found for 261042134
             [],  # not found for 261042200
+            [SAMPLE_USAC_ROW],  # found for 261042201
         ]
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -234,17 +293,20 @@ class TestManifestConstruction:
             manifest = build_corpus(output_dir=Path(tmpdir))
 
             # 3 CRM records total, but one has form470_number=None
-            # So only 2 are processed. Of those, 1 found in USAC, 1 not.
+            # Entity 12345: 1 form470 -> 1 USAC lookup (found)
+            # Entity 67890: pipe "261042200|261042201" -> 2 lookups (1 miss, 1 found)
+            # Entity 11111: None -> skipped
             assert manifest["total_crm_records"] == 3
-            assert manifest["fetched_usac"] == 1
+            assert manifest["total_form470_after_split"] == 3  # 1 + 2
+            assert manifest["fetched_usac"] == 2
             assert manifest["missing_usac"] == 1
-            assert manifest["written"] == 1
+            assert manifest["written"] == 2
             # 1 error for null form470_number + 1 for missing USAC
             assert len(manifest["errors"]) == 2
 
-            # Verify written file exists
+            # Verify written files exist
             json_files = list(Path(tmpdir).glob("ENT-*.json"))
-            assert len(json_files) == 1
+            assert len(json_files) == 2
 
             # Verify manifest file
             manifest_file = Path(tmpdir) / "manifest.json"
@@ -338,7 +400,7 @@ class TestRunEvaluation:
                 "certified_date": "2026-02-20",
                 "narrative": "Seeking proposals for internet access.",
                 "service_categories": ["Internet Access"],
-                "source": "usac_form470_jp7s_vbzh",
+                "source": "usac_form470_jt8s_3q52",
                 "fetched_at": "2026-05-19T00:00:00Z",
             }
             with open(corpus_dir / "ENT-1a2b3c4d__261042134.json", "w") as f:

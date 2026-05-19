@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -28,7 +29,21 @@ from .auth import get_admin_session, AuthError
 logger = logging.getLogger(__name__)
 
 # USAC Form 470 dataset on data.usac.org
-USAC_DATASET_ID = "jp7s-vbzh"
+# Dataset: "E-Rate FCC Form 470 Tool Data" — opendata.usac.org identifier jt8s-3q52
+# Contains 167K+ FY2026 records with structured + narrative data.
+# Fields used from this dataset (confirmed 2026-05-19):
+#   application_number         — the 9-digit Form 470 number (string)
+#   category_one_description   — free-text RFP narrative (may be empty for Cat 2-only forms)
+#   service_type               — e.g. "Data Transmission and/or Internet Access", "Internal Connections"
+#   service_category           — e.g. "Category 1", "Category 2"
+#   function                   — e.g. "Internet Access and Data Transmission Service"
+#   minimum_capacity           — e.g. "50.00 Mbps"
+#   maximum_capacity           — e.g. "1024.00 Mbps"
+#   installation_initial       — boolean (new installation or not)
+#   fcc_form_470_status        — e.g. "Certified", "Posted"
+#   billed_entity_name         — entity name (REDACTED in corpus)
+#   form_nickname              — human-readable form label
+USAC_DATASET_ID = "jt8s-3q52"
 USAC_DOMAIN = "opendata.usac.org"
 
 # Default output directory (relative to backend/)
@@ -49,6 +64,34 @@ def anonymize_entity_id(entity_id: str, salt: str) -> str:
     raw = f"{salt}:{entity_id}".encode("utf-8")
     digest = hashlib.sha1(raw).hexdigest()[:8]
     return f"ENT-{digest}"
+
+
+def split_form470_numbers(raw: str | None) -> list[str]:
+    """
+    Split a pipe-delimited string of Form 470 numbers into individual numbers.
+
+    The CRM stores form470_number as a pipe-delimited string when an entity
+    files multiple Form 470s at once. Examples:
+        "260026339|260025521"       -> ["260026339", "260025521"]
+        "260026280|260026184|260013002" -> ["260026280", "260026184", "260013002"]
+        "261042134"                 -> ["261042134"]
+        ""                          -> []
+        None                        -> []
+
+    Handles whitespace + empties: " 1 || 2 " -> ["1", "2"]
+    Returns deduplicated list preserving first-occurrence order.
+    """
+    if not raw:
+        return []
+    parts = raw.split("|")
+    seen: set[str] = set()
+    result: list[str] = []
+    for part in parts:
+        cleaned = part.strip()
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            result.append(cleaned)
+    return result
 
 
 def strip_applicant_names(text: str) -> str:
@@ -133,24 +176,24 @@ def build_narrative(usac_row: dict) -> str:
     """
     Concatenate relevant USAC fields into a synthetic RFP narrative.
 
-    Fields used (when present): narrative, service_type,
-    type_of_service_request, min_capacity, max_capacity,
-    function, manufacturer, installation_type.
+    Fields used (when present): category_one_description, service_type,
+    service_category, function, minimum_capacity, maximum_capacity,
+    installation_initial, form_nickname.
     """
     fields = [
-        "narrative",
+        "category_one_description",
         "service_type",
-        "type_of_service_request",
-        "min_capacity",
-        "max_capacity",
+        "service_category",
         "function",
-        "manufacturer",
-        "installation_type",
+        "minimum_capacity",
+        "maximum_capacity",
+        "installation_initial",
+        "form_nickname",
     ]
     parts = []
     for field in fields:
         value = usac_row.get(field)
-        if value:
+        if value and str(value).strip():
             parts.append(f"{field}: {value}")
     return "\n".join(parts)
 
@@ -193,6 +236,7 @@ def build_corpus(
 
     manifest = {
         "total_crm_records": len(records),
+        "total_form470_after_split": 0,
         "fetched_usac": 0,
         "missing_usac": 0,
         "written": 0,
@@ -201,66 +245,72 @@ def build_corpus(
     }
 
     for i, record in enumerate(records):
-        form470_number = record.get("form470_number")
+        raw_form470 = record.get("form470_number")
         entity_id = str(record.get("entity_id", ""))
-        if not form470_number:
+
+        form470_numbers = split_form470_numbers(raw_form470)
+        if not form470_numbers:
             manifest["errors"].append(
                 {"index": i, "reason": "missing form470_number"}
             )
             continue
 
+        manifest["total_form470_after_split"] += len(form470_numbers)
         anon_id = anonymize_entity_id(entity_id, salt)
-        print(
-            f"[INFO] Processing {i + 1}/{len(records)}: "
-            f"{anon_id} / Form 470 #{form470_number}"
-        )
 
-        # Fetch from USAC
-        usac_row = fetch_usac_record(client, form470_number)
-        if not usac_row:
-            manifest["missing_usac"] += 1
-            manifest["errors"].append(
-                {
-                    "index": i,
-                    "form470_number": form470_number,
-                    "reason": "not_found_in_usac",
-                }
+        for form470_number in form470_numbers:
+            print(
+                f"[INFO] Processing CRM record {i + 1}/{len(records)}: "
+                f"{anon_id} / Form 470 #{form470_number}"
             )
-            continue
 
-        manifest["fetched_usac"] += 1
+            # Fetch from USAC
+            usac_row = fetch_usac_record(client, form470_number)
+            time.sleep(0.3)  # Rate-limit courtesy for anonymous API access
+            if not usac_row:
+                manifest["missing_usac"] += 1
+                manifest["errors"].append(
+                    {
+                        "index": i,
+                        "form470_number": form470_number,
+                        "reason": "not_found_in_usac",
+                    }
+                )
+                continue
 
-        # Build narrative text
-        narrative = build_narrative(usac_row)
-        narrative = strip_applicant_names(narrative)
+            manifest["fetched_usac"] += 1
 
-        # Extract service categories
-        service_categories = []
-        if usac_row.get("service_type"):
-            service_categories.append(usac_row["service_type"])
-        if usac_row.get("type_of_service_request"):
-            service_categories.append(usac_row["type_of_service_request"])
+            # Build narrative text
+            narrative = build_narrative(usac_row)
+            narrative = strip_applicant_names(narrative)
 
-        # Build output record
-        corpus_record = {
-            "anon_id": anon_id,
-            "form470_number": form470_number,
-            "funding_year": record.get("funding_year"),
-            "form470_status": record.get("form470_status"),
-            "posting_date": record.get("form470_posting_date"),
-            "certified_date": record.get("form470_certified_date"),
-            "narrative": narrative,
-            "service_categories": service_categories,
-            "source": "usac_form470_jp7s_vbzh",
-            "fetched_at": datetime.now(timezone.utc).isoformat(),
-        }
+            # Extract service categories
+            service_categories = []
+            if usac_row.get("service_type"):
+                service_categories.append(usac_row["service_type"])
+            if usac_row.get("service_category"):
+                service_categories.append(usac_row["service_category"])
 
-        # Write to file
-        filename = f"{anon_id}__{form470_number}.json"
-        filepath = out_dir / filename
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(corpus_record, f, indent=2, ensure_ascii=False)
-        manifest["written"] += 1
+            # Build output record
+            corpus_record = {
+                "anon_id": anon_id,
+                "form470_number": form470_number,
+                "funding_year": record.get("funding_year"),
+                "form470_status": record.get("form470_status"),
+                "posting_date": record.get("form470_posting_date"),
+                "certified_date": record.get("form470_certified_date"),
+                "narrative": narrative,
+                "service_categories": service_categories,
+                "source": f"usac_form470_{USAC_DATASET_ID.replace('-', '_')}",
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+            }
+
+            # Write to file
+            filename = f"{anon_id}__{form470_number}.json"
+            filepath = out_dir / filename
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(corpus_record, f, indent=2, ensure_ascii=False)
+            manifest["written"] += 1
 
     # Write manifest
     manifest_path = out_dir / "manifest.json"
