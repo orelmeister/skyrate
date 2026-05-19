@@ -33,15 +33,18 @@ logger = logging.getLogger(__name__)
 ARTIFACTS_DIR = Path(__file__).parent / "artifacts"
 ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 
-# Columns to drop (leakers and identifiers)
-LEAKER_COLS = ["appealability_score", "outreach_sent"]
+# Columns to drop (leakers and identifiers).
+# wave_sequence_number is a denial-hunter pipeline artifact (FCDL wave grouping)
+# that is not available at Form 470 upload time; including it caused leakage in
+# baseline_v1 (test AUC 0.9988 was a sampling-bias artifact).
+LEAKER_COLS = ["appealability_score", "outreach_sent", "wave_sequence_number"]
 ID_COLS = ["ben", "frn"]
 
 # Feature config
 CATEGORICAL_COLS = ["state", "applicant_type", "service_type", "category"]
 NUMERIC_COLS = [
     "discount_rate", "requested_amount", "funding_year",
-    "months_of_service", "wave_sequence_number",
+    "months_of_service",
 ]
 BOOL_COLS = ["is_consortium", "is_certified_in_window", "spac_filed", "was_form_470_posted"]
 
@@ -72,7 +75,7 @@ def prepare_features(df):
 
     df["funding_year"] = pd.to_numeric(df["funding_year"], errors="coerce").fillna(2026).astype(int)
 
-    for col in ["months_of_service", "wave_sequence_number"]:
+    for col in ["months_of_service"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
         df[col].fillna(df[col].median(), inplace=True)
 
@@ -90,7 +93,7 @@ def build_feature_matrix(df_train, df_val, y_train):
 
     # Numeric features
     num_features = ["discount_rate", "requested_amount_log", "funding_year",
-                    "months_of_service", "wave_sequence_number"] + BOOL_COLS
+                    "months_of_service"] + BOOL_COLS
     feature_cols.extend(num_features)
 
     # Target-encode categoricals
@@ -143,80 +146,115 @@ def train_model(csv_path: str):
     # Feature engineering
     df = prepare_features(df)
 
-    # Stratified split: 70/15/15
+    # Double stratification: combined (funding_year, label) key so each split
+    # preserves both class balance AND year mix. Falls back to single-stratify
+    # if any combined bucket has <2 rows.
     y = df[TARGET].astype(int)
+    combined = (df["funding_year"].astype(str) + "_" + y.astype(str))
+    strat = combined if combined.value_counts().min() >= 2 else y
+    RANDOM_STATE = 1337
+
     df_trainval, df_test, y_trainval, y_test = train_test_split(
-        df, y, test_size=0.15, stratify=y, random_state=42
+        df, y, test_size=0.15, stratify=strat, random_state=RANDOM_STATE
     )
+    strat_tv = (df_trainval["funding_year"].astype(str) + "_" + y_trainval.astype(str))
+    if strat_tv.value_counts().min() < 2:
+        strat_tv = y_trainval
     df_train, df_val, y_train, y_val = train_test_split(
-        df_trainval, y_trainval, test_size=0.1765, stratify=y_trainval, random_state=42
+        df_trainval, y_trainval, test_size=0.1765, stratify=strat_tv, random_state=RANDOM_STATE
     )
     # 0.1765 of 0.85 ~= 0.15
 
     logger.info("Split sizes: train=%d, val=%d, test=%d", len(df_train), len(df_val), len(df_test))
 
-    # Build features
-    X_train, X_val, feature_cols, encoders = build_feature_matrix(
-        df_train.reset_index(drop=True),
-        df_val.reset_index(drop=True),
-        y_train.reset_index(drop=True),
-    )
+    df_train = df_train.reset_index(drop=True)
+    df_val = df_val.reset_index(drop=True)
+    df_test = df_test.reset_index(drop=True)
+    y_train = y_train.reset_index(drop=True)
+    y_val = y_val.reset_index(drop=True)
+    y_test = y_test.reset_index(drop=True)
 
-    # Also build test features (use train encoders)
-    df_test_prep = df_test.reset_index(drop=True)
-    _, X_test, _, _ = build_feature_matrix(
-        df_train.reset_index(drop=True),
-        df_test_prep,
-        y_train.reset_index(drop=True),
+    # Build train/val features (val encoded using train's stats only).
+    X_train, X_val, feature_cols, encoders = build_feature_matrix(
+        df_train, df_val, y_train,
     )
+    # Build test features using the same train encoders (separate call but
+    # identical train side -> identical encoder maps).
+    _, X_test, _, _ = build_feature_matrix(df_train, df_test, y_train)
+
+    # Dynamic scale_pos_weight from training set imbalance.
+    n_pos = int(y_train.sum())
+    n_neg = int(len(y_train) - n_pos)
+    scale_pos_weight = round(n_neg / max(n_pos, 1), 4)
+    logger.info("Train class balance: n_pos=%d n_neg=%d scale_pos_weight=%.4f",
+                n_pos, n_neg, scale_pos_weight)
 
     # XGBoost training
     params = {
         "objective": "binary:logistic",
         "eval_metric": "logloss",
-        "scale_pos_weight": 3.0,
+        "scale_pos_weight": scale_pos_weight,
         "max_depth": 4,
         "n_estimators": 200,
         "learning_rate": 0.05,
         "subsample": 0.8,
         "colsample_bytree": 0.8,
-        "random_state": 42,
+        "random_state": RANDOM_STATE,
         "verbosity": 0,
     }
 
     model = xgb.XGBClassifier(**params, early_stopping_rounds=20)
     model.fit(
-        X_train, y_train.reset_index(drop=True),
-        eval_set=[(X_val, y_val.reset_index(drop=True))],
+        X_train, y_train,
+        eval_set=[(X_val, y_val)],
         verbose=False,
     )
 
     best_iteration = model.best_iteration
     logger.info("Best iteration: %d", best_iteration)
 
-    # 5-fold CV on train
+    # 5-fold CV on the training set. Target encoding is recomputed PER FOLD
+    # from fold-train only -> no cross-fold target leakage.
     cv_aucs = []
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    for fold_train_idx, fold_val_idx in skf.split(X_train, y_train.reset_index(drop=True)):
-        fold_model = xgb.XGBClassifier(**{**params, "n_estimators": best_iteration + 1})
-        fold_model.fit(X_train.iloc[fold_train_idx], y_train.reset_index(drop=True).iloc[fold_train_idx], verbose=False)
-        fold_preds = fold_model.predict_proba(X_train.iloc[fold_val_idx])[:, 1]
-        cv_aucs.append(roc_auc_score(y_train.reset_index(drop=True).iloc[fold_val_idx], fold_preds))
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
+    for fold_train_idx, fold_val_idx in skf.split(df_train, y_train):
+        fold_train_df = df_train.iloc[fold_train_idx].reset_index(drop=True)
+        fold_val_df = df_train.iloc[fold_val_idx].reset_index(drop=True)
+        fold_y_train = y_train.iloc[fold_train_idx].reset_index(drop=True)
+        fold_y_val = y_train.iloc[fold_val_idx].reset_index(drop=True)
+
+        Xf_train, Xf_val, _, _ = build_feature_matrix(
+            fold_train_df, fold_val_df, fold_y_train,
+        )
+        fold_npos = int(fold_y_train.sum())
+        fold_nneg = int(len(fold_y_train) - fold_npos)
+        fold_spw = round(fold_nneg / max(fold_npos, 1), 4)
+        fold_params = {**params, "n_estimators": best_iteration + 1, "scale_pos_weight": fold_spw}
+        fold_model = xgb.XGBClassifier(**fold_params)
+        fold_model.fit(Xf_train, fold_y_train, verbose=False)
+        fold_preds = fold_model.predict_proba(Xf_val)[:, 1]
+        cv_aucs.append(roc_auc_score(fold_y_val, fold_preds))
 
     logger.info("5-fold CV AUC: %.4f +/- %.4f", np.mean(cv_aucs), np.std(cv_aucs))
 
     # Test set evaluation
-    y_test_reset = y_test.reset_index(drop=True)
+    y_test_reset = y_test
     y_prob = model.predict_proba(X_test)[:, 1]
 
     auc = roc_auc_score(y_test_reset, y_prob)
     pr_auc = average_precision_score(y_test_reset, y_prob)
 
     metrics = {
+        "_note": "Trained on unified USAC sample. Old leakage-driven baseline archived.",
         "model": "XGBoost baseline v1",
+        "sampling_strategy": "unified",
+        "random_state": RANDOM_STATE,
+        "scale_pos_weight": scale_pos_weight,
         "n_train": int(len(X_train)),
         "n_val": int(len(X_val)),
         "n_test": int(len(X_test)),
+        "n_train_pos": n_pos,
+        "n_train_neg": n_neg,
         "best_iteration": int(best_iteration),
         "cv_auc_mean": round(float(np.mean(cv_aucs)), 4),
         "cv_auc_std": round(float(np.std(cv_aucs)), 4),
@@ -287,7 +325,7 @@ def train_model(csv_path: str):
 
 def main():
     parser = argparse.ArgumentParser(description="Train XGBoost baseline risk classifier")
-    default_csv = str(Path(__file__).parent.parent.parent.parent.parent.parent.parent / "denial-hunter" / "exports" / "training_data_2026-05-19.csv")
+    default_csv = str(Path(__file__).parent.parent.parent.parent.parent.parent.parent / "denial-hunter" / "exports" / "training_data_2026-05-19_unified.csv")
     parser.add_argument("--csv", default=default_csv, help="Path to training CSV")
     args = parser.parse_args()
 

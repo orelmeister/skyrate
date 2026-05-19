@@ -1,59 +1,65 @@
 {
+  "_note": "Trained on unified USAC sample. Old leakage-driven baseline archived.",
   "model": "XGBoost baseline v1",
-  "n_train": 758,
-  "n_val": 163,
-  "n_test": 163,
-  "best_iteration": 108,
-  "cv_auc_mean": 0.9958,
-  "cv_auc_std": 0.0074,
-  "test_auc": 0.9988,
-  "test_pr_auc": 0.9969,
+  "sampling_strategy": "unified",
+  "random_state": 1337,
+  "scale_pos_weight": 31.6103,
+  "n_train": 27947,
+  "n_val": 5990,
+  "n_test": 5989,
+  "n_train_pos": 857,
+  "n_train_neg": 27090,
+  "best_iteration": 196,
+  "cv_auc_mean": 0.8654,
+  "cv_auc_std": 0.0134,
+  "test_auc": 0.8636,
+  "test_pr_auc": 0.5197,
   "thresholds": {
     "0.3": {
-      "accuracy": 0.9877,
-      "precision": 1.0,
-      "recall": 0.9512,
-      "f1": 0.975,
+      "accuracy": 0.6559,
+      "precision": 0.0716,
+      "recall": 0.8579,
+      "f1": 0.1322,
       "confusion_matrix": [
         [
-          122,
-          0
+          3771,
+          2035
         ],
         [
-          2,
-          39
+          26,
+          157
         ]
       ]
     },
     "0.5": {
-      "accuracy": 0.9877,
-      "precision": 1.0,
-      "recall": 0.9512,
-      "f1": 0.975,
+      "accuracy": 0.8651,
+      "precision": 0.1461,
+      "recall": 0.7049,
+      "f1": 0.242,
       "confusion_matrix": [
         [
-          122,
-          0
+          5052,
+          754
         ],
         [
-          2,
-          39
+          54,
+          129
         ]
       ]
     },
     "0.7": {
-      "accuracy": 0.9877,
-      "precision": 1.0,
-      "recall": 0.9512,
-      "f1": 0.975,
+      "accuracy": 0.9548,
+      "precision": 0.3493,
+      "recall": 0.5574,
+      "f1": 0.4295,
       "confusion_matrix": [
         [
-          122,
-          0
+          5616,
+          190
         ],
         [
-          2,
-          39
+          81,
+          102
         ]
       ]
     }

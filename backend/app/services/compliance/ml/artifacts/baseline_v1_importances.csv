@@ -1,16 +1,16 @@
 feature,gain
-applicant_type_Consortium,152.1131
-wave_sequence_number,40.4938
-state_te,9.2244
-service_type_Basic Maintenance of Internal Connections,8.6613
-months_of_service,6.343
-is_consortium,5.7989
-applicant_type_School District,4.9454
-spac_filed,4.8211
-funding_year,4.1707
-category_1.0,3.5133
-requested_amount_log,3.1389
-service_type_Data Transmission and/or Internet Access,2.6213
-applicant_type_School,2.4302
-discount_rate,1.8259
-service_type_Internal Connections,1.2143
+service_type_Wireless School Bus Services and Equipment,864.0035
+category_nan,742.3458
+category_2.0,641.9886
+category_1.0,422.5135
+service_type_Wi-Fi Hotspots Services and Equipment,358.1491
+service_type_Data Transmission and/or Internet Access,308.5588
+applicant_type_School,235.6205
+applicant_type_Consortium,170.0173
+applicant_type_School District,159.0112
+spac_filed,157.3309
+state_te,155.8706
+service_type_Basic Maintenance of Internal Connections,129.0084
+funding_year,115.7587
+discount_rate,98.1401
+is_consortium,78.8607
