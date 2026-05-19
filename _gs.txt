@@ -1,0 +1,7 @@
+﻿ M frontend/tsconfig.tsbuildinfo
+?? _gallery_before.txt
+?? _gallery_diff.txt
+?? _gs.txt
+?? backend/_deploy_check.txt
+?? backend/_do_check.json
+?? tests/perf/pia_evidence/

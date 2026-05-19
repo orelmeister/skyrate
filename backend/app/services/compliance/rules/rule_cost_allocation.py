@@ -15,7 +15,7 @@ from typing import Optional
 
 from .base import RuleFinding, Severity
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 RULE_ID = "RULE-005"
 RULE_REFERENCE = "47 CFR Section 54.504(e); FCC Order 19-117 — cost allocation"
 
@@ -36,6 +36,15 @@ INELIGIBLE_KEYWORDS = [
     r"analog\s+(?:line|phone)",
 ]
 
+# Negation patterns — if these precede ineligible keywords, ignore
+NEGATION_PATTERNS = [
+    r"no\s+(?:voice|telephone|ineligible|phone|fax)",
+    r"(?:not|without)\s+(?:including?|any)\s+(?:voice|telephone|ineligible)",
+    r"(?:does|do)\s+not\s+include",
+    r"(?:excluded?|excluding|not\s+included)",
+    r"no\s+(?:other\s+)?(?:ineligible|non[\s-]*eligible)",
+]
+
 # Eligible + ineligible bundle indicators
 BUNDLE_KEYWORDS = [
     r"bundled?\s+(?:service|package|solution|offering)",
@@ -52,10 +61,13 @@ ALLOCATION_KEYWORDS = [
     r"eligible\s+(?:portion|share|percentage|amount|cost)",
     r"ineligible\s+(?:portion|share|percentage|amount|cost)",
     r"pro[\s-]*rat(?:a|ed|ing)",
-    r"(?:\d+)\s*%\s*eligible",
+    r"(?:\d+)\s*%\s*(?:eligible|educational|instructional)",
     r"separate\s+line\s+item",
     r"(?:split|divide|separate)\s+(?:the\s+)?(?:cost|charge|expense)",
     r"discount(?:ed)?\s+(?:only\s+)?(?:on\s+)?(?:the\s+)?eligible",
+    r"(?:educational|instructional)\s+use\s+allocat",
+    r"use\s+allocation\s+(?:document|method|calculat)",
+    r"excluded?\s+from\s+e-?rate",
 ]
 
 
@@ -66,13 +78,24 @@ def check(text: str, metadata: dict) -> Optional[RuleFinding]:
     Returns a finding if:
     - Both eligible and ineligible components are referenced
     - No cost allocation language is present
+    - The ineligible mention is not negated (e.g., "No voice services included")
     """
     text_lower = text.lower()
+
+    # Check for negation patterns first — if the document explicitly says
+    # ineligible services are NOT included, don't flag
+    has_negation = any(
+        re.search(kw, text_lower) for kw in NEGATION_PATTERNS
+    )
 
     # Check for ineligible service mentions
     has_ineligible = any(
         re.search(kw, text_lower) for kw in INELIGIBLE_KEYWORDS
     )
+
+    # If ineligible keywords found but preceded by negation, skip
+    if has_ineligible and has_negation:
+        has_ineligible = False
 
     # Check for bundle/mixed indicators
     has_bundle = any(

@@ -16,7 +16,7 @@ from typing import Optional
 
 from .base import RuleFinding, Severity
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 RULE_ID = "RULE-002"
 RULE_REFERENCE = "47 CFR Section 54.502; USAC Eligible Services List FY2026"
 
@@ -25,10 +25,10 @@ CATEGORY_1_KEYWORDS = [
     r"data\s+transmission",
     r"internet\s+access",
     r"internet\s+service",
-    r"broadband\s+(?:service|connection|access)",
+    r"broadband\s+(?:service|connection|access|connectivity)",
     r"wide\s*area\s*network",
-    r"wan\s+(?:service|connection)",
-    r"fiber\s+(?:optic|connection|service|lit)",
+    r"\bwan\b",
+    r"fiber\s+(?:optic|connection|service|lit|connectivity)",
     r"dark\s+fiber",
     r"ethernet",
     r"transport\s+(?:service|circuit)",
@@ -36,10 +36,12 @@ CATEGORY_1_KEYWORDS = [
     r"wireless\s+internet",
     r"leased\s+(?:lit\s+)?fiber",
     r"self[- ]provisioned",
-    r"isp\b",
+    r"\bisp\b",
     r"telecommunications",
     r"digital\s+transmission",
     r"lit\s+fiber",
+    r"sd[- ]?wan",
+    r"mpls",
 ]
 
 # Category 2 service keywords

@@ -15,7 +15,7 @@ from typing import Optional
 
 from .base import RuleFinding, Severity
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 RULE_ID = "RULE-001"
 RULE_REFERENCE = "47 CFR Section 54.504(b)(1) — 28-day waiting period"
 
@@ -28,6 +28,8 @@ DATE_PATTERNS = [
     r"(?:allowable\s*contract\s*date|earliest\s*contract\s*date)[:\s]*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
     r"(?:post(?:ed)?|fil(?:e|ed|ing)|submit(?:ted)?)\s+(?:on\s+)?(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
     r"(?:on|by)\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+    r"(?:posting|filing)[:\s]*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+    r"(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
 ]
 
 # Patterns indicating the window is mentioned
@@ -112,7 +114,12 @@ def check(text: str, metadata: dict) -> Optional[RuleFinding]:
     if not window_mentioned and len(dates) == 0:
         # Check if this even looks like a Form 470 context
         form_470_refs = re.findall(r"form\s*470", text_lower)
-        if form_470_refs:
+        # Must mention Form 470 AND eligible E-Rate services to trigger
+        erate_context = re.search(
+            r"(?:e-?rate|usac|eligible\s+services|competitive\s+bidding|internet\s+access|broadband|fiber|category\s*[12])",
+            text_lower
+        )
+        if form_470_refs and erate_context:
             return RuleFinding(
                 rule_id=RULE_ID,
                 rule_version=VERSION,

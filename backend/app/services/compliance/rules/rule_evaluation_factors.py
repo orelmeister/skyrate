@@ -17,19 +17,22 @@ from typing import Optional
 
 from .base import RuleFinding, Severity
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 RULE_ID = "RULE-004"
 RULE_REFERENCE = "47 CFR Section 54.503(b)(1)(i) — price as primary evaluation factor"
 
 # Patterns indicating evaluation criteria section
 EVAL_SECTION_KEYWORDS = [
     r"evaluation\s+(?:criteria|factors?|process|methodology)",
+    r"evaluat(?:ed|ing)\s+(?:using|based|on)",
     r"scoring\s+(?:criteria|factors?|methodology|rubric)",
     r"selection\s+(?:criteria|factors?|process)",
-    r"bid\s+evaluation",
-    r"proposal\s+evaluation",
+    r"bid\s+(?:evaluation|scoring)",
+    r"proposal(?:s)?\s+(?:will\s+be\s+)?(?:evaluated|scored)",
     r"award\s+criteria",
     r"weighted\s+(?:criteria|factors?|scoring)",
+    r"scored\s+on",
+    r"scoring\s+methodology",
 ]
 
 # Price-related keywords
@@ -39,14 +42,14 @@ PRICE_KEYWORDS = [
 
 # Patterns suggesting price is primary/most weighted
 PRICE_PRIMARY_PATTERNS = [
-    r"price.*(?:most\s+(?:heavily\s+)?weighted|primary|highest\s+weight|greatest\s+weight)",
-    r"(?:most\s+(?:heavily\s+)?weighted|primary|highest\s+weight|greatest\s+weight).*price",
-    r"price.*(?:(?:\d+)\s*%|percent).*(?:highest|most|primary|greatest)",
+    r"(?:price|pricing).*(?:most\s+(?:heavily\s+)?weighted|primary|highest\s+weight|greatest\s+weight)",
+    r"(?:most\s+(?:heavily\s+)?weighted|primary|highest\s+weight|greatest\s+weight).*(?:price|pricing)",
+    r"(?:price|pricing).*(?:(?:\d+)\s*%|percent).*(?:highest|most|primary|greatest)",
     r"cost.*(?:most\s+(?:heavily\s+)?weighted|primary|highest\s+weight|greatest\s+weight)",
     r"(?:most\s+(?:heavily\s+)?weighted|primary|highest\s+weight|greatest\s+weight).*cost",
     # Common weight-based patterns (price > 50% implies primary)
-    r"(?:price|cost)\s*[:=\-]\s*(?:[5-9]\d|100)\s*%",
-    r"(?:[5-9]\d|100)\s*%\s*[-:=]?\s*(?:price|cost)",
+    r"(?:price|cost|pricing)\s*[:=\-]\s*(?:[5-9]\d|100)\s*%",
+    r"(?:[5-9]\d|100)\s*%\s*[-:=]?\s*(?:price|cost|pricing)",
 ]
 
 

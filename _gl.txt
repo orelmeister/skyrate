@@ -1,0 +1,8 @@
+﻿7a26836 fix: eager-load role profiles in get_current_user + fix test infra
+16be865 fix: include role profiles in auth/me + add PIA preview endpoint
+f7c87c6 fix: PIA template routing - pass explicit category, fix fallback, add student_count
+48c2427 feat(consultant/service-search): year fix (default current FY, 2026/2027), 500-row limit, Excel-style per-column filters + sort on all columns
+74f2a13 ops: fix cron URL to use skyrate.ai/api (api.skyrate.ai doesn't resolve)
+632ccec perf_v2: capture before/after audit JSON + HTML report (flags flipped ON)
+db3685f ops: GitHub Actions cron for nightly USAC cache refresh
+0766ebe merge: perf_v2 single-shot (flagged OFF)
