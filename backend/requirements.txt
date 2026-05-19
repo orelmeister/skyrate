@@ -126,3 +126,9 @@ pymupdf>=1.25.0
 # Embeddings (Compliance RAG)
 # ==========================================
 sentence-transformers==2.7.0
+
+# ==========================================
+# ML (Compliance Risk Classifier)
+# ==========================================
+xgboost==2.0.3
+scikit-learn==1.4.2

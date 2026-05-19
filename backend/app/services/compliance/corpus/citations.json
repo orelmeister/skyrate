@@ -42,6 +42,22 @@
       "text": "The 28-day rule requires applicants to allow a minimum of 28 calendar days between when USAC posts the Form 470 on its website and when the applicant files Form 471. This waiting period ensures vendors have adequate time to review and respond to service requests. The 28-day clock starts when USAC posts the form (not when applicant submits it — there may be a 1-2 day processing delay). Filing Form 471 before the 28-day window closes is one of the most common reasons for USAC denial.",
       "last_verified": "2026-05-19",
       "applicable_rules": ["RULE-001"]
+    },
+    {
+      "id": "USAC-FORM470-INSTRUCTIONS",
+      "title": "USAC Form 470 Instructions — Funding Year 2026",
+      "source_url": "https://www.usac.org/e-rate/applicant-process/competitive-bidding/form-470-filing/",
+      "text": "Summary by SkyRate (source: USAC official Form 470 filing instructions, FY2026). Form 470 is the Description of Services Requested and Certification Form that initiates the competitive bidding process. Applicants must file Form 470 to describe the services and/or equipment they seek to purchase. Key requirements: (1) Select at least one service type from the Eligible Services List; (2) Describe services with sufficient detail for vendors to prepare bids without specifying a brand name unless 'or equivalent' language is included; (3) Indicate whether the request is for Category 1 (Internet Access / Data Transmission) or Category 2 (Internal Connections / BMIC); (4) Certify that technology plan requirements are met (if applicable); (5) Certify that the applicant is aware of the minimum 28-day waiting period after USAC posts the form. After filing, USAC typically posts the form within 1-2 business days. Applicants should verify posting date via the USAC portal before counting 28 days.",
+      "last_verified": "2026-05-19",
+      "applicable_rules": ["RULE-001", "RULE-002", "RULE-003"]
+    },
+    {
+      "id": "FCC-ORDER-19-117",
+      "title": "FCC Order 19-117 — Cost Allocation and Eligible Use Requirements",
+      "source_url": "https://www.fcc.gov/document/fcc-19-117",
+      "text": "Summary by SkyRate (source: FCC 19-117, released December 2019). FCC Order 19-117 addresses cost allocation requirements for E-Rate funded services. When a service includes both eligible and ineligible components, the applicant must allocate costs so that E-Rate discounts apply only to the eligible portion. Key provisions: (1) Applicants must use a reasonable cost allocation method when services bundle eligible and ineligible components (e.g., voice and data on the same circuit); (2) Acceptable methods include proportional allocation based on usage studies, per-unit cost calculations, or vendor-provided line-item pricing; (3) The burden is on the applicant to demonstrate that the allocation methodology is reasonable and documented; (4) Common ineligible components requiring allocation: voice/POTS lines, video surveillance dedicated bandwidth, personal/non-educational use, administrative non-instructional use; (5) Failure to properly allocate costs is grounds for USAC to deny or reduce funding commitments.",
+      "last_verified": "2026-05-19",
+      "applicable_rules": ["RULE-005"]
     }
   ]
 }

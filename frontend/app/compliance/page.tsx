@@ -4,9 +4,18 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
-import { Shield, Upload, AlertTriangle, CheckCircle, XCircle, FileText, ArrowLeft, ShieldCheck, Brain, ExternalLink } from "lucide-react";
+import { Shield, Upload, AlertTriangle, CheckCircle, XCircle, FileText, ArrowLeft, ShieldCheck, Brain, ExternalLink, ChevronDown, ChevronRight, Activity } from "lucide-react";
 
 // ==================== TYPES ====================
+
+interface AgentTraceStage {
+  stage: string;
+  model: string;
+  latency_ms: number;
+  input_tokens: number;
+  output_tokens: number;
+  disagreement_flag?: boolean;
+}
 
 interface ComplianceFinding {
   severity: "low" | "medium" | "high";
@@ -38,6 +47,7 @@ interface ComplianceResult {
   llm_findings: ComplianceFinding[];
   engine_version: string | null;
   disclaimer: string;
+  agent_trace?: AgentTraceStage[];
 }
 
 // ==================== COMPONENT ====================
@@ -51,6 +61,7 @@ export default function CompliancePage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<ComplianceResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [traceOpen, setTraceOpen] = useState(false);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -448,6 +459,56 @@ export default function CompliancePage() {
                 <p className="text-emerald-800 font-medium">
                   No significant compliance issues detected.
                 </p>
+              </div>
+            )}
+
+            {/* Agent Pipeline Trace */}
+            {result.agent_trace && result.agent_trace.length > 0 && (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                {result.agent_trace.some((s) => s.disagreement_flag) && (
+                  <div className="px-5 py-3 bg-indigo-50 border-b border-indigo-100">
+                    <p className="text-sm font-medium text-indigo-800">
+                      Second-opinion review available — Compliance Officer and Verifier disagree on this analysis
+                    </p>
+                  </div>
+                )}
+                <button
+                  onClick={() => setTraceOpen(!traceOpen)}
+                  className="w-full px-5 py-4 flex items-center gap-2 text-left hover:bg-slate-50 transition-colors"
+                >
+                  {traceOpen ? (
+                    <ChevronDown className="w-4 h-4 text-slate-500" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-slate-500" />
+                  )}
+                  <Activity className="w-4 h-4 text-slate-600" />
+                  <span className="text-sm font-medium text-slate-700">
+                    Agent Pipeline Trace ({result.agent_trace.length} stages)
+                  </span>
+                </button>
+                {traceOpen && (
+                  <div className="px-5 pb-4 space-y-2">
+                    {result.agent_trace.map((stage, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between px-3 py-2 bg-slate-50 rounded-lg text-sm"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="font-medium text-slate-800">
+                            {stage.stage}
+                          </span>
+                          <span className="text-xs text-slate-500 font-mono">
+                            {stage.model}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4 text-xs text-slate-500">
+                          <span>{(stage.latency_ms / 1000).toFixed(1)}s</span>
+                          <span>{stage.input_tokens + stage.output_tokens} tok</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

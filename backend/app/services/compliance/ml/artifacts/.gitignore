@@ -1,0 +1,5 @@
+# ML artifacts - keep only metrics/importances in git
+*
+!.gitignore
+!*_metrics.json
+!*_importances.csv
