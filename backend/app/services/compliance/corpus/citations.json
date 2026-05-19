@@ -1,0 +1,47 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-05-19",
+  "disclaimer": "Advisory only. Not legal or USAC official guidance.",
+  "citations": [
+    {
+      "id": "FCC-26-30",
+      "title": "FCC 26-30 Report and Order — Mandatory USAC Bidding Portal",
+      "source_url": "https://www.fcc.gov/document/fcc-26-30",
+      "text": "FCC 26-30 (released May 1, 2026) establishes a mandatory USAC-hosted competitive bidding portal for E-Rate applicants beginning in Funding Year 2028. The portal will standardize Form 470 postings and bid evaluations. Competitive bidding opens approximately July 1, 2027. This order does not change existing 28-day waiting period requirements or evaluation factor rules for FY2026-FY2027.",
+      "last_verified": "2026-05-19",
+      "applicable_rules": ["RULE-001", "RULE-004"]
+    },
+    {
+      "id": "47-CFR-54.503",
+      "title": "47 CFR Section 54.503 — Competitive Bidding Requirements",
+      "source_url": "https://www.ecfr.gov/current/title-47/chapter-I/subchapter-B/part-54/subpart-F/section-54.503",
+      "text": "Section 54.503 requires that all applicants seeking E-Rate discounts engage in a fair and open competitive bidding process. Subsection (b)(1)(i) mandates that price of eligible products and services be the most heavily weighted factor in bid evaluation. Subsection (b)(2) requires that any brand-name specification include 'or equivalent' language to avoid unduly restricting competition. Applicants must wait at least 28 days after USAC posts their Form 470 before filing Form 471.",
+      "last_verified": "2026-05-19",
+      "applicable_rules": ["RULE-001", "RULE-003", "RULE-004"]
+    },
+    {
+      "id": "47-CFR-54.504",
+      "title": "47 CFR Section 54.504 — Request for Services",
+      "source_url": "https://www.ecfr.gov/current/title-47/chapter-I/subchapter-B/part-54/subpart-F/section-54.504",
+      "text": "Section 54.504 governs the Form 470 filing process. Subsection (b)(1) establishes the 28-day minimum waiting period between Form 470 posting and Form 471 filing. Subsection (e) addresses cost allocation requirements when services include both eligible and ineligible components — applicants must request discounts only on the eligible portion and provide documentation of cost allocation methodology.",
+      "last_verified": "2026-05-19",
+      "applicable_rules": ["RULE-001", "RULE-005"]
+    },
+    {
+      "id": "USAC-ESL-2026",
+      "title": "USAC Eligible Services List — Funding Year 2026",
+      "source_url": "https://www.usac.org/e-rate/applicant-process/before-you-begin/eligible-services-list/",
+      "text": "The Eligible Services List (ESL) for FY2026 defines two categories. Category 1 includes Data Transmission Services and Internet Access (fiber, broadband, WAN, cellular data, lit/dark fiber, self-provisioned networks). Category 2 includes Internal Connections (switches, routers, wireless access points, firewalls, cabling), Managed Internal Broadband Services (MIBS), and Basic Maintenance of Internal Connections (BMIC). Voice services (POTS, VoIP) are no longer eligible as of FY2020. Applicants must request services from at least one eligible category on Form 470.",
+      "last_verified": "2026-05-19",
+      "applicable_rules": ["RULE-002"]
+    },
+    {
+      "id": "28-DAY-RULE",
+      "title": "28-Day Waiting Period — Competitive Bidding Window",
+      "source_url": "https://www.usac.org/e-rate/applicant-process/competitive-bidding/",
+      "text": "The 28-day rule requires applicants to allow a minimum of 28 calendar days between when USAC posts the Form 470 on its website and when the applicant files Form 471. This waiting period ensures vendors have adequate time to review and respond to service requests. The 28-day clock starts when USAC posts the form (not when applicant submits it — there may be a 1-2 day processing delay). Filing Form 471 before the 28-day window closes is one of the most common reasons for USAC denial.",
+      "last_verified": "2026-05-19",
+      "applicable_rules": ["RULE-001"]
+    }
+  ]
+}

@@ -4,7 +4,7 @@ import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
-import { Shield, Upload, AlertTriangle, CheckCircle, XCircle, FileText, ArrowLeft } from "lucide-react";
+import { Shield, Upload, AlertTriangle, CheckCircle, XCircle, FileText, ArrowLeft, ShieldCheck, Brain, ExternalLink } from "lucide-react";
 
 // ==================== TYPES ====================
 
@@ -14,12 +14,30 @@ interface ComplianceFinding {
   description: string;
   suggestion: string;
   rule_reference: string | null;
+  source?: "rule_engine" | "llm";
+  rule_id?: string;
+}
+
+interface RuleFinding {
+  rule_id: string;
+  rule_version: string;
+  severity: string;
+  area: string;
+  description: string;
+  suggestion: string;
+  rule_reference: string;
+  confidence: number;
+  evidence_snippet: string | null;
 }
 
 interface ComplianceResult {
   overall_risk: "Low" | "Medium" | "High";
   summary: string | null;
   findings: ComplianceFinding[];
+  rule_findings: RuleFinding[];
+  llm_findings: ComplianceFinding[];
+  engine_version: string | null;
+  disclaimer: string;
 }
 
 // ==================== COMPONENT ====================
@@ -282,6 +300,11 @@ export default function CompliancePage() {
                   {result.summary && (
                     <p className="text-sm text-slate-600 mt-1">{result.summary}</p>
                   )}
+                  {result.engine_version && (
+                    <p className="text-xs text-slate-400 mt-1">
+                      Rule Engine v{result.engine_version}
+                    </p>
+                  )}
                 </div>
                 <span
                   className={`px-4 py-2 rounded-full text-sm font-bold border ${riskColor(
@@ -293,13 +316,87 @@ export default function CompliancePage() {
               </div>
             </div>
 
-            {/* Findings */}
-            {result.findings.length > 0 ? (
+            {/* Verified Rule Checks Section */}
+            {result.rule_findings && result.rule_findings.length > 0 && (
               <div className="space-y-4">
-                <h3 className="text-md font-semibold text-slate-800">
-                  Findings ({result.findings.length})
-                </h3>
-                {result.findings.map((finding, idx) => (
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-indigo-600" />
+                  <h3 className="text-md font-semibold text-slate-800">
+                    Verified Rule Checks ({result.rule_findings.length})
+                  </h3>
+                  <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-medium">
+                    Deterministic
+                  </span>
+                </div>
+                {result.rule_findings.map((rf, idx) => (
+                  <div
+                    key={idx}
+                    className={`bg-white rounded-xl border border-slate-200 border-l-4 ${severityBorder(
+                      rf.severity.toLowerCase()
+                    )} p-5 shadow-sm`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <ShieldCheck className="w-5 h-5 text-indigo-500 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="text-xs font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+                            {rf.rule_id}
+                          </span>
+                          <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                            {rf.area}
+                          </span>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                              rf.severity.toLowerCase() === "high"
+                                ? "bg-red-100 text-red-700"
+                                : rf.severity.toLowerCase() === "medium"
+                                ? "bg-amber-100 text-amber-700"
+                                : "bg-emerald-100 text-emerald-700"
+                            }`}
+                          >
+                            {rf.severity}
+                          </span>
+                          <span className="text-xs text-slate-400">
+                            {Math.round(rf.confidence * 100)}% confidence
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-900 font-medium mb-2">
+                          {rf.description}
+                        </p>
+                        <p className="text-sm text-slate-600">
+                          <strong>Suggestion:</strong> {rf.suggestion}
+                        </p>
+                        {rf.evidence_snippet && (
+                          <p className="text-xs text-slate-500 mt-2 italic bg-slate-50 px-2 py-1 rounded">
+                            Evidence: &ldquo;{rf.evidence_snippet}&rdquo;
+                          </p>
+                        )}
+                        {rf.rule_reference && (
+                          <p className="text-xs text-indigo-600 mt-2 font-medium flex items-center gap-1">
+                            <ExternalLink className="w-3 h-3" />
+                            {rf.rule_reference}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* AI Analysis Section */}
+            {result.llm_findings && result.llm_findings.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Brain className="w-5 h-5 text-purple-600" />
+                  <h3 className="text-md font-semibold text-slate-800">
+                    AI Analysis ({result.llm_findings.length})
+                  </h3>
+                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">
+                    LLM-derived
+                  </span>
+                </div>
+                {result.llm_findings.map((finding, idx) => (
                   <div
                     key={idx}
                     className={`bg-white rounded-xl border border-slate-200 border-l-4 ${severityBorder(
@@ -341,7 +438,11 @@ export default function CompliancePage() {
                   </div>
                 ))}
               </div>
-            ) : (
+            )}
+
+            {/* No findings at all */}
+            {(!result.rule_findings || result.rule_findings.length === 0) &&
+             (!result.llm_findings || result.llm_findings.length === 0) && (
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6 text-center">
                 <CheckCircle className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
                 <p className="text-emerald-800 font-medium">
@@ -349,6 +450,13 @@ export default function CompliancePage() {
                 </p>
               </div>
             )}
+
+            {/* Disclaimer */}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+              <p className="text-xs text-slate-500 text-center">
+                {result.disclaimer || "Advisory only. Not legal or USAC official guidance."}
+              </p>
+            </div>
           </div>
         )}
       </div>

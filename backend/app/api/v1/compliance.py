@@ -1,6 +1,6 @@
 """
 Compliance API Router — Form 470 pre-review endpoints.
-Phase 0: Upload PDF → extract text → LLM analysis → structured findings.
+Phase 1: Upload PDF → extract text → deterministic rules + LLM analysis → structured findings.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
@@ -29,12 +29,30 @@ class ComplianceFinding(BaseModel):
     description: str
     suggestion: str
     rule_reference: Optional[str] = None
+    source: Optional[str] = None  # "rule_engine" or "llm"
+    rule_id: Optional[str] = None
+
+
+class RuleFindingResponse(BaseModel):
+    rule_id: str
+    rule_version: str
+    severity: str
+    area: str
+    description: str
+    suggestion: str
+    rule_reference: str
+    confidence: float
+    evidence_snippet: Optional[str] = None
 
 
 class ComplianceAnalysisResponse(BaseModel):
     overall_risk: str  # "Low", "Medium", "High"
     summary: Optional[str] = None
     findings: List[ComplianceFinding]
+    rule_findings: List[RuleFindingResponse] = []
+    llm_findings: List[ComplianceFinding] = []
+    engine_version: Optional[str] = None
+    disclaimer: str = "Advisory only. Not legal or USAC official guidance."
 
 
 # ==================== ENDPOINTS ====================
@@ -90,8 +108,8 @@ async def analyze_form470_endpoint(
             detail="Could not extract text from PDF. The file may be image-based or corrupted.",
         )
 
-    # Analyze with Gemini
-    result = await analyze_form470(document_text)
+    # Analyze with rule engine + Gemini
+    result = await analyze_form470(document_text, {"filename": file.filename})
     if not result:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -99,14 +117,19 @@ async def analyze_form470_endpoint(
         )
 
     logger.info(
-        "Compliance analysis completed for user %s: risk=%s, findings=%d",
+        "Compliance analysis completed for user %s: risk=%s, rule_findings=%d, llm_findings=%d",
         current_user.id,
         result.get("overall_risk"),
-        len(result.get("findings", [])),
+        len(result.get("rule_findings", [])),
+        len(result.get("llm_findings", [])),
     )
 
     return ComplianceAnalysisResponse(
         overall_risk=result["overall_risk"],
         summary=result.get("summary"),
         findings=[ComplianceFinding(**f) for f in result.get("findings", [])],
+        rule_findings=[RuleFindingResponse(**rf) for rf in result.get("rule_findings", [])],
+        llm_findings=[ComplianceFinding(**lf) for lf in result.get("llm_findings", [])],
+        engine_version=result.get("engine_version"),
+        disclaimer=result.get("disclaimer", "Advisory only. Not legal or USAC official guidance."),
     )

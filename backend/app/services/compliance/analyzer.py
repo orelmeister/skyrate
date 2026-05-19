@@ -1,6 +1,6 @@
 """
-Compliance Analyzer — calls Google Gemini to assess Form 470 compliance risk.
-Phase 0: Single LLM pass, no rule engine or embeddings.
+Compliance Analyzer — deterministic rule engine + Gemini LLM analysis.
+Phase 1: Rules run first, findings feed into LLM prompt for grounding.
 """
 
 import json
@@ -10,6 +10,8 @@ from typing import Optional
 import google.generativeai as genai
 
 from ...core.config import settings
+from .rules import run_all_rules, ENGINE_VERSION
+from .rules.base import RuleFinding
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,7 @@ Your task:
 3. Cite specific FCC/USAC rules where possible (e.g., FCC Order 19-117, USAC Program Integrity Guidelines).
 4. Focus on competitive bidding requirements, service eligibility, cost-effectiveness, and documentation completeness.
 5. NEVER claim guaranteed approval or denial — this is advisory only.
+6. DO NOT re-derive issues already covered in the VERIFIED RULE FINDINGS section below. Instead, look for ADDITIONAL issues not caught by the deterministic rules.
 
 Return ONLY valid JSON in this exact format:
 {
@@ -39,68 +42,158 @@ Return ONLY valid JSON in this exact format:
   ]
 }
 
-If the document appears compliant with no significant issues, return overall_risk "Low" with an empty or minimal findings array.
+If the document appears compliant with no significant issues beyond those in VERIFIED RULE FINDINGS, return overall_risk "Low" with an empty or minimal findings array.
 If the document does not appear to be a Form 470 or is unreadable, return overall_risk "High" with a single finding explaining the issue.
 """
 
 
-async def analyze_form470(document_text: str) -> Optional[dict]:
+def _format_rule_findings_for_prompt(findings: list[RuleFinding]) -> str:
+    """Format deterministic rule findings as context for the LLM prompt."""
+    if not findings:
+        return "No deterministic rule violations detected."
+
+    lines = []
+    for f in findings:
+        lines.append(
+            f"- [{f.rule_id}] ({f.severity.value}) {f.area}: {f.description} "
+            f"[Ref: {f.rule_reference}]"
+        )
+    return "\n".join(lines)
+
+
+async def analyze_form470(
+    document_text: str, metadata: Optional[dict] = None
+) -> Optional[dict]:
     """
-    Analyze Form 470 text for compliance issues using Gemini.
+    Analyze Form 470 text using deterministic rules + Gemini LLM.
+
+    Phase 1 flow:
+    1. Run deterministic rule engine (pure Python, no API calls)
+    2. Feed rule findings into Gemini prompt for grounding
+    3. Return both rule_findings and llm_findings separately
 
     Args:
         document_text: Extracted text content from the Form 470 PDF.
+        metadata: Optional dict with filename, upload context, etc.
 
     Returns:
-        Parsed JSON response with risk assessment, or None on failure.
+        Dict with rule_findings, llm_findings, merged findings, and risk.
     """
-    api_key = settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY
-    if not api_key:
-        logger.error("No Gemini/Google API key configured")
-        return None
+    if metadata is None:
+        metadata = {}
 
+    # --- Phase 1: Deterministic Rule Engine ---
+    rule_findings: list[RuleFinding] = []
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
-            system_instruction=SYSTEM_PROMPT,
+        rule_findings = run_all_rules(document_text, metadata)
+        logger.info(
+            "Rule engine returned %d findings (engine v%s)",
+            len(rule_findings),
+            ENGINE_VERSION,
         )
-
-        # Truncate if extremely long (Gemini context is large but let's be safe)
-        max_chars = 120_000
-        if len(document_text) > max_chars:
-            document_text = document_text[:max_chars] + "\n\n[Document truncated]"
-
-        response = model.generate_content(
-            f"Analyze this Form 470 document for USAC compliance readiness:\n\n{document_text}",
-            generation_config=genai.GenerationConfig(
-                temperature=0.2,
-                response_mime_type="application/json",
-            ),
-        )
-
-        if not response.text:
-            logger.error("Gemini returned empty response")
-            return None
-
-        # Parse JSON response
-        result = json.loads(response.text)
-
-        # Validate expected structure
-        if "overall_risk" not in result or "findings" not in result:
-            logger.error("Gemini response missing required fields: %s", response.text[:200])
-            return None
-
-        # Normalize overall_risk
-        valid_risks = ("Low", "Medium", "High")
-        if result["overall_risk"] not in valid_risks:
-            result["overall_risk"] = "Medium"
-
-        return result
-
-    except json.JSONDecodeError as e:
-        logger.error("Failed to parse Gemini JSON response: %s", str(e))
-        return None
     except Exception as e:
-        logger.error("Gemini analysis failed: %s", str(e))
-        return None
+        logger.error("Rule engine failed: %s", str(e))
+
+    # --- Phase 1: LLM Analysis with rule grounding ---
+    api_key = settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY
+    llm_result = None
+
+    if api_key:
+        try:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel(
+                model_name="gemini-2.0-flash",
+                system_instruction=SYSTEM_PROMPT,
+            )
+
+            # Truncate if extremely long
+            max_chars = 120_000
+            text_for_llm = document_text
+            if len(text_for_llm) > max_chars:
+                text_for_llm = text_for_llm[:max_chars] + "\n\n[Document truncated]"
+
+            # Build prompt with rule findings context
+            rule_context = _format_rule_findings_for_prompt(rule_findings)
+            prompt = (
+                f"VERIFIED RULE FINDINGS (from deterministic engine — do not re-derive these):\n"
+                f"{rule_context}\n\n"
+                f"---\n\n"
+                f"Analyze this Form 470 document for ADDITIONAL USAC compliance issues "
+                f"not already covered above:\n\n{text_for_llm}"
+            )
+
+            response = model.generate_content(
+                prompt,
+                generation_config=genai.GenerationConfig(
+                    temperature=0.2,
+                    response_mime_type="application/json",
+                ),
+            )
+
+            if response.text:
+                llm_result = json.loads(response.text)
+                if "overall_risk" not in llm_result or "findings" not in llm_result:
+                    logger.error("Gemini response missing required fields")
+                    llm_result = None
+                else:
+                    valid_risks = ("Low", "Medium", "High")
+                    if llm_result["overall_risk"] not in valid_risks:
+                        llm_result["overall_risk"] = "Medium"
+
+        except json.JSONDecodeError as e:
+            logger.error("Failed to parse Gemini JSON response: %s", str(e))
+        except Exception as e:
+            logger.error("Gemini analysis failed: %s", str(e))
+    else:
+        logger.warning("No Gemini API key — returning rule findings only")
+
+    # --- Merge results ---
+    rule_findings_dicts = [f.model_dump() for f in rule_findings]
+
+    # Convert rule findings to the same shape as LLM findings for merged list
+    merged_findings = []
+    for rf in rule_findings_dicts:
+        merged_findings.append({
+            "severity": rf["severity"].lower() if isinstance(rf["severity"], str) else rf["severity"],
+            "area": rf["area"],
+            "description": rf["description"],
+            "suggestion": rf["suggestion"],
+            "rule_reference": rf["rule_reference"],
+            "source": "rule_engine",
+            "rule_id": rf["rule_id"],
+        })
+
+    llm_findings = []
+    if llm_result:
+        for lf in llm_result.get("findings", []):
+            lf["source"] = "llm"
+            llm_findings.append(lf)
+            merged_findings.append(lf)
+
+    # Determine overall risk (take the higher of rule-derived and LLM-derived)
+    risk_order = {"Low": 0, "Medium": 1, "High": 2}
+    rule_max_risk = "Low"
+    for rf in rule_findings:
+        if risk_order.get(rf.severity.value, 0) > risk_order.get(rule_max_risk, 0):
+            rule_max_risk = rf.severity.value
+
+    llm_risk = llm_result["overall_risk"] if llm_result else "Low"
+    overall_risk = (
+        rule_max_risk
+        if risk_order.get(rule_max_risk, 0) >= risk_order.get(llm_risk, 0)
+        else llm_risk
+    )
+
+    summary = llm_result.get("summary") if llm_result else None
+    if not summary and rule_findings:
+        summary = f"Deterministic rules identified {len(rule_findings)} issue(s)."
+
+    return {
+        "overall_risk": overall_risk,
+        "summary": summary,
+        "findings": merged_findings,
+        "rule_findings": rule_findings_dicts,
+        "llm_findings": llm_findings,
+        "engine_version": ENGINE_VERSION,
+        "disclaimer": "Advisory only. Not legal or USAC official guidance.",
+    }
