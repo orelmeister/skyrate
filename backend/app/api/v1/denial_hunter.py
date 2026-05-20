@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from ...core.security import require_role
@@ -46,6 +47,23 @@ def _get_db() -> Session:
                 "DENIAL_HUNTER_MYSQL_PASSWORD, DENIAL_HUNTER_MYSQL_DATABASE."
             ),
         )
+    # Probe the connection so unreachable-host errors surface as a clean 503
+    # (instead of bubbling up as a 500 from the endpoint's first query).
+    # Common cause: Hostinger remote-MySQL allow-list does not include the
+    # current DigitalOcean outbound IP.
+    try:
+        sess.execute(text("SELECT 1"))
+    except OperationalError as exc:
+        sess.close()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Denial Hunter database is temporarily unreachable. "
+                "Verify the Hostinger Remote MySQL allow-list includes the "
+                "skyrate.ai backend outbound IP (or use a wildcard '%'). "
+                f"Underlying error: {str(exc.orig)[:240]}"
+            ),
+        ) from exc
     try:
         yield sess
     finally:
