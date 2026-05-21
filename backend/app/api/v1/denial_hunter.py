@@ -116,12 +116,30 @@ async def stats(_: User = DHAdmin, db: Session = Depends(_get_db)):
             COUNT(*) AS total,
             SUM(CASE WHEN outreach_status = 'new' THEN 1 ELSE 0 END) AS new_count,
             SUM(CASE WHEN outreach_status = 'contacted' THEN 1 ELSE 0 END) AS contacted,
-            SUM(CASE WHEN outreach_status = 'replied' THEN 1 ELSE 0 END) AS replied,
             SUM(CASE WHEN outreach_status = 'won' THEN 1 ELSE 0 END) AS won,
             SUM(CASE WHEN outreach_status = 'lost' THEN 1 ELSE 0 END) AS lost,
             SUM(CASE WHEN outreach_status = 'archived' THEN 1 ELSE 0 END) AS archived,
             COALESCE(SUM(requested_amount), 0) AS total_potential_revenue
         FROM denial_leads
+        """
+    )).first()
+
+    # "Replied" is sourced from denial_replies (the authoritative inbox log).
+    # The bot updates denial_leads.outreach_status to specific values like
+    # 'interested' / 'unsubscribed' / 'redirected' rather than a generic
+    # 'replied', so counting that column always returned 0. We count distinct
+    # leads with at least one human reply (excluding auto-replies, bounces,
+    # DSNs, and out-of-office responders), plus the total reply messages.
+    reply_totals = db.execute(text(
+        """
+        SELECT
+            COUNT(*) AS total_messages,
+            COUNT(DISTINCT COALESCE(institution_ben, from_email)) AS distinct_leads,
+            SUM(CASE WHEN classification = 'INTERESTED' THEN 1 ELSE 0 END) AS interested_msgs,
+            SUM(CASE WHEN status = 'needs_review' THEN 1 ELSE 0 END) AS needs_review_msgs
+        FROM denial_replies
+        WHERE COALESCE(classification, '') NOT IN
+            ('AUTO_REPLY', 'BOUNCE', 'DSN', 'OUT_OF_OFFICE')
         """
     )).first()
 
@@ -189,7 +207,10 @@ async def stats(_: User = DHAdmin, db: Session = Depends(_get_db)):
         "total_leads": int(totals.total or 0),
         "new": int(totals.new_count or 0),
         "contacted": int(totals.contacted or 0),
-        "replied": int(totals.replied or 0),
+        "replied": int((reply_totals.distinct_leads if reply_totals else 0) or 0),
+        "reply_messages_total": int((reply_totals.total_messages if reply_totals else 0) or 0),
+        "reply_messages_interested": int((reply_totals.interested_msgs if reply_totals else 0) or 0),
+        "reply_messages_needs_review": int((reply_totals.needs_review_msgs if reply_totals else 0) or 0),
         "won": int(totals.won or 0),
         "lost": int(totals.lost or 0),
         "archived": int(totals.archived or 0),
