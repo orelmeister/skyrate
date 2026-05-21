@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuthStore } from "@/lib/auth-store";
+import { useAuthStore, authFetch } from "@/lib/auth-store";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -111,16 +111,9 @@ function getAuthToken(): string | null {
 }
 
 async function dhFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = getAuthToken();
   const url = `${API_BASE}/api/v1/admin/denial-hunter${path}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init.headers || {}),
-    },
-  });
+  // authFetch handles Authorization header + auto-refresh on 401 + retry once.
+  const res = await authFetch(url, init);
   if (!res.ok) {
     let detail = res.statusText;
     try {
@@ -128,6 +121,11 @@ async function dhFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
       detail = j.detail || detail;
     } catch {
       /* ignore */
+    }
+    // If refresh failed and we're still 401, bounce to sign-in so the user
+    // gets a clean re-auth instead of a raw "Signature has expired" toast.
+    if (res.status === 401 && typeof window !== "undefined") {
+      window.location.href = "/sign-in?next=/admin/denial-hunter";
     }
     throw new Error(`${res.status}: ${detail}`);
   }
