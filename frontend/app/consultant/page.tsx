@@ -1099,6 +1099,24 @@ function ConsultantPortalPage() {
     }
   };
 
+  const handleSetPrimaryCRN = async (crnId: number, crnNumber: string) => {
+    if (!confirm(`Make CRN ${crnNumber} your primary CRN? This will demote your current primary CRN, which you can then delete if you no longer need it.`)) {
+      return;
+    }
+    try {
+      const response = await api.setPrimaryCRN(crnId);
+      if (response.success) {
+        await loadCRNList();
+        await loadData(true);
+      } else {
+        alert(response.error || "Failed to set primary CRN");
+      }
+    } catch (error: any) {
+      console.error("Failed to set primary CRN:", error);
+      alert(error?.message || "Failed to set primary CRN");
+    }
+  };
+
   // Function to add school from search results
   const handleAddSchoolFromSearch = async (school: { ben: string; school_name: string; state: string }) => {
     try {
@@ -4022,6 +4040,15 @@ function ConsultantPortalPage() {
                           <div className="flex items-center gap-2">
                             {!crn.is_primary && (
                               <button
+                                onClick={() => handleSetPrimaryCRN(crn.id, crn.crn)}
+                                className="px-2 py-1 text-[11px] font-medium text-indigo-600 hover:text-white hover:bg-indigo-600 border border-indigo-200 hover:border-indigo-600 rounded-md transition"
+                                title="Make this CRN your primary CRN"
+                              >
+                                Set as Primary
+                              </button>
+                            )}
+                            {!crn.is_primary && (
+                              <button
                                 onClick={() => handleRemoveCRN(crn.id, crn.crn, crn.is_primary)}
                                 className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
                                 title="Remove CRN"
@@ -4030,6 +4057,9 @@ function ConsultantPortalPage() {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                 </svg>
                               </button>
+                            )}
+                            {crn.is_primary && (
+                              <span className="text-[10px] text-slate-400 italic">Primary CRN — promote another to delete</span>
                             )}
                           </div>
                         </div>

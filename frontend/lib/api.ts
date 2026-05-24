@@ -1928,6 +1928,12 @@ class ApiClient {
     });
   }
 
+  async setPrimaryCRN(crnId: number): Promise<ApiResponse<{ message: string; primary_crn: string }>> {
+    return this.request(`/api/v1/consultant/crns/${crnId}/set-primary`, {
+      method: 'POST',
+    });
+  }
+
   // ==================== VENDOR ====================
 
   async getVendorProfile(): Promise<ApiResponse<{ profile: VendorProfile }>> {

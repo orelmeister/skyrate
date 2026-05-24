@@ -1016,6 +1016,52 @@ async def activate_crn_after_payment(
     }
 
 
+@router.post("/crns/{crn_id}/set-primary")
+async def set_primary_crn(
+    crn_id: int,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
+    db: Session = Depends(get_db)
+):
+    """Promote a CRN to be the consultant's primary CRN. Demotes the previous primary.
+    The primary CRN cannot be deleted, so this is used to free up the old primary for removal."""
+    target = db.query(ConsultantCRN).filter(
+        ConsultantCRN.id == crn_id,
+        ConsultantCRN.consultant_profile_id == profile.id
+    ).first()
+
+    if not target:
+        raise HTTPException(status_code=404, detail="CRN not found")
+
+    if target.is_primary:
+        return {"success": True, "message": f"CRN {target.crn} is already primary"}
+
+    # Demote any existing primary CRN(s) on this profile
+    db.query(ConsultantCRN).filter(
+        ConsultantCRN.consultant_profile_id == profile.id,
+        ConsultantCRN.is_primary == True  # noqa: E712
+    ).update({"is_primary": False}, synchronize_session="fetch")
+
+    # Promote the target
+    target.is_primary = True
+
+    # Mirror primary CRN onto the profile so the rest of the app keeps working
+    profile.crn = target.crn
+    if target.company_name:
+        profile.company_name = target.company_name
+    if target.phone:
+        profile.phone = target.phone
+
+    db.commit()
+    logger.info(f"Set primary CRN to {target.crn} for profile {profile.id}")
+
+    return {
+        "success": True,
+        "message": f"CRN {target.crn} is now the primary CRN",
+        "primary_crn": target.crn,
+    }
+
+
 @router.delete("/crns/{crn_id}")
 async def remove_crn(
     crn_id: int,
