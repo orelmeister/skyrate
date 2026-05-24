@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
-import { Shield, Upload, AlertTriangle, CheckCircle, XCircle, FileText, ArrowLeft, ShieldCheck, Brain, ExternalLink, ChevronDown, ChevronRight, Activity } from "lucide-react";
+import { Shield, Upload, AlertTriangle, CheckCircle, XCircle, FileText, ArrowLeft, ShieldCheck, Brain, ExternalLink, ChevronDown, ChevronRight, Activity, Paperclip, X, Plus } from "lucide-react";
 
 // ==================== TYPES ====================
 
@@ -57,11 +57,25 @@ export default function CompliancePage() {
   const { user, isAuthenticated, token, _hasHydrated } = useAuthStore();
 
   const [file, setFile] = useState<File | null>(null);
+  const [supportingFiles, setSupportingFiles] = useState<File[]>([]);
   const [dragActive, setDragActive] = useState(false);
+  const [supportDragActive, setSupportDragActive] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<ComplianceResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [traceOpen, setTraceOpen] = useState(false);
+
+  const supportingInputRef = useRef<HTMLInputElement>(null);
+
+  const MAX_SUPPORTING_FILES = 5;
+  const MAX_FILE_SIZE_MB = 10;
+  const SUPPORTED_TYPES = [".pdf", ".docx", ".doc", ".txt"];
+  const SUPPORTED_MIME_TYPES = [
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",
+    "text/plain",
+  ];
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -99,6 +113,72 @@ export default function CompliancePage() {
     }
   }, []);
 
+  const isValidSupportingFile = useCallback((f: File): boolean => {
+    const ext = "." + f.name.split(".").pop()?.toLowerCase();
+    return SUPPORTED_TYPES.includes(ext) || SUPPORTED_MIME_TYPES.includes(f.type);
+  }, []);
+
+  const addSupportingFiles = useCallback((files: FileList | File[]) => {
+    const newFiles: File[] = [];
+    const fileArray = Array.from(files);
+
+    for (const f of fileArray) {
+      if (!isValidSupportingFile(f)) {
+        setError(`"${f.name}" is not supported. Accepted: PDF, DOCX, DOC, TXT.`);
+        return;
+      }
+      if (f.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+        setError(`"${f.name}" exceeds ${MAX_FILE_SIZE_MB} MB limit.`);
+        return;
+      }
+      newFiles.push(f);
+    }
+
+    setSupportingFiles((prev) => {
+      const combined = [...prev, ...newFiles];
+      if (combined.length > MAX_SUPPORTING_FILES) {
+        setError(`Maximum ${MAX_SUPPORTING_FILES} supporting documents allowed.`);
+        return prev;
+      }
+      setError(null);
+      return combined;
+    });
+  }, [isValidSupportingFile]);
+
+  const removeSupportingFile = useCallback((index: number) => {
+    setSupportingFiles((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleSupportDrag = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setSupportDragActive(true);
+    } else if (e.type === "dragleave") {
+      setSupportDragActive(false);
+    }
+  }, []);
+
+  const handleSupportDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSupportDragActive(false);
+
+    const dropped = e.dataTransfer.files;
+    if (dropped && dropped.length > 0) {
+      addSupportingFiles(dropped);
+    }
+  }, [addSupportingFiles]);
+
+  const handleSupportingFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files;
+    if (selected && selected.length > 0) {
+      addSupportingFiles(selected);
+    }
+    // Reset input so same file can be re-selected
+    if (e.target) e.target.value = "";
+  }, [addSupportingFiles]);
+
   // Auth guard
   if (_hasHydrated && !isAuthenticated) {
     router.push("/sign-in");
@@ -123,6 +203,11 @@ export default function CompliancePage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
+
+      // Append supporting documents
+      for (const sf of supportingFiles) {
+        formData.append("supporting_files", sf);
+      }
 
       const accessToken = token || localStorage.getItem("access_token");
       const response = await fetch("/api/v1/compliance/form470/analyze", {
@@ -266,6 +351,90 @@ export default function CompliancePage() {
                 <p className="text-sm text-slate-500">PDF only, max 10 MB</p>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Supporting Documents (Optional) */}
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-3">
+            <Paperclip className="w-4 h-4 text-slate-500" />
+            <h3 className="text-sm font-semibold text-slate-700">
+              Supporting Documents
+            </h3>
+            <span className="text-xs text-slate-400">(optional)</span>
+          </div>
+          <p className="text-xs text-slate-500 mb-3">
+            Attach RFPs, addenda, vendor bids, or scope-of-work documents for cross-document compliance analysis.
+            Up to {MAX_SUPPORTING_FILES} files, {MAX_FILE_SIZE_MB} MB each. Accepted: PDF, DOCX, DOC, TXT.
+          </p>
+
+          {/* Supporting files drop zone */}
+          <div
+            onDragEnter={handleSupportDrag}
+            onDragLeave={handleSupportDrag}
+            onDragOver={handleSupportDrag}
+            onDrop={handleSupportDrop}
+            className={`border-2 border-dashed rounded-xl p-5 text-center transition-all ${
+              supportDragActive
+                ? "border-indigo-400 bg-indigo-50"
+                : supportingFiles.length > 0
+                ? "border-slate-200 bg-slate-50"
+                : "border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50"
+            }`}
+          >
+            {supportingFiles.length > 0 ? (
+              <div className="space-y-2">
+                {supportingFiles.map((sf, idx) => (
+                  <div
+                    key={`${sf.name}-${idx}`}
+                    className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-3 py-2"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                      <span className="text-sm text-slate-700 truncate">{sf.name}</span>
+                      <span className="text-xs text-slate-400 flex-shrink-0">
+                        {(sf.size / 1024 / 1024).toFixed(1)} MB
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => removeSupportingFile(idx)}
+                      className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                      aria-label={`Remove ${sf.name}`}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                {supportingFiles.length < MAX_SUPPORTING_FILES && (
+                  <button
+                    onClick={() => supportingInputRef.current?.click()}
+                    className="flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-800 mx-auto mt-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add more
+                  </button>
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => supportingInputRef.current?.click()}
+                className="flex flex-col items-center gap-1 w-full"
+              >
+                <Paperclip className="w-8 h-8 text-slate-300" />
+                <p className="text-sm text-slate-500">
+                  Drop supporting docs here, or click to browse
+                </p>
+              </button>
+            )}
+            <input
+              ref={supportingInputRef}
+              type="file"
+              multiple
+              accept=".pdf,.docx,.doc,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,text/plain"
+              onChange={handleSupportingFileSelect}
+              className="hidden"
+            />
           </div>
         </div>
 

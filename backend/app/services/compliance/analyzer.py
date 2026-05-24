@@ -27,6 +27,12 @@ Your task:
 4. Focus on competitive bidding requirements, service eligibility, cost-effectiveness, and documentation completeness.
 5. NEVER claim guaranteed approval or denial — this is advisory only.
 6. DO NOT re-derive issues already covered in the VERIFIED RULE FINDINGS section below. Instead, look for ADDITIONAL issues not caught by the deterministic rules.
+7. If SUPPORTING DOCUMENTS are provided (RFPs, addenda, vendor bids, scope-of-work), cross-reference them against the primary Form 470 to identify:
+   - Scope mismatches (services in RFP but missing from Form 470 or vice versa)
+   - Vendor restriction language that could violate competitive bidding rules
+   - Inconsistencies in service descriptions, quantities, or technical specs
+   - Timeline conflicts between documents
+   - Any language that could be interpreted as pre-selecting a vendor
 
 Return ONLY valid JSON in this exact format:
 {
@@ -35,7 +41,7 @@ Return ONLY valid JSON in this exact format:
   "findings": [
     {
       "severity": "low" | "medium" | "high",
-      "area": "Category name (e.g., Competitive Bidding, Service Eligibility, Cost Allocation)",
+      "area": "Category name (e.g., Competitive Bidding, Service Eligibility, Cost Allocation, Cross-Document Inconsistency)",
       "description": "What the issue is",
       "suggestion": "How to fix or mitigate",
       "rule_reference": "Specific FCC/USAC rule citation if applicable, or null"
@@ -63,7 +69,8 @@ def _format_rule_findings_for_prompt(findings: list[RuleFinding]) -> str:
 
 
 async def analyze_form470(
-    document_text: str, metadata: Optional[dict] = None
+    document_text: str, metadata: Optional[dict] = None,
+    supporting_documents: Optional[list[dict]] = None,
 ) -> Optional[dict]:
     """
     Analyze Form 470 text using deterministic rules + Gemini LLM.
@@ -76,6 +83,8 @@ async def analyze_form470(
     Args:
         document_text: Extracted text content from the Form 470 PDF.
         metadata: Optional dict with filename, upload context, etc.
+        supporting_documents: Optional list of dicts with 'filename' and 'text' keys
+                              for cross-document analysis.
 
     Returns:
         Dict with rule_findings, llm_findings, merged findings, and risk.
@@ -133,6 +142,7 @@ async def analyze_form470(
                 rule_findings=rule_findings_dicts,
                 corpus_citations=corpus_citations,
                 engine_version=ENGINE_VERSION,
+                supporting_documents=supporting_documents,
             )
             logger.info(
                 "Multi-agent pipeline complete: risk=%s, findings=%d, timings=%s",
@@ -178,13 +188,39 @@ async def analyze_form470(
                     + "\n".join(corpus_lines)
                 )
 
+            # Build supporting documents context
+            supporting_context = ""
+            if supporting_documents:
+                # Calculate available budget for supporting docs
+                # Reserve ~80K chars for primary doc, allocate rest proportionally
+                max_supporting_chars = max(0, max_chars - len(text_for_llm) - 5000)
+                per_doc_budget = max_supporting_chars // len(supporting_documents) if supporting_documents else 0
+
+                sup_parts = []
+                for i, sup_doc in enumerate(supporting_documents, 1):
+                    doc_text = sup_doc["text"]
+                    if per_doc_budget > 0 and len(doc_text) > per_doc_budget:
+                        doc_text = doc_text[:per_doc_budget] + "\n[...document truncated due to length]"
+                        logger.warning(
+                            "Supporting doc '%s' truncated from %d to %d chars",
+                            sup_doc["filename"], len(sup_doc["text"]), per_doc_budget,
+                        )
+                    sup_parts.append(
+                        f"\n=== SUPPORTING DOCUMENT {i} ({sup_doc['filename']}) ===\n{doc_text}"
+                    )
+                supporting_context = "\n\nSUPPORTING DOCUMENTS (cross-reference against Form 470):" + "".join(sup_parts)
+
             prompt = (
                 f"VERIFIED RULE FINDINGS (from deterministic engine — do not re-derive these):\n"
                 f"{rule_context}\n"
                 f"{corpus_context}\n\n"
                 f"---\n\n"
+                f"PRIMARY DOCUMENT (Form 470):\n\n{text_for_llm}\n"
+                f"{supporting_context}\n\n"
+                f"---\n\n"
                 f"Analyze this Form 470 document for ADDITIONAL USAC compliance issues "
-                f"not already covered above:\n\n{text_for_llm}\n\n"
+                f"not already covered above."
+                f"{' Also cross-reference the supporting documents for inconsistencies, scope mismatches, or vendor restriction issues.' if supporting_documents else ''}\n\n"
                 f"Advisory only. Not legal or USAC official guidance."
             )
 
