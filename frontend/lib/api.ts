@@ -2663,6 +2663,13 @@ class ApiClient {
   }
 
   /**
+   * Delete an admin-managed user account
+   */
+  async deleteAdminUser(userId: number | string): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/users/${userId}`, { method: 'DELETE' });
+  }
+
+  /**
    * Get admin analytics
    */
   async getAdminAnalytics(): Promise<ApiResponse<any>> {
