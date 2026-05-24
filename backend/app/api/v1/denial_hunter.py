@@ -139,7 +139,8 @@ async def stats(_: User = DHAdmin, db: Session = Depends(_get_db)):
             SUM(CASE WHEN status = 'needs_review' THEN 1 ELSE 0 END) AS needs_review_msgs
         FROM denial_replies
         WHERE COALESCE(classification, '') NOT IN
-            ('AUTO_REPLY', 'BOUNCE', 'DSN', 'OUT_OF_OFFICE')
+            ('AUTO_REPLY', 'BOUNCE', 'DSN', 'OUT_OF_OFFICE', 'TEST')
+          AND COALESCE(status, '') <> 'test_injection'
         """
     )).first()
 
