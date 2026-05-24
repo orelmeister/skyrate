@@ -1045,20 +1045,36 @@ async def set_primary_crn(
     # Promote the target
     target.is_primary = True
 
-    # Mirror primary CRN onto the profile so the rest of the app keeps working
-    profile.crn = target.crn
-    if target.company_name:
-        profile.company_name = target.company_name
-    if target.phone:
-        profile.phone = target.phone
+    # Mirror primary CRN onto the profile so legacy code paths keep working.
+    # profile.crn has a UNIQUE index, so if another consultant profile already
+    # claims this CRN string we skip the mirror — consultant_crns.is_primary
+    # is the real source of truth in the multi-CRN era.
+    conflict = db.query(ConsultantProfile).filter(
+        ConsultantProfile.crn == target.crn,
+        ConsultantProfile.id != profile.id
+    ).first()
+    mirrored = False
+    if not conflict:
+        profile.crn = target.crn
+        if target.company_name:
+            profile.company_name = target.company_name
+        if target.phone:
+            profile.phone = target.phone
+        mirrored = True
+    else:
+        logger.warning(
+            f"Skipped mirroring CRN {target.crn} onto profile {profile.id}: "
+            f"already owned by profile {conflict.id}. is_primary flag still updated."
+        )
 
     db.commit()
-    logger.info(f"Set primary CRN to {target.crn} for profile {profile.id}")
+    logger.info(f"Set primary CRN to {target.crn} for profile {profile.id} (mirrored={mirrored})")
 
     return {
         "success": True,
         "message": f"CRN {target.crn} is now the primary CRN",
         "primary_crn": target.crn,
+        "profile_mirrored": mirrored,
     }
 
 
