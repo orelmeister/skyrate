@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import { Suspense } from "react";
 
 export const metadata: Metadata = {
   title: "Compliance \u2014 USAC Document Review | SkyRate AI",
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function ComplianceLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" /></div>}>{children}</Suspense>;
 }
