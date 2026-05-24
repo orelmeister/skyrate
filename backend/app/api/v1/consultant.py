@@ -1023,12 +1023,23 @@ async def set_primary_crn(
     current_user: User = Depends(require_role("admin", "consultant", "super")),
     db: Session = Depends(get_db)
 ):
-    """Promote a CRN to be the consultant's primary CRN. Demotes the previous primary.
-    The primary CRN cannot be deleted, so this is used to free up the old primary for removal."""
-    target = db.query(ConsultantCRN).filter(
-        ConsultantCRN.id == crn_id,
-        ConsultantCRN.consultant_profile_id == profile.id
-    ).first()
+    """Promote a CRN to be its owner's primary CRN. Demotes the previous primary.
+    The primary CRN cannot be deleted, so this is used to free up the old primary for removal.
+
+    Admin/super users may operate on any consultant profile's CRN (matches the
+    cross-tenant scope of GET /crns). Regular consultants are scoped to their own.
+    """
+    is_privileged = current_user.role in ("admin", "super")
+
+    if is_privileged:
+        target = db.query(ConsultantCRN).filter(
+            ConsultantCRN.id == crn_id
+        ).first()
+    else:
+        target = db.query(ConsultantCRN).filter(
+            ConsultantCRN.id == crn_id,
+            ConsultantCRN.consultant_profile_id == profile.id
+        ).first()
 
     if not target:
         raise HTTPException(status_code=404, detail="CRN not found")
@@ -1036,39 +1047,49 @@ async def set_primary_crn(
     if target.is_primary:
         return {"success": True, "message": f"CRN {target.crn} is already primary"}
 
-    # Demote any existing primary CRN(s) on this profile
+    # Always operate on the CRN's actual owning profile, not the caller's.
+    owning_profile = db.query(ConsultantProfile).filter(
+        ConsultantProfile.id == target.consultant_profile_id
+    ).first()
+    if not owning_profile:
+        raise HTTPException(status_code=404, detail="Owning consultant profile not found")
+
+    # Demote any existing primary CRN(s) on the owning profile
     db.query(ConsultantCRN).filter(
-        ConsultantCRN.consultant_profile_id == profile.id,
+        ConsultantCRN.consultant_profile_id == owning_profile.id,
         ConsultantCRN.is_primary == True  # noqa: E712
     ).update({"is_primary": False}, synchronize_session="fetch")
 
     # Promote the target
     target.is_primary = True
 
-    # Mirror primary CRN onto the profile so legacy code paths keep working.
+    # Mirror primary CRN onto the owning profile so legacy code paths keep working.
     # profile.crn has a UNIQUE index, so if another consultant profile already
     # claims this CRN string we skip the mirror — consultant_crns.is_primary
     # is the real source of truth in the multi-CRN era.
     conflict = db.query(ConsultantProfile).filter(
         ConsultantProfile.crn == target.crn,
-        ConsultantProfile.id != profile.id
+        ConsultantProfile.id != owning_profile.id
     ).first()
     mirrored = False
     if not conflict:
-        profile.crn = target.crn
+        owning_profile.crn = target.crn
         if target.company_name:
-            profile.company_name = target.company_name
+            owning_profile.company_name = target.company_name
         if target.phone:
-            profile.phone = target.phone
+            owning_profile.phone = target.phone
         mirrored = True
     else:
         logger.warning(
-            f"Skipped mirroring CRN {target.crn} onto profile {profile.id}: "
+            f"Skipped mirroring CRN {target.crn} onto profile {owning_profile.id}: "
             f"already owned by profile {conflict.id}. is_primary flag still updated."
         )
 
     db.commit()
-    logger.info(f"Set primary CRN to {target.crn} for profile {profile.id} (mirrored={mirrored})")
+    logger.info(
+        f"Set primary CRN to {target.crn} for owning profile {owning_profile.id} "
+        f"(actor={current_user.id}, mirrored={mirrored})"
+    )
 
     return {
         "success": True,
@@ -1085,18 +1106,29 @@ async def remove_crn(
     current_user: User = Depends(require_role("admin", "consultant", "super")),
     db: Session = Depends(get_db)
 ):
-    """Remove a CRN from the consultant's account and delete all schools imported from that CRN."""
-    crn_record = db.query(ConsultantCRN).filter(
-        ConsultantCRN.id == crn_id,
-        ConsultantCRN.consultant_profile_id == profile.id
-    ).first()
-    
+    """Remove a CRN and delete all schools imported from that CRN.
+
+    Admin/super users may delete any consultant's CRN (matches the cross-tenant
+    scope of GET /crns). Regular consultants are scoped to their own profile.
+    """
+    is_privileged = current_user.role in ("admin", "super")
+
+    if is_privileged:
+        crn_record = db.query(ConsultantCRN).filter(
+            ConsultantCRN.id == crn_id
+        ).first()
+    else:
+        crn_record = db.query(ConsultantCRN).filter(
+            ConsultantCRN.id == crn_id,
+            ConsultantCRN.consultant_profile_id == profile.id
+        ).first()
+
     if not crn_record:
         raise HTTPException(status_code=404, detail="CRN not found")
-    
+
     if crn_record.is_primary:
         raise HTTPException(status_code=400, detail="Cannot remove primary CRN. Change your primary CRN first.")
-    
+
     # Cancel Stripe subscription if exists
     if crn_record.stripe_subscription_id and STRIPE_AVAILABLE:
         settings = get_settings()
@@ -1108,18 +1140,24 @@ async def remove_crn(
             )
         except Exception:
             pass  # Best effort
-    
-    # Delete schools that were imported from this CRN
+
+    # Delete schools that were imported from this CRN under the CRN's OWNING
+    # profile (not the caller's). Important when admin/super removes another
+    # consultant's CRN.
     crn_value = crn_record.crn
+    owning_profile_id = crn_record.consultant_profile_id
     deleted_schools = db.query(ConsultantSchool).filter(
-        ConsultantSchool.consultant_profile_id == profile.id,
+        ConsultantSchool.consultant_profile_id == owning_profile_id,
         ConsultantSchool.source_crn == crn_value
     ).delete(synchronize_session="fetch")
-    logger.info(f"Removed {deleted_schools} schools imported from CRN {crn_value}")
-    
+    logger.info(
+        f"Removed {deleted_schools} schools imported from CRN {crn_value} "
+        f"(owning_profile={owning_profile_id}, actor={current_user.id})"
+    )
+
     db.delete(crn_record)
     db.commit()
-    
+
     return {"success": True, "message": f"CRN {crn_value} removed along with {deleted_schools} imported schools"}
 
 
