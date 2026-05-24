@@ -346,8 +346,8 @@ export const authFetch = async (url: string, options: RequestInit = {}) => {
       // Refresh failed — redirect to signin for clean re-auth
       if (typeof window !== "undefined") {
         const path = window.location.pathname + window.location.search;
-        if (!window.location.pathname.startsWith('/signin') && !window.location.pathname.startsWith('/auth')) {
-          window.location.href = `/signin?from=${encodeURIComponent(path)}&reason=expired`;
+        if (!window.location.pathname.startsWith('/sign-in') && !window.location.pathname.startsWith('/auth')) {
+          window.location.href = `/sign-in?from=${encodeURIComponent(path)}&reason=expired`;
         }
       }
     }

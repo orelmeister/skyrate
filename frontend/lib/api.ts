@@ -990,8 +990,8 @@ class ApiClient {
         } catch { /* ignore */ }
         if (typeof window !== 'undefined') {
           const currentPath = window.location.pathname + window.location.search;
-          if (!window.location.pathname.startsWith('/signin') && !window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/auth')) {
-            window.location.href = `/signin?from=${encodeURIComponent(currentPath)}&reason=expired`;
+          if (!window.location.pathname.startsWith('/sign-in') && !window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/auth')) {
+            window.location.href = `/sign-in?from=${encodeURIComponent(currentPath)}&reason=expired`;
           }
         }
         return {
