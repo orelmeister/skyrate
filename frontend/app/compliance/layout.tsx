@@ -1,8 +1,8 @@
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Compliance — Form 470 Pre-Review | SkyRate AI",
-  description: "AI-powered Form 470 compliance pre-review. Identify USAC issue risks before submission.",
+  title: "Compliance \u2014 USAC Document Review | SkyRate AI",
+  description: "AI-powered USAC compliance review for Forms 470, 471, 472, 474, 486, 500, 498 and more. Identify risks before submission.",
   robots: { index: false, follow: false },
 };
 
