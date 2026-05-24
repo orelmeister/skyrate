@@ -593,6 +593,73 @@ function UsersTab({
 }) {
   const [selectedUsers, setSelectedUsers] = useState<Set<number>>(new Set());
 
+  // Client-side sorting. sortKey points to a field on the user object;
+  // for nested/computed fields we map it in the comparator below.
+  type SortKey =
+    | "email" | "name" | "role" | "identifier"
+    | "email_verified" | "onboarding_completed"
+    | "last_login" | "days_since_signup" | "is_active";
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
+
+  const sortedUsers = useMemo(() => {
+    if (!sortKey) return users;
+    const getVal = (u: any): any => {
+      switch (sortKey) {
+        case "email": return (u.email || "").toLowerCase();
+        case "name": return (u.full_name || u.first_name || "").toLowerCase();
+        case "role": return u.role || "";
+        case "identifier": {
+          const v = u.role === "consultant" ? u.portfolio?.crn
+            : u.role === "vendor" ? u.portfolio?.spin
+            : u.role === "applicant" ? u.portfolio?.ben : null;
+          return v ? String(v) : "";
+        }
+        case "email_verified": return u.email_verified ? 1 : 0;
+        case "onboarding_completed": return u.onboarding_completed ? 1 : 0;
+        case "last_login": return u.last_login ? new Date(u.last_login).getTime() : 0;
+        case "days_since_signup": return u.days_since_signup ?? -1;
+        case "is_active": return u.is_active ? 1 : 0;
+      }
+    };
+    const copy = [...users];
+    copy.sort((a, b) => {
+      const av = getVal(a); const bv = getVal(b);
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return copy;
+  }, [users, sortKey, sortDir]);
+
+  // Sortable header cell that shows an arrow when active.
+  function SortTh({ k, children, className = "" }: { k: SortKey; children: React.ReactNode; className?: string }) {
+    const active = sortKey === k;
+    return (
+      <th className={`text-left px-3 py-3 font-medium text-slate-600 ${className}`}>
+        <button
+          type="button"
+          onClick={() => toggleSort(k)}
+          className="inline-flex items-center gap-1 hover:text-slate-900"
+        >
+          {children}
+          <span className={`text-[10px] ${active ? "text-purple-600" : "text-slate-300"}`}>
+            {active ? (sortDir === "asc" ? "▲" : "▼") : "↕"}
+          </span>
+        </button>
+      </th>
+    );
+  }
+
   function handleExportUsers() {
     const cols = [
       "Email", "Name", "Role", "Company", "Identifier", "Email Verified",
@@ -691,11 +758,11 @@ function UsersTab({
         onClearSelection={() => setSelectedUsers(new Set())}
       />
 
-      <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
+      <div className="bg-white rounded-xl shadow-sm border overflow-x-auto relative">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 border-b">
             <tr>
-              <th className="w-10 px-3 py-3">
+              <th className="w-10 px-3 py-3 sticky left-0 bg-slate-50 z-10">
                 <input
                   type="checkbox"
                   checked={users.length > 0 && selectedUsers.size === users.length}
@@ -703,22 +770,26 @@ function UsersTab({
                   className="rounded border-slate-300"
                 />
               </th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Email</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Name</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Role</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Identifier</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Email Verified</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Onboarding</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Last Login</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600 whitespace-nowrap">Days Since Signup</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Status</th>
-              <th className="text-right px-4 py-3 font-medium text-slate-600 whitespace-nowrap">Actions</th>
+              <SortTh k="email">Email</SortTh>
+              <SortTh k="name">Name</SortTh>
+              <SortTh k="role">Role</SortTh>
+              <SortTh k="identifier">Identifier</SortTh>
+              <SortTh k="email_verified" className="whitespace-nowrap">Verified</SortTh>
+              <SortTh k="onboarding_completed">Onboarding</SortTh>
+              <SortTh k="last_login" className="whitespace-nowrap">Last Login</SortTh>
+              <SortTh k="days_since_signup" className="whitespace-nowrap">Days</SortTh>
+              <SortTh k="is_active">Status</SortTh>
+              <th
+                className="text-right px-3 py-3 font-medium text-slate-600 whitespace-nowrap sticky right-0 bg-slate-50 z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)]"
+              >
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => (
-              <tr key={u.id} className="border-b last:border-0 hover:bg-slate-50">
-                <td className="px-3 py-3">
+            {sortedUsers.map((u) => (
+              <tr key={u.id} className="border-b last:border-0 hover:bg-slate-50 group">
+                <td className="px-3 py-3 sticky left-0 bg-white group-hover:bg-slate-50 z-10">
                   <input
                     type="checkbox"
                     checked={selectedUsers.has(u.id)}
@@ -726,9 +797,9 @@ function UsersTab({
                     className="rounded border-slate-300"
                   />
                 </td>
-                <td className="px-4 py-3 text-slate-900">{u.email}</td>
-                <td className="px-4 py-3">{u.full_name || u.first_name || "—"}</td>
-                <td className="px-4 py-3">
+                <td className="px-3 py-3 text-slate-900 max-w-[220px] truncate" title={u.email}>{u.email}</td>
+                <td className="px-3 py-3 max-w-[180px] truncate" title={u.full_name || u.first_name || ""}>{u.full_name || u.first_name || "—"}</td>
+                <td className="px-3 py-3">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                     u.role === "admin" ? "bg-red-100 text-red-700" :
                     u.role === "consultant" ? "bg-purple-100 text-purple-700" :
@@ -736,7 +807,7 @@ function UsersTab({
                     "bg-green-100 text-green-700"
                   }`}>{u.role}</span>
                 </td>
-                <td className="px-4 py-3 text-xs">
+                <td className="px-3 py-3 text-xs">
                   {(() => {
                     // Identifier presence: backend pre-computes has_identifier
                     // and exposes the raw value via portfolio.crn/spin/ben.
@@ -754,32 +825,34 @@ function UsersTab({
                     );
                   })()}
                 </td>
-                <td className="px-4 py-3 text-xs">
+                <td className="px-3 py-3 text-xs">
                   {u.email_verified ? (
                     <span className="text-green-600">Yes</span>
                   ) : (
                     <span className="text-red-500">No</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-xs">
+                <td className="px-3 py-3 text-xs">
                   {u.onboarding_completed ? (
                     <span className="text-green-600">Complete</span>
                   ) : (
                     <span className="text-amber-600">Incomplete</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">
+                <td className="px-3 py-3 text-slate-500 text-xs whitespace-nowrap">
                   {u.last_login ? new Date(u.last_login).toLocaleDateString() : (
                     <span className="text-red-500">Never</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-slate-500 text-xs">{u.days_since_signup ?? "—"}</td>
-                <td className="px-4 py-3">
+                <td className="px-3 py-3 text-slate-500 text-xs text-right tabular-nums">{u.days_since_signup ?? "—"}</td>
+                <td className="px-3 py-3">
                   <span className={`text-xs ${u.is_active ? "text-green-600" : "text-red-500"}`}>
                     {u.is_active ? "Active" : "Inactive"}
                   </span>
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap text-right">
+                <td
+                  className="px-3 py-3 whitespace-nowrap text-right sticky right-0 bg-white group-hover:bg-slate-50 z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)]"
+                >
                   <div className="flex items-center justify-end gap-3">
                     <button
                       onClick={() => onEmailUser(u.id)}
