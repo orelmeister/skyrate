@@ -136,7 +136,10 @@ async def stats(_: User = DHAdmin, db: Session = Depends(_get_db)):
             COUNT(*) AS total_messages,
             COUNT(DISTINCT COALESCE(institution_ben, from_email)) AS distinct_leads,
             SUM(CASE WHEN classification = 'INTERESTED' THEN 1 ELSE 0 END) AS interested_msgs,
-            SUM(CASE WHEN status = 'needs_review' THEN 1 ELSE 0 END) AS needs_review_msgs
+            SUM(CASE WHEN status = 'needs_review' THEN 1 ELSE 0 END) AS needs_review_msgs,
+            SUM(CASE WHEN draft_status = 'pending'  THEN 1 ELSE 0 END) AS drafts_pending,
+            SUM(CASE WHEN draft_status = 'approved' THEN 1 ELSE 0 END) AS drafts_approved,
+            SUM(CASE WHEN draft_status = 'sent'     THEN 1 ELSE 0 END) AS drafts_sent
         FROM denial_replies
         WHERE COALESCE(classification, '') NOT IN
             ('AUTO_REPLY', 'BOUNCE', 'DSN', 'OUT_OF_OFFICE', 'TEST')
@@ -212,6 +215,9 @@ async def stats(_: User = DHAdmin, db: Session = Depends(_get_db)):
         "reply_messages_total": int((reply_totals.total_messages if reply_totals else 0) or 0),
         "reply_messages_interested": int((reply_totals.interested_msgs if reply_totals else 0) or 0),
         "reply_messages_needs_review": int((reply_totals.needs_review_msgs if reply_totals else 0) or 0),
+        "drafts_pending": int((reply_totals.drafts_pending if reply_totals else 0) or 0),
+        "drafts_approved": int((reply_totals.drafts_approved if reply_totals else 0) or 0),
+        "drafts_sent": int((reply_totals.drafts_sent if reply_totals else 0) or 0),
         "won": int(totals.won or 0),
         "lost": int(totals.lost or 0),
         "archived": int(totals.archived or 0),
@@ -417,3 +423,188 @@ async def trigger_digest(_: User = DHAdmin):
             "Remote on-demand trigger is not yet wired up."
         ),
     }
+
+
+# ---------------------------------------------------------------------------
+# /drafts — human-in-the-loop reply-approval workflow
+# ---------------------------------------------------------------------------
+# Lifecycle (denial_replies.draft_status):
+#   pending      -> Gemini drafted a reply; awaiting human approval in dashboard
+#   approved     -> Human clicked Send; denial-hunter worker drains and SMTPs
+#   sent         -> Worker confirmed SMTP delivery
+#   send_failed  -> SMTP error; needs operator attention
+#   rejected     -> Human rejected; never sends
+#
+# The skyrate.ai backend does NOT send mail directly — it only flips the row
+# to draft_status='approved'. The denial-hunter worker (which already holds
+# SMTP creds for schools@mail.skyrate.ai) drains approved rows on each poll
+# cycle and sends with proper RFC-822 threading headers.
+
+from sqlalchemy import bindparam  # noqa: E402
+
+DRAFT_LIST_COLS = (
+    "id, outreach_id, institution_ben, from_email, from_name, to_email, "
+    "subject, received_at, classification, sentiment, intent_confidence, "
+    "recommended_action, reasoning, forward_to_email, forward_to_name, "
+    "draft_status, status, approved_by, approved_at, sent_at, send_error, "
+    "classified_at"
+)
+
+
+@router.get("/drafts")
+async def list_drafts(
+    draft_status_: str = Query("pending", alias="draft_status",
+                               description="pending|approved|sent|send_failed|rejected|all"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    _: User = DHAdmin,
+    db: Session = Depends(_get_db),
+):
+    where = "WHERE draft_reply IS NOT NULL AND draft_reply <> ''"
+    params: Dict[str, Any] = {}
+    if draft_status_ and draft_status_ != "all":
+        where += " AND draft_status = :ds"
+        params["ds"] = draft_status_
+    total = db.execute(
+        text(f"SELECT COUNT(*) FROM denial_replies {where}"), params,
+    ).scalar() or 0
+    params["limit"] = limit
+    params["offset"] = offset
+    rows = _rows(db.execute(text(
+        f"SELECT {DRAFT_LIST_COLS} FROM denial_replies {where} "
+        "ORDER BY classified_at DESC, id DESC LIMIT :limit OFFSET :offset"
+    ), params))
+    # Enrich with organization name when available
+    bens = [r["institution_ben"] for r in rows if r.get("institution_ben")]
+    if bens:
+        org_rows = _rows(db.execute(
+            text("SELECT ben, organization_name, state, appealability, "
+                 "appeal_deadline FROM denial_leads WHERE ben IN :bens")
+            .bindparams(bindparam("bens", expanding=True)),
+            {"bens": list(set(bens))},
+        ))
+        by_ben = {r["ben"]: r for r in org_rows}
+        for r in rows:
+            ctx = by_ben.get(r.get("institution_ben"))
+            if ctx:
+                r["organization_name"] = ctx.get("organization_name")
+                r["state"] = ctx.get("state")
+                r["appealability"] = ctx.get("appealability")
+                r["appeal_deadline"] = ctx.get("appeal_deadline")
+    return {"total": int(total), "limit": limit, "offset": offset, "rows": rows}
+
+
+@router.get("/drafts/{draft_id}")
+async def get_draft(
+    draft_id: int,
+    _: User = DHAdmin,
+    db: Session = Depends(_get_db),
+):
+    row = db.execute(text(
+        "SELECT * FROM denial_replies WHERE id = :id"
+    ), {"id": draft_id}).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    data: Dict[str, Any] = dict(row._mapping)
+    for k, v in list(data.items()):
+        if isinstance(v, (datetime, date)):
+            data[k] = v.isoformat()
+    if data.get("institution_ben"):
+        lead = db.execute(text(
+            "SELECT ben, organization_name, state, appealability, "
+            "appeal_deadline, primary_argument, denial_category_human "
+            "FROM denial_leads WHERE ben = :b LIMIT 1"
+        ), {"b": data["institution_ben"]}).first()
+        if lead:
+            data["lead"] = {k: (v.isoformat() if isinstance(v, (datetime, date)) else v)
+                            for k, v in dict(lead._mapping).items()}
+    if data.get("outreach_id"):
+        out = db.execute(text(
+            "SELECT id, touch_number, subject, sent_at, recipient_email "
+            "FROM denial_outreach WHERE id = :oid LIMIT 1"
+        ), {"oid": data["outreach_id"]}).first()
+        if out:
+            data["outreach"] = {k: (v.isoformat() if isinstance(v, (datetime, date)) else v)
+                                for k, v in dict(out._mapping).items()}
+    return data
+
+
+class DraftEdit(BaseModel):
+    draft_reply: str = Field(..., min_length=1, max_length=20000)
+
+
+@router.patch("/drafts/{draft_id}")
+async def edit_draft(
+    draft_id: int,
+    payload: DraftEdit,
+    _: User = DHAdmin,
+    db: Session = Depends(_get_db),
+):
+    row = db.execute(text(
+        "SELECT id, draft_status FROM denial_replies WHERE id = :id"
+    ), {"id": draft_id}).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    if (row.draft_status or "pending") not in ("pending",):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot edit draft in status '{row.draft_status}' (only 'pending' is editable).",
+        )
+    db.execute(text(
+        "UPDATE denial_replies SET draft_reply = :body WHERE id = :id"
+    ), {"body": payload.draft_reply, "id": draft_id})
+    db.commit()
+    return {"ok": True, "id": draft_id}
+
+
+@router.post("/drafts/{draft_id}/approve")
+async def approve_draft(
+    draft_id: int,
+    user: User = DHAdmin,
+    db: Session = Depends(_get_db),
+):
+    row = db.execute(text(
+        "SELECT id, draft_status, draft_reply, from_email FROM denial_replies WHERE id = :id"
+    ), {"id": draft_id}).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    if (row.draft_status or "pending") != "pending":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot approve draft in status '{row.draft_status}'.",
+        )
+    if not (row.draft_reply or "").strip():
+        raise HTTPException(status_code=400, detail="Draft body is empty; edit before approving.")
+    if not (row.from_email or "").strip():
+        raise HTTPException(status_code=400, detail="No recipient (from_email) on row; cannot send.")
+    db.execute(text(
+        "UPDATE denial_replies SET draft_status = 'approved', "
+        "approved_by = :who, approved_at = NOW() WHERE id = :id"
+    ), {"who": user.email, "id": draft_id})
+    db.commit()
+    return {"ok": True, "id": draft_id, "draft_status": "approved",
+            "detail": "Queued for SMTP send on next worker poll (within ~2 min)."}
+
+
+@router.post("/drafts/{draft_id}/reject")
+async def reject_draft(
+    draft_id: int,
+    user: User = DHAdmin,
+    db: Session = Depends(_get_db),
+):
+    row = db.execute(text(
+        "SELECT id, draft_status FROM denial_replies WHERE id = :id"
+    ), {"id": draft_id}).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    if (row.draft_status or "pending") not in ("pending", "send_failed"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot reject draft in status '{row.draft_status}'.",
+        )
+    db.execute(text(
+        "UPDATE denial_replies SET draft_status = 'rejected', "
+        "approved_by = :who, approved_at = NOW() WHERE id = :id"
+    ), {"who": user.email, "id": draft_id})
+    db.commit()
+    return {"ok": True, "id": draft_id, "draft_status": "rejected"}

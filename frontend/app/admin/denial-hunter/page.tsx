@@ -17,6 +17,9 @@ type Stats = {
   lost: number;
   archived: number;
   total_potential_revenue: number;
+  drafts_pending?: number;
+  drafts_approved?: number;
+  drafts_sent?: number;
   by_appealability: Record<string, number>;
   by_state: { state: string; cnt: number }[];
   by_funding_year: { funding_year: number; cnt: number }[];
@@ -598,11 +601,22 @@ export default function DenialHunterDashboard() {
 
       <main className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {/* KPI strip */}
-        <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
           <KPI label="Total Leads" value={stats?.total_leads ?? "—"} />
           <KPI label="New" value={stats?.new ?? "—"} tone="blue" />
           <KPI label="Contacted" value={stats?.contacted ?? "—"} tone="violet" />
           <KPI label="Replied" value={stats?.replied ?? "—"} tone="amber" />
+          <a
+            href="/admin/denial-hunter/drafts"
+            className="block hover:scale-[1.02] transition-transform"
+            title="Review Gemini-drafted replies awaiting your approval before they are sent"
+          >
+            <KPI
+              label={`Drafts Pending${stats?.drafts_approved ? ` (+${stats.drafts_approved} queued)` : ""}`}
+              value={stats?.drafts_pending ?? "—"}
+              tone="rose"
+            />
+          </a>
           <KPI label="Won" value={stats?.won ?? "—"} tone="emerald" />
           <KPI
             label="Potential Revenue"
