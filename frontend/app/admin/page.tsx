@@ -359,6 +359,15 @@ function AdminDashboard() {
                 onboardingIncomplete={userOnbIncomplete}
                 setOnboardingIncomplete={setUserOnbIncomplete}
                 onEmailUser={(id) => { setEmailUserId(id); setActiveTab("communications"); }}
+                onDeleteUser={async (u) => {
+                  if (!confirm(`Delete user ${u.email}? This cannot be undone.`)) return;
+                  try {
+                    await api.deleteAdminUser(u.id);
+                    await loadUsers();
+                  } catch (e: any) {
+                    alert(`Failed to delete user: ${e?.message || e}`);
+                  }
+                }}
               />
             )}
             {activeTab === "tickets" && (
@@ -571,6 +580,7 @@ function UsersTab({
   emailUnverified, setEmailUnverified,
   onboardingIncomplete, setOnboardingIncomplete,
   onEmailUser,
+  onDeleteUser,
 }: {
   users: any[]; total: number; search: string; setSearch: (s: string) => void;
   roleFilter: string; setRoleFilter: (r: string) => void;
@@ -579,6 +589,7 @@ function UsersTab({
   emailUnverified: boolean; setEmailUnverified: (v: boolean) => void;
   onboardingIncomplete: boolean; setOnboardingIncomplete: (v: boolean) => void;
   onEmailUser: (id: number) => void;
+  onDeleteUser: (user: any) => void;
 }) {
   const [selectedUsers, setSelectedUsers] = useState<Set<number>>(new Set());
 
@@ -701,7 +712,7 @@ function UsersTab({
               <th className="text-left px-4 py-3 font-medium text-slate-600">Last Login</th>
               <th className="text-left px-4 py-3 font-medium text-slate-600 whitespace-nowrap">Days Since Signup</th>
               <th className="text-left px-4 py-3 font-medium text-slate-600">Status</th>
-              <th className="text-left px-4 py-3 font-medium text-slate-600">Actions</th>
+              <th className="text-right px-4 py-3 font-medium text-slate-600 whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -768,13 +779,22 @@ function UsersTab({
                     {u.is_active ? "Active" : "Inactive"}
                   </span>
                 </td>
-                <td className="px-4 py-3">
-                  <button
-                    onClick={() => onEmailUser(u.id)}
-                    className="text-xs text-purple-600 hover:underline"
-                  >
-                    Email
-                  </button>
+                <td className="px-4 py-3 whitespace-nowrap text-right">
+                  <div className="flex items-center justify-end gap-3">
+                    <button
+                      onClick={() => onEmailUser(u.id)}
+                      className="text-xs text-purple-600 hover:underline"
+                    >
+                      Email
+                    </button>
+                    <button
+                      onClick={() => onDeleteUser(u)}
+                      className="text-xs text-red-600 hover:underline"
+                      title="Delete this user permanently"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

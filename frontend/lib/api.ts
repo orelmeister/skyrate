@@ -2628,6 +2628,13 @@ class ApiClient {
   }
 
   /**
+   * Delete a user (admin only). Backend rejects deleting yourself.
+   */
+  async deleteAdminUser(userId: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/users/${userId}`, { method: 'DELETE' });
+  }
+
+  /**
    * Get admin analytics
    */
   async getAdminAnalytics(): Promise<ApiResponse<any>> {
