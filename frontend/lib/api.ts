@@ -979,6 +979,27 @@ class ApiClient {
         }
       }
 
+      // Terminal 401: no refresh token or refresh failed — redirect to signin
+      const isAuthEndpoint = endpoint.includes('/auth/');
+      if (response.status === 401 && !isAuthEndpoint) {
+        this.clearTokens();
+        try {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('skyrate-auth');
+          }
+        } catch { /* ignore */ }
+        if (typeof window !== 'undefined') {
+          const currentPath = window.location.pathname + window.location.search;
+          if (!window.location.pathname.startsWith('/signin') && !window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/auth')) {
+            window.location.href = `/signin?from=${encodeURIComponent(currentPath)}&reason=expired`;
+          }
+        }
+        return {
+          success: false,
+          error: 'Your session expired. Please sign in again.',
+        };
+      }
+
       if (!isJsonResponse(response)) {
         return await nonJsonError(response);
       }
@@ -1069,6 +1090,20 @@ class ApiClient {
 
       const data = await response.json();
       this.setTokens(data.access_token, data.refresh_token);
+      // Sync into Zustand persist store so auth-store stays current
+      try {
+        if (typeof window !== 'undefined') {
+          const stored = localStorage.getItem('skyrate-auth');
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (parsed && parsed.state) {
+              parsed.state.token = data.access_token;
+              parsed.state.refreshToken = data.refresh_token;
+              localStorage.setItem('skyrate-auth', JSON.stringify(parsed));
+            }
+          }
+        }
+      } catch { /* ignore parse errors */ }
       return true;
     } catch {
       this.clearTokens();
@@ -2625,13 +2660,6 @@ class ApiClient {
     if (params?.email_unverified) qs.set('email_unverified', 'true');
     if (params?.onboarding_incomplete) qs.set('onboarding_incomplete', 'true');
     return this.request(`/api/v1/admin/users?${qs.toString()}`);
-  }
-
-  /**
-   * Delete a user (admin only). Backend rejects deleting yourself.
-   */
-  async deleteAdminUser(userId: number): Promise<ApiResponse<any>> {
-    return this.request(`/api/v1/admin/users/${userId}`, { method: 'DELETE' });
   }
 
   /**
