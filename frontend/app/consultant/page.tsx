@@ -1077,11 +1077,15 @@ function ConsultantPortalPage() {
   };
 
   const handleRemoveCRN = async (crnId: number, crnNumber: string, isPrimary: boolean) => {
-    if (isPrimary) {
+    const isPrivileged = user?.role === 'admin' || user?.role === 'super';
+    if (isPrimary && !isPrivileged) {
       alert("Cannot remove your primary CRN. It's linked to your main subscription.");
       return;
     }
-    if (!confirm(`Remove CRN ${crnNumber}? This will also remove all schools imported from this CRN. Any active subscription for this CRN will be cancelled.`)) {
+    const warning = isPrimary
+      ? `Remove PRIMARY CRN ${crnNumber}? This is the primary CRN for its owning consultant profile. All schools imported from this CRN will be deleted and another remaining CRN (if any) will be auto-promoted to primary. Any active subscription will be cancelled.`
+      : `Remove CRN ${crnNumber}? This will also remove all schools imported from this CRN. Any active subscription for this CRN will be cancelled.`;
+    if (!confirm(warning)) {
       return;
     }
     
@@ -4047,18 +4051,18 @@ function ConsultantPortalPage() {
                                 Set as Primary
                               </button>
                             )}
-                            {!crn.is_primary && (
+                            {(!crn.is_primary || user?.role === 'admin' || user?.role === 'super') && (
                               <button
                                 onClick={() => handleRemoveCRN(crn.id, crn.crn, crn.is_primary)}
                                 className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
-                                title="Remove CRN"
+                                title={crn.is_primary ? "Remove CRN (admin override — will auto-promote a replacement)" : "Remove CRN"}
                               >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                 </svg>
                               </button>
                             )}
-                            {crn.is_primary && (
+                            {crn.is_primary && user?.role !== 'admin' && user?.role !== 'super' && (
                               <span className="text-[10px] text-slate-400 italic">Primary CRN — promote another to delete</span>
                             )}
                           </div>

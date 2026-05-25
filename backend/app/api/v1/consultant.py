@@ -1126,8 +1126,10 @@ async def remove_crn(
     if not crn_record:
         raise HTTPException(status_code=404, detail="CRN not found")
 
-    if crn_record.is_primary:
+    if crn_record.is_primary and not is_privileged:
         raise HTTPException(status_code=400, detail="Cannot remove primary CRN. Change your primary CRN first.")
+
+    was_primary = crn_record.is_primary
 
     # Cancel Stripe subscription if exists
     if crn_record.stripe_subscription_id and STRIPE_AVAILABLE:
@@ -1156,6 +1158,44 @@ async def remove_crn(
     )
 
     db.delete(crn_record)
+    db.flush()
+
+    # If admin/super removed a primary CRN, auto-promote another remaining CRN
+    # on the owning profile (so the owner isn't left without a primary) and
+    # update the legacy profile.crn mirror.
+    if was_primary and is_privileged:
+        owning_profile = db.query(ConsultantProfile).filter(
+            ConsultantProfile.id == owning_profile_id
+        ).first()
+        replacement = db.query(ConsultantCRN).filter(
+            ConsultantCRN.consultant_profile_id == owning_profile_id
+        ).order_by(ConsultantCRN.created_at).first()
+        if owning_profile:
+            if replacement:
+                replacement.is_primary = True
+                # Mirror onto profile if no unique-index collision
+                clash = db.query(ConsultantProfile).filter(
+                    ConsultantProfile.crn == replacement.crn,
+                    ConsultantProfile.id != owning_profile.id
+                ).first()
+                if not clash:
+                    owning_profile.crn = replacement.crn
+                    if replacement.company_name:
+                        owning_profile.company_name = replacement.company_name
+                    if replacement.phone:
+                        owning_profile.phone = replacement.phone
+                logger.info(
+                    f"Auto-promoted CRN {replacement.crn} to primary on profile "
+                    f"{owning_profile_id} after deleting old primary"
+                )
+            else:
+                # No CRNs left — clear the legacy mirror
+                if owning_profile.crn == crn_value:
+                    owning_profile.crn = None
+                logger.info(
+                    f"Cleared profile.crn on profile {owning_profile_id}: no CRNs remain"
+                )
+
     db.commit()
 
     return {"success": True, "message": f"CRN {crn_value} removed along with {deleted_schools} imported schools"}
