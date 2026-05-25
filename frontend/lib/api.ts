@@ -1972,6 +1972,8 @@ class ApiClient {
   async resyncCRNSchools(crnId: number): Promise<ApiResponse<{
     crn: string;
     usac_school_count: number;
+    consultants_dataset_count?: number;
+    form_471_dataset_count?: number;
     imported_count: number;
     skipped_count: number;
     total_schools_for_crn: number;

@@ -600,39 +600,52 @@ class USACService:
         """
         Fetch all schools associated with a Consultant Registration Number (CRN).
         
+        Queries Form 471 by ``cnct_registration_num`` (which holds the CRN of
+        whichever consultant is attached to the application — this may be a
+        wider net than the consultants dataset, which keys on the consultant's
+        own EPC organization id).
+        
         Args:
             crn: Consultant Registration Number
-            years: Optional list of funding years to query (defaults to last 3 years)
+            years: Optional list of funding years to query
+                   (defaults to 2016..current_year — full E-Rate history)
             
         Returns:
             Dictionary with list of unique schools and count
         """
         if not years:
             current_year = datetime.now().year
-            years = [current_year, current_year - 1, current_year - 2]
+            # E-Rate Productivity Center went live FY2016; cover full history.
+            years = list(range(2016, current_year + 1))
         
         all_schools = {}  # ben -> school info
         
         for year in years:
-            # Query Form 471 by consultant registration number
-            df = self._client.fetch_data(
-                year=year,
-                filters={'cnct_registration_num': crn.upper().strip()},
-                limit=5000,
-                dataset='form_471'
-            )
+            try:
+                # Query Form 471 by consultant registration number
+                df = self._client.fetch_data(
+                    year=year,
+                    filters={'cnct_registration_num': crn.upper().strip()},
+                    limit=50000,
+                    dataset='form_471'
+                )
+            except Exception as e:
+                print(f"[USAC] get_schools_by_crn year={year} crn={crn} failed: {e}")
+                continue
             
-            if not df.empty:
-                for _, row in df.iterrows():
-                    ben = str(row.get('ben', '')).strip()
-                    if ben and ben not in all_schools:
-                        all_schools[ben] = {
-                            'ben': ben,
-                            'organization_name': row.get('organization_name'),
-                            'state': row.get('state'),
-                            'city': row.get('city'),
-                            'entity_type': row.get('organization_entity_type_name'),
-                        }
+            if df is None or df.empty:
+                continue
+            
+            for _, row in df.iterrows():
+                ben = str(row.get('ben', '')).strip()
+                if ben and ben not in all_schools:
+                    all_schools[ben] = {
+                        'ben': ben,
+                        'organization_name': row.get('organization_name') or row.get('applicant_name') or row.get('billed_entity_name'),
+                        'state': row.get('state') or row.get('physical_state'),
+                        'city': row.get('city') or row.get('physical_city'),
+                        'entity_type': row.get('organization_entity_type_name') or row.get('applicant_type'),
+                    }
         
         return {
             'crn': crn.upper().strip(),

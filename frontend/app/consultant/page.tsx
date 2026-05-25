@@ -1129,9 +1129,11 @@ function ConsultantPortalPage() {
       const response = await api.resyncCRNSchools(crnId);
       if (response.success && response.data) {
         const d = response.data;
+        const breakdown = (d.consultants_dataset_count !== undefined || d.form_471_dataset_count !== undefined)
+          ? `\nConsultants dataset: ${d.consultants_dataset_count ?? 0}\nForm 471 dataset: ${d.form_471_dataset_count ?? 0}\nMerged unique: ${d.usac_school_count}\n`
+          : `\nUSAC returned: ${d.usac_school_count} schools\n`;
         alert(
-          `Re-sync complete for ${d.crn}.\n\n` +
-          `USAC returned: ${d.usac_school_count} schools\n` +
+          `Re-sync complete for ${d.crn}.${breakdown}` +
           `Newly imported: ${d.imported_count}\n` +
           `Already in portfolio: ${d.skipped_count}\n` +
           `Total schools tied to this CRN: ${d.total_schools_for_crn}`

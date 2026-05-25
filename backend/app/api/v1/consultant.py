@@ -1136,16 +1136,52 @@ async def resync_crn_schools(
 
     crn_value = crn_record.crn
     usac_service = get_usac_service()
-    result = usac_service.verify_crn(crn_value)
 
-    if not result.get("valid"):
+    # Query BOTH USAC sources and merge to maximize school coverage:
+    #   1) Consultants dataset (x5px-esft.json) — keyed on cnslt_epc_organization_id
+    #   2) Form 471 dataset — keyed on cnct_registration_num (different field;
+    #      catches schools the consultant filed for under any role/position)
+    consultants_result = usac_service.verify_crn(crn_value)
+    consultants_schools = consultants_result.get("schools") or [] if consultants_result.get("valid") else []
+
+    form471_result = {}
+    form471_schools = []
+    try:
+        form471_result = usac_service.get_schools_by_crn(crn_value)
+        form471_schools = form471_result.get("schools") or []
+    except Exception as e:
+        logger.warning(f"Resync CRN {crn_value}: form_471 fallback failed: {e}")
+
+    if not consultants_result.get("valid") and not form471_schools:
         raise HTTPException(
             status_code=400,
-            detail=result.get("error", "USAC could not return schools for this CRN"),
+            detail=consultants_result.get("error", "USAC could not return schools for this CRN"),
         )
 
-    schools = result.get("schools") or []
+    # Merge BENs from both sources. Consultants dataset rows are preferred
+    # for metadata (applicant_type), with form_471 rows filling any gaps.
+    merged: Dict[str, Dict] = {}
+    for s in consultants_schools:
+        ben = str(s.get("ben") or "").strip()
+        if ben:
+            merged[ben] = s
+    for s in form471_schools:
+        ben = str(s.get("ben") or "").strip()
+        if not ben:
+            continue
+        if ben in merged:
+            existing = merged[ben]
+            # Fill missing fields from form_471 data
+            for k in ("organization_name", "state", "city", "entity_type", "applicant_type"):
+                if not existing.get(k) and s.get(k):
+                    existing[k] = s.get(k)
+        else:
+            merged[ben] = s
+
+    schools = list(merged.values())
     total_from_usac = len(schools)
+    consultants_count = len(consultants_schools)
+    form471_count = len(form471_schools)
 
     imported = _import_schools_for_crn(owning_profile, crn_value, schools, db)
 
@@ -1159,20 +1195,24 @@ async def resync_crn_schools(
 
     logger.info(
         f"Resync CRN {crn_value} (id={crn_id}, owner_profile={owning_profile.id}, "
-        f"actor={current_user.id}): USAC returned {total_from_usac}, "
-        f"imported {imported['imported_count']} new, skipped {imported['skipped_count']}, "
-        f"total now {new_count}"
+        f"actor={current_user.id}): consultants_ds={consultants_count}, "
+        f"form_471_ds={form471_count}, merged_unique={total_from_usac}, "
+        f"imported={imported['imported_count']} new, "
+        f"skipped={imported['skipped_count']}, total_now={new_count}"
     )
 
     return {
         "success": True,
         "crn": crn_value,
         "usac_school_count": total_from_usac,
+        "consultants_dataset_count": consultants_count,
+        "form_471_dataset_count": form471_count,
         "imported_count": imported["imported_count"],
         "skipped_count": imported["skipped_count"],
         "total_schools_for_crn": new_count,
         "message": (
-            f"USAC returned {total_from_usac} schools. "
+            f"USAC returned {total_from_usac} unique schools "
+            f"({consultants_count} from consultants dataset + {form471_count} from form_471, merged). "
             f"Added {imported['imported_count']} new, {imported['skipped_count']} already imported."
         ),
     }
