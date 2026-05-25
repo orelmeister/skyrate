@@ -726,20 +726,34 @@ class USACService:
         session = self._create_enrichment_session()
         
         try:
-            # Fetch all applications for this CRN (limit to 1000 records)
-            params = {
-                "cnslt_epc_organization_id": crn_clean,
-                "$limit": 1000,
-                "$order": "funding_year DESC"
-            }
-            
-            response = session.get(CONSULTANTS_API_URL, params=params, timeout=45)
-            
-            if response.status_code != 200:
-                result["error"] = f"USAC API error: {response.status_code}"
-                return result
-            
-            data = response.json()
+            # Paginate through ALL applications for this CRN.
+            # Previously capped at $limit=1000 which truncated unique BENs for
+            # consultants with deep histories — paginate using offset until the
+            # API returns fewer than page_size rows.
+            PAGE_SIZE = 50000  # Socrata per-query max
+            data: List[Dict[str, Any]] = []
+            offset = 0
+            while True:
+                params = {
+                    "cnslt_epc_organization_id": crn_clean,
+                    "$limit": PAGE_SIZE,
+                    "$offset": offset,
+                    "$order": "funding_year DESC",
+                }
+                response = session.get(CONSULTANTS_API_URL, params=params, timeout=60)
+                if response.status_code != 200:
+                    result["error"] = f"USAC API error: {response.status_code}"
+                    return result
+                page = response.json() or []
+                if not page:
+                    break
+                data.extend(page)
+                if len(page) < PAGE_SIZE:
+                    break
+                offset += PAGE_SIZE
+                # Safety cap to avoid infinite loops on misbehaving API
+                if offset >= 500000:
+                    break
             
             if not data:
                 result["error"] = "No consultant found with this CRN"

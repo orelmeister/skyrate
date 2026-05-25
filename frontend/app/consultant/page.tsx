@@ -1121,6 +1121,32 @@ function ConsultantPortalPage() {
     }
   };
 
+  const handleResyncCRNSchools = async (crnId: number, crnNumber: string) => {
+    if (!confirm(`Re-pull every school for CRN ${crnNumber} from USAC?\n\nThis will check the full USAC consultants dataset and import any schools that weren't picked up the first time. Existing schools are kept.`)) {
+      return;
+    }
+    try {
+      const response = await api.resyncCRNSchools(crnId);
+      if (response.success && response.data) {
+        const d = response.data;
+        alert(
+          `Re-sync complete for ${d.crn}.\n\n` +
+          `USAC returned: ${d.usac_school_count} schools\n` +
+          `Newly imported: ${d.imported_count}\n` +
+          `Already in portfolio: ${d.skipped_count}\n` +
+          `Total schools tied to this CRN: ${d.total_schools_for_crn}`
+        );
+        await loadCRNList();
+        await loadData(true);
+      } else {
+        alert(response.error || "Failed to re-sync schools");
+      }
+    } catch (error: any) {
+      console.error("Failed to re-sync CRN schools:", error);
+      alert(error?.message || "Failed to re-sync schools");
+    }
+  };
+
   // Function to add school from search results
   const handleAddSchoolFromSearch = async (school: { ben: string; school_name: string; state: string }) => {
     try {
@@ -4042,6 +4068,13 @@ function ConsultantPortalPage() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleResyncCRNSchools(crn.id, crn.crn)}
+                              className="px-2 py-1 text-[11px] font-medium text-slate-600 hover:text-white hover:bg-slate-700 border border-slate-200 hover:border-slate-700 rounded-md transition"
+                              title="Re-pull every school for this CRN from USAC and import anything missing"
+                            >
+                              Re-sync schools
+                            </button>
                             {!crn.is_primary && (
                               <button
                                 onClick={() => handleSetPrimaryCRN(crn.id, crn.crn)}

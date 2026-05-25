@@ -1099,6 +1099,85 @@ async def set_primary_crn(
     }
 
 
+@router.post("/crns/{crn_id}/resync-schools")
+async def resync_crn_schools(
+    crn_id: int,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
+    db: Session = Depends(get_db),
+):
+    """Re-pull the CRN's school list from USAC and import any new BENs.
+
+    Useful when the initial verify_crn import missed schools (older years,
+    pagination caps, etc.). Admin/super users can resync any CRN cross-tenant
+    and the schools are imported into the CRN's *owning* profile, not the
+    caller's profile.
+    """
+    is_privileged = current_user.role in ("admin", "super")
+
+    if is_privileged:
+        crn_record = db.query(ConsultantCRN).filter(
+            ConsultantCRN.id == crn_id
+        ).first()
+    else:
+        crn_record = db.query(ConsultantCRN).filter(
+            ConsultantCRN.id == crn_id,
+            ConsultantCRN.consultant_profile_id == profile.id,
+        ).first()
+
+    if not crn_record:
+        raise HTTPException(status_code=404, detail="CRN not found")
+
+    owning_profile = db.query(ConsultantProfile).filter(
+        ConsultantProfile.id == crn_record.consultant_profile_id
+    ).first()
+    if not owning_profile:
+        raise HTTPException(status_code=404, detail="Owning consultant profile not found")
+
+    crn_value = crn_record.crn
+    usac_service = get_usac_service()
+    result = usac_service.verify_crn(crn_value)
+
+    if not result.get("valid"):
+        raise HTTPException(
+            status_code=400,
+            detail=result.get("error", "USAC could not return schools for this CRN"),
+        )
+
+    schools = result.get("schools") or []
+    total_from_usac = len(schools)
+
+    imported = _import_schools_for_crn(owning_profile, crn_value, schools, db)
+
+    # Refresh schools_count on the CRN record so the UI reflects new totals.
+    new_count = db.query(ConsultantSchool).filter(
+        ConsultantSchool.consultant_profile_id == owning_profile.id,
+        ConsultantSchool.source_crn == crn_value,
+    ).count()
+    crn_record.schools_count = new_count
+    db.commit()
+
+    logger.info(
+        f"Resync CRN {crn_value} (id={crn_id}, owner_profile={owning_profile.id}, "
+        f"actor={current_user.id}): USAC returned {total_from_usac}, "
+        f"imported {imported['imported_count']} new, skipped {imported['skipped_count']}, "
+        f"total now {new_count}"
+    )
+
+    return {
+        "success": True,
+        "crn": crn_value,
+        "usac_school_count": total_from_usac,
+        "imported_count": imported["imported_count"],
+        "skipped_count": imported["skipped_count"],
+        "total_schools_for_crn": new_count,
+        "message": (
+            f"USAC returned {total_from_usac} schools. "
+            f"Added {imported['imported_count']} new, {imported['skipped_count']} already imported."
+        ),
+    }
+
+
 @router.delete("/crns/{crn_id}")
 async def remove_crn(
     crn_id: int,

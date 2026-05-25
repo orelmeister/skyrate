@@ -1969,6 +1969,19 @@ class ApiClient {
     });
   }
 
+  async resyncCRNSchools(crnId: number): Promise<ApiResponse<{
+    crn: string;
+    usac_school_count: number;
+    imported_count: number;
+    skipped_count: number;
+    total_schools_for_crn: number;
+    message: string;
+  }>> {
+    return this.request(`/api/v1/consultant/crns/${crnId}/resync-schools`, {
+      method: 'POST',
+    });
+  }
+
   // ==================== VENDOR ====================
 
   async getVendorProfile(): Promise<ApiResponse<{ profile: VendorProfile }>> {
