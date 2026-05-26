@@ -1,0 +1,50 @@
+{
+  "anon_id": "ENT-20d8eecb",
+  "form470_number": "260025969",
+  "elapsed_seconds": 3.666,
+  "evaluated_at": "2026-05-19T20:45:34.405377+00:00",
+  "result": {
+    "overall_risk": "Medium",
+    "summary": "The Form 470 indicates 'Existing Equipment' for Managed Internal Broadband Services (MIBS). This could raise questions about whether the services truly qualify as eligible under Category 2, as MIBS typically involves new equipment or upgrades. Further clarification is needed to ensure compliance.",
+    "findings": [
+      {
+        "severity": "medium",
+        "area": "Service Eligibility",
+        "description": "The selection of 'Existing Equipment' for MIBS raises concerns about eligibility. MIBS generally involves the installation, maintenance, and operation of new or upgraded internal broadband infrastructure. Using existing equipment may not meet the eligibility requirements for Category 2 support.",
+        "suggestion": "Clarify in the narrative section how the managed services relate to eligible components and activities. If the services are solely for maintaining existing, unsupported equipment, consider whether they truly qualify as MIBS. Ensure the Form 471 accurately reflects the services being requested.",
+        "rule_reference": "FCC Order 19-117, Paragraph 48",
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Competitive Bidding",
+        "description": "While not inherently a violation, specifying 'Existing Equipment' might inadvertently limit the pool of potential bidders. Some vendors may specialize in new deployments or upgrades, and might not bid on services related to existing infrastructure.",
+        "suggestion": "Ensure the description of services is broad enough to attract a competitive pool of bidders. Focus on the required outcomes (e.g., network performance, reliability) rather than solely on the existing equipment.",
+        "rule_reference": null,
+        "source": "llm"
+      }
+    ],
+    "rule_findings": [],
+    "llm_findings": [
+      {
+        "severity": "medium",
+        "area": "Service Eligibility",
+        "description": "The selection of 'Existing Equipment' for MIBS raises concerns about eligibility. MIBS generally involves the installation, maintenance, and operation of new or upgraded internal broadband infrastructure. Using existing equipment may not meet the eligibility requirements for Category 2 support.",
+        "suggestion": "Clarify in the narrative section how the managed services relate to eligible components and activities. If the services are solely for maintaining existing, unsupported equipment, consider whether they truly qualify as MIBS. Ensure the Form 471 accurately reflects the services being requested.",
+        "rule_reference": "FCC Order 19-117, Paragraph 48",
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Competitive Bidding",
+        "description": "While not inherently a violation, specifying 'Existing Equipment' might inadvertently limit the pool of potential bidders. Some vendors may specialize in new deployments or upgrades, and might not bid on services related to existing infrastructure.",
+        "suggestion": "Ensure the description of services is broad enough to attract a competitive pool of bidders. Focus on the required outcomes (e.g., network performance, reliability) rather than solely on the existing equipment.",
+        "rule_reference": null,
+        "source": "llm"
+      }
+    ],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

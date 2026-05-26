@@ -1,0 +1,55 @@
+{
+  "anon_id": "ENT-ce56947c",
+  "form470_number": "250017362",
+  "elapsed_seconds": 2.483,
+  "evaluated_at": "2026-05-19T20:43:31.007997+00:00",
+  "result": {
+    "overall_risk": "Medium",
+    "summary": "The Form 470 lacks sufficient detail regarding Category 1 services and relies heavily on external RFP documents, potentially hindering transparency and competitive bidding. The absence of specific information within the Form 470 itself raises concerns about compliance with USAC's requirements for a clear and open bidding process.",
+    "findings": [
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "Document appears to be a bid solicitation but no evaluation criteria section was found. The FCC requires that applicants specify evaluation factors with price as the most heavily weighted.",
+        "suggestion": "Include a clear evaluation criteria section listing all factors with their relative weights. Price must be the most heavily weighted factor.",
+        "rule_reference": "47 CFR Section 54.503(b)(1)(i) — price as primary evaluation factor",
+        "source": "rule_engine",
+        "rule_id": "RULE-004"
+      },
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "The description for Category 1 services states, \"Please refer to our RFP documents for cat 1 specifics.\" This lacks detail in the Form 470 itself. Relying solely on external documents makes it difficult for service providers to quickly assess the applicant's needs and prepare bids, potentially limiting competition. The Form 470 should contain enough information for bidders to determine if they can provide the requested services.",
+        "suggestion": "Include a summary of the Category 1 service requirements directly in the Form 470 description, even if detailed specifications are in the RFP. Specify the type of Category 1 service needed (e.g., internet access, WAN) and any key requirements (e.g., bandwidth, service level agreements).",
+        "rule_reference": null,
+        "source": "llm"
+      }
+    ],
+    "rule_findings": [
+      {
+        "rule_id": "RULE-004",
+        "rule_version": "1.1.0",
+        "severity": "Medium",
+        "area": "Competitive Bidding",
+        "description": "Document appears to be a bid solicitation but no evaluation criteria section was found. The FCC requires that applicants specify evaluation factors with price as the most heavily weighted.",
+        "suggestion": "Include a clear evaluation criteria section listing all factors with their relative weights. Price must be the most heavily weighted factor.",
+        "rule_reference": "47 CFR Section 54.503(b)(1)(i) — price as primary evaluation factor",
+        "confidence": 0.6,
+        "evidence_snippet": "rfp"
+      }
+    ],
+    "llm_findings": [
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "The description for Category 1 services states, \"Please refer to our RFP documents for cat 1 specifics.\" This lacks detail in the Form 470 itself. Relying solely on external documents makes it difficult for service providers to quickly assess the applicant's needs and prepare bids, potentially limiting competition. The Form 470 should contain enough information for bidders to determine if they can provide the requested services.",
+        "suggestion": "Include a summary of the Category 1 service requirements directly in the Form 470 description, even if detailed specifications are in the RFP. Specify the type of Category 1 service needed (e.g., internet access, WAN) and any key requirements (e.g., bandwidth, service level agreements).",
+        "rule_reference": null,
+        "source": "llm"
+      }
+    ],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

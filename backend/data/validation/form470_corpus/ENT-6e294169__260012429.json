@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-6e294169",
+  "form470_number": "260012429",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-04-13",
+  "certified_date": "2026-03-16",
+  "narrative": "category_one_description: The applicant is seeking competitive bids for Category 1 Internet access services, including dedicated fiber connectivity with associated installation and activation, as described in the posted RFP. All bids will be evaluated in accordance with FCC and USAC competitive bidding rules, with price of eligible services as the primary factor.\nservice_type: Data Transmission and/or Internet Access\nservice_category: Category 1\nfunction: Internet Access and Data Transmission Service\nminimum_capacity: 500.00 Mbps\nmaximum_capacity: 2048.00 Mbps\ninstallation_initial: True\nform_nickname: BAIS CHANA HERITAGE SCHOOL, Inc.     FY 2026 C1",
+  "service_categories": [
+    "Data Transmission and/or Internet Access",
+    "Category 1"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:23:37.332420+00:00"
+}

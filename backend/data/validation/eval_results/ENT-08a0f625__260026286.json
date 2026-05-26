@@ -1,0 +1,50 @@
+{
+  "anon_id": "ENT-08a0f625",
+  "form470_number": "260026286",
+  "elapsed_seconds": 3.519,
+  "evaluated_at": "2026-05-19T20:45:17.847114+00:00",
+  "result": {
+    "overall_risk": "Medium",
+    "summary": "The Form 470 requests Managed Internal Broadband Services for existing equipment, which could raise cost-effectiveness concerns if not properly justified. Ensure the Form 471 application clearly demonstrates the cost-effectiveness of managed services compared to other options, and that the existing equipment is still suitable for its intended purpose.",
+    "findings": [
+      {
+        "severity": "medium",
+        "area": "Cost-Effectiveness",
+        "description": "Requesting managed services for existing equipment may raise questions about cost-effectiveness. USAC may scrutinize whether the cost of managed services is justified compared to the cost of maintaining the equipment or purchasing new equipment.",
+        "suggestion": "Document the rationale for choosing managed services over other options, including cost comparisons and justifications for extending the life of the existing equipment. Be prepared to provide detailed cost breakdowns and demonstrate that the chosen solution is the most cost-effective option for the applicant's needs.",
+        "rule_reference": "USAC Program Integrity Assurance Guide, Cost-Effectiveness Section",
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Service Eligibility",
+        "description": "While managed internal broadband services are generally eligible, ensure that the specific services requested align with the eligible services list and are necessary for the effective operation of the school's broadband network.",
+        "suggestion": "Review the eligible services list and ensure that all requested services are clearly defined and align with eligible activities. Document how the managed services will improve the school's broadband network and support educational purposes.",
+        "rule_reference": "Eligible Services List",
+        "source": "llm"
+      }
+    ],
+    "rule_findings": [],
+    "llm_findings": [
+      {
+        "severity": "medium",
+        "area": "Cost-Effectiveness",
+        "description": "Requesting managed services for existing equipment may raise questions about cost-effectiveness. USAC may scrutinize whether the cost of managed services is justified compared to the cost of maintaining the equipment or purchasing new equipment.",
+        "suggestion": "Document the rationale for choosing managed services over other options, including cost comparisons and justifications for extending the life of the existing equipment. Be prepared to provide detailed cost breakdowns and demonstrate that the chosen solution is the most cost-effective option for the applicant's needs.",
+        "rule_reference": "USAC Program Integrity Assurance Guide, Cost-Effectiveness Section",
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Service Eligibility",
+        "description": "While managed internal broadband services are generally eligible, ensure that the specific services requested align with the eligible services list and are necessary for the effective operation of the school's broadband network.",
+        "suggestion": "Review the eligible services list and ensure that all requested services are clearly defined and align with eligible activities. Document how the managed services will improve the school's broadband network and support educational purposes.",
+        "rule_reference": "Eligible Services List",
+        "source": "llm"
+      }
+    ],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

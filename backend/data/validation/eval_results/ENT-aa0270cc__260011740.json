@@ -1,0 +1,71 @@
+{
+  "anon_id": "ENT-aa0270cc",
+  "form470_number": "260011740",
+  "elapsed_seconds": 2.975,
+  "evaluated_at": "2026-05-19T20:42:51.623166+00:00",
+  "result": {
+    "overall_risk": "Medium",
+    "summary": "The Form 470 presents a moderate risk due to the lack of detailed information regarding cost-effectiveness considerations and potential issues related to the scope of the RFP.",
+    "findings": [
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "Document appears to be a bid solicitation but no evaluation criteria section was found. The FCC requires that applicants specify evaluation factors with price as the most heavily weighted.",
+        "suggestion": "Include a clear evaluation criteria section listing all factors with their relative weights. Price must be the most heavily weighted factor.",
+        "rule_reference": "47 CFR Section 54.503(b)(1)(i) — price as primary evaluation factor",
+        "source": "rule_engine",
+        "rule_id": "RULE-004"
+      },
+      {
+        "severity": "medium",
+        "area": "Cost-Effectiveness",
+        "description": "The description lacks explicit mention of how cost-effectiveness will be evaluated beyond price. While price is important, the FCC also emphasizes considering factors like bandwidth, scalability, and reliability in determining the most cost-effective solution. The description should explicitly state that cost-effectiveness, not just low price, will be a key factor.",
+        "suggestion": "Include a statement emphasizing the importance of cost-effectiveness, considering factors beyond just the lowest price, such as bandwidth, scalability, and reliability. This demonstrates a commitment to securing the most value for the funding requested.",
+        "rule_reference": null,
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Service Eligibility",
+        "description": "The description mentions 'related installation services' for Category 2. It's important to ensure that all installation services requested are clearly E-Rate eligible under Category 2 rules. Vague descriptions can lead to ineligible services being included.",
+        "suggestion": "Clarify the specific types of installation services being requested and ensure they align with eligible Category 2 services as defined by USAC. Reference the eligible services list.",
+        "rule_reference": null,
+        "source": "llm"
+      }
+    ],
+    "rule_findings": [
+      {
+        "rule_id": "RULE-004",
+        "rule_version": "1.1.0",
+        "severity": "Medium",
+        "area": "Competitive Bidding",
+        "description": "Document appears to be a bid solicitation but no evaluation criteria section was found. The FCC requires that applicants specify evaluation factors with price as the most heavily weighted.",
+        "suggestion": "Include a clear evaluation criteria section listing all factors with their relative weights. Price must be the most heavily weighted factor.",
+        "rule_reference": "47 CFR Section 54.503(b)(1)(i) — price as primary evaluation factor",
+        "confidence": 0.6,
+        "evidence_snippet": "rfp"
+      }
+    ],
+    "llm_findings": [
+      {
+        "severity": "medium",
+        "area": "Cost-Effectiveness",
+        "description": "The description lacks explicit mention of how cost-effectiveness will be evaluated beyond price. While price is important, the FCC also emphasizes considering factors like bandwidth, scalability, and reliability in determining the most cost-effective solution. The description should explicitly state that cost-effectiveness, not just low price, will be a key factor.",
+        "suggestion": "Include a statement emphasizing the importance of cost-effectiveness, considering factors beyond just the lowest price, such as bandwidth, scalability, and reliability. This demonstrates a commitment to securing the most value for the funding requested.",
+        "rule_reference": null,
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Service Eligibility",
+        "description": "The description mentions 'related installation services' for Category 2. It's important to ensure that all installation services requested are clearly E-Rate eligible under Category 2 rules. Vague descriptions can lead to ineligible services being included.",
+        "suggestion": "Clarify the specific types of installation services being requested and ensure they align with eligible Category 2 services as defined by USAC. Reference the eligible services list.",
+        "rule_reference": null,
+        "source": "llm"
+      }
+    ],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

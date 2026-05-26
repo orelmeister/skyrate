@@ -15,9 +15,17 @@ from typing import Optional
 
 from .base import RuleFinding, Severity
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 RULE_ID = "RULE-003"
 RULE_REFERENCE = "47 CFR Section 54.503(b)(2) — brand name 'or equivalent' requirement"
+
+# Institution name fragments that should NEVER be treated as brand mentions.
+# These commonly appear in school/district names and are not product references.
+INSTITUTION_STOPWORDS = [
+    "charter school", "charter academy", "magnet school", "academy of",
+    "school district", "public schools", "elementary school", "high school",
+    "middle school", "preparatory", "catholic school",
+]
 
 # Common networking/telecom brand names that might appear in Form 470
 BRAND_NAMES = [
@@ -43,13 +51,17 @@ EQUIVALENT_PHRASES = [
 ]
 
 
-def _find_brand_without_equivalent(text: str) -> list[tuple[str, str]]:
+def _find_brand_without_equivalent(text: str, metadata: dict) -> list[tuple[str, str]]:
     """
     Find brand names that appear without 'or equivalent' nearby.
+
+    Skips matches that fall inside institution-name stopword phrases or
+    the entity's form_nickname (to avoid false positives from school names).
 
     Returns list of (brand_name, evidence_snippet) tuples.
     """
     text_lower = text.lower()
+    nickname_lower = (metadata.get("form_nickname") or "").lower()
     violations = []
 
     for brand in BRAND_NAMES:
@@ -57,6 +69,21 @@ def _find_brand_without_equivalent(text: str) -> list[tuple[str, str]]:
         pattern = re.compile(re.escape(brand), re.IGNORECASE)
         for match in pattern.finditer(text_lower):
             start = match.start()
+
+            # --- False-positive guard 1: institution stopword ---
+            # Check if the brand match is part of a known school name fragment
+            context_window = text_lower[max(0, start - 30):start + len(brand) + 30]
+            is_stopword = any(
+                sw in context_window for sw in INSTITUTION_STOPWORDS
+            )
+            if is_stopword:
+                continue
+
+            # --- False-positive guard 2: entity nickname ---
+            # If the brand appears inside the entity's own name, skip it
+            if nickname_lower and brand in nickname_lower:
+                continue
+
             # Check within 100 characters after the brand name
             window_after = text_lower[start:start + len(brand) + 100]
             # Also check slightly before (for constructs like "or equivalent to Cisco")
@@ -87,7 +114,7 @@ def check(text: str, metadata: dict) -> Optional[RuleFinding]:
     FCC rules require that any brand-name specification include
     'or equivalent' to ensure open competition.
     """
-    violations = _find_brand_without_equivalent(text)
+    violations = _find_brand_without_equivalent(text, metadata)
 
     if not violations:
         return None

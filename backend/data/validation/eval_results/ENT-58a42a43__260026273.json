@@ -1,0 +1,34 @@
+{
+  "anon_id": "ENT-58a42a43",
+  "form470_number": "260026273",
+  "elapsed_seconds": 2.42,
+  "evaluated_at": "2026-05-19T20:41:10.910751+00:00",
+  "result": {
+    "overall_risk": "Medium",
+    "summary": "The Form 470 appears generally compliant, but the broad capacity range (50 Mbps to 2048 Mbps) may raise cost-effectiveness concerns during the competitive bidding process. Clearer specification of needs would help ensure bids are appropriately tailored and comparable.",
+    "findings": [
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "The wide range of bandwidth requested (50 Mbps to 2048 Mbps) may lead to difficulty in comparing bids and determining the most cost-effective solution. It is unclear what the actual bandwidth requirements are.",
+        "suggestion": "Narrow the bandwidth range to better reflect the applicant's actual needs. Consider specifying different tiers of bandwidth with associated pricing to allow for more accurate comparison of bids.",
+        "rule_reference": "USAC Program Integrity Assurance Guide, Competitive Bidding Section",
+        "source": "llm"
+      }
+    ],
+    "rule_findings": [],
+    "llm_findings": [
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "The wide range of bandwidth requested (50 Mbps to 2048 Mbps) may lead to difficulty in comparing bids and determining the most cost-effective solution. It is unclear what the actual bandwidth requirements are.",
+        "suggestion": "Narrow the bandwidth range to better reflect the applicant's actual needs. Consider specifying different tiers of bandwidth with associated pricing to allow for more accurate comparison of bids.",
+        "rule_reference": "USAC Program Integrity Assurance Guide, Competitive Bidding Section",
+        "source": "llm"
+      }
+    ],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

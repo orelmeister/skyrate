@@ -1,0 +1,34 @@
+{
+  "anon_id": "ENT-13aa090e",
+  "form470_number": "260026269",
+  "elapsed_seconds": 2.159,
+  "evaluated_at": "2026-05-19T20:45:25.831333+00:00",
+  "result": {
+    "overall_risk": "Medium",
+    "summary": "The wide capacity range (50 Mbps to 2048 Mbps) may raise cost-effectiveness concerns and questions about actual needs. Justification for the upper end of the range should be documented.",
+    "findings": [
+      {
+        "severity": "medium",
+        "area": "Cost-Effectiveness",
+        "description": "The large range between minimum and maximum capacity (50 Mbps to 2048 Mbps) may lead to questions regarding cost-effectiveness. It's unclear if the applicant truly needs the upper end of the capacity range, and bids may not be comparable if vendors offer services at significantly different capacity points within that range.",
+        "suggestion": "Consider narrowing the capacity range to better reflect actual needs and ensure comparable bids. Document the justification for the maximum capacity requested, including projected usage and growth.",
+        "rule_reference": "USAC Program Integrity Assurance Guide, Competitive Bidding Considerations",
+        "source": "llm"
+      }
+    ],
+    "rule_findings": [],
+    "llm_findings": [
+      {
+        "severity": "medium",
+        "area": "Cost-Effectiveness",
+        "description": "The large range between minimum and maximum capacity (50 Mbps to 2048 Mbps) may lead to questions regarding cost-effectiveness. It's unclear if the applicant truly needs the upper end of the capacity range, and bids may not be comparable if vendors offer services at significantly different capacity points within that range.",
+        "suggestion": "Consider narrowing the capacity range to better reflect actual needs and ensure comparable bids. Document the justification for the maximum capacity requested, including projected usage and growth.",
+        "rule_reference": "USAC Program Integrity Assurance Guide, Competitive Bidding Considerations",
+        "source": "llm"
+      }
+    ],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

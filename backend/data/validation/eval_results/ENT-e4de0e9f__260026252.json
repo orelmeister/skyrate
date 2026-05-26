@@ -1,0 +1,55 @@
+{
+  "anon_id": "ENT-e4de0e9f",
+  "form470_number": "260026252",
+  "elapsed_seconds": 2.836,
+  "evaluated_at": "2026-05-19T20:43:55.706981+00:00",
+  "result": {
+    "overall_risk": "Medium",
+    "summary": "The Form 470 appears generally compliant, but the wide bandwidth range and lack of specific details regarding scalability requirements could raise cost-effectiveness concerns during USAC review. The applicant should ensure that the selected solution is the most cost-effective option for their actual needs.",
+    "findings": [
+      {
+        "severity": "medium",
+        "area": "Cost Allocation",
+        "description": "Document references ineligible services or bundled eligible/ineligible components but does not include cost allocation language. E-Rate discounts may only apply to the eligible portion of services.",
+        "suggestion": "Add a cost allocation methodology that clearly separates eligible from ineligible costs. Request E-Rate discounts only on the eligible portion. Include line-item breakdowns where possible.",
+        "rule_reference": "47 CFR Section 54.504(e); FCC Order 19-117 — cost allocation",
+        "source": "rule_engine",
+        "rule_id": "RULE-005"
+      },
+      {
+        "severity": "medium",
+        "area": "Cost-Effectiveness",
+        "description": "The wide bandwidth range (1 Gbps to 5 Gbps) without specific justification or scalability requirements may raise concerns about cost-effectiveness. USAC may question whether the applicant is procuring services that are truly needed and the most cost-effective option.",
+        "suggestion": "The applicant should document their current and projected bandwidth needs to justify the selected bandwidth range. They should also solicit bids for different bandwidth tiers within the range to ensure they are selecting the most cost-effective solution. Document the evaluation process.",
+        "rule_reference": "47 CFR Section 54.503(c)(1)(i); USAC Program Integrity Assurance Guide",
+        "source": "llm"
+      }
+    ],
+    "rule_findings": [
+      {
+        "rule_id": "RULE-005",
+        "rule_version": "1.1.0",
+        "severity": "Medium",
+        "area": "Cost Allocation",
+        "description": "Document references ineligible services or bundled eligible/ineligible components but does not include cost allocation language. E-Rate discounts may only apply to the eligible portion of services.",
+        "suggestion": "Add a cost allocation methodology that clearly separates eligible from ineligible costs. Request E-Rate discounts only on the eligible portion. Include line-item breakdowns where possible.",
+        "rule_reference": "47 CFR Section 54.504(e); FCC Order 19-117 — cost allocation",
+        "confidence": 0.8,
+        "evidence_snippet": "learly identify any ineligible components, include SPIN, and comply with all E-Rate progra"
+      }
+    ],
+    "llm_findings": [
+      {
+        "severity": "medium",
+        "area": "Cost-Effectiveness",
+        "description": "The wide bandwidth range (1 Gbps to 5 Gbps) without specific justification or scalability requirements may raise concerns about cost-effectiveness. USAC may question whether the applicant is procuring services that are truly needed and the most cost-effective option.",
+        "suggestion": "The applicant should document their current and projected bandwidth needs to justify the selected bandwidth range. They should also solicit bids for different bandwidth tiers within the range to ensure they are selecting the most cost-effective solution. Document the evaluation process.",
+        "rule_reference": "47 CFR Section 54.503(c)(1)(i); USAC Program Integrity Assurance Guide",
+        "source": "llm"
+      }
+    ],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

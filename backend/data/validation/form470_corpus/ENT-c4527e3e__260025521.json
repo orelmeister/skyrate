@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-c4527e3e",
+  "form470_number": "260025521",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-04-22",
+  "certified_date": "2026-03-25",
+  "narrative": "category_one_description: The applicant seeks proposals for Dedicated Internet Access delivered via fiber for school locations in Silver Spring, Maryland. Vendors should provide pricing for service tiers ranging from 1 Gbps to 5 Gbps, including all installation, activation, and recurring monthly costs. Service should include appropriate Service Level Agreements covering uptime, latency, and support response times. Equivalent service solutions that meet the bandwidth and reliability requirements will be considered.\nservice_type: Data Transmission and/or Internet Access\nservice_category: Category 1\nfunction: Internet Access and Data Transmission Service\nminimum_capacity: 1024.00 Mbps\nmaximum_capacity: 5120.00 Mbps\ninstallation_initial: True\nform_nickname: YESHIVA OF GREATER WASHINGTON  DY 2026 C1",
+  "service_categories": [
+    "Data Transmission and/or Internet Access",
+    "Category 1"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:23:20.129903+00:00"
+}

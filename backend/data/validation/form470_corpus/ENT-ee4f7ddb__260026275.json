@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-ee4f7ddb",
+  "form470_number": "260026275",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-04-15",
+  "certified_date": "2026-03-18",
+  "narrative": "service_type: Managed Internal Broadband Services\nservice_category: Category 2\nfunction: Existing Equipment\nform_nickname: Great Oaks C2",
+  "service_categories": [
+    "Managed Internal Broadband Services",
+    "Category 2"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:23:27.523620+00:00"
+}

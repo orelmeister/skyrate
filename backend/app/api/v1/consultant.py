@@ -1113,6 +1113,10 @@ async def resync_crn_schools(
     and the schools are imported into the CRN's *owning* profile, not the
     caller's profile.
     """
+    import time
+    start_time = time.time()
+    logger.info(f"Resync CRN {crn_id}: started by {current_user.email} (role={current_user.role})")
+    
     is_privileged = current_user.role in ("admin", "super")
 
     if is_privileged:
@@ -1147,7 +1151,13 @@ async def resync_crn_schools(
     form471_result = {}
     form471_schools = []
     try:
-        form471_result = usac_service.get_schools_by_crn(crn_value)
+        # For resync, limit to recent 3 years to avoid timeout/slowness from querying full 2016-current history.
+        # Initial profile add uses full history; resync uses recent years for performance.
+        import datetime
+        current_year = datetime.datetime.now().year
+        recent_years = list(range(max(2016, current_year - 2), current_year + 1))
+        logger.info(f"Resync CRN {crn_value}: querying form_471 for recent years {recent_years}")
+        form471_result = usac_service.get_schools_by_crn(crn_value, years=recent_years)
         form471_schools = form471_result.get("schools") or []
     except Exception as e:
         logger.warning(f"Resync CRN {crn_value}: form_471 fallback failed: {e}")
@@ -1201,6 +1211,9 @@ async def resync_crn_schools(
         f"skipped={imported['skipped_count']}, total_now={new_count}"
     )
 
+    elapsed = time.time() - start_time
+    logger.info(f"Resync CRN {crn_value}: completed in {elapsed:.2f}s")
+    
     return {
         "success": True,
         "crn": crn_value,

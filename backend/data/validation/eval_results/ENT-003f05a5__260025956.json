@@ -1,0 +1,66 @@
+{
+  "anon_id": "ENT-003f05a5",
+  "form470_number": "260025956",
+  "elapsed_seconds": 12.346,
+  "evaluated_at": "2026-05-19T20:44:58.575885+00:00",
+  "result": {
+    "overall_risk": "Medium",
+    "summary": "The Form 470 indicates managed internal broadband services for existing equipment. While not inherently problematic, this warrants scrutiny regarding cost-effectiveness and potential duplication of services, especially if existing equipment is nearing end-of-life or if the managed service overlaps with existing internal IT capabilities.",
+    "findings": [
+      {
+        "severity": "medium",
+        "area": "Cost-Effectiveness",
+        "description": "Managed internal broadband services for existing equipment may raise questions about cost-effectiveness. USAC prioritizes the most cost-effective solutions. If the existing equipment is old or inefficient, a managed service might not be the most economical approach compared to replacing the equipment or upgrading the internal network.",
+        "suggestion": "The applicant should document the rationale for choosing a managed service over other options, including a cost analysis comparing the managed service to alternatives like equipment replacement or internal network upgrades. This documentation should be retained in case of audit.",
+        "rule_reference": "USAC Program Integrity Assurance Guide",
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Service Eligibility",
+        "description": "Managed internal broadband services are generally eligible, but the specific components of the service must be carefully reviewed to ensure they meet the eligibility criteria. Services that primarily support administrative functions or are not directly related to broadband connectivity are ineligible.",
+        "suggestion": "The applicant should ensure that the managed service only includes eligible components and that ineligible components are properly excluded from the funding request. The description of services should be detailed enough to allow USAC to determine eligibility.",
+        "rule_reference": "FCC Order 19-117",
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Competitive Bidding",
+        "description": "The description of services should be sufficiently detailed to allow bidders to submit informed bids. Vague or ambiguous descriptions can lead to non-compliant bids or challenges from other service providers.",
+        "suggestion": "The applicant should provide a clear and comprehensive description of the required services, including the scope of the managed service, the specific equipment involved, and any performance requirements. This will help ensure that all bidders are bidding on the same set of requirements.",
+        "rule_reference": null,
+        "source": "llm"
+      }
+    ],
+    "rule_findings": [],
+    "llm_findings": [
+      {
+        "severity": "medium",
+        "area": "Cost-Effectiveness",
+        "description": "Managed internal broadband services for existing equipment may raise questions about cost-effectiveness. USAC prioritizes the most cost-effective solutions. If the existing equipment is old or inefficient, a managed service might not be the most economical approach compared to replacing the equipment or upgrading the internal network.",
+        "suggestion": "The applicant should document the rationale for choosing a managed service over other options, including a cost analysis comparing the managed service to alternatives like equipment replacement or internal network upgrades. This documentation should be retained in case of audit.",
+        "rule_reference": "USAC Program Integrity Assurance Guide",
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Service Eligibility",
+        "description": "Managed internal broadband services are generally eligible, but the specific components of the service must be carefully reviewed to ensure they meet the eligibility criteria. Services that primarily support administrative functions or are not directly related to broadband connectivity are ineligible.",
+        "suggestion": "The applicant should ensure that the managed service only includes eligible components and that ineligible components are properly excluded from the funding request. The description of services should be detailed enough to allow USAC to determine eligibility.",
+        "rule_reference": "FCC Order 19-117",
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Competitive Bidding",
+        "description": "The description of services should be sufficiently detailed to allow bidders to submit informed bids. Vague or ambiguous descriptions can lead to non-compliant bids or challenges from other service providers.",
+        "suggestion": "The applicant should provide a clear and comprehensive description of the required services, including the scope of the managed service, the specific equipment involved, and any performance requirements. This will help ensure that all bidders are bidding on the same set of requirements.",
+        "rule_reference": null,
+        "source": "llm"
+      }
+    ],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

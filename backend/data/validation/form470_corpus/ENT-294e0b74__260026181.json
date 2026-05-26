@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-294e0b74",
+  "form470_number": "260026181",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-04-12",
+  "certified_date": "2026-03-15",
+  "narrative": "category_one_description: The applicant is seeking bids for dedicated Internet access services scalable between 1 Gbps and 10 Gbps to support instructional and administrative connectivity across multiple school sites within the Yeshivath Beth Yehudah school system. Vendors should provide pricing for scalable bandwidth options and clearly identify all monthly recurring and non-recurring costs associated with installation and service delivery.Services may be delivered to approximately four (4) school locations and must support reliable high-speed broadband connectivity suitable for modern educational network environments. Vendors must include service level agreements (SLA), installation, monitoring, and ongoing technical support.The applicant schools participating in this procurement are independent private educational institutions that may be administered collectively for E-Rate procurement and filing purposes. The applicant reserves the right to submit FCC Form 471 funding requests either individually by school entity or under a district or consortium structure within the FCC E-Rate Productivity Center (EPC), depending on the final entity configuration at the time of filing.\nservice_type: Data Transmission and/or Internet Access\nservice_category: Category 1\nfunction: Internet Access and Data Transmission Service\nminimum_capacity: 1024.00 Mbps\nmaximum_capacity: 10240.00 Mbps\ninstallation_initial: True\nform_nickname: YESHIVATH BETH YEHUDAH SCHOOL FY 2026 C1 & C2",
+  "service_categories": [
+    "Data Transmission and/or Internet Access",
+    "Category 1"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:23:40.814945+00:00"
+}

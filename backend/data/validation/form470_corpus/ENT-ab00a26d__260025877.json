@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-ab00a26d",
+  "form470_number": "260025877",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-04-01",
+  "certified_date": "2026-03-04",
+  "narrative": "category_one_description: Please disregard Form 470 #: 260024950. This form is the most updated for the elementary school only, which will be located at either 65 Beach 56th Street, 5th Fl, Queens NY 11692 OR 160 Beach 29 Street, 3rd Fl,Queens NY 11691At least 1 internet line, with a minimum 1 GBPS, dedicated fiber preferred. Please provide quotes for 1 GB, 2 GB, and 5 GB speeds.  Please provide any NRC setup costs with the quote, which may require a site survey.At least 1 internet line, cable preferred at a minimum 200 MBPS\nservice_type: Data Transmission and/or Internet Access\nservice_category: Category 1\nfunction: Internet Access and Data Transmission Service\nminimum_capacity: 1024.00 Mbps\nmaximum_capacity: 5120.00 Mbps\ninstallation_initial: True\nform_nickname: 2026-27-Form470-Lamad Arverne",
+  "service_categories": [
+    "Data Transmission and/or Internet Access",
+    "Category 1"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:24:09.558464+00:00"
+}

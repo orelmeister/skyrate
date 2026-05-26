@@ -1,0 +1,71 @@
+{
+  "anon_id": "ENT-ab00a26d",
+  "form470_number": "260024950",
+  "elapsed_seconds": 3.355,
+  "evaluated_at": "2026-05-19T20:42:54.982323+00:00",
+  "result": {
+    "overall_risk": "Medium",
+    "summary": "The Form 470 presents a moderate risk due to the uncertainty surrounding the elementary school location, which could impact the cost-effectiveness analysis and competitive bidding process. Additionally, the mix of fiber and cable requests for the same location could raise questions about technology choices.",
+    "findings": [
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "No reference to the 28-day waiting period or posting/filing dates found in the document.",
+        "suggestion": "Confirm that at least 28 calendar days will elapse between USAC posting of your Form 470 and your Form 471 filing date.",
+        "rule_reference": "47 CFR Section 54.504(b)(1) — 28-day waiting period",
+        "source": "rule_engine",
+        "rule_id": "RULE-001"
+      },
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "The Form 470 lists two potential locations for the elementary school. This uncertainty could complicate the competitive bidding process, as vendors may need to provide quotes for both locations, potentially increasing costs and administrative burden. It also makes a fair comparison of bids more difficult.",
+        "suggestion": "Finalize the elementary school location before filing the Form 471 to ensure accurate and comparable bids. If this is not possible, clearly state in the Form 470 how the applicant will evaluate bids considering the location uncertainty.",
+        "rule_reference": null,
+        "source": "llm"
+      },
+      {
+        "severity": "medium",
+        "area": "Cost-Effectiveness",
+        "description": "Requesting both dedicated fiber and cable internet access for the same location (both the elementary and middle school) without a clear justification may raise questions about cost-effectiveness. Fiber is generally more expensive than cable. The applicant should be prepared to justify why both options are being considered and how the final selection will ensure the most cost-effective solution.",
+        "suggestion": "Provide a clear explanation in the Form 471 application justifying the need for both fiber and cable options. Document the factors considered in evaluating cost-effectiveness, such as bandwidth requirements, reliability needs, and long-term costs.",
+        "rule_reference": null,
+        "source": "llm"
+      }
+    ],
+    "rule_findings": [
+      {
+        "rule_id": "RULE-001",
+        "rule_version": "1.1.0",
+        "severity": "Medium",
+        "area": "Competitive Bidding",
+        "description": "No reference to the 28-day waiting period or posting/filing dates found in the document.",
+        "suggestion": "Confirm that at least 28 calendar days will elapse between USAC posting of your Form 470 and your Form 471 filing date.",
+        "rule_reference": "47 CFR Section 54.504(b)(1) — 28-day waiting period",
+        "confidence": 0.6,
+        "evidence_snippet": null
+      }
+    ],
+    "llm_findings": [
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "The Form 470 lists two potential locations for the elementary school. This uncertainty could complicate the competitive bidding process, as vendors may need to provide quotes for both locations, potentially increasing costs and administrative burden. It also makes a fair comparison of bids more difficult.",
+        "suggestion": "Finalize the elementary school location before filing the Form 471 to ensure accurate and comparable bids. If this is not possible, clearly state in the Form 470 how the applicant will evaluate bids considering the location uncertainty.",
+        "rule_reference": null,
+        "source": "llm"
+      },
+      {
+        "severity": "medium",
+        "area": "Cost-Effectiveness",
+        "description": "Requesting both dedicated fiber and cable internet access for the same location (both the elementary and middle school) without a clear justification may raise questions about cost-effectiveness. Fiber is generally more expensive than cable. The applicant should be prepared to justify why both options are being considered and how the final selection will ensure the most cost-effective solution.",
+        "suggestion": "Provide a clear explanation in the Form 471 application justifying the need for both fiber and cable options. Document the factors considered in evaluating cost-effectiveness, such as bandwidth requirements, reliability needs, and long-term costs.",
+        "rule_reference": null,
+        "source": "llm"
+      }
+    ],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

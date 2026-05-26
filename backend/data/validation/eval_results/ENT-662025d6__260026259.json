@@ -1,0 +1,16 @@
+{
+  "anon_id": "ENT-662025d6",
+  "form470_number": "260026259",
+  "elapsed_seconds": 0.897,
+  "evaluated_at": "2026-05-19T20:41:27.220294+00:00",
+  "result": {
+    "overall_risk": "Low",
+    "summary": "The Form 470 appears generally compliant based on the information provided. No immediate red flags are apparent beyond the deterministic findings.",
+    "findings": [],
+    "rule_findings": [],
+    "llm_findings": [],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

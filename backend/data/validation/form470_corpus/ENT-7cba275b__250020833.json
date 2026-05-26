@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-7cba275b",
+  "form470_number": "250020833",
+  "funding_year": 2025,
+  "form470_status": "Certified",
+  "posting_date": "2025-03-09",
+  "certified_date": "2025-02-09",
+  "narrative": "category_one_description: Please refer to our RFP for more specifics\nservice_type: Data Transmission and/or Internet Access\nservice_category: Category 1\nfunction: Internet Access and Data Transmission Service\nminimum_capacity: 300.00 Mbps\nmaximum_capacity: 1024.00 Mbps\ninstallation_initial: True\nform_nickname: CHABAD OF SOUTHERN NEVADA DBA [ENTITY_REDACTED]  FY 2025",
+  "service_categories": [
+    "Data Transmission and/or Internet Access",
+    "Category 1"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:24:32.960834+00:00"
+}

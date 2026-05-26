@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-91d740e5",
+  "form470_number": "260012707",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-02-04",
+  "certified_date": "2026-01-07",
+  "narrative": "category_one_description: The applicant is seeking proposals for Category 1 services, including Internet Access and/or Data Transmission services, to support the educational and administrative needs of the school. The requested services are intended to provide reliable, scalable, and cost-effective connectivity. Vendors must meet all FCC and USAC eligibility requirements. The applicant will evaluate all bids received in accordance with E-Rate competitive bidding rules, with price of the eligible services being the primary factor. See RFP for specifics\nservice_type: Data Transmission and/or Internet Access\nservice_category: Category 1\nfunction: Internet Access and Data Transmission Service\nminimum_capacity: 500.00 Mbps\nmaximum_capacity: 2048.00 Mbps\ninstallation_initial: True\nform_nickname: BETH JACOB PAROCHIAL SCHOOL FY 2026 C1",
+  "service_categories": [
+    "Data Transmission and/or Internet Access",
+    "Category 1"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:24:24.676036+00:00"
+}

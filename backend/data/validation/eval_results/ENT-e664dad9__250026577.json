@@ -1,0 +1,16 @@
+{
+  "anon_id": "ENT-e664dad9",
+  "form470_number": "250026577",
+  "elapsed_seconds": 0.944,
+  "evaluated_at": "2026-05-19T20:43:56.654397+00:00",
+  "result": {
+    "overall_risk": "Low",
+    "summary": "The Form 470 appears generally compliant. The bandwidth range provides flexibility while remaining specific enough for vendors to provide accurate bids.",
+    "findings": [],
+    "rule_findings": [],
+    "llm_findings": [],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

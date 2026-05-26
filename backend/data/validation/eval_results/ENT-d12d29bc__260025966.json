@@ -1,0 +1,16 @@
+{
+  "anon_id": "ENT-d12d29bc",
+  "form470_number": "260025966",
+  "elapsed_seconds": 0.955,
+  "evaluated_at": "2026-05-19T20:43:35.351471+00:00",
+  "result": {
+    "overall_risk": "Low",
+    "summary": "The Form 470 appears generally compliant, focusing on fiber internet access for two sites. No immediate red flags are apparent based on the provided information.",
+    "findings": [],
+    "rule_findings": [],
+    "llm_findings": [],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-662025d6",
+  "form470_number": "260024516",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-04-15",
+  "certified_date": "2026-03-18",
+  "narrative": "service_type: Internal Connections\nservice_category: Category 2\nfunction: Uninterruptable Power Supply/Battery Backup and Necessary Software and Licenses\ninstallation_initial: True\nform_nickname: 2026_16062890_HANNA SACKS",
+  "service_categories": [
+    "Internal Connections",
+    "Category 2"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:23:26.927393+00:00"
+}

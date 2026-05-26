@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-3b90cd3e",
+  "form470_number": "260015776",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-02-18",
+  "certified_date": "2026-01-21",
+  "narrative": "category_one_description: The applicant is seeking proposals for Category 1 services, including Internet Access and/or Data Transmission services, to support the educational and administrative needs of the school. The requested services are intended to provide reliable, scalable, and cost-effective connectivity. Vendors must meet all FCC and USAC eligibility requirements. The applicant will evaluate all bids received in accordance with E-Rate competitive bidding rules, with price of the eligible services being the primary factor. Please see our RFP for specifics\nservice_type: Data Transmission and/or Internet Access\nservice_category: Category 1\nfunction: Internet Access and Data Transmission Service\nminimum_capacity: 400.00 Mbps\nmaximum_capacity: 1024.00 Mbps\ninstallation_initial: True\nform_nickname: [ENTITY_REDACTED] FY 2026",
+  "service_categories": [
+    "Data Transmission and/or Internet Access",
+    "Category 1"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:24:22.358087+00:00"
+}

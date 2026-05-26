@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-f0d39196",
+  "form470_number": "260025945",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-04-01",
+  "certified_date": "2026-03-04",
+  "narrative": "service_type: Internal Connections\nservice_category: Category 2\nfunction: Switches and Necessary Software and Licenses\ninstallation_initial: True\nform_nickname: Toras Emes Miami IC 2026",
+  "service_categories": [
+    "Internal Connections",
+    "Category 2"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:24:03.854963+00:00"
+}

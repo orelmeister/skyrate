@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-aa0270cc",
+  "form470_number": "260011740",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-01-25",
+  "certified_date": "2025-12-28",
+  "narrative": "category_one_description: The applicant is seeking proposals for E-Rate eligible Category 1 Internet Access and Category 2 Internal Connections, including eligible networking equipment and related installation services, for a single school site. See our RFP for more specifics\nservice_type: Data Transmission and/or Internet Access\nservice_category: Category 1\nfunction: Internet Access and Data Transmission Service\nminimum_capacity: 1024.00 Mbps\nmaximum_capacity: 2048.00 Mbps\ninstallation_initial: True\nform_nickname: Mesivta Kesser Torah of Baltimore FY 2026",
+  "service_categories": [
+    "Data Transmission and/or Internet Access",
+    "Category 1"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:24:25.257171+00:00"
+}

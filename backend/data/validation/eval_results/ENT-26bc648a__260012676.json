@@ -1,0 +1,16 @@
+{
+  "anon_id": "ENT-26bc648a",
+  "form470_number": "260012676",
+  "elapsed_seconds": 0.949,
+  "evaluated_at": "2026-05-19T20:45:42.093770+00:00",
+  "result": {
+    "overall_risk": "Low",
+    "summary": "The Form 470 appears generally compliant, focusing on internet access and data transmission. The description emphasizes cost-effectiveness and adherence to E-Rate rules, suggesting a good understanding of program requirements.",
+    "findings": [],
+    "rule_findings": [],
+    "llm_findings": [],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

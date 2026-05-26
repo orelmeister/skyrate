@@ -1,0 +1,71 @@
+{
+  "anon_id": "ENT-0da7607e",
+  "form470_number": "250007719",
+  "elapsed_seconds": 3.576,
+  "evaluated_at": "2026-05-19T20:45:22.627594+00:00",
+  "result": {
+    "overall_risk": "Medium",
+    "summary": "The Form 470 references an attached RFP, which is good practice. However, the lack of detail on the Form 470 itself, combined with the missing evaluation criteria, elevates the risk of a competitive bidding challenge.",
+    "findings": [
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "Document appears to be a bid solicitation but no evaluation criteria section was found. The FCC requires that applicants specify evaluation factors with price as the most heavily weighted.",
+        "suggestion": "Include a clear evaluation criteria section listing all factors with their relative weights. Price must be the most heavily weighted factor.",
+        "rule_reference": "47 CFR Section 54.503(b)(1)(i) — price as primary evaluation factor",
+        "source": "rule_engine",
+        "rule_id": "RULE-004"
+      },
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "The Form 470 relies heavily on an attached RFP for service details. While referencing an RFP is acceptable, the Form 470 itself should provide a sufficient summary of the requested services to allow vendors to determine if they can provide the services. The current description is minimal.",
+        "suggestion": "Include a more detailed description of the cabling project directly on the Form 470, even if it duplicates information in the RFP. This ensures that all potential bidders have adequate information upfront.",
+        "rule_reference": null,
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Service Eligibility",
+        "description": "The service type is listed as Internal Connections and the function as Cabling, which are generally eligible. However, without more detail, it's impossible to confirm that all requested components and services meet the definition of eligible Internal Connections. For example, network management services are not eligible.",
+        "suggestion": "Ensure that the RFP clearly defines the scope of the cabling project and that all requested components and services are eligible Internal Connections. Exclude ineligible services or clearly delineate them for cost allocation purposes.",
+        "rule_reference": null,
+        "source": "llm"
+      }
+    ],
+    "rule_findings": [
+      {
+        "rule_id": "RULE-004",
+        "rule_version": "1.1.0",
+        "severity": "Medium",
+        "area": "Competitive Bidding",
+        "description": "Document appears to be a bid solicitation but no evaluation criteria section was found. The FCC requires that applicants specify evaluation factors with price as the most heavily weighted.",
+        "suggestion": "Include a clear evaluation criteria section listing all factors with their relative weights. Price must be the most heavily weighted factor.",
+        "rule_reference": "47 CFR Section 54.503(b)(1)(i) — price as primary evaluation factor",
+        "confidence": 0.6,
+        "evidence_snippet": "rfp"
+      }
+    ],
+    "llm_findings": [
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "The Form 470 relies heavily on an attached RFP for service details. While referencing an RFP is acceptable, the Form 470 itself should provide a sufficient summary of the requested services to allow vendors to determine if they can provide the services. The current description is minimal.",
+        "suggestion": "Include a more detailed description of the cabling project directly on the Form 470, even if it duplicates information in the RFP. This ensures that all potential bidders have adequate information upfront.",
+        "rule_reference": null,
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Service Eligibility",
+        "description": "The service type is listed as Internal Connections and the function as Cabling, which are generally eligible. However, without more detail, it's impossible to confirm that all requested components and services meet the definition of eligible Internal Connections. For example, network management services are not eligible.",
+        "suggestion": "Ensure that the RFP clearly defines the scope of the cabling project and that all requested components and services are eligible Internal Connections. Exclude ineligible services or clearly delineate them for cost allocation purposes.",
+        "rule_reference": null,
+        "source": "llm"
+      }
+    ],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

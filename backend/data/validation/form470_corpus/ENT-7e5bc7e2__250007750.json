@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-7e5bc7e2",
+  "form470_number": "250007750",
+  "funding_year": 2025,
+  "form470_status": "Certified",
+  "posting_date": "2024-12-31",
+  "certified_date": "2024-12-03",
+  "narrative": "category_one_description: Please see our RFP document for service specifics\nservice_type: Data Transmission and/or Internet Access\nservice_category: Category 1\nfunction: Internet Access and Data Transmission Service\nminimum_capacity: 1024.00 Mbps\nmaximum_capacity: 5120.00 Mbps\ninstallation_initial: True\nform_nickname: BNOS BAIS YAAKOV HIGH SCHOOL FY 2025",
+  "service_categories": [
+    "Data Transmission and/or Internet Access",
+    "Category 1"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:24:40.970286+00:00"
+}

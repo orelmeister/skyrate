@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-973ba6d6",
+  "form470_number": "260025667",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-04-01",
+  "certified_date": "2026-03-04",
+  "narrative": "service_type: Internal Connections\nservice_category: Category 2\nfunction: Wireless Access Points and Necessary Software and Licenses\ninstallation_initial: True\nform_nickname: ST DEMETRIOS Greek American School FY 2026 C2",
+  "service_categories": [
+    "Internal Connections",
+    "Category 2"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:23:57.985444+00:00"
+}

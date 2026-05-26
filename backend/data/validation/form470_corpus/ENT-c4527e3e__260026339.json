@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-c4527e3e",
+  "form470_number": "260026339",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-04-22",
+  "certified_date": "2026-03-25",
+  "narrative": "service_type: Internal Connections\nservice_category: Category 2\nfunction: Wireless Access Points and Necessary Software and Licenses\ninstallation_initial: True\nform_nickname: Yesh Greater Wash Lic",
+  "service_categories": [
+    "Internal Connections",
+    "Category 2"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:23:19.521957+00:00"
+}

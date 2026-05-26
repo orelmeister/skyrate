@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-eb7bb815",
+  "form470_number": "260025607",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-04-01",
+  "certified_date": "2026-03-04",
+  "narrative": "category_one_description: The applicant seeks proposals for fiber-based Internet access services to support connectivity across the school campus. Vendors may propose Dedicated Internet Access (DIA) or equivalent broadband Internet access services with bandwidth options ranging from 1 Gbps to 2 Gbps, including installation, activation, and ongoing service support. Solutions must provide reliable and scalable connectivity suitable for instructional and administrative use.\nservice_type: Data Transmission and/or Internet Access\nservice_category: Category 1\nfunction: Internet Access and Data Transmission Service\nminimum_capacity: 1024.00 Mbps\nmaximum_capacity: 2048.00 Mbps\ninstallation_initial: True\nform_nickname: YESHIVA OF CENTRAL QUEENS FY 2026 C1&2",
+  "service_categories": [
+    "Data Transmission and/or Internet Access",
+    "Category 1"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:24:03.298481+00:00"
+}

@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-ee4f7ddb",
+  "form470_number": "260025921",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-04-15",
+  "certified_date": "2026-03-18",
+  "narrative": "category_one_description: Two circuits one primary one load balancing\nservice_type: Data Transmission and/or Internet Access\nservice_category: Category 1\nfunction: Internet Access and Data Transmission Service\nminimum_capacity: 10.00 Mbps\nmaximum_capacity: 10240.00 Mbps\ninstallation_initial: True\nform_nickname: Great  470 B",
+  "service_categories": [
+    "Data Transmission and/or Internet Access",
+    "Category 1"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:23:28.122909+00:00"
+}

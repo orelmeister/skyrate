@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-e973fc93",
+  "form470_number": "250007294",
+  "funding_year": 2025,
+  "form470_status": "Certified",
+  "posting_date": "2024-12-26",
+  "certified_date": "2024-11-28",
+  "narrative": "category_one_description: See attached RFP for the specifics of the services requested\nservice_type: Basic Maintenance of Internal Connections\nservice_category: Category 2\nfunction: Wireless Access Points\nform_nickname: Ahi Ezer Yeshiva School FY 2025",
+  "service_categories": [
+    "Basic Maintenance of Internal Connections",
+    "Category 2"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:24:42.119323+00:00"
+}

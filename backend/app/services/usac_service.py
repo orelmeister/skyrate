@@ -21,10 +21,13 @@ import numpy as np
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import logging
 
 # Add backend directory to path for utils imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from utils.usac_client import USACDataClient, map_field_name, FIELD_NAME_MAPPING
+
+logger = logging.getLogger(__name__)
 
 
 def clean_nan_values(data: Any) -> Any:
@@ -619,9 +622,13 @@ class USACService:
             years = list(range(2016, current_year + 1))
         
         all_schools = {}  # ben -> school info
+        failed_years = []
+        
+        logger.info(f"get_schools_by_crn CRN={crn}: querying {len(years)} years {years}")
         
         for year in years:
             try:
+                logger.debug(f"get_schools_by_crn CRN={crn} year={year}: fetching...")
                 # Query Form 471 by consultant registration number
                 df = self._client.fetch_data(
                     year=year,
@@ -629,11 +636,14 @@ class USACService:
                     limit=50000,
                     dataset='form_471'
                 )
+                logger.debug(f"get_schools_by_crn CRN={crn} year={year}: got {len(df) if df is not None else 0} rows")
             except Exception as e:
-                print(f"[USAC] get_schools_by_crn year={year} crn={crn} failed: {e}")
+                logger.warning(f"get_schools_by_crn CRN={crn} year={year}: failed ({type(e).__name__}: {str(e)[:100]})")
+                failed_years.append(year)
                 continue
             
             if df is None or df.empty:
+                logger.debug(f"get_schools_by_crn CRN={crn} year={year}: empty result")
                 continue
             
             for _, row in df.iterrows():
@@ -646,6 +656,8 @@ class USACService:
                         'city': row.get('city') or row.get('physical_city'),
                         'entity_type': row.get('organization_entity_type_name') or row.get('applicant_type'),
                     }
+        
+        logger.info(f"get_schools_by_crn CRN={crn}: completed with {len(all_schools)} unique schools, failed years: {failed_years}")
         
         return {
             'crn': crn.upper().strip(),

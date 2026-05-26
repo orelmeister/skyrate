@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-fc90cb4e",
+  "form470_number": "260019661",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-04-01",
+  "certified_date": "2026-03-04",
+  "narrative": "category_one_description: [ENTITY_REDACTED] seeks proposals for fully managed Dedicated Internet Access (DIA) delivered via fiber to four school locations, with scalable symmetrical bandwidth of approximately 5 Gbps to 10 Gbps. Proposals must include all recurring and non-recurring costs, special construction if required, network electronics necessary to deliver service, and service level agreements ensuring reliable, end-to-end connectivity compliant with E-Rate rules.\nservice_type: Data Transmission and/or Internet Access\nservice_category: Category 1\nfunction: Internet Access and Data Transmission Service\nminimum_capacity: 5120.00 Mbps\nmaximum_capacity: 10240.00 Mbps\ninstallation_initial: True\nform_nickname: [ENTITY_REDACTED] FY 2026 C1/C2",
+  "service_categories": [
+    "Data Transmission and/or Internet Access",
+    "Category 1"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:24:08.997852+00:00"
+}

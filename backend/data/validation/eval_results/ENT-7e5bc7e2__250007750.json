@@ -1,0 +1,71 @@
+{
+  "anon_id": "ENT-7e5bc7e2",
+  "form470_number": "250007750",
+  "elapsed_seconds": 3.425,
+  "evaluated_at": "2026-05-19T20:42:17.843086+00:00",
+  "result": {
+    "overall_risk": "Medium",
+    "summary": "The Form 470 has some potential issues regarding the lack of specific service details and cost-effectiveness considerations, potentially leading to increased scrutiny during USAC review.",
+    "findings": [
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "Document appears to be a bid solicitation but no evaluation criteria section was found. The FCC requires that applicants specify evaluation factors with price as the most heavily weighted.",
+        "suggestion": "Include a clear evaluation criteria section listing all factors with their relative weights. Price must be the most heavily weighted factor.",
+        "rule_reference": "47 CFR Section 54.503(b)(1)(i) — price as primary evaluation factor",
+        "source": "rule_engine",
+        "rule_id": "RULE-004"
+      },
+      {
+        "severity": "medium",
+        "area": "Service Eligibility",
+        "description": "The description 'Please see our RFP document for service specifics' lacks detail on the Form 470 itself. While referencing an RFP is acceptable, the 470 should contain enough information to allow bidders to determine if they can provide the requested services. Vague descriptions can hinder the competitive bidding process.",
+        "suggestion": "Include a brief summary of the required services directly on the Form 470, even if a more detailed RFP is available. This ensures that all potential bidders have sufficient information upfront.",
+        "rule_reference": null,
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Cost-Effectiveness",
+        "description": "The form specifies a capacity range (1024 Mbps - 5120 Mbps) without clearly indicating how the final capacity selection will be determined. This could raise questions about whether the chosen service is the most cost-effective option.",
+        "suggestion": "Explain in the RFP or on the Form 470 how the final capacity will be selected (e.g., based on student bandwidth needs, specific applications, or budget constraints).",
+        "rule_reference": null,
+        "source": "llm"
+      }
+    ],
+    "rule_findings": [
+      {
+        "rule_id": "RULE-004",
+        "rule_version": "1.1.0",
+        "severity": "Medium",
+        "area": "Competitive Bidding",
+        "description": "Document appears to be a bid solicitation but no evaluation criteria section was found. The FCC requires that applicants specify evaluation factors with price as the most heavily weighted.",
+        "suggestion": "Include a clear evaluation criteria section listing all factors with their relative weights. Price must be the most heavily weighted factor.",
+        "rule_reference": "47 CFR Section 54.503(b)(1)(i) — price as primary evaluation factor",
+        "confidence": 0.6,
+        "evidence_snippet": "rfp"
+      }
+    ],
+    "llm_findings": [
+      {
+        "severity": "medium",
+        "area": "Service Eligibility",
+        "description": "The description 'Please see our RFP document for service specifics' lacks detail on the Form 470 itself. While referencing an RFP is acceptable, the 470 should contain enough information to allow bidders to determine if they can provide the requested services. Vague descriptions can hinder the competitive bidding process.",
+        "suggestion": "Include a brief summary of the required services directly on the Form 470, even if a more detailed RFP is available. This ensures that all potential bidders have sufficient information upfront.",
+        "rule_reference": null,
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Cost-Effectiveness",
+        "description": "The form specifies a capacity range (1024 Mbps - 5120 Mbps) without clearly indicating how the final capacity selection will be determined. This could raise questions about whether the chosen service is the most cost-effective option.",
+        "suggestion": "Explain in the RFP or on the Form 470 how the final capacity will be selected (e.g., based on student bandwidth needs, specific applications, or budget constraints).",
+        "rule_reference": null,
+        "source": "llm"
+      }
+    ],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

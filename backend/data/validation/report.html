@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compliance Validation Report</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                line-height: 1.6; padding: 2rem; max-width: 1200px; margin: 0 auto;
+                color: #1a1a2e; background: #f8f9fa; }
+        h1 { color: #6b46c1; margin-bottom: 0.5rem; }
+        h2 { color: #2d3748; margin: 2rem 0 1rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem; }
+        .meta { color: #718096; margin-bottom: 2rem; }
+        table { width: 100%; border-collapse: collapse; margin: 1rem 0; background: white;
+                 border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        th, td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #e2e8f0; }
+        th { background: #6b46c1; color: white; font-weight: 600; }
+        tr:hover { background: #f7fafc; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                         gap: 1rem; margin: 1rem 0; }
+        .summary-card { background: white; padding: 1.5rem; border-radius: 8px;
+                         box-shadow: 0 1px 3px rgba(0,0,0,0.1); text-align: center; }
+        .summary-card .value { font-size: 2rem; font-weight: 700; color: #6b46c1; }
+        .summary-card .label { font-size: 0.875rem; color: #718096; }
+        .chart-container { background: white; padding: 1.5rem; border-radius: 8px;
+                            box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin: 1rem 0; }
+        svg { display: block; margin: 0 auto; }
+        .disclaimer { margin-top: 3rem; padding: 1.5rem; background: #fffbeb;
+                       border: 1px solid #f6e05e; border-radius: 8px; font-size: 0.875rem; }
+        .footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #e2e8f0;
+                   color: #a0aec0; font-size: 0.75rem; }
+    </style>
+</head>
+<body>
+    <h1>Compliance Validation Report</h1>
+    <p class="meta">Generated: 2026-05-19 20:44 UTC | Corpus size: 144 records</p>
+
+    <div class="summary-grid">
+        <div class="summary-card">
+            <div class="value">144</div>
+            <div class="label">Total Records Evaluated</div>
+        </div>
+        <div class="summary-card">
+            <div class="value">0.0</div>
+            <div class="label">Avg High-Severity / Doc</div>
+        </div>
+        <div class="summary-card">
+            <div class="value">2.2</div>
+            <div class="label">Avg Medium-Severity / Doc</div>
+        </div>
+        <div class="summary-card">
+            <div class="value">0.5</div>
+            <div class="label">Avg Low-Severity / Doc</div>
+        </div>
+    </div>
+
+    <h2>USAC Issue Risk Score Distribution</h2>
+    <div class="chart-container">
+        <svg width="420" height="170" viewBox="0 0 420 170">
+            <rect x="10" y="140" width="30" height="0" fill="#6b46c1" opacity="0.8"/><text x="25" y="155" text-anchor="middle" font-size="10">0-10%</text><text x="25" y="135" text-anchor="middle" font-size="9">0</text>
+<rect x="50" y="140" width="30" height="0" fill="#6b46c1" opacity="0.8"/><text x="65" y="155" text-anchor="middle" font-size="10">10-20%</text><text x="65" y="135" text-anchor="middle" font-size="9">0</text>
+<rect x="90" y="36" width="30" height="104" fill="#6b46c1" opacity="0.8"/><text x="105" y="155" text-anchor="middle" font-size="10">20-30%</text><text x="105" y="31" text-anchor="middle" font-size="9">66</text>
+<rect x="130" y="140" width="30" height="0" fill="#6b46c1" opacity="0.8"/><text x="145" y="155" text-anchor="middle" font-size="10">30-40%</text><text x="145" y="135" text-anchor="middle" font-size="9">0</text>
+<rect x="170" y="140" width="30" height="0" fill="#6b46c1" opacity="0.8"/><text x="185" y="155" text-anchor="middle" font-size="10">40-50%</text><text x="185" y="135" text-anchor="middle" font-size="9">0</text>
+<rect x="210" y="20" width="30" height="120" fill="#6b46c1" opacity="0.8"/><text x="225" y="155" text-anchor="middle" font-size="10">50-60%</text><text x="225" y="15" text-anchor="middle" font-size="9">76</text>
+<rect x="250" y="140" width="30" height="0" fill="#6b46c1" opacity="0.8"/><text x="265" y="155" text-anchor="middle" font-size="10">60-70%</text><text x="265" y="135" text-anchor="middle" font-size="9">0</text>
+<rect x="290" y="140" width="30" height="0" fill="#6b46c1" opacity="0.8"/><text x="305" y="155" text-anchor="middle" font-size="10">70-80%</text><text x="305" y="135" text-anchor="middle" font-size="9">0</text>
+<rect x="330" y="137" width="30" height="3" fill="#6b46c1" opacity="0.8"/><text x="345" y="155" text-anchor="middle" font-size="10">80-90%</text><text x="345" y="132" text-anchor="middle" font-size="9">2</text>
+<rect x="370" y="140" width="30" height="0" fill="#6b46c1" opacity="0.8"/><text x="385" y="155" text-anchor="middle" font-size="10">90-100%</text><text x="385" y="135" text-anchor="middle" font-size="9">0</text>
+        </svg>
+        <p style="text-align:center; color:#718096; font-size:0.8rem; margin-top:0.5rem;">
+            Risk score buckets (0-100%). Low=20%, Medium=50%, High=80%.
+        </p>
+    </div>
+
+    <h2>Per-Rule Fire Rate and Confidence</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Rule ID</th>
+                <th>Count</th>
+                <th>Fire Rate</th>
+                <th>Conf Min</th>
+                <th>Conf P25</th>
+                <th>Conf Median</th>
+                <th>Conf P75</th>
+                <th>Conf Max</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+            <td>RULE-001</td>
+            <td>3</td>
+            <td>2.1%</td>
+            <td>0.60</td>
+            <td>0.60</td>
+            <td>0.60</td>
+            <td>0.60</td>
+            <td>0.60</td>
+        </tr><tr>
+            <td>RULE-002</td>
+            <td>1</td>
+            <td>0.7%</td>
+            <td>0.75</td>
+            <td>0.75</td>
+            <td>0.75</td>
+            <td>0.75</td>
+            <td>0.75</td>
+        </tr><tr>
+            <td>RULE-003</td>
+            <td>1</td>
+            <td>0.7%</td>
+            <td>0.90</td>
+            <td>0.90</td>
+            <td>0.90</td>
+            <td>0.90</td>
+            <td>0.90</td>
+        </tr><tr>
+            <td>RULE-004</td>
+            <td>64</td>
+            <td>44.4%</td>
+            <td>0.60</td>
+            <td>0.60</td>
+            <td>0.60</td>
+            <td>0.60</td>
+            <td>0.60</td>
+        </tr><tr>
+            <td>RULE-005</td>
+            <td>1</td>
+            <td>0.7%</td>
+            <td>0.80</td>
+            <td>0.80</td>
+            <td>0.80</td>
+            <td>0.80</td>
+            <td>0.80</td>
+        </tr>
+        </tbody>
+    </table>
+
+    <h2>Risk Score by Form 470 Status</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Status</th>
+                <th>Count</th>
+                <th>Avg Risk Score</th>
+                <th>Min</th>
+                <th>Max</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+            <td>Canceled</td>
+            <td>1</td>
+            <td>0.8000</td>
+            <td>0.8000</td>
+            <td>0.8000</td>
+        </tr><tr>
+            <td>Certified</td>
+            <td>143</td>
+            <td>0.3636</td>
+            <td>0.2000</td>
+            <td>0.8000</td>
+        </tr>
+        </tbody>
+    </table>
+
+    <h2>Top 10 Highest-Risk Records</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Anon ID</th>
+                <th>Form 470 #</th>
+                <th>Risk Score</th>
+                <th>Risk Level</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+            <td>ENT-3936a457</td>
+            <td>260009606</td>
+            <td>0.80</td>
+            <td>High</td>
+        </tr><tr>
+            <td>ENT-ea630a4b</td>
+            <td>260020248</td>
+            <td>0.80</td>
+            <td>High</td>
+        </tr><tr>
+            <td>ENT-003f05a5</td>
+            <td>260025956</td>
+            <td>0.50</td>
+            <td>Medium</td>
+        </tr><tr>
+            <td>ENT-005c04d0</td>
+            <td>260025983</td>
+            <td>0.50</td>
+            <td>Medium</td>
+        </tr><tr>
+            <td>ENT-0107e97b</td>
+            <td>250010328</td>
+            <td>0.50</td>
+            <td>Medium</td>
+        </tr><tr>
+            <td>ENT-0527a53b</td>
+            <td>250020198</td>
+            <td>0.50</td>
+            <td>Medium</td>
+        </tr><tr>
+            <td>ENT-08a0f625</td>
+            <td>260014532</td>
+            <td>0.50</td>
+            <td>Medium</td>
+        </tr><tr>
+            <td>ENT-08a0f625</td>
+            <td>260026286</td>
+            <td>0.50</td>
+            <td>Medium</td>
+        </tr><tr>
+            <td>ENT-0da7607e</td>
+            <td>250007719</td>
+            <td>0.50</td>
+            <td>Medium</td>
+        </tr><tr>
+            <td>ENT-13aa090e</td>
+            <td>260026269</td>
+            <td>0.50</td>
+            <td>Medium</td>
+        </tr>
+        </tbody>
+    </table>
+
+    <div class="disclaimer">
+        <strong>Privacy Notice:</strong> All entity identifiers in this report are anonymized
+        using a salted one-way hash. No applicant names, BENs, or personally identifiable
+        information are stored in evaluation outputs.<br><br>
+        <strong>Disclaimer:</strong> This validation report is for internal calibration purposes
+        only. Risk scores are advisory and do not represent USAC determinations. "USAC issue risk"
+        refers to the likelihood of triggering a USAC Program Integrity review, not a guarantee
+        of approval or denial.
+    </div>
+
+    <div class="footer">
+        <p>SkyRate AI Compliance Validation Harness | Internal Use Only</p>
+        <p>Data derived from USAC Open Data (public records) cross-referenced with CRM filing metadata.</p>
+        <p>Do not distribute this report externally. Corpus files are excluded from version control.</p>
+    </div>
+</body>
+</html>

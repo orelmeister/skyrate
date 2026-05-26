@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-0da7607e",
+  "form470_number": "250007719",
+  "funding_year": 2025,
+  "form470_status": "Certified",
+  "posting_date": "2024-12-31",
+  "certified_date": "2024-12-03",
+  "narrative": "category_one_description: See attached RFP document for the details of services request\nservice_type: Internal Connections\nservice_category: Category 2\nfunction: Cabling\ninstallation_initial: True\nform_nickname: ELITE HIGH SCHOOL  FY 2025",
+  "service_categories": [
+    "Internal Connections",
+    "Category 2"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:24:40.418520+00:00"
+}

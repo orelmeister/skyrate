@@ -1,0 +1,50 @@
+{
+  "anon_id": "ENT-fbe86a11",
+  "form470_number": "260026271",
+  "elapsed_seconds": 3.289,
+  "evaluated_at": "2026-05-19T20:44:39.002875+00:00",
+  "result": {
+    "overall_risk": "Medium",
+    "summary": "The Form 470 appears generally compliant, but the broad capacity range (50 Mbps to 2048 Mbps) may raise cost-effectiveness concerns and could benefit from further clarification to ensure a fair and open competitive bidding process.",
+    "findings": [
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "The wide range of bandwidth (50 Mbps to 2048 Mbps) specified may not allow vendors to provide accurate and competitive bids. It is unclear what the actual bandwidth requirements are, potentially hindering a fair evaluation of bids based on cost-effectiveness.",
+        "suggestion": "Consider narrowing the bandwidth range or providing more specific details about the bandwidth requirements for each location to enable vendors to submit more accurate and competitive bids. Justify the need for such a wide range in the description.",
+        "rule_reference": null,
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Cost-Effectiveness",
+        "description": "Without a more defined bandwidth requirement, it may be difficult to demonstrate that the selected service is the most cost-effective option, as required by E-Rate rules. Selecting a much higher bandwidth than needed could be seen as wasteful.",
+        "suggestion": "Document the rationale for the chosen bandwidth and how it aligns with the applicant's needs and budget. Compare the cost per Mbps for different bandwidth options during the Form 471 application process.",
+        "rule_reference": null,
+        "source": "llm"
+      }
+    ],
+    "rule_findings": [],
+    "llm_findings": [
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "The wide range of bandwidth (50 Mbps to 2048 Mbps) specified may not allow vendors to provide accurate and competitive bids. It is unclear what the actual bandwidth requirements are, potentially hindering a fair evaluation of bids based on cost-effectiveness.",
+        "suggestion": "Consider narrowing the bandwidth range or providing more specific details about the bandwidth requirements for each location to enable vendors to submit more accurate and competitive bids. Justify the need for such a wide range in the description.",
+        "rule_reference": null,
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Cost-Effectiveness",
+        "description": "Without a more defined bandwidth requirement, it may be difficult to demonstrate that the selected service is the most cost-effective option, as required by E-Rate rules. Selecting a much higher bandwidth than needed could be seen as wasteful.",
+        "suggestion": "Document the rationale for the chosen bandwidth and how it aligns with the applicant's needs and budget. Compare the cost per Mbps for different bandwidth options during the Form 471 application process.",
+        "rule_reference": null,
+        "source": "llm"
+      }
+    ],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

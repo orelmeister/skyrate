@@ -1,0 +1,16 @@
+{
+  "anon_id": "ENT-c4527e3e",
+  "form470_number": "260025521",
+  "elapsed_seconds": 1.174,
+  "evaluated_at": "2026-05-19T20:43:26.410857+00:00",
+  "result": {
+    "overall_risk": "Low",
+    "summary": "The Form 470 appears generally compliant. The description is clear and includes key elements for competitive bidding.",
+    "findings": [],
+    "rule_findings": [],
+    "llm_findings": [],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-74ad1ba7",
+  "form470_number": "260026186",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-04-12",
+  "certified_date": "2026-03-15",
+  "narrative": "service_type: Managed Internal Broadband Services\nservice_category: Category 2\nfunction: Existing Equipment\nform_nickname: Kinneret Day School FY 2026 C2",
+  "service_categories": [
+    "Managed Internal Broadband Services",
+    "Category 2"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:23:42.521780+00:00"
+}

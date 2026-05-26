@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-e664dad9",
+  "form470_number": "260026061",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-04-12",
+  "certified_date": "2026-03-15",
+  "narrative": "category_one_description: The applicant seeks proposals for Dedicated Internet Access (DIA) fiber service to serve multiple school buildings. Proposed bandwidth should range from 500 Mbps to 2 Gbps, scalable based on the most cost-effective solution. Service should include all necessary equipment, installation, and configuration required to deliver reliable broadband connectivity. Contracts of 14 years may be considered. Vendors should reference the associated RFP for additional details.\nservice_type: Data Transmission and/or Internet Access\nservice_category: Category 1\nfunction: Internet Access and Data Transmission Service\nminimum_capacity: 500.00 Mbps\nmaximum_capacity: 2048.00 Mbps\ninstallation_initial: True\nform_nickname: CHEDER TORAS ZEV FY 2026 C1&C2",
+  "service_categories": [
+    "Data Transmission and/or Internet Access",
+    "Category 1"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:23:40.205695+00:00"
+}

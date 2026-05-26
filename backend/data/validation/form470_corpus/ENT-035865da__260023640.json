@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-035865da",
+  "form470_number": "260023640",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-03-26",
+  "certified_date": "2026-02-26",
+  "narrative": "category_one_description: New Horizon Community School seeks proposals for scalable broadband Internet access services to support current and projected bandwidth demand for digital learning, cloud-based applications, and online assessments. Solutions may include one or more service connections necessary to meet performance, capacity, and instructional network requirements. Vendors may propose service options ranging from 1 Gbps to 10 Gbps or equivalent scalable solutions.All proposals and vendor communications regarding this FCC Form 470 can be submitted directly to the schools IT Director at:ealexandre@nhccschool.orgVendors are responsible for monitoring this Form 470 and submitting complete proposals prior to the close of the competitive bidding period.\nservice_type: Data Transmission and/or Internet Access\nservice_category: Category 1\nfunction: Internet Access and Data Transmission Service\nminimum_capacity: 1024.00 Mbps\nmaximum_capacity: 10240.00 Mbps\ninstallation_initial: True\nform_nickname: NEW HORIZON COMMUNITY SCHOOL FY 2026 C1",
+  "service_categories": [
+    "Data Transmission and/or Internet Access",
+    "Category 1"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:24:19.938900+00:00"
+}

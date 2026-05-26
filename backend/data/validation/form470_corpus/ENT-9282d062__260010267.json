@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-9282d062",
+  "form470_number": "260010267",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-01-13",
+  "certified_date": "2025-12-16",
+  "narrative": "service_type: Internal Connections\nservice_category: Category 2\nfunction: Switches and Necessary Software and Licenses\ninstallation_initial: True\nform_nickname: THE WILLIAMSBURG CHARTER SCHOOL FY 2026",
+  "service_categories": [
+    "Internal Connections",
+    "Category 2"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:24:25.818342+00:00"
+}

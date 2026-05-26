@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-bf625336",
+  "form470_number": "250011644",
+  "funding_year": 2025,
+  "form470_status": "Certified",
+  "posting_date": "2025-01-21",
+  "certified_date": "2024-12-24",
+  "narrative": "category_one_description: Please refer to our RFP document for service specifics\nservice_type: Data Transmission and/or Internet Access\nservice_category: Category 1\nfunction: Internet Access and Data Transmission Service\nminimum_capacity: 1024.00 Mbps\nmaximum_capacity: 2048.00 Mbps\ninstallation_initial: True\nform_nickname: HEBREW ACADEMY FY 2025",
+  "service_categories": [
+    "Data Transmission and/or Internet Access",
+    "Category 1"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:24:35.951263+00:00"
+}

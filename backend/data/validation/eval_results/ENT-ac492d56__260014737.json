@@ -1,0 +1,55 @@
+{
+  "anon_id": "ENT-ac492d56",
+  "form470_number": "260014737",
+  "elapsed_seconds": 2.175,
+  "evaluated_at": "2026-05-19T20:43:04.334218+00:00",
+  "result": {
+    "overall_risk": "Medium",
+    "summary": "The Form 470 appears generally compliant, but the lack of detailed evaluation criteria beyond 'price' and reference to an external RFP introduces some risk. Ensuring the RFP is readily available and contains sufficient detail is crucial.",
+    "findings": [
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "Document appears to be a bid solicitation but no evaluation criteria section was found. The FCC requires that applicants specify evaluation factors with price as the most heavily weighted.",
+        "suggestion": "Include a clear evaluation criteria section listing all factors with their relative weights. Price must be the most heavily weighted factor.",
+        "rule_reference": "47 CFR Section 54.503(b)(1)(i) — price as primary evaluation factor",
+        "source": "rule_engine",
+        "rule_id": "RULE-004"
+      },
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "The description mentions that the applicant will evaluate bids in accordance with E-Rate rules, with price being the primary factor, and refers to an RFP for specifics. However, the Form 470 itself lacks specific details on other evaluation criteria beyond price. Relying solely on an external RFP without summarizing key criteria in the Form 470 could raise questions during USAC review.",
+        "suggestion": "Include a brief summary of the key evaluation criteria (besides price) directly in the Form 470 description. This could include factors like vendor experience, technical qualifications, or service level agreements. Ensure the RFP is easily accessible to all potential bidders.",
+        "rule_reference": "47 CFR Section 54.503(b)(1)",
+        "source": "llm"
+      }
+    ],
+    "rule_findings": [
+      {
+        "rule_id": "RULE-004",
+        "rule_version": "1.1.0",
+        "severity": "Medium",
+        "area": "Competitive Bidding",
+        "description": "Document appears to be a bid solicitation but no evaluation criteria section was found. The FCC requires that applicants specify evaluation factors with price as the most heavily weighted.",
+        "suggestion": "Include a clear evaluation criteria section listing all factors with their relative weights. Price must be the most heavily weighted factor.",
+        "rule_reference": "47 CFR Section 54.503(b)(1)(i) — price as primary evaluation factor",
+        "confidence": 0.6,
+        "evidence_snippet": "rfp"
+      }
+    ],
+    "llm_findings": [
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "The description mentions that the applicant will evaluate bids in accordance with E-Rate rules, with price being the primary factor, and refers to an RFP for specifics. However, the Form 470 itself lacks specific details on other evaluation criteria beyond price. Relying solely on an external RFP without summarizing key criteria in the Form 470 could raise questions during USAC review.",
+        "suggestion": "Include a brief summary of the key evaluation criteria (besides price) directly in the Form 470 description. This could include factors like vendor experience, technical qualifications, or service level agreements. Ensure the RFP is easily accessible to all potential bidders.",
+        "rule_reference": "47 CFR Section 54.503(b)(1)",
+        "source": "llm"
+      }
+    ],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

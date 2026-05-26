@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-3936a457",
+  "form470_number": "260009606",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-04-09",
+  "certified_date": "2026-03-12",
+  "narrative": "category_one_description: [ENTITY_REDACTED] is seeking bids for Category 1 and Category 2 E-Rate eligible services.For Category 1, the school requests Dedicated Internet Access over fiber with scalable speeds from 1 Gbps up to 10 Gbps. Installation, activation, inside wiring if needed, and all required components must be included. Service must be compatible with the schools existing network with no disruption during cutover.For Category 2, the school requests bids for Internal Connections equipment including:10 Ubiquiti U6-PRO-US access points, 1 SonicWALL TZ470 firewall, 2 network racks, 2 Ubiquiti routers, 2 Ubiquiti USW-48-POE switches, and all associated licensing, cabling, installation, and configuration. Equivalent equipment may be proposed.The school is also seeking MIBS (Managed Internal Broadband Services) for existing school-owned equipment: 1 SonicWall TZ470 firewall, two Ubiquiti USW-48-POE switches, and one Ubiquiti USW-PRO-48-POE switch. Required MIBS functions include firmware updates, 24/7 monitoring and alerting, configuration backups, ticketing and support, security patching, and performance reporting.Vendors may submit bids for Category 1, Category 2, or both. Proposals from brokers will not be accepted.   see our RFP document for more specifics .\nservice_type: Data Transmission and/or Internet Access\nservice_category: Category 1\nfunction: Internet Access and Data Transmission Service\nminimum_capacity: 1024.00 Mbps\nmaximum_capacity: 10240.00 Mbps\ninstallation_initial: True\nform_nickname: [ENTITY_REDACTED], Inc.  FY 2026",
+  "service_categories": [
+    "Data Transmission and/or Internet Access",
+    "Category 1"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:23:45.423422+00:00"
+}

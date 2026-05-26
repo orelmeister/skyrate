@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-5ca74914",
+  "form470_number": "250026328",
+  "funding_year": 2025,
+  "form470_status": "Certified",
+  "posting_date": "2025-04-07",
+  "certified_date": "2025-03-10",
+  "narrative": "service_type: Internal Connections\nservice_category: Category 2\nfunction: Cabling\ninstallation_initial: True\nform_nickname: Congregation Yeshiva Beis Chaya Mushka Inc. FY 2025 C2",
+  "service_categories": [
+    "Internal Connections",
+    "Category 2"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:24:28.738368+00:00"
+}

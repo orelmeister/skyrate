@@ -1,0 +1,50 @@
+{
+  "anon_id": "ENT-fc90cb4e",
+  "form470_number": "260019661",
+  "elapsed_seconds": 3.11,
+  "evaluated_at": "2026-05-19T20:44:42.113711+00:00",
+  "result": {
+    "overall_risk": "Medium",
+    "summary": "The Form 470 specifies a relatively narrow bandwidth range (5-10 Gbps) which could potentially limit the competitiveness of the bidding process. Additionally, while special construction is mentioned, the lack of detail could lead to later disputes.",
+    "findings": [
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "The specified bandwidth range (5-10 Gbps) might inadvertently limit the number of potential bidders. A wider range or more flexible language (e.g., \"at least 5 Gbps, scalable to 10 Gbps or higher\") could encourage more competitive bids.",
+        "suggestion": "Consider broadening the bandwidth range or using more flexible language to attract a wider range of bids. Ensure the minimum bandwidth meets the applicant's needs while allowing for future scalability.",
+        "rule_reference": "FCC Order 19-117, Competitive Bidding Requirements",
+        "source": "llm"
+      },
+      {
+        "severity": "medium",
+        "area": "Cost-Effectiveness",
+        "description": "The description mentions special construction but lacks detail. Without a clear understanding of potential special construction costs, it's difficult to evaluate the cost-effectiveness of bids.",
+        "suggestion": "Provide more detail regarding potential special construction requirements, or indicate that bidders should provide detailed cost breakdowns for any special construction needed. This will allow for a more accurate comparison of bids.",
+        "rule_reference": "USAC Program Integrity Assurance Guide, Cost-Effectiveness",
+        "source": "llm"
+      }
+    ],
+    "rule_findings": [],
+    "llm_findings": [
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "The specified bandwidth range (5-10 Gbps) might inadvertently limit the number of potential bidders. A wider range or more flexible language (e.g., \"at least 5 Gbps, scalable to 10 Gbps or higher\") could encourage more competitive bids.",
+        "suggestion": "Consider broadening the bandwidth range or using more flexible language to attract a wider range of bids. Ensure the minimum bandwidth meets the applicant's needs while allowing for future scalability.",
+        "rule_reference": "FCC Order 19-117, Competitive Bidding Requirements",
+        "source": "llm"
+      },
+      {
+        "severity": "medium",
+        "area": "Cost-Effectiveness",
+        "description": "The description mentions special construction but lacks detail. Without a clear understanding of potential special construction costs, it's difficult to evaluate the cost-effectiveness of bids.",
+        "suggestion": "Provide more detail regarding potential special construction requirements, or indicate that bidders should provide detailed cost breakdowns for any special construction needed. This will allow for a more accurate comparison of bids.",
+        "rule_reference": "USAC Program Integrity Assurance Guide, Cost-Effectiveness",
+        "source": "llm"
+      }
+    ],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

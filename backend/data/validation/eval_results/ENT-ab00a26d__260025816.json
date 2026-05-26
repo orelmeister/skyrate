@@ -1,0 +1,71 @@
+{
+  "anon_id": "ENT-ab00a26d",
+  "form470_number": "260025816",
+  "elapsed_seconds": 3.77,
+  "evaluated_at": "2026-05-19T20:42:58.752831+00:00",
+  "result": {
+    "overall_risk": "Medium",
+    "summary": "The Form 470 appears generally compliant but has some potential issues regarding the clarity of the service requests and potential cost-effectiveness concerns that could trigger further USAC scrutiny.",
+    "findings": [
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "No reference to the 28-day waiting period or posting/filing dates found in the document.",
+        "suggestion": "Confirm that at least 28 calendar days will elapse between USAC posting of your Form 470 and your Form 471 filing date.",
+        "rule_reference": "47 CFR Section 54.504(b)(1) — 28-day waiting period",
+        "source": "rule_engine",
+        "rule_id": "RULE-001"
+      },
+      {
+        "severity": "medium",
+        "area": "Service Eligibility",
+        "description": "The description includes a request for both dedicated fiber and cable internet access. While not inherently ineligible, the request for 'cable preferred at a minimum 200 MBPS' alongside a fiber request of 1 GBPS or more could raise questions about whether the applicant is seeking the most cost-effective solution, particularly if cable is significantly cheaper and meets their needs. USAC may question why fiber is needed if cable is acceptable.",
+        "suggestion": "Clarify the specific requirements and justification for both fiber and cable options. Explain why cable is only 'preferred' and under what circumstances fiber is necessary. Provide data usage or other justification for the bandwidth requirements.",
+        "rule_reference": null,
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Cost-Effectiveness",
+        "description": "The form requests quotes for 1 GB, 2 GB, and 5 GB speeds. While obtaining multiple quotes is good practice, the applicant should be prepared to justify the chosen bandwidth level as the most cost-effective option that meets their needs. Failure to adequately justify the selected bandwidth could lead to questions about waste or imprudence.",
+        "suggestion": "Document the process used to determine the required bandwidth and justify the selection of the chosen speed based on current and projected usage. This documentation should be retained in case of audit.",
+        "rule_reference": null,
+        "source": "llm"
+      }
+    ],
+    "rule_findings": [
+      {
+        "rule_id": "RULE-001",
+        "rule_version": "1.1.0",
+        "severity": "Medium",
+        "area": "Competitive Bidding",
+        "description": "No reference to the 28-day waiting period or posting/filing dates found in the document.",
+        "suggestion": "Confirm that at least 28 calendar days will elapse between USAC posting of your Form 470 and your Form 471 filing date.",
+        "rule_reference": "47 CFR Section 54.504(b)(1) — 28-day waiting period",
+        "confidence": 0.6,
+        "evidence_snippet": null
+      }
+    ],
+    "llm_findings": [
+      {
+        "severity": "medium",
+        "area": "Service Eligibility",
+        "description": "The description includes a request for both dedicated fiber and cable internet access. While not inherently ineligible, the request for 'cable preferred at a minimum 200 MBPS' alongside a fiber request of 1 GBPS or more could raise questions about whether the applicant is seeking the most cost-effective solution, particularly if cable is significantly cheaper and meets their needs. USAC may question why fiber is needed if cable is acceptable.",
+        "suggestion": "Clarify the specific requirements and justification for both fiber and cable options. Explain why cable is only 'preferred' and under what circumstances fiber is necessary. Provide data usage or other justification for the bandwidth requirements.",
+        "rule_reference": null,
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Cost-Effectiveness",
+        "description": "The form requests quotes for 1 GB, 2 GB, and 5 GB speeds. While obtaining multiple quotes is good practice, the applicant should be prepared to justify the chosen bandwidth level as the most cost-effective option that meets their needs. Failure to adequately justify the selected bandwidth could lead to questions about waste or imprudence.",
+        "suggestion": "Document the process used to determine the required bandwidth and justify the selection of the chosen speed based on current and projected usage. This documentation should be retained in case of audit.",
+        "rule_reference": null,
+        "source": "llm"
+      }
+    ],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

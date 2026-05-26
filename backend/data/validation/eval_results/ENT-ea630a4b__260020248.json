@@ -1,0 +1,71 @@
+{
+  "anon_id": "ENT-ea630a4b",
+  "form470_number": "260020248",
+  "elapsed_seconds": 3.47,
+  "evaluated_at": "2026-05-19T20:44:15.740962+00:00",
+  "result": {
+    "overall_risk": "High",
+    "summary": "The Form 470 lacks any indication of eligible services being requested, making it non-compliant and likely to be rejected by USAC. The absence of eligible services, combined with the lack of detail, suggests a high risk of non-compliance.",
+    "findings": [
+      {
+        "severity": "high",
+        "area": "Service Eligibility",
+        "description": "No recognizable E-Rate eligible service type found in the document. Form 470 must request services from Category 1 (Internet/Data Transmission) or Category 2 (Internal Connections/MIBS/BMIC).",
+        "suggestion": "Ensure the Form 470 clearly identifies the service category and specific service types being requested per the USAC Eligible Services List.",
+        "rule_reference": "47 CFR Section 54.502; USAC Eligible Services List FY2026",
+        "source": "rule_engine",
+        "rule_id": "RULE-002"
+      },
+      {
+        "severity": "high",
+        "area": "Service Eligibility",
+        "description": "The Form 470 does not specify any eligible Category 1 or Category 2 services. Without a clear indication of the services being sought, it is impossible to determine if the request aligns with E-Rate program rules.",
+        "suggestion": "The applicant should revise the Form 470 to explicitly list the Category 1 or Category 2 services they intend to procure. They should consult the USAC Eligible Services List for FY2026 to ensure the services are eligible.",
+        "rule_reference": "47 CFR Section 54.502; USAC Eligible Services List FY2026",
+        "source": "llm"
+      },
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "Due to the lack of specified services, it's impossible to assess whether the Form 470 provides sufficient information for vendors to submit informed bids. A vague or incomplete description of required services could lead to non-compliant bids and a flawed competitive bidding process.",
+        "suggestion": "The applicant should provide a detailed description of the services needed, including technical specifications, bandwidth requirements, and any specific features required. This will enable vendors to submit accurate and competitive bids.",
+        "rule_reference": "47 CFR Section 54.503",
+        "source": "llm"
+      }
+    ],
+    "rule_findings": [
+      {
+        "rule_id": "RULE-002",
+        "rule_version": "1.1.0",
+        "severity": "High",
+        "area": "Service Eligibility",
+        "description": "No recognizable E-Rate eligible service type found in the document. Form 470 must request services from Category 1 (Internet/Data Transmission) or Category 2 (Internal Connections/MIBS/BMIC).",
+        "suggestion": "Ensure the Form 470 clearly identifies the service category and specific service types being requested per the USAC Eligible Services List.",
+        "rule_reference": "47 CFR Section 54.502; USAC Eligible Services List FY2026",
+        "confidence": 0.75,
+        "evidence_snippet": null
+      }
+    ],
+    "llm_findings": [
+      {
+        "severity": "high",
+        "area": "Service Eligibility",
+        "description": "The Form 470 does not specify any eligible Category 1 or Category 2 services. Without a clear indication of the services being sought, it is impossible to determine if the request aligns with E-Rate program rules.",
+        "suggestion": "The applicant should revise the Form 470 to explicitly list the Category 1 or Category 2 services they intend to procure. They should consult the USAC Eligible Services List for FY2026 to ensure the services are eligible.",
+        "rule_reference": "47 CFR Section 54.502; USAC Eligible Services List FY2026",
+        "source": "llm"
+      },
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "Due to the lack of specified services, it's impossible to assess whether the Form 470 provides sufficient information for vendors to submit informed bids. A vague or incomplete description of required services could lead to non-compliant bids and a flawed competitive bidding process.",
+        "suggestion": "The applicant should provide a detailed description of the services needed, including technical specifications, bandwidth requirements, and any specific features required. This will enable vendors to submit accurate and competitive bids.",
+        "rule_reference": "47 CFR Section 54.503",
+        "source": "llm"
+      }
+    ],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

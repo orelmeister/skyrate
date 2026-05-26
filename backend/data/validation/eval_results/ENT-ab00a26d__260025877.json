@@ -1,0 +1,71 @@
+{
+  "anon_id": "ENT-ab00a26d",
+  "form470_number": "260025877",
+  "elapsed_seconds": 3.4,
+  "evaluated_at": "2026-05-19T20:43:02.157765+00:00",
+  "result": {
+    "overall_risk": "Medium",
+    "summary": "The Form 470 presents a moderate risk due to the unclear service address and potential issues with cost-effectiveness given the request for multiple bandwidth options.",
+    "findings": [
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "No reference to the 28-day waiting period or posting/filing dates found in the document.",
+        "suggestion": "Confirm that at least 28 calendar days will elapse between USAC posting of your Form 470 and your Form 471 filing date.",
+        "rule_reference": "47 CFR Section 54.504(b)(1) — 28-day waiting period",
+        "source": "rule_engine",
+        "rule_id": "RULE-001"
+      },
+      {
+        "severity": "medium",
+        "area": "Service Eligibility",
+        "description": "The Form 470 lists two possible locations for the service, making it unclear which location(s) the services are intended for. This ambiguity could lead to confusion among bidders and potentially impact the eligibility of the services requested. USAC requires clarity regarding the service location to ensure funds are used for eligible purposes.",
+        "suggestion": "The applicant should clarify the exact service location(s) in an updated Form 470. If both locations require service, this should be explicitly stated, and the bandwidth requirements for each location should be clearly defined.",
+        "rule_reference": null,
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Cost-Effectiveness",
+        "description": "Requesting quotes for 1 GB, 2 GB, and 5 GB speeds, while potentially beneficial for comparison, could lead to questions about cost-effectiveness if the chosen bandwidth significantly exceeds the actual needs of the school. Selecting a higher bandwidth than necessary may raise concerns about waste of E-rate funds.",
+        "suggestion": "The applicant should carefully analyze its bandwidth needs and document the justification for selecting a particular bandwidth level. This documentation should be retained in case of a USAC audit.",
+        "rule_reference": null,
+        "source": "llm"
+      }
+    ],
+    "rule_findings": [
+      {
+        "rule_id": "RULE-001",
+        "rule_version": "1.1.0",
+        "severity": "Medium",
+        "area": "Competitive Bidding",
+        "description": "No reference to the 28-day waiting period or posting/filing dates found in the document.",
+        "suggestion": "Confirm that at least 28 calendar days will elapse between USAC posting of your Form 470 and your Form 471 filing date.",
+        "rule_reference": "47 CFR Section 54.504(b)(1) — 28-day waiting period",
+        "confidence": 0.6,
+        "evidence_snippet": null
+      }
+    ],
+    "llm_findings": [
+      {
+        "severity": "medium",
+        "area": "Service Eligibility",
+        "description": "The Form 470 lists two possible locations for the service, making it unclear which location(s) the services are intended for. This ambiguity could lead to confusion among bidders and potentially impact the eligibility of the services requested. USAC requires clarity regarding the service location to ensure funds are used for eligible purposes.",
+        "suggestion": "The applicant should clarify the exact service location(s) in an updated Form 470. If both locations require service, this should be explicitly stated, and the bandwidth requirements for each location should be clearly defined.",
+        "rule_reference": null,
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Cost-Effectiveness",
+        "description": "Requesting quotes for 1 GB, 2 GB, and 5 GB speeds, while potentially beneficial for comparison, could lead to questions about cost-effectiveness if the chosen bandwidth significantly exceeds the actual needs of the school. Selecting a higher bandwidth than necessary may raise concerns about waste of E-rate funds.",
+        "suggestion": "The applicant should carefully analyze its bandwidth needs and document the justification for selecting a particular bandwidth level. This documentation should be retained in case of a USAC audit.",
+        "rule_reference": null,
+        "source": "llm"
+      }
+    ],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

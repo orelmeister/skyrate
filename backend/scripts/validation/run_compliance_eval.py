@@ -84,17 +84,9 @@ def scan_narrative_direct(narrative: str) -> dict:
         from app.services.compliance.analyzer import analyze_form470
         import asyncio
 
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                result = pool.submit(
-                    asyncio.run, analyze_form470(narrative, {"filename": "validation_harness.txt"})
-                ).result()
-        else:
-            result = asyncio.run(
-                analyze_form470(narrative, {"filename": "validation_harness.txt"})
-            )
+        result = asyncio.run(
+            analyze_form470(narrative, {"filename": "validation_harness.txt"})
+        )
 
         if result:
             return result

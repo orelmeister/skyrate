@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-20d8eecb",
+  "form470_number": "250007509",
+  "funding_year": 2025,
+  "form470_status": "Certified",
+  "posting_date": "2024-12-30",
+  "certified_date": "2024-12-02",
+  "narrative": "category_one_description: See attached RFP for service specifics\nservice_type: Data Transmission and/or Internet Access\nservice_category: Category 1\nfunction: Internet Access and Data Transmission Service\nminimum_capacity: 500.00 Mbps\nmaximum_capacity: 1024.00 Mbps\ninstallation_initial: True\nform_nickname: ADOLPH SCHREIBER HEBREW ACAD 2025",
+  "service_categories": [
+    "Data Transmission and/or Internet Access",
+    "Category 1"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:24:41.561327+00:00"
+}

@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-ce56947c",
+  "form470_number": "250017362",
+  "funding_year": 2025,
+  "form470_status": "Certified",
+  "posting_date": "2025-02-24",
+  "certified_date": "2025-01-27",
+  "narrative": "category_one_description: PLease refer to our RFP documents for cat 1 specifics\nservice_type: Internal Connections\nservice_category: Category 2\nfunction: Cabling\ninstallation_initial: True\nform_nickname: Yeshiva Bais Chaya Esther FY 2025",
+  "service_categories": [
+    "Internal Connections",
+    "Category 2"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:24:35.401114+00:00"
+}

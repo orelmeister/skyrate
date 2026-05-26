@@ -1,0 +1,50 @@
+{
+  "anon_id": "ENT-ee4f7ddb",
+  "form470_number": "260025921",
+  "elapsed_seconds": 3.919,
+  "evaluated_at": "2026-05-19T20:44:22.502935+00:00",
+  "result": {
+    "overall_risk": "Medium",
+    "summary": "The wide bandwidth range (10 Mbps to 10240 Mbps) may raise cost-effectiveness concerns and trigger scrutiny during USAC review. Specifying \"load balancing\" without further detail could also lead to questions about the necessity and cost allocation of the secondary circuit.",
+    "findings": [
+      {
+        "severity": "medium",
+        "area": "Cost-Effectiveness",
+        "description": "The extremely wide bandwidth range (10 Mbps - 10240 Mbps) makes it difficult for service providers to submit accurate and competitive bids. This could lead to the applicant not selecting the most cost-effective solution, potentially violating E-Rate program rules.",
+        "suggestion": "Narrow the bandwidth range to a more realistic and specific range based on current and projected needs. Justify the need for the upper limit of the range in the description.",
+        "rule_reference": "USAC Program Integrity Assurance Guide, Cost-Effectiveness Section",
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Service Eligibility",
+        "description": "The description mentions \"load balancing\" without specifying the primary purpose or necessity of the secondary circuit. USAC may question whether the secondary circuit is truly necessary for basic internet access or data transmission, or if it provides enhanced services that are ineligible.",
+        "suggestion": "Provide a clear explanation of why load balancing is required, including the specific needs it addresses (e.g., redundancy, high availability). Explain how the load balancing contributes to the core mission of the school/library.",
+        "rule_reference": "FCC Order 19-117, Eligible Services List",
+        "source": "llm"
+      }
+    ],
+    "rule_findings": [],
+    "llm_findings": [
+      {
+        "severity": "medium",
+        "area": "Cost-Effectiveness",
+        "description": "The extremely wide bandwidth range (10 Mbps - 10240 Mbps) makes it difficult for service providers to submit accurate and competitive bids. This could lead to the applicant not selecting the most cost-effective solution, potentially violating E-Rate program rules.",
+        "suggestion": "Narrow the bandwidth range to a more realistic and specific range based on current and projected needs. Justify the need for the upper limit of the range in the description.",
+        "rule_reference": "USAC Program Integrity Assurance Guide, Cost-Effectiveness Section",
+        "source": "llm"
+      },
+      {
+        "severity": "low",
+        "area": "Service Eligibility",
+        "description": "The description mentions \"load balancing\" without specifying the primary purpose or necessity of the secondary circuit. USAC may question whether the secondary circuit is truly necessary for basic internet access or data transmission, or if it provides enhanced services that are ineligible.",
+        "suggestion": "Provide a clear explanation of why load balancing is required, including the specific needs it addresses (e.g., redundancy, high availability). Explain how the load balancing contributes to the core mission of the school/library.",
+        "rule_reference": "FCC Order 19-117, Eligible Services List",
+        "source": "llm"
+      }
+    ],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}

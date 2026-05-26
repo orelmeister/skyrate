@@ -1,0 +1,15 @@
+{
+  "anon_id": "ENT-e664dad9",
+  "form470_number": "260026182",
+  "funding_year": 2026,
+  "form470_status": "Certified",
+  "posting_date": "2026-04-12",
+  "certified_date": "2026-03-15",
+  "narrative": "service_type: Internal Connections\nservice_category: Category 2\nfunction: Switches and Necessary Software and Licenses\ninstallation_initial: True\nform_nickname: CHEDER TORAS ZEV FY 2026 C2",
+  "service_categories": [
+    "Internal Connections",
+    "Category 2"
+  ],
+  "source": "usac_form470_jt8s_3q52",
+  "fetched_at": "2026-05-19T19:23:39.614900+00:00"
+}

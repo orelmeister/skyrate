@@ -1,0 +1,50 @@
+{
+  "anon_id": "ENT-294e0b74",
+  "form470_number": "260026181",
+  "elapsed_seconds": 3.309,
+  "evaluated_at": "2026-05-19T20:45:46.532261+00:00",
+  "result": {
+    "overall_risk": "Medium",
+    "summary": "The Form 470 presents a moderate risk due to the lack of specific information regarding cost-effectiveness evaluation criteria and the potential complexity of service delivery to multiple independent school sites.",
+    "findings": [
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "The description lacks specific details on how cost-effectiveness will be evaluated beyond stating that vendors should provide pricing. There is no mention of weighting factors for price vs. other factors (e.g., service level agreements, technical support).",
+        "suggestion": "Include a clear statement outlining the evaluation criteria, including the relative importance of price, service level agreements, technical capabilities, and vendor experience. This will help ensure a fair and transparent bidding process. Consider including specific weighting percentages for each criterion.",
+        "rule_reference": "FCC Order 19-117, USAC Program Integrity Guidelines",
+        "source": "llm"
+      },
+      {
+        "severity": "medium",
+        "area": "Service Eligibility",
+        "description": "The description mentions that the applicant schools are independent private educational institutions that may be administered collectively for E-Rate purposes. This introduces potential complexity in determining the eligible entities and ensuring compliance with cost allocation rules if services are shared.",
+        "suggestion": "Clarify the exact legal structure of the applicant entities and how services will be allocated among them. Ensure that the Form 471 filing accurately reflects the eligible entities and that cost allocation is performed correctly if services are shared. Maintain documentation to support the eligibility of each entity.",
+        "rule_reference": "47 CFR § 54.504",
+        "source": "llm"
+      }
+    ],
+    "rule_findings": [],
+    "llm_findings": [
+      {
+        "severity": "medium",
+        "area": "Competitive Bidding",
+        "description": "The description lacks specific details on how cost-effectiveness will be evaluated beyond stating that vendors should provide pricing. There is no mention of weighting factors for price vs. other factors (e.g., service level agreements, technical support).",
+        "suggestion": "Include a clear statement outlining the evaluation criteria, including the relative importance of price, service level agreements, technical capabilities, and vendor experience. This will help ensure a fair and transparent bidding process. Consider including specific weighting percentages for each criterion.",
+        "rule_reference": "FCC Order 19-117, USAC Program Integrity Guidelines",
+        "source": "llm"
+      },
+      {
+        "severity": "medium",
+        "area": "Service Eligibility",
+        "description": "The description mentions that the applicant schools are independent private educational institutions that may be administered collectively for E-Rate purposes. This introduces potential complexity in determining the eligible entities and ensuring compliance with cost allocation rules if services are shared.",
+        "suggestion": "Clarify the exact legal structure of the applicant entities and how services will be allocated among them. Ensure that the Form 471 filing accurately reflects the eligible entities and that cost allocation is performed correctly if services are shared. Maintain documentation to support the eligibility of each entity.",
+        "rule_reference": "47 CFR § 54.504",
+        "source": "llm"
+      }
+    ],
+    "corpus_citations": [],
+    "engine_version": "1.0.0",
+    "disclaimer": "Advisory only. Not legal or USAC official guidance."
+  }
+}
