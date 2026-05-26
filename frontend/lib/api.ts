@@ -4,6 +4,7 @@
  */
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
 
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -943,10 +944,17 @@ class ApiClient {
     }
 
     try {
+      const controller = new AbortController();
+      const timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS;
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
       const response = await fetch(url, {
         ...options,
         headers,
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       // Defense-in-depth: if origin (DO/Cloudflare) returns HTML for an error,
       // do not try to JSON.parse it. Surface a clean message instead.
@@ -970,7 +978,10 @@ class ApiClient {
         if (refreshed) {
           const newToken = this.getAccessToken();
           headers['Authorization'] = `Bearer ${newToken}`;
-          const retryResponse = await fetch(url, { ...options, headers });
+          const retryController = new AbortController();
+          const retryTimeoutId = setTimeout(() => retryController.abort(), timeoutMs);
+          const retryResponse = await fetch(url, { ...options, headers, signal: retryController.signal });
+          clearTimeout(retryTimeoutId);
           if (!isJsonResponse(retryResponse)) {
             return await nonJsonError(retryResponse);
           }
@@ -1029,6 +1040,12 @@ class ApiClient {
 
       return { success: true, data };
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return {
+          success: false,
+          error: 'Request timed out. Please try again.',
+        };
+      }
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Network error',
@@ -1071,11 +1088,17 @@ class ApiClient {
     if (!refreshToken) return false;
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), DEFAULT_REQUEST_TIMEOUT_MS);
+
       const response = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refresh_token: refreshToken }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         this.clearTokens();

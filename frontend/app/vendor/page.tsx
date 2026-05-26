@@ -336,9 +336,11 @@ function VendorPortalPage() {
       }
       
       // Check if payment setup is required
+      let redirected = false;
       try {
         const paymentStatus = await api.getPaymentStatus();
         if (paymentStatus.success && paymentStatus.data?.requires_payment_setup) {
+          redirected = true;
           router.push("/subscribe");
           return;
         }
@@ -346,9 +348,12 @@ function VendorPortalPage() {
         console.error("Error checking payment status:", error);
         // If we can't check payment status, continue to dashboard
         // The backend will enforce payment requirements on API calls
+      } finally {
+        if (!redirected) {
+          setCheckingPayment(false);
+        }
       }
-      
-      setCheckingPayment(false);
+
       loadProfile();
     };
     
