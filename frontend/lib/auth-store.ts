@@ -9,6 +9,40 @@ import { persist } from "zustand/middleware";
 // API base URL
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
+/**
+ * Normalize a FastAPI/Pydantic error `detail` field into a single string.
+ *
+ * FastAPI returns `detail` as either:
+ *   - a string (custom HTTPException)            -> use as-is
+ *   - an array of {type,loc,msg,input,ctx,url}  -> Pydantic validation errors
+ *   - undefined/null                             -> use fallback
+ *
+ * Rendering the raw array as a React child crashes the tree with React error
+ * #31 ("Objects are not valid as a React child"), which surfaces as a frozen
+ * sign-in page (the ErrorBoundary swallows the error and the redirect to the
+ * dashboard never fires). Always coerce to a plain string before storing in
+ * the `error` slot.
+ */
+function normalizeErrorDetail(detail: unknown, fallback: string): string {
+  if (typeof detail === "string" && detail.trim().length > 0) return detail;
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((d: any) => {
+        if (typeof d === "string") return d;
+        if (d && typeof d.msg === "string") return d.msg;
+        return null;
+      })
+      .filter(Boolean);
+    if (msgs.length > 0) return msgs.join("; ");
+  }
+  if (detail && typeof detail === "object") {
+    const anyDetail = detail as any;
+    if (typeof anyDetail.msg === "string") return anyDetail.msg;
+    if (typeof anyDetail.message === "string") return anyDetail.message;
+  }
+  return fallback;
+}
+
 // User interface
 export interface User {
   id: number;
@@ -115,7 +149,7 @@ export const useAuthStore = create<AuthState>()(
           if (!response.ok) {
             set({ 
               isLoading: false, 
-              error: data.detail || "Login failed. Please check your credentials." 
+              error: normalizeErrorDetail(data?.detail, "Login failed. Please check your credentials.") 
             });
             return false;
           }
@@ -174,7 +208,7 @@ export const useAuthStore = create<AuthState>()(
           if (!response.ok) {
             set({ 
               isLoading: false, 
-              error: data.detail || "Google login failed." 
+              error: normalizeErrorDetail(data?.detail, "Google login failed.") 
             });
             return false;
           }
@@ -213,7 +247,7 @@ export const useAuthStore = create<AuthState>()(
           if (!response.ok) {
             set({ 
               isLoading: false, 
-              error: result.detail || "Registration failed." 
+              error: normalizeErrorDetail(result?.detail, "Registration failed.") 
             });
             return false;
           }
