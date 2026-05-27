@@ -1142,13 +1142,88 @@ def run_form470_scanner_job():
 
 
 def init_scheduler():
-    """Initialize the background scheduler with all jobs"""
+    """Initialize the background scheduler with all jobs.
+
+    Cross-process safety (added 2026-05-27):
+    When uvicorn runs with --workers > 1, every worker process executes the
+    FastAPI `lifespan` startup, which would otherwise start APScheduler N
+    times and fire each job N times. We use an O_CREAT|O_EXCL sentinel file
+    so only the first worker that wins the race starts the scheduler; the
+    others log and return. The sentinel is recreated each container boot
+    because /tmp is fresh on every DigitalOcean deploy.
+
+    Override with `SKYRATE_DISABLE_SCHEDULER=1` to skip entirely
+    (useful when running the scheduler in a dedicated DO worker component).
+    """
     global scheduler
-    
+
     if scheduler is not None:
         logger.warning("Scheduler already initialized")
         return
-    
+
+    import os as _os
+
+    if _os.environ.get("SKYRATE_DISABLE_SCHEDULER") == "1":
+        logger.info("Scheduler disabled via SKYRATE_DISABLE_SCHEDULER=1; skipping init")
+        return
+
+    # Single-leader election across uvicorn workers via O_EXCL sentinel.
+    # First worker to create the file wins and starts the scheduler.
+    _lock_path = _os.environ.get("SKYRATE_SCHEDULER_LOCK", "/tmp/skyrate_scheduler.lock")
+
+    def _try_acquire():
+        try:
+            _fd = _os.open(_lock_path, _os.O_CREAT | _os.O_EXCL | _os.O_WRONLY, 0o644)
+            try:
+                _os.write(_fd, f"pid={_os.getpid()}\n".encode())
+            finally:
+                _os.close(_fd)
+            return True
+        except FileExistsError:
+            return False
+
+    if not _try_acquire():
+        # Lock exists. If the owning PID is dead (crashed worker), reclaim it.
+        try:
+            with open(_lock_path, "r") as _lf:
+                _content = _lf.read().strip()
+            _owner_pid = None
+            if _content.startswith("pid="):
+                try:
+                    _owner_pid = int(_content[4:])
+                except ValueError:
+                    _owner_pid = None
+            _is_alive = False
+            if _owner_pid:
+                try:
+                    _os.kill(_owner_pid, 0)
+                    _is_alive = True
+                except (ProcessLookupError, PermissionError):
+                    _is_alive = False
+                except OSError:
+                    _is_alive = True  # be conservative
+            if not _is_alive:
+                logger.warning(
+                    f"Scheduler lock {_lock_path} held by dead pid={_owner_pid}; reclaiming"
+                )
+                try:
+                    _os.unlink(_lock_path)
+                except OSError:
+                    pass
+                if not _try_acquire():
+                    logger.info(
+                        f"Another worker beat us to reclaiming {_lock_path}; skipping init in this worker"
+                    )
+                    return
+            else:
+                logger.info(
+                    f"Scheduler lock {_lock_path} held by live pid={_owner_pid}; skipping init in this worker"
+                )
+                return
+        except OSError as e:
+            logger.warning(f"Could not inspect scheduler lock {_lock_path}: {e}; skipping init")
+            return
+
     scheduler = BackgroundScheduler()
 
     # FIX (2026-05-18): Every IntervalTrigger job now sets next_run_time so the
@@ -1267,11 +1342,20 @@ def init_scheduler():
 def shutdown_scheduler():
     """Shutdown the scheduler gracefully"""
     global scheduler
-    
+
     if scheduler is not None:
         scheduler.shutdown()
         scheduler = None
         logger.info("Background scheduler shut down")
+        # Release the cross-worker lock so the next deploy / restart can re-elect.
+        import os as _os
+        _lock_path = _os.environ.get("SKYRATE_SCHEDULER_LOCK", "/tmp/skyrate_scheduler.lock")
+        try:
+            _os.unlink(_lock_path)
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            logger.warning(f"Could not remove scheduler lock {_lock_path}: {e}")
 
 
 def get_scheduler_status():
