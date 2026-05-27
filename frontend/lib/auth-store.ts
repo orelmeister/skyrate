@@ -89,6 +89,39 @@ export interface RegisterData {
   promo_token?: string; // For promo invite registrations
 }
 
+/**
+ * Derive whether a user needs to complete payment setup, using ONLY the
+ * `user.subscription` object that is already persisted client-side by the
+ * Zustand `persist` middleware. This lets dashboard pages avoid a per-mount
+ * round-trip to `/api/v1/subscriptions/payment-status`.
+ *
+ * Returns:
+ *   - `false` -> user has valid access (active OR active trial). Skip network.
+ *   - `true`  -> user clearly needs to set up payment. Skip network, redirect.
+ *   - `null`  -> indeterminate (no user, or no subscription record yet).
+ *               Caller should fall back to the network call.
+ *
+ * Mirrors the rules in backend/app/api/v1/subscriptions.py::get_payment_status,
+ * minus the test-account / promo-invite branches which require server-side
+ * state (those still flow through the `null` fallback path on first load).
+ */
+export function deriveRequiresPaymentSetup(user: User | null): boolean | null {
+  if (!user) return null;
+  if (user.role === "admin" || user.role === "super") return false;
+  const sub = user.subscription;
+  if (!sub) return null;
+  if (sub.status === "active") return false;
+  if (sub.status === "trialing") {
+    if (sub.trial_end) {
+      const trialEnd = new Date(sub.trial_end).getTime();
+      if (!Number.isNaN(trialEnd) && trialEnd > Date.now()) return false;
+    }
+    return true;
+  }
+  // past_due | canceled | incomplete -> require setup
+  return true;
+}
+
 // Auth state interface
 interface AuthState {
   user: User | null;

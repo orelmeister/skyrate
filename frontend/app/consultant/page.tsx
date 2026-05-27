@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useAuthStore } from "@/lib/auth-store";
+import { useAuthStore, deriveRequiresPaymentSetup } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
 import { api, ConsultantSchool, ConsultantProfile, AppealRecord, PIAResponseRecord, PIAFRNRecord, PIAPreview, FRNWatch, FRNReportHistory } from "@/lib/api";
 import { SearchResultsTable } from "@/components/SearchResultsTable";
@@ -691,14 +691,28 @@ function ConsultantPortalPage() {
         return;
       }
       
-      // Check if payment setup is required
+      // Check if payment setup is required.
+      //
+      // Fast path: derive from `user.subscription` already persisted by Zustand.
+      // This eliminates a network round-trip on every dashboard mount /
+      // tab navigation. Only fall back to /payment-status when the persisted
+      // subscription record is missing (first load after fresh signup,
+      // test-account auto-grant, promo-invite expiry recompute, etc.).
       let redirected = false;
       try {
-        const paymentStatus = await api.getPaymentStatus();
-        if (paymentStatus.success && paymentStatus.data?.requires_payment_setup) {
+        const derived = deriveRequiresPaymentSetup(user);
+        if (derived === true) {
           redirected = true;
           router.push("/subscribe");
           return;
+        }
+        if (derived === null) {
+          const paymentStatus = await api.getPaymentStatus();
+          if (paymentStatus.success && paymentStatus.data?.requires_payment_setup) {
+            redirected = true;
+            router.push("/subscribe");
+            return;
+          }
         }
       } catch (error) {
         console.error("Error checking payment status:", error);
