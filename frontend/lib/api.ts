@@ -929,7 +929,7 @@ class ApiClient {
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit & { timeoutMs?: number } = {}
   ): Promise<ApiResponse<T>> {
     const url = `${API_BASE_URL}${endpoint}`;
     const accessToken = this.getAccessToken();
@@ -943,13 +943,16 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${accessToken}`;
     }
 
+    // Per-call timeout override (e.g., USAC-backed endpoints may need >15s)
+    const { timeoutMs: timeoutOverride, ...fetchOptions } = options;
+
     try {
       const controller = new AbortController();
-      const timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS;
+      const timeoutMs = timeoutOverride ?? DEFAULT_REQUEST_TIMEOUT_MS;
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       const response = await fetch(url, {
-        ...options,
+        ...fetchOptions,
         headers,
         signal: controller.signal,
       });
@@ -2503,8 +2506,10 @@ class ApiClient {
     imported: Array<{ ben: string; school_name: string; state: string }>;
     skipped: string[];
   }>> {
+    // USAC verify + auto-import scans multiple funding years and can take 30-60s.
     return this.request(`/api/v1/consultant/crn/verify?crn=${encodeURIComponent(crn)}&auto_import=${autoImport}`, {
       method: 'POST',
+      timeoutMs: 120000,
     });
   }
 

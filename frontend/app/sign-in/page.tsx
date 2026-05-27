@@ -12,16 +12,32 @@ declare global {
 }
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
+const REMEMBER_ME_KEY = "sr_remember_me";
+
+function readRememberFlag(): boolean {
+  if (typeof window === "undefined") return true;
+  const v = window.localStorage.getItem(REMEMBER_ME_KEY);
+  // Default ON. Only off when explicitly set to "0".
+  return v !== "0";
+}
 
 export default function SignInPage() {
   const router = useRouter();
   const { login, isAuthenticated, isLoading, error, clearError, user } = useAuthStore();
   const loginWithGoogle = useAuthStore((s) => s.loginWithGoogle);
+  const refreshAccessToken = useAuthStore((s) => s.refreshAccessToken);
+  const _hasHydrated = useAuthStore((s) => s._hasHydrated);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
   const googleBtnRef = useRef<HTMLDivElement>(null);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
+
+  // Read Remember-me preference on mount
+  useEffect(() => {
+    setRemember(readRememberFlag());
+  }, []);
 
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) return;
@@ -87,19 +103,72 @@ export default function SignInPage() {
   }, [loginWithGoogle, clearError]);
 
   useEffect(() => {
+    // Silent auto-login: when the user lands on /sign-in with a persisted
+    // refresh token AND Remember-me enabled, attempt to refresh the access
+    // token in the background. On success, route straight to the dashboard.
+    // On failure (token revoked, expired, secret rotated), leave the form
+    // visible so the user can sign in normally.
+    if (!_hasHydrated) return;
+
+    const persistedRemember = readRememberFlag();
+    const hasRefreshToken =
+      typeof window !== "undefined" &&
+      (() => {
+        try {
+          const raw = window.localStorage.getItem("skyrate-auth");
+          if (!raw) return false;
+          const parsed = JSON.parse(raw);
+          return Boolean(parsed?.state?.refreshToken);
+        } catch {
+          return false;
+        }
+      })();
+
+    const finishCheck = () => { /* form remains visible */ };
+
     if (isAuthenticated && user) {
-      const dashboard = user.role === 'vendor' ? '/vendor' : 
+      const dashboard = user.role === 'vendor' ? '/vendor' :
                        user.role === 'admin' ? '/admin' :
                        user.role === 'super' ? '/super' :
                        user.role === 'applicant' ? '/applicant' : '/consultant';
       router.push(dashboard);
+      return;
     }
-  }, [isAuthenticated, user, router]);
+
+    if (!persistedRemember || !hasRefreshToken) {
+      finishCheck();
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const ok = await refreshAccessToken();
+      if (cancelled) return;
+      if (ok) {
+        const u = useAuthStore.getState().user;
+        const dashboard = u?.role === 'vendor' ? '/vendor' :
+                         u?.role === 'admin' ? '/admin' :
+                         u?.role === 'super' ? '/super' :
+                         u?.role === 'applicant' ? '/applicant' : '/consultant';
+        router.push(dashboard);
+        return;
+      }
+      finishCheck();
+    })();
+
+    return () => { cancelled = true; };
+  }, [_hasHydrated, isAuthenticated, user, router, refreshAccessToken]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
-    
+
+    // Persist the Remember-me preference so the auto-login effect respects
+    // the user's choice on the next visit.
+    try {
+      window.localStorage.setItem(REMEMBER_ME_KEY, remember ? "1" : "0");
+    } catch { /* ignore */ }
+
     const success = await login(email, password);
     if (success) {
       const currentUser = useAuthStore.getState().user;
@@ -253,6 +322,8 @@ export default function SignInPage() {
                 <input
                   type="checkbox"
                   id="remember"
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
                   className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                 />
                 <label htmlFor="remember" className="text-sm text-slate-600">
