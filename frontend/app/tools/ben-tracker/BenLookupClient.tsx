@@ -96,8 +96,15 @@ export default function BenLookupClient() {
     }
     setLoading(true);
     trackEvent("ben_tracker_search", { ben: cleaned });
+    // 30s client-side timeout — backend cold-starts or USAC slowness can otherwise hang
+    // the spinner indefinitely (fetch has no default timeout).
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
     try {
-      const res = await fetch(`/api/v1/public/ben-lookup?ben=${encodeURIComponent(cleaned)}`);
+      const res = await fetch(
+        `/api/v1/public/ben-lookup?ben=${encodeURIComponent(cleaned)}`,
+        { signal: controller.signal }
+      );
       const data: BENLookupResponse = await res.json();
       if (!res.ok) {
         setError((data as unknown as { detail?: string })?.detail || "Lookup failed. Please try again.");
@@ -109,9 +116,15 @@ export default function BenLookupClient() {
           total_frns: data.record?.total_frns ?? 0,
         });
       }
-    } catch {
-      setError("Network error. Please try again.");
+    } catch (err) {
+      const isAbort = err instanceof DOMException && err.name === "AbortError";
+      setError(
+        isAbort
+          ? "Lookup is taking longer than usual. USAC may be slow right now — please try again in a moment."
+          : "Network error. Please try again."
+      );
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
