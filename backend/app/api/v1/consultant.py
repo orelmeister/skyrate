@@ -1967,22 +1967,114 @@ async def get_pia_frns(
     return result
 
 
+def _sync_schools_from_usac_background(profile_id: int):
+    """Background task: refresh school statuses for the given profile.
+
+    Runs after the response is sent so /schools never blocks on a USAC
+    fetch. Opens its own short-lived DB session to avoid using the
+    request-scoped one. Safe to call when no schools exist.
+
+    Added 2026-05-27 Phase 2 perf fix.
+    """
+    from ...core.database import SessionLocal
+    bg_db = SessionLocal()
+    try:
+        bg_schools = bg_db.query(ConsultantSchool).filter(
+            ConsultantSchool.consultant_profile_id == profile_id
+        ).all()
+        if not bg_schools:
+            return
+        usac_service = get_usac_service()
+        all_bens = [s.ben for s in bg_schools]
+        ben_applications: Dict[str, List[Dict]] = {ben: [] for ben in all_bens}
+        try:
+            all_applications = usac_service.fetch_form_471(
+                filters={"ben": all_bens},
+                limit=len(all_bens) * 20,
+            )
+            for app in all_applications:
+                app_ben = str(app.get("ben", ""))
+                if app_ben in ben_applications:
+                    ben_applications[app_ben].append(app)
+        except Exception as e:
+            print(f"[bg-sync] Batch USAC fetch failed for profile {profile_id}: {e}")
+            return
+        for school in bg_schools:
+            applications = ben_applications.get(school.ben, [])
+            if applications:
+                sorted_apps = sorted(
+                    applications,
+                    key=lambda x: int(x.get("funding_year", 0) or 0),
+                    reverse=True,
+                )
+                latest = sorted_apps[0]
+                latest_year = latest.get("funding_year")
+                latest_year_apps = [a for a in sorted_apps if a.get("funding_year") == latest_year]
+                statuses = [
+                    (a.get("form_471_frn_status_name") or a.get("application_status") or "").lower()
+                    for a in latest_year_apps
+                ]
+                has_denied = any("denied" in s for s in statuses)
+                has_funded = any(s in ["funded", "committed"] for s in statuses)
+                has_pending = any(s in ["pending", "under review", "in review", "wave ready", "certified", "submitted"] for s in statuses)
+                has_unfunded = any(s in ["unfunded", "cancelled", "not funded"] for s in statuses)
+                if has_denied:
+                    status_label, color = "Has Denials", "red"
+                elif has_unfunded:
+                    status_label, color = "Unfunded", "red"
+                elif has_funded:
+                    status_label, color = "Funded", "green"
+                elif has_pending:
+                    status_label, color = "Pending", "yellow"
+                else:
+                    status_label = latest.get("form_471_frn_status_name") or latest.get("application_status") or "Unknown"
+                    color = "gray"
+                new_name = latest.get("applicant_name") or latest.get("organization_name") or latest.get("billed_entity_name")
+                if new_name and new_name != school.school_name:
+                    school.school_name = new_name
+                new_state = latest.get("physical_state") or latest.get("state")
+                if new_state and new_state != school.state:
+                    school.state = new_state
+                school.status = status_label
+                school.status_color = color
+                school.latest_year = int(latest_year) if latest_year else None
+                school.applications_count = len(applications)
+                school.last_synced = datetime.utcnow()
+            else:
+                school.status = "No Applications"
+                school.status_color = "gray"
+                school.applications_count = 0
+                school.last_synced = datetime.utcnow()
+        bg_db.commit()
+        print(f"[bg-sync] Refreshed {len(bg_schools)} schools for profile {profile_id}")
+    except Exception as e:
+        print(f"[bg-sync] Failed for profile {profile_id}: {e}")
+        try:
+            bg_db.rollback()
+        except Exception:
+            pass
+    finally:
+        bg_db.close()
+
+
 @router.get("/schools")
 async def list_schools(
-    include_usac_data: bool = Query(False, description="Fetch fresh data from USAC for each school"),
-    auto_sync: bool = Query(True, description="Auto-sync schools with Unknown status or never synced"),
+    background_tasks: BackgroundTasks,
+    include_usac_data: bool = Query(False, description="Fetch fresh data from USAC for each school (blocks)"),
+    auto_sync: bool = Query(True, description="Schedule background USAC refresh for Unknown / stale schools"),
     profile: ConsultantProfile = Depends(get_consultant_profile),
     db: Session = Depends(get_db)
 ):
     """
     List all schools in consultant's portfolio.
-    
-    Auto-sync behavior (auto_sync=true by default):
-    - Automatically syncs schools that have status='Unknown' or have never been synced
-    - Ensures schools always have up-to-date status when consultant logs in
-    
-    If include_usac_data=true, forces fresh sync for ALL schools regardless of status.
-    OPTIMIZED: Uses batch query to fetch all schools at once instead of one-by-one.
+
+    Behavior (2026-05-27 perf v3):
+    - Returns DB-cached rows immediately. NEVER blocks on USAC.
+    - If ``auto_sync=true`` and any school has Unknown status / no last_synced,
+      a background task is queued to refresh from USAC. The next page load
+      will see updated rows.
+    - ``include_usac_data=true`` still triggers a synchronous live fetch
+      (legacy escape hatch for the "Force Refresh" button).
     """
     # perf_v2: serve cached payload when fresh and caller didn't force live.
     if not include_usac_data:
@@ -1992,23 +2084,24 @@ async def list_schools(
     schools = db.query(ConsultantSchool).filter(
         ConsultantSchool.consultant_profile_id == profile.id
     ).order_by(ConsultantSchool.school_name).all()
-    
+
     school_list = []
-    
-    # Determine if we need to sync from USAC
-    # Auto-sync schools that have status='Unknown' or have never been synced
-    needs_sync = include_usac_data  # Force sync if explicitly requested
-    
+
+    # Determine sync behavior
+    needs_sync = include_usac_data  # synchronous only when explicitly forced
+
+    bg_sync_scheduled = False
     if not needs_sync and auto_sync and schools:
-        # Check if any schools need syncing (Unknown status or never synced)
         schools_needing_sync = [
-            s for s in schools 
+            s for s in schools
             if not s.status or s.status == 'Unknown' or s.last_synced is None
         ]
         if schools_needing_sync:
-            needs_sync = True
-            print(f"Auto-sync triggered: {len(schools_needing_sync)} schools need status update")
-    
+            # NON-BLOCKING: kick a background task; respond from DB right now.
+            background_tasks.add_task(_sync_schools_from_usac_background, profile.id)
+            bg_sync_scheduled = True
+            print(f"[/schools] queued bg sync: {len(schools_needing_sync)} schools stale for profile {profile.id}")
+
     if needs_sync and schools:
         usac_service = get_usac_service()
         
@@ -2123,7 +2216,8 @@ async def list_schools(
         "success": True,
         "count": len(school_list),
         "schools": school_list,
-        "synced": needs_sync if schools else False
+        "synced": needs_sync if schools else False,
+        "resync_pending": bg_sync_scheduled,
     }
 
 
