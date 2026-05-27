@@ -4,7 +4,12 @@
  */
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
+// Default timeout is generous to accommodate USAC-backed endpoints (frn-status,
+// dashboard-stats, schools sync) which can legitimately take 20-40s when the
+// portfolio is large or the cache is cold. Per-call `timeoutMs` overrides this
+// for known-fast endpoints when needed. The original 15s default broke the
+// FRN Status tab + Refresh-from-USAC flow for super/admin users.
+const DEFAULT_REQUEST_TIMEOUT_MS = 60000;
 
 export interface ApiResponse<T = any> {
   success: boolean;
