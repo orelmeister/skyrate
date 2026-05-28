@@ -1,0 +1,43 @@
+# Keep the build context small so Docker layers stay tight.
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+!.env.production
+
+# Logs / OS / editor junk
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Tests & docs we don't need at build time
+__tests__/
+__mocks__/
+test/
+tests/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+coverage/
+
+# Git
+.git/
+.gitignore
+
+# Local artifacts
+_*.txt
+_*.json
+__*.txt
+
+# Build-time only files (never copied into the running container)
+Dockerfile
+.dockerignore

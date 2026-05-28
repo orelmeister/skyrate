@@ -1,0 +1,44 @@
+# Keep the build context small so Docker layers stay tight.
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Local artifacts / logs / test outputs
+*.log
+*.db
+*.sqlite
+*.sqlite3
+_*.txt
+_*.json
+__*.txt
+
+# Editor / OS junk
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Tests & docs we don't need at runtime
+tests/
+test_*.py
+*_test.py
+docs/
+*.md
+
+# Git
+.git/
+.gitignore
+
+# Build-time only files (never used by the running container)
+Dockerfile
+.dockerignore
