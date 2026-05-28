@@ -1548,10 +1548,11 @@ class ApiClient {
     if (refresh) params.set('refresh', 'true');
     if (ben) params.set('ben', ben);
     const queryString = params.toString() ? `?${params.toString()}` : '';
-    // USAC batch can take 60-95s on cold cache for large portfolios.
-    // 60s default would abort before the response arrives, leaving the UI
-    // blank. 95s stays under Cloudflare's 100s edge limit.
-    return this.request(`/api/v1/consultant/frn-status${queryString}`, { timeoutMs: 95000 });
+    // USAC batch can take 90-130s on cold cache for large portfolios.
+    // 180s timeout ensures we don't abort prematurely; Cloudflare may still
+    // 524 on the absolute worst cold cases, but most cold calls complete <120s.
+    // After first call, DB cache returns <2s.
+    return this.request(`/api/v1/consultant/frn-status${queryString}`, { timeoutMs: 180000 });
   }
 
   /**
@@ -1581,7 +1582,7 @@ class ApiClient {
     if (year) params.set('year', String(year));
     if (refresh) params.set('refresh', 'true');
     const qs = params.toString();
-    return this.request(`/api/v1/consultant/frn-status/summary${qs ? '?' + qs : ''}`, { timeoutMs: 95000 });
+    return this.request(`/api/v1/consultant/frn-status/summary${qs ? '?' + qs : ''}`, { timeoutMs: 180000 });
   }
 
   /**
@@ -1601,7 +1602,7 @@ class ApiClient {
     };
   }>> {
     const params = year ? `?year=${year}` : '';
-    return this.request(`/api/v1/consultant/frn-status/school/${ben}${params}`, { timeoutMs: 95000 });
+    return this.request(`/api/v1/consultant/frn-status/school/${ben}${params}`, { timeoutMs: 180000 });
   }
 
   // ==================== SCHOOL ENRICHMENT ====================
