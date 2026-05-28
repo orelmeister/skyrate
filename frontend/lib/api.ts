@@ -1548,7 +1548,10 @@ class ApiClient {
     if (refresh) params.set('refresh', 'true');
     if (ben) params.set('ben', ben);
     const queryString = params.toString() ? `?${params.toString()}` : '';
-    return this.request(`/api/v1/consultant/frn-status${queryString}`);
+    // USAC batch can take 60-95s on cold cache for large portfolios.
+    // 60s default would abort before the response arrives, leaving the UI
+    // blank. 95s stays under Cloudflare's 100s edge limit.
+    return this.request(`/api/v1/consultant/frn-status${queryString}`, { timeoutMs: 95000 });
   }
 
   /**
@@ -1578,7 +1581,7 @@ class ApiClient {
     if (year) params.set('year', String(year));
     if (refresh) params.set('refresh', 'true');
     const qs = params.toString();
-    return this.request(`/api/v1/consultant/frn-status/summary${qs ? '?' + qs : ''}`);
+    return this.request(`/api/v1/consultant/frn-status/summary${qs ? '?' + qs : ''}`, { timeoutMs: 95000 });
   }
 
   /**
@@ -1598,7 +1601,7 @@ class ApiClient {
     };
   }>> {
     const params = year ? `?year=${year}` : '';
-    return this.request(`/api/v1/consultant/frn-status/school/${ben}${params}`);
+    return this.request(`/api/v1/consultant/frn-status/school/${ben}${params}`, { timeoutMs: 95000 });
   }
 
   // ==================== SCHOOL ENRICHMENT ====================
