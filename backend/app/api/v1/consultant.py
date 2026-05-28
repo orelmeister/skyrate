@@ -3248,7 +3248,19 @@ async def get_portfolio_frn_status(
             q = q.filter(AdminFRNSnapshot.funding_year == str(yr))
         if st_filter:
             q = q.filter(AdminFRNSnapshot.status.ilike(f"%{st_filter}%"))
-        return q.all()
+        # Dedupe by (ben, frn) keeping the most-recently-refreshed row. This
+        # tolerates duplicate inserts from the on-demand refresh path (which
+        # cannot reliably DELETE due to concurrent writer locks).
+        rows = q.order_by(AdminFRNSnapshot.last_refreshed.desc()).all()
+        seen = set()
+        unique = []
+        for r in rows:
+            key = (r.ben, r.frn)
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(r)
+        return unique
 
     # Step 1: query local denormalized table.
     if not refresh:
@@ -3348,11 +3360,11 @@ async def get_portfolio_frn_status(
                     )
                 )
 
-        # Replace existing rows for this user's portfolio BENs atomically.
+        # Insert new rows. We do NOT delete the old ones — the read path
+        # de-duplicates by (ben, frn) keeping the most recent last_refreshed
+        # so stale rows are harmless. Avoiding the DELETE also avoids long
+        # row-lock contention with the nightly scheduler refresh.
         if new_rows:
-            db.query(AdminFRNSnapshot).filter(
-                AdminFRNSnapshot.ben.in_(school_bens)
-            ).delete(synchronize_session=False)
             db.bulk_save_objects(new_rows)
             db.commit()
 
