@@ -327,6 +327,13 @@ function ConsultantPortalPage() {
   const [pendingCrn, setPendingCrn] = useState<string | null>(null);  // CRN waiting for payment
   const [showCrnPaywall, setShowCrnPaywall] = useState(false);
 
+  // Replace-CRN modal (test/admin/super only — for swapping demo CRNs in place)
+  const [showReplaceCrnModal, setShowReplaceCrnModal] = useState(false);
+  const [replaceCrnTarget, setReplaceCrnTarget] = useState<{ id: number; crn: string } | null>(null);
+  const [replaceCrnInput, setReplaceCrnInput] = useState("");
+  const [replacingCrn, setReplacingCrn] = useState(false);
+  const [replaceCrnError, setReplaceCrnError] = useState<string | null>(null);
+
   // School search and filter state
   const [schoolSearchQuery, setSchoolSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -1197,6 +1204,44 @@ function ConsultantPortalPage() {
     } catch (error: any) {
       console.error("Failed to re-sync CRN schools:", error);
       alert(error?.message || "Failed to re-sync schools");
+    }
+  };
+
+  // Replace-CRN handler (test/demo accounts) — swaps a CRN slot in place so
+  // demo operators can retarget the test consultant onto whichever CRN their
+  // prospect wants to see without juggling add/promote/delete.
+  const handleReplaceCRN = async () => {
+    if (!replaceCrnTarget) return;
+    const newCrn = replaceCrnInput.trim().toUpperCase();
+    if (!newCrn) {
+      setReplaceCrnError("Please enter the new CRN");
+      return;
+    }
+    setReplacingCrn(true);
+    setReplaceCrnError(null);
+    try {
+      const response = await api.replaceCRN(replaceCrnTarget.id, newCrn);
+      if (response.success && response.data) {
+        const d = response.data;
+        setShowReplaceCrnModal(false);
+        setReplaceCrnTarget(null);
+        setReplaceCrnInput("");
+        await loadCRNList();
+        await loadData(true);
+        alert(
+          `CRN swapped: ${d.old_crn} -> ${d.new_crn}\n\n` +
+          `Company: ${d.consultant?.company_name || 'N/A'}\n` +
+          `Schools imported: ${d.imported_count}\n` +
+          `Old schools removed: ${d.deleted_old_schools}`
+        );
+      } else {
+        setReplaceCrnError(response.error || "Failed to replace CRN");
+      }
+    } catch (error: any) {
+      console.error("Failed to replace CRN:", error);
+      setReplaceCrnError(error?.message || "Failed to replace CRN");
+    } finally {
+      setReplacingCrn(false);
     }
   };
 
@@ -4188,6 +4233,20 @@ function ConsultantPortalPage() {
                             >
                               Re-sync schools
                             </button>
+                            {(isFreeUser || user?.role === 'admin' || user?.role === 'super') && (
+                              <button
+                                onClick={() => {
+                                  setReplaceCrnTarget({ id: crn.id, crn: crn.crn });
+                                  setReplaceCrnInput("");
+                                  setReplaceCrnError(null);
+                                  setShowReplaceCrnModal(true);
+                                }}
+                                className="px-2 py-1 text-[11px] font-medium text-amber-700 hover:text-white hover:bg-amber-600 border border-amber-200 hover:border-amber-600 rounded-md transition"
+                                title="Replace this CRN with a different one (test/demo accounts only) — swaps the slot in place and re-imports the new CRN's schools"
+                              >
+                                Replace
+                              </button>
+                            )}
                             {!crn.is_primary && (
                               <button
                                 onClick={() => handleSetPrimaryCRN(crn.id, crn.crn)}
@@ -4274,6 +4333,63 @@ function ConsultantPortalPage() {
                               Verifying...
                             </>
                           ) : 'Verify & Add'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Replace CRN Modal (test/demo accounts) */}
+                {showReplaceCrnModal && replaceCrnTarget && (
+                  <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => !replacingCrn && setShowReplaceCrnModal(false)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
+                      <h3 className="text-lg font-semibold text-slate-900 mb-1">Replace CRN</h3>
+                      <p className="text-sm text-slate-500 mb-3">
+                        Swap <span className="font-mono font-semibold text-slate-900">{replaceCrnTarget.crn}</span> for a different CRN.
+                        Schools tied to the old CRN are removed and the new CRN's schools are imported automatically.
+                      </p>
+                      <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg mb-3">
+                        <p className="text-[11px] text-amber-800">
+                          <strong>Demo helper</strong> — visible because this is a test/demo account. Lets you retarget the account onto any consultant on the fly.
+                        </p>
+                      </div>
+
+                      <input
+                        type="text"
+                        value={replaceCrnInput}
+                        onChange={(e) => setReplaceCrnInput(e.target.value.toUpperCase())}
+                        placeholder="Enter new CRN (e.g., 17026509)"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono uppercase mb-3"
+                        autoFocus
+                        onKeyDown={(e) => e.key === 'Enter' && !replacingCrn && handleReplaceCRN()}
+                      />
+
+                      {replaceCrnError && (
+                        <p className="text-xs text-red-600 mb-3">{replaceCrnError}</p>
+                      )}
+
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => setShowReplaceCrnModal(false)}
+                          disabled={replacingCrn}
+                          className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleReplaceCRN}
+                          disabled={replacingCrn || !replaceCrnInput.trim()}
+                          className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition"
+                        >
+                          {replacingCrn ? (
+                            <>
+                              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Replacing...
+                            </>
+                          ) : 'Verify & Replace'}
                         </button>
                       </div>
                     </div>

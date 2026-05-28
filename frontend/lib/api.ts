@@ -2004,6 +2004,24 @@ class ApiClient {
     });
   }
 
+  async replaceCRN(crnId: number, newCrn: string): Promise<ApiResponse<{
+    old_crn: string;
+    new_crn: string;
+    consultant: any;
+    school_count: number;
+    deleted_old_schools: number;
+    imported_count: number;
+    skipped_count: number;
+    is_primary: boolean;
+    profile_mirrored: boolean;
+    message: string;
+  }>> {
+    return this.request(`/api/v1/consultant/crns/${crnId}/replace`, {
+      method: 'POST',
+      body: JSON.stringify({ new_crn: newCrn }),
+    });
+  }
+
   async resyncCRNSchools(crnId: number): Promise<ApiResponse<{
     crn: string;
     usac_school_count: number;

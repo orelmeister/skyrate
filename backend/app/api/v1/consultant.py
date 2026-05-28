@@ -1039,6 +1039,146 @@ async def activate_crn_after_payment(
     }
 
 
+class ReplaceCRNRequest(BaseModel):
+    new_crn: str
+
+
+@router.post("/crns/{crn_id}/replace")
+async def replace_crn(
+    crn_id: int,
+    data: ReplaceCRNRequest,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
+    db: Session = Depends(get_db),
+):
+    """Swap an existing CRN slot in place — for test/demo accounts (and admin/super).
+
+    Verifies the new CRN with USAC, updates the CRN record's value + company info,
+    drops the schools imported under the old CRN value, and re-imports schools for
+    the new CRN. If this slot is primary, the legacy profile.crn mirror is also
+    updated. This lets demo operators rapidly retarget the test consultant onto
+    whichever consultant the prospect wants to see — without the add → promote →
+    delete dance, and without tripping the "CRN already added" duplicate check.
+
+    Gated to:
+      - admin / super (any consultant profile)
+      - free/test users (their own profile only) — same population that gets
+        unlimited free CRNs via _is_free_crn_user.
+    """
+    is_privileged = current_user.role in ("admin", "super")
+    is_free = _is_free_crn_user(current_user)
+
+    if not (is_privileged or is_free):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Replacing a CRN in place is only available for test/demo accounts. "
+                   "Use Add CRN + Set as Primary + Remove for paid accounts."
+        )
+
+    if is_privileged:
+        crn_record = db.query(ConsultantCRN).filter(ConsultantCRN.id == crn_id).first()
+    else:
+        crn_record = db.query(ConsultantCRN).filter(
+            ConsultantCRN.id == crn_id,
+            ConsultantCRN.consultant_profile_id == profile.id,
+        ).first()
+
+    if not crn_record:
+        raise HTTPException(status_code=404, detail="CRN not found")
+
+    new_crn_value = (data.new_crn or "").upper().strip()
+    if not new_crn_value:
+        raise HTTPException(status_code=400, detail="new_crn is required")
+
+    old_crn_value = crn_record.crn
+    owning_profile_id = crn_record.consultant_profile_id
+
+    if new_crn_value == old_crn_value:
+        raise HTTPException(status_code=400, detail="New CRN matches the current value")
+
+    # Reject if the owning profile already has another row with the new value
+    dup = db.query(ConsultantCRN).filter(
+        ConsultantCRN.consultant_profile_id == owning_profile_id,
+        ConsultantCRN.crn == new_crn_value,
+        ConsultantCRN.id != crn_record.id,
+    ).first()
+    if dup:
+        raise HTTPException(
+            status_code=400,
+            detail=f"CRN {new_crn_value} is already on this account in another slot — delete that slot first or just use it."
+        )
+
+    # Verify with USAC
+    usac_service = get_usac_service()
+    result = usac_service.verify_crn(new_crn_value)
+    if not result["valid"]:
+        raise HTTPException(
+            status_code=400,
+            detail=result.get("error", f"Invalid CRN {new_crn_value} — not found in USAC database")
+        )
+
+    owning_profile = db.query(ConsultantProfile).filter(
+        ConsultantProfile.id == owning_profile_id
+    ).first()
+    if not owning_profile:
+        raise HTTPException(status_code=404, detail="Owning consultant profile not found")
+
+    consultant_info = result.get("consultant") or {}
+
+    # Drop schools tied to the OLD CRN value (only on the owning profile)
+    deleted_schools = db.query(ConsultantSchool).filter(
+        ConsultantSchool.consultant_profile_id == owning_profile_id,
+        ConsultantSchool.source_crn == old_crn_value,
+    ).delete(synchronize_session="fetch")
+
+    # Update the CRN record in place
+    crn_record.crn = new_crn_value
+    crn_record.company_name = consultant_info.get("company_name") or crn_record.company_name
+    crn_record.phone = consultant_info.get("phone") or crn_record.phone
+    crn_record.is_verified = True
+    crn_record.verified_at = datetime.utcnow()
+    db.flush()
+
+    # Mirror onto legacy profile.crn if this slot is primary
+    mirrored = False
+    if crn_record.is_primary:
+        conflict = db.query(ConsultantProfile).filter(
+            ConsultantProfile.crn == new_crn_value,
+            ConsultantProfile.id != owning_profile.id,
+        ).first()
+        if not conflict:
+            owning_profile.crn = new_crn_value
+            if consultant_info.get("company_name"):
+                owning_profile.company_name = consultant_info["company_name"]
+            if consultant_info.get("phone"):
+                owning_profile.phone = consultant_info["phone"]
+            mirrored = True
+
+    # Import schools for the new CRN
+    imported = _import_schools_for_crn(owning_profile, new_crn_value, result.get("schools") or [], db)
+
+    db.commit()
+    logger.info(
+        f"Replaced CRN slot {crn_id}: {old_crn_value} -> {new_crn_value} on profile "
+        f"{owning_profile_id} (actor={current_user.id}, deleted_schools={deleted_schools}, "
+        f"imported={imported['imported_count']}, mirrored={mirrored})"
+    )
+
+    return {
+        "success": True,
+        "old_crn": old_crn_value,
+        "new_crn": new_crn_value,
+        "consultant": consultant_info,
+        "school_count": result.get("school_count", 0),
+        "deleted_old_schools": deleted_schools,
+        "imported_count": imported["imported_count"],
+        "skipped_count": imported["skipped_count"],
+        "is_primary": crn_record.is_primary,
+        "profile_mirrored": mirrored,
+        "message": f"CRN {old_crn_value} replaced with {new_crn_value}",
+    }
+
+
 @router.post("/crns/{crn_id}/set-primary")
 async def set_primary_crn(
     crn_id: int,
