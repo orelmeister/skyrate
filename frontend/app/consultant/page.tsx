@@ -3421,9 +3421,36 @@ function ConsultantPortalPage() {
                 </div>
               )}
 
-              {/* Summary Cards — Clickable to filter (hidden while warming so zero
-                  values aren't misread as real results) */}
-              {portfolioFrnData && !portfolioFrnData.warming && (
+              {/* Needs-refresh banner — backend has no local FRN rows for this
+                  portfolio yet. User must click Refresh from USAC, or wait for
+                  the nightly sync. */}
+              {portfolioFrnData?.needs_refresh && (
+                <div className="bg-sky-50 border border-sky-200 rounded-2xl p-6 flex items-start gap-4 shadow-sm">
+                  <div className="text-3xl flex-shrink-0">📥</div>
+                  <div className="flex-1">
+                    <div className="font-semibold text-sky-900">Portfolio FRNs not loaded yet</div>
+                    <div className="text-sm text-sky-800 mt-1">
+                      {portfolioFrnData.message || "Your portfolio FRN data hasn't been imported yet."}
+                    </div>
+                    <button
+                      onClick={() => loadPortfolioFRNStatus(portfolioFrnYear, portfolioFrnStatusFilter, portfolioFrnPendingReason, true)}
+                      disabled={portfolioFrnLoading}
+                      className="mt-3 px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors text-sm font-medium inline-flex items-center gap-2 disabled:opacity-60"
+                    >
+                      {portfolioFrnLoading ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <span>🔄</span>
+                      )}
+                      Refresh from USAC now
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Summary Cards — Clickable to filter (hidden while warming or when
+                  portfolio is empty, so zero values aren't misread as real results) */}
+              {portfolioFrnData && !portfolioFrnData.warming && !portfolioFrnData.needs_refresh && (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <button
                     onClick={() => { setPortfolioFrnStatusFilter(""); loadPortfolioFRNStatus(portfolioFrnYear, "", portfolioFrnPendingReason); }}
