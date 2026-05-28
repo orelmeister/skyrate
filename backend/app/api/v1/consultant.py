@@ -2976,6 +2976,32 @@ async def list_appeals(
 
 # ==================== FRN STATUS MONITORING (for Consultant Portfolio) ====================
 
+# Process-wide dedup so we never spawn more than one warming task per cache_key.
+# Each uvicorn worker has its own set, which is fine — dedup within a worker is
+# what saves the SQLAlchemy connection pool (size 5 + overflow 10) from being
+# saturated by repeated cache-miss requests from auto-retrying clients.
+import threading as _frn_threading
+_FRN_WARMING_LOCK = _frn_threading.Lock()
+_FRN_WARMING_IN_FLIGHT: set = set()
+
+
+def _frn_warming_acquire(cache_key: Optional[str]) -> bool:
+    """Return True if we acquired the warming slot for this cache_key."""
+    if not cache_key:
+        return True  # No key -> always allow (rare cache_service failure path)
+    with _FRN_WARMING_LOCK:
+        if cache_key in _FRN_WARMING_IN_FLIGHT:
+            return False
+        _FRN_WARMING_IN_FLIGHT.add(cache_key)
+        return True
+
+
+def _frn_warming_release(cache_key: Optional[str]) -> None:
+    if not cache_key:
+        return
+    with _FRN_WARMING_LOCK:
+        _FRN_WARMING_IN_FLIGHT.discard(cache_key)
+
 
 def _warm_frn_cache_background(
     school_bens: list,
@@ -2984,7 +3010,11 @@ def _warm_frn_cache_background(
     pending_reason: Optional[str],
     cache_key: Optional[str],
 ) -> None:
-    """Background task: fetch USAC FRN data and populate cache so the next request is instant."""
+    """Background task: fetch USAC FRN data and populate cache so the next request is instant.
+
+    Does NOT hold a DB connection during the multi-minute USAC HTTP fetch — only
+    opens SessionLocal at the very end to write the cached result.
+    """
     import logging
     _log = logging.getLogger(__name__)
     try:
@@ -3065,6 +3095,8 @@ def _warm_frn_cache_background(
         _log.info("_warm_frn_cache_background: cached %d FRNs for %d BENs", len(all_frns), len(school_bens))
     except Exception as exc:
         _log.exception("_warm_frn_cache_background failed: %s", exc)
+    finally:
+        _frn_warming_release(cache_key)
 
 
 @router.get("/frn-status")
@@ -3149,14 +3181,18 @@ async def get_portfolio_frn_status(
     # background hydration. This avoids the 83-130s USAC batch call that
     # exceeds Cloudflare's 100s edge timeout.
     if not refresh:
-        background_tasks.add_task(
-            _warm_frn_cache_background,
-            school_bens=school_bens,
-            year=year,
-            status_filter=status_filter,
-            pending_reason=pending_reason,
-            cache_key=cache_key,
-        )
+        # Dedup: only schedule a warming task if one isn't already in flight
+        # for this exact cache key. Auto-retrying clients otherwise pile up
+        # background tasks and exhaust the SQLAlchemy connection pool.
+        if _frn_warming_acquire(cache_key):
+            background_tasks.add_task(
+                _warm_frn_cache_background,
+                school_bens=school_bens,
+                year=year,
+                status_filter=status_filter,
+                pending_reason=pending_reason,
+                cache_key=cache_key,
+            )
         return {
             "success": True,
             "warming": True,

@@ -866,7 +866,9 @@ function ConsultantPortalPage() {
   };
 
   // Load Portfolio FRN Status
-  const loadPortfolioFRNStatus = async (year?: number, statusFilter?: string, pendingReason?: string, refresh?: boolean, ben?: string) => {
+  // _retryCount is used internally for exponential backoff on warming responses;
+  // callers should leave it undefined.
+  const loadPortfolioFRNStatus = async (year?: number, statusFilter?: string, pendingReason?: string, refresh?: boolean, ben?: string, _retryCount?: number) => {
     setPortfolioFrnLoading(true);
     setPortfolioFrnError(null);
     try {
@@ -878,11 +880,19 @@ function ConsultantPortalPage() {
           setUpgradeBen(data.ben || ben || '');
           setShowBenUpgradeModal(true);
         } else if (data.warming) {
-          // Cache is warming in background — auto-retry after delay
+          // Cache is warming in background — auto-retry with exponential backoff
+          // (20s, 30s, 45s, 60s, capped at 60s). Stops at retry 12 (~10 min total)
+          // so the spinner doesn't run forever if USAC is unavailable.
           setPortfolioFrnData({ ...data, warming: true });
+          const next = (_retryCount ?? 0) + 1;
+          if (next > 12) {
+            setPortfolioFrnError("Cache warming is taking longer than usual. USAC may be slow — try Refresh from USAC, or come back in a few minutes.");
+            return;
+          }
+          const delayMs = Math.min(60000, [20000, 30000, 45000, 60000][Math.min(next - 1, 3)]);
           setTimeout(() => {
-            loadPortfolioFRNStatus(year, statusFilter, pendingReason, false, ben);
-          }, 15000);
+            loadPortfolioFRNStatus(year, statusFilter, pendingReason, false, ben, next);
+          }, delayMs);
           return; // keep loading state active until retry resolves
         } else {
           setPortfolioFrnData(response.data);
@@ -3394,8 +3404,26 @@ function ConsultantPortalPage() {
                 </div>
               </div>
 
-              {/* Summary Cards — Clickable to filter */}
-              {portfolioFrnData && (
+              {/* Warming banner — shown while backend builds the cache. Replaces the
+                  zero summary tiles so users don't think the year filter "shows 0". */}
+              {portfolioFrnData?.warming && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 flex items-start gap-4 shadow-sm">
+                  <div className="w-6 h-6 mt-0.5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin flex-shrink-0"></div>
+                  <div className="flex-1">
+                    <div className="font-semibold text-amber-900">Warming FRN cache for your portfolio</div>
+                    <div className="text-sm text-amber-800 mt-1">
+                      We&apos;re fetching live FRN data from USAC for {portfolioFrnData.total_schools || 0} schools. First load takes 1&ndash;3 minutes for large portfolios; subsequent loads are instant for 6 hours.
+                    </div>
+                    <div className="text-xs text-amber-700 mt-2">
+                      Auto-retrying&hellip; You can switch tabs or wait here.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Summary Cards — Clickable to filter (hidden while warming so zero
+                  values aren't misread as real results) */}
+              {portfolioFrnData && !portfolioFrnData.warming && (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <button
                     onClick={() => { setPortfolioFrnStatusFilter(""); loadPortfolioFRNStatus(portfolioFrnYear, "", portfolioFrnPendingReason); }}
