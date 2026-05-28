@@ -79,6 +79,7 @@ export function useVerificationGuard() {
     }
 
     // User is not verified — redirect to onboarding
+    setChecking(false);
     router.push("/onboarding");
   }, [_hasHydrated, isLoading, isAuthenticated, user, router]);
 

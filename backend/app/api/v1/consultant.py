@@ -2976,6 +2976,97 @@ async def list_appeals(
 
 # ==================== FRN STATUS MONITORING (for Consultant Portfolio) ====================
 
+
+def _warm_frn_cache_background(
+    school_bens: list,
+    year: Optional[int],
+    status_filter: Optional[str],
+    pending_reason: Optional[str],
+    cache_key: Optional[str],
+) -> None:
+    """Background task: fetch USAC FRN data and populate cache so the next request is instant."""
+    import logging
+    _log = logging.getLogger(__name__)
+    try:
+        from utils.usac_client import USACDataClient
+        from app.services.cache_service import set_cached
+        from app.core.database import SessionLocal
+
+        client = USACDataClient()
+        batch_result = client.get_frn_status_batch(
+            bens=school_bens,
+            year=year,
+            status_filter=status_filter,
+            pending_reason_filter=pending_reason,
+        )
+        if not batch_result.get("success"):
+            _log.warning("_warm_frn_cache_background: USAC batch failed: %s", batch_result.get("error"))
+            return
+
+        all_frns = []
+        schools_data = []
+        status_counts = {
+            "funded": {"count": 0, "amount": 0},
+            "denied": {"count": 0, "amount": 0},
+            "pending": {"count": 0, "amount": 0},
+            "other": {"count": 0, "amount": 0},
+        }
+        for ben in school_bens:
+            result = batch_result["results"].get(ben, {})
+            if result.get("success") and result.get("frns"):
+                school_frns = result.get("frns", [])
+                all_frns.extend(school_frns)
+                school_summary = {
+                    "ben": ben,
+                    "entity_name": result.get("entity_name", "Unknown"),
+                    "total_frns": len(school_frns),
+                    "funded": 0,
+                    "denied": 0,
+                    "pending": 0,
+                    "total_amount": 0,
+                    "frns": school_frns[:10],
+                }
+                for frn in school_frns:
+                    frn_status = (frn.get("status") or "").lower()
+                    amount = float(frn.get("commitment_amount") or frn.get("total_authorized_amount") or frn.get("amount") or 0)
+                    school_summary["total_amount"] += amount
+                    if "funded" in frn_status or "committed" in frn_status:
+                        school_summary["funded"] += 1
+                        status_counts["funded"]["count"] += 1
+                        status_counts["funded"]["amount"] += amount
+                    elif "denied" in frn_status:
+                        school_summary["denied"] += 1
+                        status_counts["denied"]["count"] += 1
+                        status_counts["denied"]["amount"] += amount
+                    elif any(s in frn_status for s in ["pending", "review", "submitted", "certified"]):
+                        school_summary["pending"] += 1
+                        status_counts["pending"]["count"] += 1
+                        status_counts["pending"]["amount"] += amount
+                    else:
+                        status_counts["other"]["count"] += 1
+                        status_counts["other"]["amount"] += amount
+                schools_data.append(school_summary)
+
+        cached_result = {
+            "success": True,
+            "total_frns": len(all_frns),
+            "total_schools": len(schools_data),
+            "summary": status_counts,
+            "year_filter": year,
+            "schools": schools_data,
+        }
+        if cache_key:
+            db = SessionLocal()
+            try:
+                set_cached(db, cache_key, cached_result, ttl_hours=6)
+                db.commit()
+            finally:
+                db.close()
+        _log.info("_warm_frn_cache_background: cached %d FRNs for %d BENs", len(all_frns), len(school_bens))
+    except Exception as exc:
+        _log.exception("_warm_frn_cache_background failed: %s", exc)
+
+
 @router.get("/frn-status")
 async def get_portfolio_frn_status(
     background_tasks: BackgroundTasks,
@@ -3053,12 +3144,19 @@ async def get_portfolio_frn_status(
     except Exception:
         cache_key = None  # Cache unavailable, proceed without it
 
-    # --- NON-BLOCKING PATH for large portfolios ---
-    # If cache missed and portfolio has >5 BENs, return immediately with
-    # "warming" flag and trigger background hydration. This avoids the
-    # 90-130s USAC batch call that exceeds Cloudflare's 100s edge timeout.
-    if len(school_bens) > 5 and not refresh:
-        background_tasks.add_task(hydrate_user_background, current_user.id, "frn_cache_miss")
+    # --- NON-BLOCKING PATH for cache misses ---
+    # If cache missed, return immediately with "warming" flag and trigger
+    # background hydration. This avoids the 83-130s USAC batch call that
+    # exceeds Cloudflare's 100s edge timeout.
+    if not refresh:
+        background_tasks.add_task(
+            _warm_frn_cache_background,
+            school_bens=school_bens,
+            year=year,
+            status_filter=status_filter,
+            pending_reason=pending_reason,
+            cache_key=cache_key,
+        )
         return {
             "success": True,
             "warming": True,

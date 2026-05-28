@@ -209,6 +209,7 @@ function ConsultantPortalPage() {
   // FRN Status Monitoring state
   const [portfolioFrnData, setPortfolioFrnData] = useState<any>(null);
   const [portfolioFrnLoading, setPortfolioFrnLoading] = useState(false);
+  const [portfolioFrnError, setPortfolioFrnError] = useState<string | null>(null);
   const [portfolioFrnYear, setPortfolioFrnYear] = useState<number | undefined>(undefined);
   const [portfolioFrnStatusFilter, setPortfolioFrnStatusFilter] = useState<string>("");
   const [portfolioFrnPendingReason, setPortfolioFrnPendingReason] = useState<string>("");
@@ -679,14 +680,19 @@ function ConsultantPortalPage() {
     const checkPaymentStatus = async () => {
       if (!_hasHydrated || checkingVerification) return;
       if (!isAuthenticated) {
+        setCheckingPayment(false);
         router.push("/sign-in");
         return;
       }
       // Verification guard handles redirect to /onboarding
-      if (!emailVerified) return;
+      if (!emailVerified) {
+        setCheckingPayment(false);
+        return;
+      }
       if (user?.role !== "consultant" && user?.role !== "admin" && user?.role !== "super") {
         // Redirect to appropriate dashboard based on role
         const dashboard = user?.role === 'applicant' ? '/applicant' : '/vendor';
+        setCheckingPayment(false);
         router.push(dashboard);
         return;
       }
@@ -862,6 +868,7 @@ function ConsultantPortalPage() {
   // Load Portfolio FRN Status
   const loadPortfolioFRNStatus = async (year?: number, statusFilter?: string, pendingReason?: string, refresh?: boolean, ben?: string) => {
     setPortfolioFrnLoading(true);
+    setPortfolioFrnError(null);
     try {
       const response = await api.getConsultantFRNStatus(year, statusFilter || undefined, 500, pendingReason || undefined, refresh, ben);
       if (response.success && response.data) {
@@ -880,9 +887,17 @@ function ConsultantPortalPage() {
         } else {
           setPortfolioFrnData(response.data);
         }
+      } else {
+        setPortfolioFrnError("Failed to load FRN data. Please try again.");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to load portfolio FRN status:", error);
+      const msg = error?.message || "";
+      if (msg.includes("timeout") || msg.includes("aborted") || msg.includes("504")) {
+        setPortfolioFrnError("Request timed out. USAC data may be loading in the background — please retry in a minute.");
+      } else {
+        setPortfolioFrnError("Failed to load FRN data. Please try again.");
+      }
     } finally {
       setPortfolioFrnLoading(false);
     }
@@ -3636,6 +3651,22 @@ function ConsultantPortalPage() {
                       ? "Your FRN cache is warming up. This takes about 1-2 minutes for new portfolios. Retrying automatically..."
                       : "Loading FRN status across your portfolio..."}
                   </p>
+                </div>
+              )}
+
+              {/* Error State */}
+              {portfolioFrnError && !portfolioFrnLoading && (
+                <div className="bg-white rounded-2xl border border-red-200 p-8 text-center">
+                  <span className="text-3xl mb-3 block">&#9888;&#65039;</span>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">FRN Data Unavailable</h3>
+                  <p className="text-sm text-slate-600 mb-4 max-w-md mx-auto">{portfolioFrnError}</p>
+                  <button
+                    onClick={() => loadPortfolioFRNStatus(portfolioFrnYear, portfolioFrnStatusFilter, portfolioFrnPendingReason)}
+                    className="px-5 py-2.5 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-colors font-medium inline-flex items-center gap-2"
+                  >
+                    <span>&#x1F504;</span>
+                    Retry
+                  </button>
                 </div>
               )}
 
