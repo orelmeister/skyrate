@@ -2978,6 +2978,7 @@ async def list_appeals(
 
 @router.get("/frn-status")
 async def get_portfolio_frn_status(
+    background_tasks: BackgroundTasks,
     year: Optional[int] = Depends(parse_optional_year),
     status_filter: Optional[str] = None,
     pending_reason: Optional[str] = None,
@@ -3051,6 +3052,27 @@ async def get_portfolio_frn_status(
                 return cached_result
     except Exception:
         cache_key = None  # Cache unavailable, proceed without it
+
+    # --- NON-BLOCKING PATH for large portfolios ---
+    # If cache missed and portfolio has >5 BENs, return immediately with
+    # "warming" flag and trigger background hydration. This avoids the
+    # 90-130s USAC batch call that exceeds Cloudflare's 100s edge timeout.
+    if len(school_bens) > 5 and not refresh:
+        background_tasks.add_task(hydrate_user_background, current_user.id, "frn_cache_miss")
+        return {
+            "success": True,
+            "warming": True,
+            "message": "FRN cache is warming for your portfolio. Data will be ready in 1-2 minutes. Please retry shortly.",
+            "total_frns": 0,
+            "total_schools": len(school_bens),
+            "summary": {
+                "funded": {"count": 0, "amount": 0},
+                "denied": {"count": 0, "amount": 0},
+                "pending": {"count": 0, "amount": 0},
+                "other": {"count": 0, "amount": 0},
+            },
+            "schools": [],
+        }
     
     try:
         from utils.usac_client import USACDataClient

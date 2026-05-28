@@ -870,6 +870,13 @@ function ConsultantPortalPage() {
           // Regular consultant tried to look up a BEN not in their portfolio
           setUpgradeBen(data.ben || ben || '');
           setShowBenUpgradeModal(true);
+        } else if (data.warming) {
+          // Cache is warming in background — auto-retry after delay
+          setPortfolioFrnData({ ...data, warming: true });
+          setTimeout(() => {
+            loadPortfolioFRNStatus(year, statusFilter, pendingReason, false, ben);
+          }, 15000);
+          return; // keep loading state active until retry resolves
         } else {
           setPortfolioFrnData(response.data);
         }
@@ -3624,7 +3631,11 @@ function ConsultantPortalPage() {
               {portfolioFrnLoading && (
                 <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
                   <div className="w-8 h-8 border-3 border-teal-200 border-t-teal-600 rounded-full animate-spin mx-auto mb-4"></div>
-                  <p className="text-sm text-slate-500">Loading FRN status across your portfolio...</p>
+                  <p className="text-sm text-slate-500">
+                    {(portfolioFrnData as any)?.warming
+                      ? "Your FRN cache is warming up. This takes about 1-2 minutes for new portfolios. Retrying automatically..."
+                      : "Loading FRN status across your portfolio..."}
+                  </p>
                 </div>
               )}
 
