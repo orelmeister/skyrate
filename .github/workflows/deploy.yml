@@ -1,0 +1,50 @@
+name: Build and Deploy to DigitalOcean
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Log in to DigitalOcean Container Registry
+        run: doctl registry login --expiry-seconds 1200
+
+      - name: Build and Push Backend Image
+        run: |
+          cd backend
+          docker build -t registry.digitalocean.com/skyrate-ai/backend:latest .
+          docker push registry.digitalocean.com/skyrate-ai/backend:latest
+          docker tag registry.digitalocean.com/skyrate-ai/backend:latest registry.digitalocean.com/skyrate-ai/backend:${{ github.sha }}
+          docker push registry.digitalocean.com/skyrate-ai/backend:${{ github.sha }}
+
+      - name: Build and Push Frontend Image
+        run: |
+          cd frontend
+          # Pass build args required by Next.js at build time
+          docker build \
+            --build-arg NEXT_PUBLIC_API_URL=https://skyrate.ai \
+            --build-arg NEXT_PUBLIC_VAPID_KEY=BOQ_1ePgEdPmLcqMCOwM1XGJakthkvFnt3AuCJaGZMs-gm71tz7QorrUdZzBwK-6XWX_SwaRlnO02jyZZNzM-8I \
+            --build-arg NEXT_PUBLIC_GOOGLE_CLIENT_ID=71080289472-toa6lo796oq4oj49j74bmdr7ims6c9jh.apps.googleusercontent.com \
+            --build-arg NEXT_PUBLIC_PERF_V2_ENABLED=true \
+            --build-arg COMPLIANCE_USE_AGENTS=false \
+            --build-arg COMPLIANCE_USE_PRO=false \
+            -t registry.digitalocean.com/skyrate-ai/frontend:latest .
+          docker push registry.digitalocean.com/skyrate-ai/frontend:latest
+          docker tag registry.digitalocean.com/skyrate-ai/frontend:latest registry.digitalocean.com/skyrate-ai/frontend:${{ github.sha }}
+          docker push registry.digitalocean.com/skyrate-ai/frontend:${{ github.sha }}
+
+      - name: Update DigitalOcean App Spec
+        run: |
+          doctl apps spec get 8f201fb9-f0f1-4b58-a329-e1fb41ef9f69 > _live_spec.yaml
+          python3 -c "import yaml; spec = yaml.safe_load(open('_live_spec.yaml')); [comp.pop('github', None) or comp.pop('build_command', None) or comp.pop('environment_slug', None) or comp.update({'image': {'registry_type': 'DOCR', 'registry': 'skyrate-ai', 'repository': 'backend' if comp['name'] == 'scheduler' else comp['name'], 'tag': '${{ github.sha }}'}}) for comp_type in ['services', 'workers'] if comp_type in spec for comp in spec[comp_type]]; yaml.dump(spec, open('_new_spec.yaml', 'w'), sort_keys=False)"
+          doctl apps update 8f201fb9-f0f1-4b58-a329-e1fb41ef9f69 --spec _new_spec.yaml
