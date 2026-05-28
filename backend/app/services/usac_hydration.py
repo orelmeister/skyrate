@@ -123,6 +123,17 @@ class UsacHydrationService:
                 schools_payload = self._build_schools_payload(db, profile)
                 stats_payload = self._build_dashboard_stats(db, profile)
                 crns_payload = self._build_crns_payload(db, profile)
+                # Warm the FRN cache rows that /v1/consultant/frn-status and
+                # /v1/consultant/frn-status/summary check on every request.
+                # This is the single biggest perf fix: it turns a 90-130s
+                # cold USAC call into a <50ms DB cache lookup for the user.
+                try:
+                    self._warm_frn_cache(db, profile)
+                except Exception as exc:  # non-fatal: schools/stats/crns still useful
+                    logger.warning(
+                        "usac_hydrate frn_cache_warm failed user_id=%s: %s",
+                        user_id, exc,
+                    )
 
             cache.schools_json = json.dumps(schools_payload, default=str)
             cache.dashboard_stats_json = json.dumps(stats_payload, default=str)
@@ -160,6 +171,208 @@ class UsacHydrationService:
             return job  # caller decides whether to re-raise
 
     # ----- Payload builders ------------------------------------------------
+
+    def _warm_frn_cache(self, db: Session, profile: ConsultantProfile) -> None:
+        """Pre-populate the USACCache rows that /v1/consultant/frn-status and
+        /v1/consultant/frn-status/summary read from on every request.
+
+        The endpoints check ``cache_service.get_cached(make_frn_cache_key(...))``
+        and ``cache_service.get_cached(make_cache_key("frn_summary", ...))``
+        before doing a live USAC fetch. We populate exactly those keys here
+        so the next user request returns instantly from MySQL instead of
+        blocking 90-130s on USAC's Open Data API.
+
+        Years warmed: current year, current-1, current-2, plus the ``None``
+        (all-years) variant. Two cache entries written per year (status +
+        summary), four years × 2 = 8 entries total. TTL is 25h so the
+        nightly hydration keeps everything continuously fresh.
+        """
+        from app.services.cache_service import (
+            make_frn_cache_key,
+            make_cache_key,
+            set_cached,
+        )
+        from utils.usac_client import USACDataClient
+
+        school_bens = [s.ben for s in profile.schools if s.ben]
+        if not school_bens:
+            return
+
+        current_year = datetime.utcnow().year
+        years_to_warm: List[Optional[int]] = [
+            current_year,
+            current_year - 1,
+            current_year - 2,
+            None,  # all-years variant (no year filter)
+        ]
+
+        client = USACDataClient()
+
+        for year in years_to_warm:
+            try:
+                batch_result = client.get_frn_status_batch(
+                    bens=school_bens,
+                    year=year,
+                    status_filter=None,
+                    pending_reason_filter=None,
+                )
+                if not batch_result.get("success"):
+                    continue
+
+                # ---- Build /frn-status response shape ----
+                status_payload = self._build_frn_status_from_batch(
+                    school_bens, batch_result, year
+                )
+                set_cached(
+                    db,
+                    make_frn_cache_key(school_bens, year, None, None),
+                    status_payload,
+                    ttl_hours=25,
+                )
+
+                # ---- Build /frn-status/summary response shape ----
+                summary_payload = self._build_frn_summary_from_batch(
+                    school_bens, batch_result, year
+                )
+                set_cached(
+                    db,
+                    make_cache_key("frn_summary", bens=school_bens, year=year),
+                    summary_payload,
+                    ttl_hours=25,
+                )
+
+                logger.info(
+                    "frn_warm ok user_id=%s year=%s bens=%s frns=%s",
+                    profile.user_id, year, len(school_bens),
+                    summary_payload.get("total_frns"),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "frn_warm fail user_id=%s year=%s err=%s",
+                    profile.user_id, year, exc,
+                )
+
+    @staticmethod
+    def _build_frn_status_from_batch(
+        school_bens: List[str],
+        batch_result: Dict[str, Any],
+        year: Optional[int],
+    ) -> Dict[str, Any]:
+        """Mirror of /v1/consultant/frn-status response construction."""
+        all_frns: List[Dict[str, Any]] = []
+        schools_data: List[Dict[str, Any]] = []
+        status_counts = {
+            "funded": {"count": 0, "amount": 0},
+            "denied": {"count": 0, "amount": 0},
+            "pending": {"count": 0, "amount": 0},
+            "other": {"count": 0, "amount": 0},
+        }
+
+        results = batch_result.get("results", {}) or {}
+
+        for ben in school_bens:
+            result = results.get(ben, {}) or {}
+            if not (result.get("success") and result.get("frns")):
+                continue
+            school_frns = result.get("frns", []) or []
+            all_frns.extend(school_frns)
+            school_summary: Dict[str, Any] = {
+                "ben": ben,
+                "entity_name": result.get("entity_name", "Unknown"),
+                "total_frns": len(school_frns),
+                "funded": 0,
+                "denied": 0,
+                "pending": 0,
+                "total_amount": 0,
+                "frns": school_frns[:10],
+            }
+            for frn in school_frns:
+                frn_status = (frn.get("status") or "").lower()
+                try:
+                    amount = float(
+                        frn.get("commitment_amount")
+                        or frn.get("total_authorized_amount")
+                        or frn.get("amount")
+                        or 0
+                    )
+                except (TypeError, ValueError):
+                    amount = 0
+                school_summary["total_amount"] += amount
+                if "funded" in frn_status or "committed" in frn_status:
+                    school_summary["funded"] += 1
+                    status_counts["funded"]["count"] += 1
+                    status_counts["funded"]["amount"] += amount
+                elif "denied" in frn_status:
+                    school_summary["denied"] += 1
+                    status_counts["denied"]["count"] += 1
+                    status_counts["denied"]["amount"] += amount
+                elif any(
+                    s in frn_status
+                    for s in ("pending", "review", "submitted", "certified")
+                ):
+                    school_summary["pending"] += 1
+                    status_counts["pending"]["count"] += 1
+                    status_counts["pending"]["amount"] += amount
+                else:
+                    status_counts["other"]["count"] += 1
+                    status_counts["other"]["amount"] += amount
+            schools_data.append(school_summary)
+
+        return {
+            "success": True,
+            "total_frns": len(all_frns),
+            "total_schools": len(schools_data),
+            "summary": status_counts,
+            "year_filter": year,
+            "schools": schools_data,
+        }
+
+    @staticmethod
+    def _build_frn_summary_from_batch(
+        school_bens: List[str],
+        batch_result: Dict[str, Any],
+        year: Optional[int],
+    ) -> Dict[str, Any]:
+        """Mirror of /v1/consultant/frn-status/summary response construction."""
+        total_frns = 0
+        status_counts = {
+            "funded": {"count": 0, "amount": 0},
+            "denied": {"count": 0, "amount": 0},
+            "pending": {"count": 0, "amount": 0},
+        }
+        schools_data: List[Dict[str, Any]] = []
+        results = batch_result.get("results", {}) or {}
+
+        for ben, ben_data in results.items():
+            if not isinstance(ben_data, dict):
+                continue
+            total_frns += ben_data.get("total_frns", 0) or 0
+            ben_summary = ben_data.get("summary", {}) or {}
+            for category in ("funded", "denied", "pending"):
+                cat_data = ben_summary.get(category, {}) or {}
+                status_counts[category]["count"] += cat_data.get("count", 0) or 0
+                status_counts[category]["amount"] += cat_data.get("amount", 0) or 0
+            ben_funded = (ben_summary.get("funded", {}) or {}).get("amount", 0) or 0
+            ben_pending = (ben_summary.get("pending", {}) or {}).get("amount", 0) or 0
+            ben_denied = (ben_summary.get("denied", {}) or {}).get("amount", 0) or 0
+            schools_data.append({
+                "ben": ben,
+                "school_name": ben_data.get("entity_name"),
+                "state": ben_data.get("entity_state"),
+                "total_funding_committed": ben_funded,
+                "total_funding_requested": ben_funded + ben_pending + ben_denied,
+                "funding_years": ben_data.get("years", []) or [],
+                "total_frns": ben_data.get("total_frns", 0) or 0,
+            })
+
+        return {
+            "success": True,
+            "total_schools": len(school_bens),
+            "total_frns": total_frns,
+            "summary": status_counts,
+            "schools": schools_data,
+            "year_filter": year,
+        }
 
     def _build_schools_payload(self, db: Session, profile: ConsultantProfile) -> Dict[str, Any]:
         """Mirror of /v1/consultant/schools force-sync path.

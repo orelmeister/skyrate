@@ -1332,7 +1332,29 @@ def init_scheduler():
         replace_existing=True,
         next_run_time=datetime.utcnow() + timedelta(seconds=30),
     )
-    
+
+    # perf_v2 nightly hydration - 03:00 UTC daily + a boot-time warm at +90s
+    # to make sure every active user has a freshly populated
+    # user_usac_cache + FRN cache row even right after a restart.
+    # Runs ONLY on the dedicated scheduler worker (SKYRATE_DISABLE_SCHEDULER=0).
+    def _nightly_perf_v2_hydration():
+        try:
+            from ..api.v1.admin_jobs import _run_bulk_hydration
+            _run_bulk_hydration(trigger="nightly", pace_seconds=0.5)
+        except Exception as exc:
+            logger.exception("perf_v2 nightly hydration failed: %s", exc)
+
+    scheduler.add_job(
+        _nightly_perf_v2_hydration,
+        trigger=CronTrigger(hour=3, minute=0),
+        id='perf_v2_nightly_hydration',
+        name='perf_v2: nightly USAC hydration + FRN cache warm',
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+        next_run_time=boot + timedelta(seconds=90),
+    )
+
     scheduler.start()
     logger.info("Background scheduler started with jobs:")
     for job in scheduler.get_jobs():

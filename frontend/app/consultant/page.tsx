@@ -1709,16 +1709,11 @@ function ConsultantPortalPage() {
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600">Loading your dashboard...</p>
-        </div>
-      </div>
-    );
-  }
+  // NOTE (2026-05-28): removed the blocking "Loading your dashboard..." full-page
+  // overlay that fired whenever `isLoading` was true. It forced every tab switch
+  // to look like a hard navigation. The sidebar + shell render immediately now,
+  // and each tab handles its own skeleton/"..." placeholders (see isLoadingStats,
+  // dashboardStats?, etc. below).
 
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: "📊" },
