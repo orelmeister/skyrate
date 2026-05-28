@@ -3447,11 +3447,13 @@ async def get_portfolio_frn_summary(
     """
     Get a quick summary of FRN status across all portfolio schools.
     Returns aggregate counts without individual FRN details.
-    OPTIMIZED: Uses batch query (1 API call) + DB cache instead of N sequential calls.
+    OPTIMIZED: Uses local admin_frn_snapshots table instead of synchronous USAC fetch.
     
     Args:
         year: Optional funding year filter (defaults to all years)
     """
+    from ...models.admin_frn_snapshot import AdminFRNSnapshot
+
     # Get all BENs in portfolio
     school_bens = [s.ben for s in profile.schools]
     
@@ -3464,69 +3466,104 @@ async def get_portfolio_frn_summary(
                 "funded": {"count": 0, "amount": 0},
                 "denied": {"count": 0, "amount": 0},
                 "pending": {"count": 0, "amount": 0}
-            }
+            },
+            "schools": [],
+            "year_filter": year
         }
     
-    # Check cache first (skip if refresh requested)
-    from app.services.cache_service import get_cached, set_cached, make_cache_key
-    cache_key = make_cache_key("frn_summary", bens=school_bens, year=year)
-    if not refresh:
-        cached = get_cached(db, cache_key)
-        if cached:
-            return cached
-    
     try:
-        from utils.usac_client import USACDataClient
+        # Build mapping from BEN to school info for the schools list
+        ben_to_school = {s.ben: s for s in profile.schools}
         
-        client = USACDataClient()
+        # Query local denormalized table
+        q = db.query(AdminFRNSnapshot).filter(AdminFRNSnapshot.ben.in_(school_bens))
+        if year is not None:
+            q = q.filter(AdminFRNSnapshot.funding_year == str(year))
         
-        # OPTIMIZED: Single batch call instead of N sequential calls
-        batch_result = client.get_frn_status_batch(school_bens, year=year)
+        # Dedupe by (ben, frn) keeping the most-recently-refreshed row
+        rows = q.order_by(AdminFRNSnapshot.last_refreshed.desc()).all()
+        seen = set()
+        unique_rows = []
+        for r in rows:
+            key = (r.ben, r.frn)
+            if key in seen:
+                continue
+            seen.add(key)
+            unique_rows.append(r)
         
-        total_frns = 0
+        total_frns = len(unique_rows)
         status_counts = {
             "funded": {"count": 0, "amount": 0},
             "denied": {"count": 0, "amount": 0},
             "pending": {"count": 0, "amount": 0}
         }
         
-        schools_data = []
+        # Group by BEN to build school-level data
+        schools_data_map = {}
+        # Pre-fill all schools so they appear even if they have 0 FRNs for the selected year
+        for ben_str, school_obj in ben_to_school.items():
+            schools_data_map[ben_str] = {
+                "ben": ben_str,
+                "school_name": school_obj.school_name if school_obj else "Unknown",
+                "state": school_obj.state if school_obj else "",
+                "total_funding_committed": 0,
+                "total_funding_requested": 0,
+                "funding_years": set(),
+                "total_frns": 0
+            }
+
+        for r in unique_rows:
+            ben_str = str(r.ben or "")
+            if ben_str not in schools_data_map:
+                school_obj = ben_to_school.get(ben_str)
+                schools_data_map[ben_str] = {
+                    "ben": ben_str,
+                    "school_name": school_obj.school_name if school_obj else r.organization_name,
+                    "state": school_obj.state if school_obj else "",
+                    "total_funding_committed": 0,
+                    "total_funding_requested": 0,
+                    "funding_years": set(),
+                    "total_frns": 0
+                }
+            
+            amount = float(r.amount_requested or 0)
+            disbursed = float(r.amount_committed or 0)
+            status_text = (r.status or "").lower()
+            
+            bucket = schools_data_map[ben_str]
+            bucket["total_frns"] += 1
+            if r.funding_year:
+                bucket["funding_years"].add(r.funding_year)
+            
+            if "funded" in status_text or "committed" in status_text:
+                bucket["total_funding_committed"] += amount
+                status_counts["funded"]["count"] += 1
+                status_counts["funded"]["amount"] += amount
+            elif "denied" in status_text:
+                bucket["total_funding_requested"] += amount
+                status_counts["denied"]["count"] += 1
+                status_counts["denied"]["amount"] += amount
+            elif any(s in status_text for s in ("pending", "review", "submitted", "certified")):
+                bucket["total_funding_requested"] += amount
+                status_counts["pending"]["count"] += 1
+                status_counts["pending"]["amount"] += amount
         
-        if batch_result.get('success'):
-            for ben, ben_data in batch_result.get('results', {}).items():
-                if isinstance(ben_data, dict):
-                    total_frns += ben_data.get('total_frns', 0)
-                    # Use pre-computed summary from get_frn_status_batch
-                    ben_summary = ben_data.get('summary', {})
-                    for category in ["funded", "denied", "pending"]:
-                        cat_data = ben_summary.get(category, {})
-                        status_counts[category]["count"] += cat_data.get("count", 0)
-                        status_counts[category]["amount"] += cat_data.get("amount", 0)
-                    
-                    # Collect per-school data for the frontend table
-                    ben_funded = ben_summary.get('funded', {}).get('amount', 0)
-                    ben_total = ben_funded + ben_summary.get('pending', {}).get('amount', 0) + ben_summary.get('denied', {}).get('amount', 0)
-                    schools_data.append({
-                        "ben": ben,
-                        "school_name": ben_data.get('entity_name'),
-                        "state": ben_data.get('entity_state'),
-                        "total_funding_committed": ben_funded,
-                        "total_funding_requested": ben_total,
-                        "funding_years": ben_data.get('years', []),
-                        "total_frns": ben_data.get('total_frns', 0)
-                    })
+        # Convert sets to lists
+        for b in schools_data_map.values():
+            b["funding_years"] = sorted(list(b["funding_years"]), reverse=True)
+            # Add committed to requested to get true total requested (like before)
+            b["total_funding_requested"] += b["total_funding_committed"]
         
         result = {
             "success": True,
-            "total_schools": len(school_bens),
+            "total_schools": len(schools_data_map), # or len(school_bens) if we want all of them
             "total_frns": total_frns,
             "summary": status_counts,
-            "schools": schools_data,
-            "year_filter": year
+            "schools": list(schools_data_map.values()),
+            "year_filter": year,
+            "from_cache": True,
+            "source": "local_db"
         }
-        
-        # Cache for 6 hours
-        set_cached(db, cache_key, result)
         
         return result
         
