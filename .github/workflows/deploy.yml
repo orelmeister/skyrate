@@ -46,5 +46,6 @@ jobs:
       - name: Update DigitalOcean App Spec
         run: |
           doctl apps spec get 8f201fb9-f0f1-4b58-a329-e1fb41ef9f69 > _live_spec.yaml
+          pip3 install pyyaml
           python3 -c "import yaml; spec = yaml.safe_load(open('_live_spec.yaml')); [comp.pop('github', None) or comp.pop('build_command', None) or comp.pop('environment_slug', None) or comp.update({'image': {'registry_type': 'DOCR', 'registry': 'skyrate-ai', 'repository': 'backend' if comp['name'] == 'scheduler' else comp['name'], 'tag': '${{ github.sha }}'}}) for comp_type in ['services', 'workers'] if comp_type in spec for comp in spec[comp_type]]; yaml.dump(spec, open('_new_spec.yaml', 'w'), sort_keys=False)"
           doctl apps update 8f201fb9-f0f1-4b58-a329-e1fb41ef9f69 --spec _new_spec.yaml
