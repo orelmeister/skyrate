@@ -79,6 +79,29 @@ except ImportError:
 
 router = APIRouter(prefix="/consultant", tags=["Consultant Portal"])
 
+
+def parse_optional_year(year: Optional[str] = Query(None)) -> Optional[int]:
+    """
+    Tolerant year query parser. Old frontend bundles (cached by the
+    service worker) sometimes send ``year=all`` or other non-numeric
+    values when a user picks the "All Years" dropdown. FastAPI's default
+    ``Optional[int]`` validation rejects those with HTTP 422 — silently
+    breaking the FRN Status filter in production for any client still
+    serving stale JS. Treat any non-numeric / "all" / empty value as
+    "no year filter" so stale clients keep working until the new bundle
+    propagates.
+    """
+    if year is None:
+        return None
+    s = str(year).strip()
+    if not s or s.lower() in ("all", "any", "none", "null", "undefined"):
+        return None
+    try:
+        return int(s)
+    except (TypeError, ValueError):
+        return None
+
+
 # USAC Open Data Dataset IDs
 USAC_DATASETS = {
     'form_471': 'srbr-2d59',      # Form 471 Applications
@@ -1488,7 +1511,7 @@ async def validate_bens(
 
 @router.get("/dashboard-stats")
 async def get_dashboard_stats(
-    year: Optional[int] = Query(None, description="Funding year to scope Form 471 stats (defaults to current calendar year)"),
+    year: Optional[int] = Depends(parse_optional_year),
     profile: ConsultantProfile = Depends(get_consultant_profile),
     db: Session = Depends(get_db)
 ):
@@ -2513,7 +2536,7 @@ async def remove_school(
 @router.get("/schools/{ben}/funding")
 async def get_school_funding(
     ben: str,
-    year: Optional[int] = None,
+    year: Optional[int] = Depends(parse_optional_year),
     profile: ConsultantProfile = Depends(get_consultant_profile),
     db: Session = Depends(get_db)
 ):
@@ -2955,7 +2978,7 @@ async def list_appeals(
 
 @router.get("/frn-status")
 async def get_portfolio_frn_status(
-    year: Optional[int] = None,
+    year: Optional[int] = Depends(parse_optional_year),
     status_filter: Optional[str] = None,
     pending_reason: Optional[str] = None,
     limit: int = 500,
@@ -3126,7 +3149,7 @@ async def get_portfolio_frn_status(
 @router.get("/frn-status/school/{ben}")
 async def get_school_frn_status(
     ben: str,
-    year: Optional[int] = None,
+    year: Optional[int] = Depends(parse_optional_year),
     profile: ConsultantProfile = Depends(get_consultant_profile),
     current_user: User = Depends(require_role("admin", "consultant", "super")),
 ):
@@ -3169,7 +3192,7 @@ async def get_school_frn_status(
 
 @router.get("/frn-status/summary")
 async def get_portfolio_frn_summary(
-    year: Optional[int] = None,
+    year: Optional[int] = Depends(parse_optional_year),
     refresh: bool = False,
     profile: ConsultantProfile = Depends(get_consultant_profile),
     db: Session = Depends(get_db),
