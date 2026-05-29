@@ -1125,59 +1125,74 @@ async def replace_crn(
 
     consultant_info = result.get("consultant") or {}
 
-    # Drop schools tied to the OLD CRN value (only on the owning profile)
-    deleted_schools = db.query(ConsultantSchool).filter(
-        ConsultantSchool.consultant_profile_id == owning_profile_id,
-        ConsultantSchool.source_crn == old_crn_value,
-    ).delete(synchronize_session="fetch")
-
-    # Update the CRN record in place
-    crn_record.crn = new_crn_value
-    crn_record.company_name = consultant_info.get("company_name") or crn_record.company_name
-    crn_record.phone = consultant_info.get("phone") or crn_record.phone
-    crn_record.is_verified = True
-    crn_record.verified_at = datetime.utcnow()
-    db.flush()
-
-    # Mirror onto legacy profile.crn if this slot is primary
-    mirrored = False
-    if crn_record.is_primary:
-        conflict = db.query(ConsultantProfile).filter(
-            ConsultantProfile.crn == new_crn_value,
-            ConsultantProfile.id != owning_profile.id,
-        ).first()
-        if not conflict:
-            owning_profile.crn = new_crn_value
-            if consultant_info.get("company_name"):
-                owning_profile.company_name = consultant_info["company_name"]
-            if consultant_info.get("phone"):
-                owning_profile.phone = consultant_info["phone"]
-            mirrored = True
-
-    # Import schools for the new CRN (best-effort: do not roll back the CRN
-    # swap itself if school import fails)
+    # --- Phase 1: Commit the CRN swap + cache invalidation FIRST ---
+    # This ensures the swap is durable even if school import fails afterward.
+    import traceback as _tb
     try:
-        imported = _import_schools_for_crn(owning_profile, new_crn_value, result.get("schools") or [], db)
-    except Exception as e:
-        logger.warning(
-            f"[REPLACE-CRN] School import failed for {new_crn_value} on profile "
-            f"{owning_profile_id}, proceeding with CRN swap anyway: {e}"
-        )
-        imported = {"imported_count": 0, "skipped_count": 0}
+        # Drop schools tied to the OLD CRN value (only on the owning profile)
+        deleted_schools = db.query(ConsultantSchool).filter(
+            ConsultantSchool.consultant_profile_id == owning_profile_id,
+            ConsultantSchool.source_crn == old_crn_value,
+        ).delete(synchronize_session="fetch")
 
-    db.commit()
+        # Update the CRN record in place
+        crn_record.crn = new_crn_value
+        crn_record.company_name = consultant_info.get("company_name") or crn_record.company_name
+        crn_record.phone = consultant_info.get("phone") or crn_record.phone
+        crn_record.is_verified = True
+        crn_record.verified_at = datetime.utcnow()
 
-    # Invalidate perf_v2 cache so subsequent GET /crns returns fresh data
-    try:
+        # Mirror onto legacy profile.crn if this slot is primary
+        mirrored = False
+        if crn_record.is_primary:
+            conflict = db.query(ConsultantProfile).filter(
+                ConsultantProfile.crn == new_crn_value,
+                ConsultantProfile.id != owning_profile.id,
+            ).first()
+            if not conflict:
+                owning_profile.crn = new_crn_value
+                if consultant_info.get("company_name"):
+                    owning_profile.company_name = consultant_info["company_name"]
+                if consultant_info.get("phone"):
+                    owning_profile.phone = consultant_info["phone"]
+                mirrored = True
+
+        # Invalidate perf_v2 cache in the SAME transaction so GET /crns
+        # never reads stale cache after the swap is committed.
         cache_row = db.query(UserUsacCache).filter(
             UserUsacCache.user_id == owning_profile.user_id
         ).first()
         if cache_row and cache_row.status == "fresh":
             cache_row.status = "stale"
-            db.commit()
             logger.info(f"[REPLACE-CRN] Invalidated perf_v2 cache for user {owning_profile.user_id}")
+
+        db.commit()
+        logger.info(
+            f"[REPLACE-CRN] Committed CRN swap {crn_id}: {old_crn_value} -> {new_crn_value} "
+            f"on profile {owning_profile_id} (deleted_schools={deleted_schools}, mirrored={mirrored})"
+        )
     except Exception as e:
-        logger.warning(f"[REPLACE-CRN] Failed to invalidate cache: {e}")
+        db.rollback()
+        logger.error(
+            f"[REPLACE-CRN][FAIL] CRN swap transaction failed for slot {crn_id} "
+            f"({old_crn_value} -> {new_crn_value}): {e}\n{_tb.format_exc()}"
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"CRN swap failed during commit: {str(e)}"
+        )
+
+    # --- Phase 2: Import schools for the new CRN (best-effort, separate commit) ---
+    imported = {"imported_count": 0, "skipped_count": 0}
+    try:
+        imported = _import_schools_for_crn(owning_profile, new_crn_value, result.get("schools") or [], db)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.warning(
+            f"[REPLACE-CRN] School import failed for {new_crn_value} on profile "
+            f"{owning_profile_id}, CRN swap already committed: {e}\n{_tb.format_exc()}"
+        )
 
     logger.info(
         f"[REPLACE-CRN] Replaced CRN slot {crn_id}: {old_crn_value} -> {new_crn_value} on profile "

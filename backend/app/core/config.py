@@ -165,6 +165,7 @@ class Settings(BaseSettings):
         "test_consultant@example.com",
         "test_vendor@example.com",
         "test_applicant@example.com",
+        "test_entity@example.com",
         "demo@skyrate.ai"
     ]
     # Coupon codes that bypass payment (case-insensitive)
