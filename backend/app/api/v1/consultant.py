@@ -3,7 +3,7 @@ Consultant Portal API Endpoints
 Handles school portfolios, funding data, and appeal generation
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -3270,6 +3270,7 @@ def _warm_frn_cache_background(
 
 @router.get("/frn-status")
 async def get_portfolio_frn_status(
+    request: Request,
     background_tasks: BackgroundTasks,
     year: Optional[int] = Depends(parse_optional_year),
     status_filter: Optional[str] = None,
@@ -3475,6 +3476,8 @@ async def get_portfolio_frn_status(
                 (r.last_refreshed for r in rows if r.last_refreshed),
                 default=None,
             )
+            from ...utils.source_tag import tag_source
+            tag_source(request, "snapshot_hit", rows=len(all_frns), partial=False, user_id=current_user.id)
             return {
                 "success": True,
                 "from_cache": True,
@@ -3576,6 +3579,8 @@ async def get_portfolio_frn_status(
         rows = _query_local(school_bens, year, status_filter)
         disb_map = _get_disb_map([r.frn for r in rows])
         all_frns, schools_data, status_counts = _aggregate_rows(rows, disb_map)
+        from ...utils.source_tag import tag_source
+        tag_source(request, "usac_live", rows=len(all_frns), partial=False, user_id=current_user.id)
         return {
             "success": True,
             "from_cache": False,

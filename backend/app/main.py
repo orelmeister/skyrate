@@ -939,11 +939,18 @@ async def request_timing_middleware(request: Request, call_next):
     response.headers["X-Server-Time-Ms"] = f"{elapsed_ms:.1f}"
     # Only log API paths to reduce noise
     if path.startswith("/v1/") or path.startswith("/api/"):
+        source = getattr(request.state, "data_source", "n/a")
+        rows = getattr(request.state, "data_rows", "-")
+        partial = str(getattr(request.state, "data_partial", False)).lower()
+        user_id = getattr(request.state, "user_id", "-")
+        tag = f"source={source} rows={rows} partial={partial} user_id={user_id}"
         # Threshold-aware log: warn if >1s, info otherwise
         if elapsed_ms >= 1000:
-            logger.warning(f"[perf] SLOW {request.method} {path} = {elapsed_ms:.0f}ms (status={response.status_code})")
+            logger.warning(f"[perf] SLOW {request.method} {path} = {elapsed_ms:.0f}ms (status={response.status_code}) {tag}")
         elif elapsed_ms >= 200:
-            logger.info(f"[perf] {request.method} {path} = {elapsed_ms:.0f}ms")
+            logger.info(f"[perf] {request.method} {path} = {elapsed_ms:.0f}ms {tag}")
+        elif source != "n/a":
+            logger.info(f"[perf] OK {request.method} {path} = {elapsed_ms:.0f}ms {tag}")
     return response
 
 # Primary routes at /v1 (this is what DO sends after stripping /api)

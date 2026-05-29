@@ -3,7 +3,7 @@ Vendor Portal API Endpoints
 Handles school search, equipment matching, and lead generation
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List, Dict
@@ -678,6 +678,7 @@ class Form470SearchRequest(BaseModel):
 
 @router.get("/470/leads")
 async def get_470_leads(
+    request: Request,
     background_tasks: BackgroundTasks,
     year: Optional[int] = None,
     state: Optional[str] = None,
@@ -810,6 +811,8 @@ async def get_470_leads(
                     (r.last_refreshed for r in rows if r.last_refreshed), default=None
                 )
 
+            from ...utils.source_tag import tag_source
+            tag_source(request, "snapshot_hit", rows=len(leads), partial=False, user_id=current_user.id)
             return {
                 "success": True,
                 "source": "local_db",
@@ -863,6 +866,8 @@ async def get_470_leads(
             total = q.count()
             rows = q.order_by(VendorForm470Snapshot.posting_date.desc().nullslast()).offset(offset).limit(limit).all()
             leads = [_row_to_lead(r) for r in rows]
+            from ...utils.source_tag import tag_source
+            tag_source(request, "snapshot_miss", rows=len(leads), partial=True, user_id=current_user.id)
             return {
                 "success": True,
                 "source": "local_db",
@@ -944,6 +949,8 @@ async def get_470_leads(
         if has_more:
             next_cursor = base64.b64encode(str(offset + limit).encode()).decode()
 
+        from ...utils.source_tag import tag_source
+        tag_source(request, "usac_live", rows=len(paginated), partial=False, user_id=current_user.id)
         return {
             "success": True,
             "source": "usac_live",
