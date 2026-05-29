@@ -734,6 +734,21 @@ def _run_schema_migrations(engine):
                 with engine.begin() as conn:
                     conn.execute(text("ALTER TABLE `applicant_profiles` MODIFY COLUMN `ben` VARCHAR(20) NULL"))
                 logger.info("Migration: Made applicant_profiles.ben nullable")
+
+        # Drop UNIQUE constraint on vendor_profiles.spin — demo accounts need to
+        # share the same SPIN (Replace Identity feature). Keep a regular index for speed.
+        if inspector.has_table("vendor_profiles"):
+            indexes = inspector.get_indexes("vendor_profiles")
+            unique_spin_idx = next(
+                (idx for idx in indexes if "spin" in idx.get("column_names", []) and idx.get("unique")),
+                None,
+            )
+            if unique_spin_idx:
+                idx_name = unique_spin_idx["name"]
+                with engine.begin() as conn:
+                    conn.execute(text(f"DROP INDEX `{idx_name}` ON `vendor_profiles`"))
+                    conn.execute(text("CREATE INDEX `ix_vendor_profiles_spin` ON `vendor_profiles` (`spin`)"))
+                logger.info(f"Migration: Dropped unique index {idx_name} on vendor_profiles.spin, replaced with non-unique index")
     except Exception as e:
         logger.error(f"Schema migration error (non-fatal): {e}")
 

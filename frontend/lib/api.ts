@@ -1034,8 +1034,8 @@ class ApiClient {
             errorMessage = data.detail.map((e: any) => e.msg || e.message || String(e)).join(', ');
           } else if (typeof data.detail === 'string') {
             errorMessage = data.detail;
-          } else if (typeof data.detail === 'object' && data.detail.msg) {
-            errorMessage = data.detail.msg;
+          } else if (typeof data.detail === 'object' && (data.detail.message || data.detail.msg)) {
+            errorMessage = data.detail.message || data.detail.msg;
           }
         } else if (data.error) {
           errorMessage = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);

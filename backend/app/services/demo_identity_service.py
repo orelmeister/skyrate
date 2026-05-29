@@ -157,7 +157,24 @@ def _swap_crn(db: Session, user: User, new_crn: str, crn_record_id: Optional[int
     except Exception as e:
         db.rollback()
         _log_fail(user.id, "crn", "update", new_crn, str(e))
-        raise HTTPException(status_code=500, detail=f"CRN swap failed: {str(e)}")
+        err_str = str(e)
+        if "Duplicate entry" in err_str or "IntegrityError" in err_str:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "ok": False,
+                    "reason": "duplicate",
+                    "message": f"CRN {new_crn} is already held by another account. Pick a different one.",
+                },
+            )
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "ok": False,
+                "reason": "internal",
+                "message": "CRN swap failed due to a server error. Please try again.",
+            },
+        )
 
     return {
         "ok": True,
@@ -184,7 +201,14 @@ def _swap_spin(db: Session, user: User, new_spin: str) -> dict:
 
     old_spin = profile.spin
     if new_spin == old_spin:
-        raise HTTPException(status_code=400, detail="New SPIN matches current value")
+        return {
+            "ok": True,
+            "name": profile.company_name or "",
+            "old_id": old_spin or "",
+            "new_id": new_spin,
+            "counts": {},
+            "no_op": True,
+        }
 
     # Verify with USAC
     usac_service = get_usac_service()
@@ -214,11 +238,6 @@ def _swap_spin(db: Session, user: User, new_spin: str) -> dict:
 
     # Transaction: update SPIN + clear search history
     try:
-        old_searches = db.query(VendorProfile.__table__.c.id).filter(
-            VendorProfile.user_id == user.id
-        ).scalar_subquery()
-        # VendorSearch records are informational, keep them
-
         profile.spin = new_spin
         if provider_name:
             profile.company_name = provider_name
@@ -227,7 +246,25 @@ def _swap_spin(db: Session, user: User, new_spin: str) -> dict:
     except Exception as e:
         db.rollback()
         _log_fail(user.id, "spin", "update", new_spin, str(e))
-        raise HTTPException(status_code=500, detail=f"SPIN swap failed: {str(e)}")
+        # Clean error for IntegrityError (duplicate SPIN still in DB)
+        err_str = str(e)
+        if "Duplicate entry" in err_str or "IntegrityError" in err_str:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "ok": False,
+                    "reason": "duplicate",
+                    "message": f"SPIN {new_spin} is already held by another account. Pick a different one.",
+                },
+            )
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "ok": False,
+                "reason": "internal",
+                "message": "SPIN swap failed due to a server error. Please try again.",
+            },
+        )
 
     return {
         "ok": True,
@@ -254,7 +291,14 @@ def _swap_ben(db: Session, user: User, new_ben: str) -> dict:
 
     old_ben = profile.ben
     if new_ben == old_ben:
-        raise HTTPException(status_code=400, detail="New BEN matches current value")
+        return {
+            "ok": True,
+            "name": profile.organization_name or "",
+            "old_id": old_ben or "",
+            "new_id": new_ben,
+            "counts": {},
+            "no_op": True,
+        }
 
     # Verify with USAC
     usac_service = get_usac_service()
@@ -300,7 +344,24 @@ def _swap_ben(db: Session, user: User, new_ben: str) -> dict:
     except Exception as e:
         db.rollback()
         _log_fail(user.id, "ben", "update", new_ben, str(e))
-        raise HTTPException(status_code=500, detail=f"BEN swap failed: {str(e)}")
+        err_str = str(e)
+        if "Duplicate entry" in err_str or "IntegrityError" in err_str:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "ok": False,
+                    "reason": "duplicate",
+                    "message": f"BEN {new_ben} is already held by another account. Pick a different one.",
+                },
+            )
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "ok": False,
+                "reason": "internal",
+                "message": "BEN swap failed due to a server error. Please try again.",
+            },
+        )
 
     return {
         "ok": True,

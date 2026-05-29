@@ -20,7 +20,7 @@ class VendorProfile(Base):
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
     
     # USAC Registration
-    spin = Column(String(50), unique=True, index=True)  # Service Provider Identification Number
+    spin = Column(String(50), index=True)  # Service Provider Identification Number
     
     # Profile info
     company_name = Column(String(255))
