@@ -1154,12 +1154,33 @@ async def replace_crn(
                 owning_profile.phone = consultant_info["phone"]
             mirrored = True
 
-    # Import schools for the new CRN
-    imported = _import_schools_for_crn(owning_profile, new_crn_value, result.get("schools") or [], db)
+    # Import schools for the new CRN (best-effort: do not roll back the CRN
+    # swap itself if school import fails)
+    try:
+        imported = _import_schools_for_crn(owning_profile, new_crn_value, result.get("schools") or [], db)
+    except Exception as e:
+        logger.warning(
+            f"[REPLACE-CRN] School import failed for {new_crn_value} on profile "
+            f"{owning_profile_id}, proceeding with CRN swap anyway: {e}"
+        )
+        imported = {"imported_count": 0, "skipped_count": 0}
 
     db.commit()
+
+    # Invalidate perf_v2 cache so subsequent GET /crns returns fresh data
+    try:
+        cache_row = db.query(UserUsacCache).filter(
+            UserUsacCache.user_id == owning_profile.user_id
+        ).first()
+        if cache_row and cache_row.status == "fresh":
+            cache_row.status = "stale"
+            db.commit()
+            logger.info(f"[REPLACE-CRN] Invalidated perf_v2 cache for user {owning_profile.user_id}")
+    except Exception as e:
+        logger.warning(f"[REPLACE-CRN] Failed to invalidate cache: {e}")
+
     logger.info(
-        f"Replaced CRN slot {crn_id}: {old_crn_value} -> {new_crn_value} on profile "
+        f"[REPLACE-CRN] Replaced CRN slot {crn_id}: {old_crn_value} -> {new_crn_value} on profile "
         f"{owning_profile_id} (actor={current_user.id}, deleted_schools={deleted_schools}, "
         f"imported={imported['imported_count']}, mirrored={mirrored})"
     )
