@@ -650,6 +650,7 @@ class Form470SearchRequest(BaseModel):
 
 @router.get("/470/leads")
 async def get_470_leads(
+    background_tasks: BackgroundTasks,
     year: Optional[int] = None,
     state: Optional[str] = None,
     category: Optional[str] = None,
@@ -660,69 +661,273 @@ async def get_470_leads(
     min_speed: Optional[str] = None,
     max_speed: Optional[str] = None,
     sort_by: Optional[str] = None,
-    limit: int = 2000,
+    limit: int = 200,
     offset: int = 0,
+    cursor: Optional[str] = None,
     min_deal_value: Optional[float] = None,
     max_deal_value: Optional[float] = None,
+    refresh: bool = False,
     current_user: User = Depends(require_role("admin", "vendor", "super")),
+    db: Session = Depends(get_db),
 ):
     """
     Get Form 470 postings for lead generation.
-    This is the CORE SALES WORKFLOW for vendors - finding schools seeking services.
-    
-    Key differentiator: Manufacturer filtering - exclusive to SkyRate!
-    
-    Args:
-        year: Optional funding year filter (defaults to current/next year)
-        state: Optional two-letter state code (e.g., 'NY', 'CA')
-        category: Optional category filter ('1' for Cat1, '2' for Cat2)
-        service_type: Optional service type filter
-        manufacturer: Optional manufacturer name (partial match - e.g., 'Cisco', 'Meraki')
-        equipment_type: Optional equipment/function type (e.g., 'Switches', 'Routers')
-        service_function: Optional service function filter (e.g., 'Managed Internal Broadband Services')
-        min_speed: Optional minimum speed/capacity filter
-        max_speed: Optional maximum speed/capacity filter
-        sort_by: Sort order ('entity_name' for ABC, default is posting_date)
-        limit: Maximum records (default 2000)
-        offset: Pagination offset (default 0)
+    SNAPSHOT-FIRST: Reads from local vendor_form470_snapshots table (<500ms).
+    Live USAC fetch only when refresh=true (with 25s hard timeout).
+
+    Cursor-based pagination: use next_cursor from response for next page.
+    Default 200 rows per page, max 1000.
     """
+    import json as _json
+    import logging as _logging
+    from ...models.vendor_form470_snapshot import VendorForm470Snapshot
+
+    _log = _logging.getLogger(__name__)
+
+    # Clamp limit
+    if limit > 1000:
+        limit = 1000
+    if limit < 1:
+        limit = 200
+
+    # Resolve cursor to offset
+    if cursor:
+        try:
+            import base64
+            decoded = base64.b64decode(cursor).decode()
+            offset = int(decoded)
+        except Exception:
+            offset = 0
+
+    def _build_query(q):
+        if year:
+            q = q.filter(VendorForm470Snapshot.funding_year == str(year))
+        if state:
+            q = q.filter(VendorForm470Snapshot.state == state.upper())
+        if category:
+            cat_name = f"Category {category}" if category in ('1', '2') else category
+            q = q.filter(VendorForm470Snapshot.categories_json.ilike(f'%{cat_name}%'))
+        if service_type:
+            q = q.filter(VendorForm470Snapshot.service_types_json.ilike(f'%{service_type}%'))
+        if manufacturer:
+            q = q.filter(VendorForm470Snapshot.manufacturers_json.ilike(f'%{manufacturer}%'))
+        if equipment_type:
+            q = q.filter(VendorForm470Snapshot.services_json.ilike(f'%{equipment_type}%'))
+        if service_function:
+            q = q.filter(VendorForm470Snapshot.service_types_json.ilike(f'%{service_function}%'))
+        if min_deal_value and min_deal_value > 0:
+            q = q.filter(VendorForm470Snapshot.c2_budget_available >= min_deal_value)
+        if max_deal_value and max_deal_value > 0:
+            q = q.filter(VendorForm470Snapshot.c2_budget_available <= max_deal_value)
+        return q
+
+    def _row_to_lead(r):
+        return {
+            "application_number": r.application_number,
+            "funding_year": r.funding_year,
+            "ben": r.ben,
+            "entity_name": r.entity_name,
+            "state": r.state,
+            "city": r.city,
+            "applicant_type": r.applicant_type,
+            "status": r.status,
+            "posting_date": r.posting_date,
+            "allowable_contract_date": r.allowable_contract_date,
+            "contact_name": r.contact_name,
+            "contact_email": r.contact_email,
+            "contact_phone": r.contact_phone,
+            "technical_contact": r.technical_contact,
+            "technical_email": r.technical_email,
+            "technical_phone": r.technical_phone,
+            "cat1_description": r.cat1_description,
+            "cat2_description": r.cat2_description,
+            "services": _json.loads(r.services_json) if r.services_json else [],
+            "manufacturers": _json.loads(r.manufacturers_json) if r.manufacturers_json else [],
+            "service_types": _json.loads(r.service_types_json) if r.service_types_json else [],
+            "categories": _json.loads(r.categories_json) if r.categories_json else [],
+            "c2_budget_total": r.c2_budget_total,
+            "c2_budget_available": r.c2_budget_available,
+            "c2_budget_cycle": r.c2_budget_cycle,
+        }
+
+    # --- Snapshot-first read path ---
+    if not refresh:
+        from sqlalchemy import func as _sqlfunc
+        q = _build_query(db.query(VendorForm470Snapshot))
+        total = q.count()
+
+        if total > 0 or refresh is False:
+            # Sort
+            if sort_by == "entity_name":
+                q = q.order_by(VendorForm470Snapshot.entity_name.asc())
+            elif sort_by == "c2_budget_available":
+                q = q.order_by(VendorForm470Snapshot.c2_budget_available.desc().nullslast())
+            else:
+                q = q.order_by(VendorForm470Snapshot.posting_date.desc().nullslast())
+
+            rows = q.offset(offset).limit(limit).all()
+            leads = [_row_to_lead(r) for r in rows]
+            has_more = (offset + limit) < total
+
+            # Build next_cursor
+            import base64
+            next_cursor = None
+            if has_more:
+                next_offset = offset + limit
+                next_cursor = base64.b64encode(str(next_offset).encode()).decode()
+
+            last_refreshed = None
+            if rows:
+                last_refreshed = max(
+                    (r.last_refreshed for r in rows if r.last_refreshed), default=None
+                )
+
+            return {
+                "success": True,
+                "source": "local_db",
+                "from_cache": True,
+                "total_leads": total,
+                "leads": leads,
+                "has_more": has_more,
+                "next_cursor": next_cursor,
+                "partial": False,
+                "last_refreshed": last_refreshed.isoformat() if last_refreshed else None,
+                "filters_applied": {
+                    "year": year, "state": state, "category": category,
+                    "service_type": service_type, "manufacturer": manufacturer,
+                    "equipment_type": equipment_type, "service_function": service_function,
+                    "min_speed": min_speed, "max_speed": max_speed,
+                    "sort_by": sort_by,
+                    "min_deal_value": min_deal_value, "max_deal_value": max_deal_value,
+                },
+            }
+
+    # --- Live USAC fetch path (refresh=true) with 25s hard timeout ---
     try:
         from utils.usac_client import USACDataClient
-        from utils.usac_cache import get_or_cache
+        import concurrent.futures
 
         client = USACDataClient()
-        cache_params = {
-            "year": year, "state": state, "category": category,
-            "service_type": service_type, "manufacturer": manufacturer,
-            "equipment_type": equipment_type, "service_function": service_function,
-            "min_speed": min_speed, "max_speed": max_speed,
-            "sort_by": sort_by, "limit": limit, "offset": offset,
-            "min_deal_value": min_deal_value, "max_deal_value": max_deal_value,
-        }
-        result = get_or_cache(
-            namespace="470_leads",
-            params=cache_params,
-            ttl_hours=6,
-            fetch_fn=lambda: client.get_470_leads(
-                year=year,
-                state=state,
-                category=category,
-                service_type=service_type,
-                manufacturer=manufacturer,
-                equipment_type=equipment_type,
-                service_function=service_function,
-                min_speed=min_speed,
-                max_speed=max_speed,
-                sort_by=sort_by,
-                limit=limit,
-                offset=offset,
-                min_deal_value=min_deal_value,
-                max_deal_value=max_deal_value,
-            ),
-        )
 
-        return result
-        
+        def _fetch_live():
+            return client.get_470_leads(
+                year=year, state=state, category=category,
+                service_type=service_type, manufacturer=manufacturer,
+                equipment_type=equipment_type, service_function=service_function,
+                min_speed=min_speed, max_speed=max_speed,
+                sort_by=sort_by, limit=5000, offset=0,
+                min_deal_value=min_deal_value, max_deal_value=max_deal_value,
+            )
+
+        result = None
+        partial = False
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_fetch_live)
+            try:
+                result = future.result(timeout=25)
+            except concurrent.futures.TimeoutError:
+                _log.warning("[470-leads] Live USAC fetch timed out after 25s, returning snapshot")
+                partial = True
+
+        if partial or not result or not result.get("success"):
+            # Return whatever snapshot rows exist with partial=true
+            q = _build_query(db.query(VendorForm470Snapshot))
+            total = q.count()
+            rows = q.order_by(VendorForm470Snapshot.posting_date.desc().nullslast()).offset(offset).limit(limit).all()
+            leads = [_row_to_lead(r) for r in rows]
+            return {
+                "success": True,
+                "source": "local_db",
+                "from_cache": True,
+                "partial": True,
+                "total_leads": total,
+                "leads": leads,
+                "has_more": (offset + limit) < total,
+                "next_cursor": None,
+                "message": "Live USAC fetch timed out or failed. Showing cached data.",
+                "filters_applied": {
+                    "year": year, "state": state, "category": category,
+                    "service_type": service_type, "manufacturer": manufacturer,
+                },
+            }
+
+        # Persist fetched leads to snapshot table (background to not block response)
+        fetched_leads = result.get("leads", [])
+
+        def _persist_snapshot(leads_data):
+            from ...core.database import SessionLocal
+            _db = SessionLocal()
+            try:
+                from datetime import datetime as _dt
+                now = _dt.utcnow()
+                # Delete and reinsert for this year/state combo (or all if no filter)
+                del_q = _db.query(VendorForm470Snapshot)
+                if year:
+                    del_q = del_q.filter(VendorForm470Snapshot.funding_year == str(year))
+                if state:
+                    del_q = del_q.filter(VendorForm470Snapshot.state == state.upper())
+                del_q.delete(synchronize_session=False)
+
+                for lead in leads_data:
+                    _db.add(VendorForm470Snapshot(
+                        application_number=lead.get("application_number", ""),
+                        funding_year=str(lead.get("funding_year", "")),
+                        ben=lead.get("ben"),
+                        entity_name=lead.get("entity_name"),
+                        state=lead.get("state"),
+                        city=lead.get("city"),
+                        applicant_type=lead.get("applicant_type"),
+                        status=lead.get("status"),
+                        posting_date=lead.get("posting_date"),
+                        allowable_contract_date=lead.get("allowable_contract_date"),
+                        contact_name=lead.get("contact_name"),
+                        contact_email=lead.get("contact_email"),
+                        contact_phone=lead.get("contact_phone"),
+                        technical_contact=lead.get("technical_contact"),
+                        technical_email=lead.get("technical_email"),
+                        technical_phone=lead.get("technical_phone"),
+                        cat1_description=lead.get("cat1_description"),
+                        cat2_description=lead.get("cat2_description"),
+                        services_json=_json.dumps(lead.get("services", [])),
+                        manufacturers_json=_json.dumps(lead.get("manufacturers", [])),
+                        service_types_json=_json.dumps(lead.get("service_types", [])),
+                        categories_json=_json.dumps(lead.get("categories", [])),
+                        c2_budget_total=lead.get("c2_budget_total"),
+                        c2_budget_available=lead.get("c2_budget_available"),
+                        c2_budget_cycle=lead.get("c2_budget_cycle"),
+                        last_refreshed=now,
+                    ))
+                _db.commit()
+                _log.info(f"[470-leads] Persisted {len(leads_data)} leads to snapshot table")
+            except Exception as exc:
+                _db.rollback()
+                _log.warning(f"[470-leads] Failed to persist snapshot: {exc}")
+            finally:
+                _db.close()
+
+        background_tasks.add_task(_persist_snapshot, fetched_leads)
+
+        # Return the live result with pagination applied
+        total_leads = result.get("total_leads", len(fetched_leads))
+        paginated = fetched_leads[offset:offset + limit]
+        import base64
+        has_more = (offset + limit) < total_leads
+        next_cursor = None
+        if has_more:
+            next_cursor = base64.b64encode(str(offset + limit).encode()).decode()
+
+        return {
+            "success": True,
+            "source": "usac_live",
+            "from_cache": False,
+            "partial": False,
+            "total_leads": total_leads,
+            "leads": paginated,
+            "has_more": has_more,
+            "next_cursor": next_cursor,
+            "filters_applied": result.get("filters_applied", {}),
+        }
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

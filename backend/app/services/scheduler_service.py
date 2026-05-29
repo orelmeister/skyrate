@@ -1067,6 +1067,196 @@ def refresh_admin_frn_snapshot():
         db.close()
 
 
+def refresh_vendor_form470_snapshot():
+    """
+    Daily job: Refresh the vendor_form470_snapshots table with current/next year
+    Form 470 leads from USAC. Ensures the GET /vendor/470/leads endpoint responds
+    in <500ms from local MySQL instead of 60s+ from live USAC.
+    """
+    logger.info("[470-snapshot] Starting vendor Form 470 snapshot refresh...")
+    db = SessionLocal()
+    try:
+        import json as _json
+        from utils.usac_client import USACDataClient
+        from ..models.vendor_form470_snapshot import VendorForm470Snapshot
+
+        client = USACDataClient()
+        now = datetime.utcnow()
+
+        # Fetch current + next year (no state filter = nationwide)
+        result = client.get_470_leads(limit=10000, offset=0)
+        if not result.get("success"):
+            logger.error(f"[470-snapshot] USAC fetch failed: {result.get('error')}")
+            return
+
+        leads = result.get("leads", [])
+        if not leads:
+            logger.info("[470-snapshot] No leads returned from USAC")
+            return
+
+        # Replace all rows atomically
+        db.query(VendorForm470Snapshot).delete(synchronize_session=False)
+        for lead in leads:
+            db.add(VendorForm470Snapshot(
+                application_number=lead.get("application_number", ""),
+                funding_year=str(lead.get("funding_year", "")),
+                ben=lead.get("ben"),
+                entity_name=lead.get("entity_name"),
+                state=lead.get("state"),
+                city=lead.get("city"),
+                applicant_type=lead.get("applicant_type"),
+                status=lead.get("status"),
+                posting_date=lead.get("posting_date"),
+                allowable_contract_date=lead.get("allowable_contract_date"),
+                contact_name=lead.get("contact_name"),
+                contact_email=lead.get("contact_email"),
+                contact_phone=lead.get("contact_phone"),
+                technical_contact=lead.get("technical_contact"),
+                technical_email=lead.get("technical_email"),
+                technical_phone=lead.get("technical_phone"),
+                cat1_description=lead.get("cat1_description"),
+                cat2_description=lead.get("cat2_description"),
+                services_json=_json.dumps(lead.get("services", [])),
+                manufacturers_json=_json.dumps(lead.get("manufacturers", [])),
+                service_types_json=_json.dumps(lead.get("service_types", [])),
+                categories_json=_json.dumps(lead.get("categories", [])),
+                c2_budget_total=lead.get("c2_budget_total"),
+                c2_budget_available=lead.get("c2_budget_available"),
+                c2_budget_cycle=lead.get("c2_budget_cycle"),
+                last_refreshed=now,
+            ))
+        db.commit()
+        logger.info(f"[470-snapshot] Refreshed: {len(leads)} leads stored")
+    except Exception as e:
+        logger.error(f"[470-snapshot] Refresh failed: {e}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+
+def refresh_frn_disbursements():
+    """
+    Daily job: Refresh the frn_disbursements table from USAC disbursements dataset.
+    Fetches disbursement data for all FRNs tracked in admin_frn_snapshots.
+    """
+    logger.info("[disbursements] Starting FRN disbursement refresh...")
+    db = SessionLocal()
+    try:
+        from ..models.frn_disbursement import FRNDisbursement
+        from ..models.admin_frn_snapshot import AdminFRNSnapshot
+        from utils.usac_client import USACDataClient
+
+        # Get all unique FRNs we track
+        frn_rows = db.query(AdminFRNSnapshot.frn, AdminFRNSnapshot.funding_year).distinct().all()
+        if not frn_rows:
+            logger.info("[disbursements] No FRNs in snapshot table to look up")
+            return
+
+        client = USACDataClient()
+        now = datetime.utcnow()
+        updated = 0
+
+        # Batch fetch disbursement data from USAC (dataset hbj5-2bpj)
+        unique_frns = list(set(r.frn for r in frn_rows if r.frn))
+        batch_size = 200
+
+        for i in range(0, len(unique_frns), batch_size):
+            batch = unique_frns[i:i + batch_size]
+            try:
+                quoted = ",".join(f"'{f}'" for f in batch)
+                url = "https://opendata.usac.org/resource/hbj5-2bpj.json"
+                params = {
+                    "$where": f"frn IN ({quoted})",
+                    "$limit": 5000,
+                    "$select": "frn, funding_year, total_authorized_disbursement, last_date_to_invoice, form_bear_flag, form_spi_flag",
+                }
+                import requests as _req
+                resp = _req.get(url, params=params, timeout=30)
+                resp.raise_for_status()
+                data = resp.json()
+
+                # Aggregate by FRN
+                frn_agg = {}
+                for row in data:
+                    frn_key = row.get("frn", "")
+                    if not frn_key:
+                        continue
+                    if frn_key not in frn_agg:
+                        frn_agg[frn_key] = {
+                            "total": 0.0,
+                            "last_date": None,
+                            "bear": False,
+                            "spi": False,
+                            "count": 0,
+                            "funding_year": row.get("funding_year", ""),
+                        }
+                    entry = frn_agg[frn_key]
+                    entry["total"] += float(row.get("total_authorized_disbursement") or 0)
+                    entry["count"] += 1
+                    inv_date = row.get("last_date_to_invoice")
+                    if inv_date:
+                        entry["last_date"] = inv_date[:10] if len(inv_date) >= 10 else inv_date
+                    if row.get("form_bear_flag") in ("Y", "y", True, "true", "1"):
+                        entry["bear"] = True
+                    if row.get("form_spi_flag") in ("Y", "y", True, "true", "1"):
+                        entry["spi"] = True
+
+                # Upsert into frn_disbursements
+                for frn_key, agg in frn_agg.items():
+                    mode = "MIX" if (agg["bear"] and agg["spi"]) else ("BEAR" if agg["bear"] else ("SPI" if agg["spi"] else None))
+                    last_date = None
+                    if agg["last_date"]:
+                        try:
+                            from datetime import date as _date
+                            parts = agg["last_date"].split("-")
+                            last_date = _date(int(parts[0]), int(parts[1]), int(parts[2]))
+                        except Exception:
+                            pass
+
+                    existing = db.query(FRNDisbursement).filter(
+                        FRNDisbursement.frn == frn_key,
+                        FRNDisbursement.funding_year == str(agg["funding_year"]),
+                    ).first()
+                    if existing:
+                        existing.total_authorized_disbursement = agg["total"]
+                        existing.last_invoice_date = last_date
+                        existing.invoicing_mode = mode
+                        existing.disbursement_count = agg["count"]
+                        existing.updated_at = now
+                    else:
+                        db.add(FRNDisbursement(
+                            frn=frn_key,
+                            funding_year=str(agg["funding_year"]),
+                            total_authorized_disbursement=agg["total"],
+                            last_invoice_date=last_date,
+                            invoicing_mode=mode,
+                            disbursement_count=agg["count"],
+                            updated_at=now,
+                        ))
+                    updated += 1
+
+                db.commit()
+            except Exception as e:
+                logger.warning(f"[disbursements] Batch {i} failed: {e}")
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+
+        logger.info(f"[disbursements] Refresh complete: {updated} FRNs updated")
+    except Exception as e:
+        logger.error(f"[disbursements] Refresh failed: {e}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+
 def refresh_predicted_leads():
     """
     Weekly job: Refresh predictive lead intelligence.
@@ -1331,6 +1521,30 @@ def init_scheduler():
         coalesce=True,
         replace_existing=True,
         next_run_time=datetime.utcnow() + timedelta(seconds=30),
+    )
+
+    # Vendor Form 470 snapshot - daily at 04:00 UTC (first run 7 min after boot)
+    scheduler.add_job(
+        refresh_vendor_form470_snapshot,
+        trigger=CronTrigger(hour=4, minute=0),
+        id='refresh_vendor_form470_snapshot',
+        name='Refresh vendor Form 470 leads snapshot from USAC',
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+        next_run_time=boot + timedelta(minutes=7),
+    )
+
+    # FRN disbursements - daily at 04:30 UTC (first run 8 min after boot)
+    scheduler.add_job(
+        refresh_frn_disbursements,
+        trigger=CronTrigger(hour=4, minute=30),
+        id='refresh_frn_disbursements',
+        name='Refresh FRN disbursement data from USAC',
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+        next_run_time=boot + timedelta(minutes=8),
     )
 
     # perf_v2 nightly hydration - 03:00 UTC daily + a boot-time warm at +90s

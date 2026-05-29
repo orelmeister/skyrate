@@ -3356,9 +3356,10 @@ async def get_portfolio_frn_status(
     #   4. Otherwise (zero rows, refresh=false): tell the user we'll have
     #      data after the next nightly sync; they can hit Refresh to force.
     from ...models.admin_frn_snapshot import AdminFRNSnapshot
+    from ...models.frn_disbursement import FRNDisbursement
     from sqlalchemy import func as _sqlfunc
 
-    def _aggregate_rows(rows):
+    def _aggregate_rows(rows, disb_map=None):
         all_frns = []
         per_school = {}
         status_counts = {
@@ -3367,11 +3368,31 @@ async def get_portfolio_frn_status(
             "pending": {"count": 0, "amount": 0},
             "other": {"count": 0, "amount": 0},
         }
+        if disb_map is None:
+            disb_map = {}
         for r in rows:
             ben_str = str(r.ben or "")
             amount = float(r.amount_requested or 0)
             disbursed = float(r.amount_committed or 0)
             status_text = (r.status or "").lower()
+            # Disbursement enrichment
+            disb = disb_map.get(r.frn)
+            total_authorized_disbursement = disb.total_authorized_disbursement if disb else None
+            last_invoice_date = str(disb.last_invoice_date) if (disb and disb.last_invoice_date) else None
+            invoicing_mode = disb.invoicing_mode if disb else None
+            # Derive sub_status
+            sub_status = None
+            if "pending" in status_text or "review" in status_text or "submitted" in status_text or "certified" in status_text:
+                sub_status = r.fcdl_date if r.fcdl_date else "Awaiting Review"
+            elif "funded" in status_text or "committed" in status_text:
+                if total_authorized_disbursement is None or total_authorized_disbursement == 0:
+                    sub_status = "Not Invoiced"
+                elif total_authorized_disbursement < amount:
+                    sub_status = "Partially Invoiced"
+                else:
+                    sub_status = "Fully Invoiced"
+            elif "denied" in status_text:
+                sub_status = "Denied"
             frn_dict = {
                 "frn": r.frn,
                 "status": r.status,
@@ -3382,6 +3403,10 @@ async def get_portfolio_frn_status(
                 "ben": ben_str,
                 "entity_name": r.organization_name or "",
                 "fcdl_date": r.fcdl_date,
+                "total_authorized_disbursement": total_authorized_disbursement,
+                "last_invoice_date": last_invoice_date,
+                "invoicing_mode": invoicing_mode,
+                "sub_status": sub_status,
             }
             all_frns.append(frn_dict)
             bucket = per_school.setdefault(
@@ -3438,11 +3463,21 @@ async def get_portfolio_frn_status(
             unique.append(r)
         return unique
 
+    def _get_disb_map(frn_list):
+        """Batch fetch disbursement data for a list of FRN strings."""
+        if not frn_list:
+            return {}
+        disb_rows = db.query(FRNDisbursement).filter(
+            FRNDisbursement.frn.in_(frn_list)
+        ).all()
+        return {d.frn: d for d in disb_rows}
+
     # Step 1: query local denormalized table.
     if not refresh:
         rows = _query_local(school_bens, year, status_filter)
         if rows:
-            all_frns, schools_data, status_counts = _aggregate_rows(rows)
+            disb_map = _get_disb_map([r.frn for r in rows])
+            all_frns, schools_data, status_counts = _aggregate_rows(rows, disb_map)
             last_refreshed = max(
                 (r.last_refreshed for r in rows if r.last_refreshed),
                 default=None,
@@ -3546,7 +3581,8 @@ async def get_portfolio_frn_status(
 
         # Re-query with the user-selected filters.
         rows = _query_local(school_bens, year, status_filter)
-        all_frns, schools_data, status_counts = _aggregate_rows(rows)
+        disb_map = _get_disb_map([r.frn for r in rows])
+        all_frns, schools_data, status_counts = _aggregate_rows(rows, disb_map)
         return {
             "success": True,
             "from_cache": False,
