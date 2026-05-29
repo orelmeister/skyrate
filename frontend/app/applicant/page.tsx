@@ -178,6 +178,14 @@ function ApplicantDashboard() {
   const [disbursementYear, setDisbursementYear] = useState<number | undefined>(undefined);
   const [selectedFrnIds, setSelectedFrnIds] = useState<Set<number>>(new Set());
 
+  // Replace BEN modal state (demo/test accounts)
+  const [showReplaceBenModal, setShowReplaceBenModal] = useState(false);
+  const [replaceBenInput, setReplaceBenInput] = useState("");
+  const [replacingBenLoading, setReplacingBenLoading] = useState(false);
+  const [replaceBenError, setReplaceBenError] = useState<string | null>(null);
+
+  const isDemoAccount = user?.email?.includes('test_') || user?.email?.includes('demo') || user?.role === 'admin' || user?.role === 'super';
+
   useEffect(() => {
     // Wait for Zustand hydration before checking auth
     if (!_hasHydrated || checkingVerification) return;
@@ -257,6 +265,38 @@ function ApplicantDashboard() {
       setTimeout(fetchDashboard, 2000);
     } catch (e) {
       console.error('Sync error:', e);
+    }
+  };
+
+  // Replace BEN handler (demo/test accounts)
+  const handleReplaceBen = async () => {
+    const newBen = replaceBenInput.trim();
+    if (!newBen) {
+      setReplaceBenError("Please enter the new BEN");
+      return;
+    }
+    setReplacingBenLoading(true);
+    setReplaceBenError(null);
+    try {
+      const response = await api.replaceApplicantBen(newBen);
+      if (response.success && response.data) {
+        const d = response.data;
+        setShowReplaceBenModal(false);
+        setReplaceBenInput("");
+        // Refresh dashboard to reflect new BEN
+        await fetchDashboard();
+        alert(
+          `[OK] Swapped to ${d.name || d.new_id}. Building snapshot in background...\n\n` +
+          `Old BEN: ${d.old_id}\nNew BEN: ${d.new_id}`
+        );
+      } else {
+        setReplaceBenError(response.error || "Failed to replace BEN");
+      }
+    } catch (error: any) {
+      console.error("Failed to replace BEN:", error);
+      setReplaceBenError(error?.message || "Failed to replace BEN");
+    } finally {
+      setReplacingBenLoading(false);
     }
   };
 
@@ -535,6 +575,19 @@ function ApplicantDashboard() {
                     <h1 className="text-2xl font-bold">{profile.organization_name}</h1>
                     <div className="flex items-center gap-3 mt-1 text-purple-100">
                       <span className="font-mono bg-white/20 px-2 py-0.5 rounded text-sm">BEN: {profile.ben}</span>
+                      {isDemoAccount && (
+                        <button
+                          onClick={() => {
+                            setReplaceBenInput("");
+                            setReplaceBenError(null);
+                            setShowReplaceBenModal(true);
+                          }}
+                          className="px-2 py-0.5 text-[11px] font-medium text-amber-200 hover:text-white hover:bg-amber-600 border border-amber-300/50 hover:border-amber-600 rounded-md transition"
+                          title="Replace this BEN with a different one (test/demo accounts only)"
+                        >
+                          Replace
+                        </button>
+                      )}
                       <span className="flex items-center gap-1 text-sm">
                         <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
                         {profile.state} • E-Rate Applicant
@@ -1648,6 +1701,63 @@ function ApplicantDashboard() {
         )}
         </div>
       </main>
+
+      {/* Replace BEN Modal (demo/test accounts) */}
+      {showReplaceBenModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => !replacingBenLoading && setShowReplaceBenModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-slate-900 mb-1">Replace BEN</h3>
+            <p className="text-sm text-slate-500 mb-3">
+              Swap <span className="font-mono font-semibold text-slate-900">{data?.profile?.ben || "current BEN"}</span> for a different Billed Entity.
+              Profile is updated, old FRN data is cleared, and a fresh sync starts in the background.
+            </p>
+            <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg mb-3">
+              <p className="text-[11px] text-amber-800">
+                <strong>Demo helper</strong> — visible because this is a test/demo account. Lets you retarget onto any applicant BEN on the fly.
+              </p>
+            </div>
+
+            <input
+              type="text"
+              value={replaceBenInput}
+              onChange={(e) => setReplaceBenInput(e.target.value)}
+              placeholder="Enter new BEN (e.g., 16056315)"
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono mb-3"
+              autoFocus
+              onKeyDown={(e) => e.key === 'Enter' && !replacingBenLoading && handleReplaceBen()}
+            />
+
+            {replaceBenError && (
+              <p className="text-xs text-red-600 mb-3">{replaceBenError}</p>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowReplaceBenModal(false)}
+                disabled={replacingBenLoading}
+                className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReplaceBen}
+                disabled={replacingBenLoading || !replaceBenInput.trim()}
+                className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition"
+              >
+                {replacingBenLoading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Replacing...
+                  </>
+                ) : 'Verify & Replace'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Appeal Modal */}
       {selectedAppeal && (

@@ -671,15 +671,8 @@ class CRNCheckoutRequest(BaseModel):
 
 def _is_free_crn_user(user: User) -> bool:
     """Check if user gets unlimited free CRNs (super, admin, or test account)."""
-    settings = get_settings()
-    if user.role in ("super", "admin"):
-        return True
-    if user.email.lower() in [e.lower() for e in settings.TEST_ACCOUNT_EMAILS]:
-        return True
-    for pattern in settings.TEST_EMAIL_PATTERNS:
-        if pattern.lower() in user.email.lower():
-            return True
-    return False
+    from ...utils.demo_gate import is_demo_user
+    return is_demo_user(user)
 
 
 @router.get("/crns")

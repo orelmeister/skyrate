@@ -3231,7 +3231,41 @@ class ApiClient {
       return null;
     }
   }
+  /**
+   * Replace vendor SPIN (demo/test accounts only)
+   */
+  async replaceVendorSpin(newSpin: string): Promise<ApiResponse<{
+    ok: boolean;
+    name: string;
+    old_id: string;
+    new_id: string;
+    counts: Record<string, number>;
+    rebuild_started: boolean;
+  }>> {
+    return this.request('/api/v1/vendor/profile/replace-spin', {
+      method: 'POST',
+      body: JSON.stringify({ new_spin: newSpin }),
+    });
+  }
+
   // ==================== APPLICANT ENDPOINTS ====================
+
+  /**
+   * Replace applicant BEN (demo/test accounts only)
+   */
+  async replaceApplicantBen(newBen: string): Promise<ApiResponse<{
+    ok: boolean;
+    name: string;
+    old_id: string;
+    new_id: string;
+    counts: Record<string, number>;
+    rebuild_started: boolean;
+  }>> {
+    return this.request('/api/v1/applicant/profile/replace-ben', {
+      method: 'POST',
+      body: JSON.stringify({ new_ben: newBen }),
+    });
+  }
 
   /**
    * Get live FRN status for applicant BENs from USAC

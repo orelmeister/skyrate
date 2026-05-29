@@ -154,6 +154,34 @@ async def validate_spin(
         )
 
 
+class ReplaceSpinRequest(BaseModel):
+    new_spin: str
+
+
+@router.post("/profile/replace-spin")
+async def replace_spin(
+    data: ReplaceSpinRequest,
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
+    db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+):
+    """Replace the vendor SPIN for demo/test accounts.
+
+    Verifies the new SPIN with USAC, updates the profile, and triggers
+    a background data rebuild.
+    """
+    from ...services.demo_identity_service import swap_demo_identity
+
+    result = swap_demo_identity(
+        db=db,
+        user=current_user,
+        kind="spin",
+        new_id=data.new_spin,
+        background_tasks=background_tasks,
+    )
+    return {"success": True, **result}
+
+
 @router.get("/spin/serviced-entities")
 async def get_serviced_entities(
     year: Optional[int] = None,

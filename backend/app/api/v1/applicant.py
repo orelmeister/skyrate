@@ -410,6 +410,35 @@ def generate_auto_appeal(db: Session, profile_id: int, frn_id: int, frn_data: di
 
 # ==================== ENDPOINTS ====================
 
+
+class ReplaceBenRequest(BaseModel):
+    new_ben: str = Field(..., description="New Billed Entity Number to swap to")
+
+
+@router.post("/profile/replace-ben")
+async def replace_ben(
+    data: ReplaceBenRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Replace the applicant BEN for demo/test accounts.
+
+    Verifies the new BEN with USAC, updates the profile, clears old FRN data,
+    and triggers a background data sync.
+    """
+    from ...services.demo_identity_service import swap_demo_identity
+
+    result = swap_demo_identity(
+        db=db,
+        user=current_user,
+        kind="ben",
+        new_id=data.new_ben,
+        background_tasks=background_tasks,
+    )
+    return {"success": True, **result}
+
+
 @router.post("/register", response_model=ApplicantTokenResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("3/minute")
 async def register_applicant(

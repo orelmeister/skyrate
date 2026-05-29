@@ -110,6 +110,12 @@ function VendorPortalPage() {
     service_provider_name: string | null;
   } | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
+
+  // Replace SPIN modal state (demo/test accounts)
+  const [showReplaceSpinModal, setShowReplaceSpinModal] = useState(false);
+  const [replaceSpinInput, setReplaceSpinInput] = useState("");
+  const [replacingSpinLoading, setReplacingSpinLoading] = useState(false);
+  const [replaceSpinError, setReplaceSpinError] = useState<string | null>(null);
   
   // Entity detail modal state
   const [selectedEntity, setSelectedEntity] = useState<ServicedEntity | null>(null);
@@ -466,6 +472,44 @@ function VendorPortalPage() {
       setSpinError("Failed to save SPIN. Please try again.");
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  // Replace SPIN handler (demo/test accounts)
+  const isDemoAccount = user?.email?.includes('test_') || user?.email?.includes('demo') || user?.role === 'admin' || user?.role === 'super';
+
+  const handleReplaceSpin = async () => {
+    const newSpin = replaceSpinInput.trim();
+    if (!newSpin) {
+      setReplaceSpinError("Please enter the new SPIN");
+      return;
+    }
+    setReplacingSpinLoading(true);
+    setReplaceSpinError(null);
+    try {
+      const response = await api.replaceVendorSpin(newSpin);
+      if (response.success && response.data) {
+        const d = response.data;
+        setShowReplaceSpinModal(false);
+        setReplaceSpinInput("");
+        // Refresh profile
+        const profileRes = await api.getVendorProfile();
+        if (profileRes.success && profileRes.data) {
+          setProfile(profileRes.data.profile);
+          setSpinInput(profileRes.data.profile.spin || "");
+        }
+        alert(
+          `[OK] Swapped to ${d.name || d.new_id}. Building snapshot in background...\n\n` +
+          `Old SPIN: ${d.old_id}\nNew SPIN: ${d.new_id}`
+        );
+      } else {
+        setReplaceSpinError(response.error || "Failed to replace SPIN");
+      }
+    } catch (error: any) {
+      console.error("Failed to replace SPIN:", error);
+      setReplaceSpinError(error?.message || "Failed to replace SPIN");
+    } finally {
+      setReplacingSpinLoading(false);
     }
   };
 
@@ -3897,9 +3941,22 @@ function VendorPortalPage() {
                 {profile?.spin && !spinValidation && (
                   <div className="p-4 bg-slate-50 rounded-xl">
                     <div className="flex items-center justify-between">
-                      <div>
+                      <div className="flex items-center gap-2">
                         <span className="text-sm text-slate-500">Current SPIN:</span>
                         <span className="ml-2 font-mono font-semibold">{profile.spin}</span>
+                        {isDemoAccount && (
+                          <button
+                            onClick={() => {
+                              setReplaceSpinInput("");
+                              setReplaceSpinError(null);
+                              setShowReplaceSpinModal(true);
+                            }}
+                            className="ml-2 px-2 py-1 text-[11px] font-medium text-amber-700 hover:text-white hover:bg-amber-600 border border-amber-200 hover:border-amber-600 rounded-md transition"
+                            title="Replace this SPIN with a different one (test/demo accounts only)"
+                          >
+                            Replace
+                          </button>
+                        )}
                       </div>
                       <button
                         onClick={() => setActiveTab("my-entities")}
@@ -4043,6 +4100,63 @@ function VendorPortalPage() {
                 )}
               </div>
             </div>
+
+            {/* Replace SPIN Modal (demo/test accounts) */}
+            {showReplaceSpinModal && (
+              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => !replacingSpinLoading && setShowReplaceSpinModal(false)}>
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-1">Replace SPIN</h3>
+                  <p className="text-sm text-slate-500 mb-3">
+                    Swap <span className="font-mono font-semibold text-slate-900">{profile?.spin || "current SPIN"}</span> for a different Service Provider.
+                    Profile is updated and data is rebuilt in the background.
+                  </p>
+                  <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg mb-3">
+                    <p className="text-[11px] text-amber-800">
+                      <strong>Demo helper</strong> — visible because this is a test/demo account. Lets you retarget onto any vendor SPIN on the fly.
+                    </p>
+                  </div>
+
+                  <input
+                    type="text"
+                    value={replaceSpinInput}
+                    onChange={(e) => setReplaceSpinInput(e.target.value)}
+                    placeholder="Enter new SPIN (e.g., 143032945)"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono mb-3"
+                    autoFocus
+                    onKeyDown={(e) => e.key === 'Enter' && !replacingSpinLoading && handleReplaceSpin()}
+                  />
+
+                  {replaceSpinError && (
+                    <p className="text-xs text-red-600 mb-3">{replaceSpinError}</p>
+                  )}
+
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setShowReplaceSpinModal(false)}
+                      disabled={replacingSpinLoading}
+                      className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleReplaceSpin}
+                      disabled={replacingSpinLoading || !replaceSpinInput.trim()}
+                      className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition"
+                    >
+                      {replacingSpinLoading ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Replacing...
+                        </>
+                      ) : 'Verify & Replace'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
         </div>

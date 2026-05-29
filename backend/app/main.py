@@ -74,11 +74,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 class PerfTimingMiddleware(BaseHTTPMiddleware):
-    """perf_v2: record per-request latency + cache-hit flag for /v1 endpoints.
+    """perf_v2: record per-request latency + cache-hit flag + source tag for /v1 endpoints.
 
     Endpoint code calls ``perf_metrics_context.set_cache_hit(True)`` when it
     serves a response from user_usac_cache. The contextvar is read here.
     A response header ``X-Cache: hit`` is also emitted for client visibility.
+    Source/rows/partial are read from ``request.state`` (set by utils.source_tag).
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:
@@ -98,6 +99,28 @@ class PerfTimingMiddleware(BaseHTTPMiddleware):
                     status_code=response.status_code,
                     cache_hit=cache_hit,
                 )
+                # Structured telemetry log
+                source = getattr(request.state, "data_source", None)
+                rows = getattr(request.state, "data_rows", None)
+                partial = getattr(request.state, "data_partial", None)
+                user_id = getattr(request.state, "user_id", None)
+                extra_parts = []
+                if source:
+                    extra_parts.append(f"source={source}")
+                if user_id:
+                    extra_parts.append(f"user_id={user_id}")
+                if rows is not None:
+                    extra_parts.append(f"rows={rows}")
+                if partial is not None:
+                    extra_parts.append(f"partial={str(partial).lower()}")
+                extra = " ".join(extra_parts)
+                if duration_ms > 1000 or source:
+                    level = "SLOW" if duration_ms > 1000 else "OK"
+                    logger.info(
+                        f"[perf] {level} path={path} method={request.method} "
+                        f"status={response.status_code} duration_ms={duration_ms:.0f} "
+                        f"cache_hit={cache_hit} {extra}"
+                    )
             if cache_hit:
                 response.headers["X-Cache"] = "hit"
             response.headers["Server-Timing"] = f"app;dur={duration_ms:.1f}"
