@@ -15,7 +15,13 @@ from sqlalchemy.orm import Session
 from ..models.user import User
 from ..models.consultant import ConsultantProfile, ConsultantCRN, ConsultantSchool
 from ..models.vendor import VendorProfile
-from ..models.applicant import ApplicantProfile, ApplicantFRN, ApplicantBEN
+from ..models.applicant import (
+    ApplicantProfile,
+    ApplicantFRN,
+    ApplicantBEN,
+    ApplicantStatusHistory,
+    ApplicantAutoAppeal,
+)
 from ..models.user_usac_cache import UserUsacCache
 from ..utils.demo_gate import is_demo_user
 from ..services.usac_service import get_usac_service
@@ -320,6 +326,17 @@ def _swap_ben(db: Session, user: User, new_ben: str) -> dict:
 
     # Transaction: update BEN + clear old FRN data
     try:
+        # Delete dependent child rows first (FKs to applicant_frns without ON DELETE CASCADE)
+        frn_ids_subq = db.query(ApplicantFRN.id).filter(
+            ApplicantFRN.applicant_profile_id == profile.id,
+        )
+        deleted_history = db.query(ApplicantStatusHistory).filter(
+            ApplicantStatusHistory.frn_id.in_(frn_ids_subq)
+        ).delete(synchronize_session=False)
+        deleted_appeals = db.query(ApplicantAutoAppeal).filter(
+            ApplicantAutoAppeal.frn_id.in_(frn_ids_subq)
+        ).delete(synchronize_session=False)
+
         # Delete old FRN records for this profile
         deleted_frns = db.query(ApplicantFRN).filter(
             ApplicantFRN.applicant_profile_id == profile.id,
@@ -374,7 +391,11 @@ def _swap_ben(db: Session, user: User, new_ben: str) -> dict:
         "name": org_name,
         "old_id": old_ben or "",
         "new_id": new_ben,
-        "counts": {"frns_deleted": deleted_frns},
+        "counts": {
+            "frns_deleted": deleted_frns,
+            "status_history_deleted": deleted_history,
+            "auto_appeals_deleted": deleted_appeals,
+        },
     }
 
 
