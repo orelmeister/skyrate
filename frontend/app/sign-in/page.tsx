@@ -230,10 +230,10 @@ export default function SignInPage() {
           </p>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-300 to-indigo-300 flex items-center justify-center text-purple-700 font-semibold shadow-md">
-              JM
+              AB
             </div>
             <div>
-              <div className="text-white font-medium">Jennifer Martinez</div>
+              <div className="text-white font-medium">Ari Bernstein</div>
               <div className="text-purple-200 text-sm">E-Rate Consultant, California</div>
             </div>
           </div>
