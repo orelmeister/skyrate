@@ -4,13 +4,13 @@ import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowLeft, Shield, CheckCircle, AlertTriangle, BarChart3, FileText, Sparkles, Zap, BookOpen, Clock } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate Compliance AI: We Tested It on 144 Real Form 470s [FY2026 Results] | SkyRate",
-  description: "SkyRate's AI Compliance Engine scanned 144 real Certified Form 470 filings for FCC §54.503 violations in 5 minutes. See the methodology, rule-fire rates, and what every E-Rate applicant should fix before USAC PIA review.",
+  title: "E-Rate Compliance AI 2026 [See Our 144 Form 470 Results] | SkyRate",
+  description: "Discover what happens when AI scans 144 real E-Rate Form 470 filings. Uncover the top compliance violations you must fix before USAC PIA review.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/blog/erate-compliance-ai-validation-2026" },
   openGraph: {
-    title: "E-Rate Compliance AI: We Tested It on 144 Real Form 470s [FY2026 Results] | SkyRate",
-    description: "SkyRate's AI Compliance Engine scanned 144 real Certified Form 470 filings for FCC §54.503 violations in 5 minutes. See the methodology, rule-fire rates, and what every E-Rate applicant should fix before USAC PIA review.",
+    title: "E-Rate Compliance AI 2026 [See Our 144 Form 470 Results] | SkyRate",
+    description: "Discover what happens when AI scans 144 real E-Rate Form 470 filings. Uncover the top compliance violations you must fix before USAC PIA review.",
     url: "https://skyrate.ai/blog/erate-compliance-ai-validation-2026",
     siteName: "SkyRate AI",
     type: "article",

@@ -5,13 +5,13 @@ import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowRight, ArrowLeft, Clock, Sparkles, BookOpen, DollarSign, Calculator, Laptop, Wifi, Server, CheckCircle, AlertTriangle, TrendingUp, Users } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate Category 2 Budget 2026 — Exact Amounts Per Student",
-  description: "Look up your school's exact 2026–2027 Category 2 budget. Updated USAC formula, free calculator, and what changed for FY2026. Includes equipment eligibility list.",
+  title: "E-Rate Category 2 Budget 2026 [Calculate Exact Amounts] | SkyRate",
+  description: "Calculate your school's exact 2026–2027 Category 2 budget. Master the updated USAC formula and download our free equipment eligibility list.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/blog/erate-category-2-budget-guide" },
   openGraph: {
-    title: "E-Rate Category 2 Budget 2026 — Exact Amounts Per Student",
-    description: "Look up your school's exact 2026–2027 Category 2 budget. Updated USAC formula, free calculator, and what changed for FY2026. Includes equipment eligibility list.",
+    title: "E-Rate Category 2 Budget 2026 [Calculate Exact Amounts] | SkyRate",
+    description: "Calculate your school's exact 2026–2027 Category 2 budget. Master the updated USAC formula and download our free equipment eligibility list.",
     url: "https://skyrate.ai/blog/erate-category-2-budget-guide",
     siteName: "SkyRate AI",
     type: "article",

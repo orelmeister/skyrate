@@ -52,7 +52,7 @@ const staticArticles = [
     category: "Analysis",
   },
   {
-    title: "How to Appeal an E-Rate Denial: Step-by-Step Guide",
+    title: "How to Appeal an E-Rate Denial 2026 [Step-by-Step + AI Template]",
     teaser:
       "Learn the exact process for crafting a winning E-Rate appeal, from analyzing your denial letter to submitting supporting documentation. Our AI-powered approach has a 98% success rate.",
     icon: FileText,
@@ -61,7 +61,7 @@ const staticArticles = [
     category: "Guide",
   },
   {
-    title: "Understanding E-Rate Form 470: A Complete Guide",
+    title: "E-Rate Form 470 Guide 2026 — File & Win Bids [Step-by-Step + Free Checklist]",
     teaser:
       "Form 470 is the starting point for E-Rate competitive bidding. We break down every section, common mistakes, and how vendors can find opportunities before anyone else.",
     icon: Search,
@@ -70,7 +70,7 @@ const staticArticles = [
     category: "Guide",
   },
   {
-    title: "Top 10 E-Rate Denial Reasons and How to Fix Them",
+    title: "Top 10 E-Rate Denial Reasons 2026 [How to Fix Each One]",
     teaser:
       "From missing documentation to competitive bidding violations — we analyze the most common E-Rate denial codes and show you how to prevent and resolve each one.",
     icon: AlertTriangle,
@@ -79,7 +79,7 @@ const staticArticles = [
     category: "Analysis",
   },
   {
-    title: "E-Rate Category 2 Budget: Everything You Need to Know",
+    title: "E-Rate Category 2 Budget Guide 2026 [Exact Amounts Per Student]",
     teaser:
       "Category 2 budgets fund internal connections, Wi-Fi, and managed broadband services. Understand your school's C2 budget cap, five-year cycles, and how to maximize every dollar.",
     icon: DollarSign,

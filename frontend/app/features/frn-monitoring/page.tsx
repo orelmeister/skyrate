@@ -3,12 +3,12 @@ import Link from "next/link";
 import { Check, ArrowRight, Bell, Activity, Clock, Mail, BarChart3, Shield, Database, History } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "FRN Tracker — Real-Time E-Rate Status Alerts (Free 2026)",
+  title: "E-Rate FRN Tracker 2026 [Free Real-Time Status Alerts] | SkyRate",
   description: "Track every E-Rate FRN in real time. Free instant alerts the moment USAC commits, denies, or flags your funding. No credit card. Trusted by E-Rate consultants nationwide.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/features/frn-monitoring" },
   openGraph: {
-    title: "FRN Tracker — Real-Time E-Rate Status Alerts (Free 2026)",
+    title: "E-Rate FRN Tracker 2026 [Free Real-Time Status Alerts] | SkyRate",
     description: "Track every E-Rate FRN in real time. Free instant alerts the moment USAC commits, denies, or flags your funding. No credit card. Trusted by E-Rate consultants nationwide.",
     url: "https://skyrate.ai/features/frn-monitoring",
     siteName: "SkyRate AI",
@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "FRN Tracker — Real-Time E-Rate Status Alerts (Free 2026)",
+    title: "E-Rate FRN Tracker 2026 [Free Real-Time Status Alerts] | SkyRate",
     description: "Track every E-Rate FRN in real time. Free instant alerts when USAC commits, denies, or flags your funding.",
   },
 };

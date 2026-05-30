@@ -5,13 +5,13 @@ import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowRight, ArrowLeft, FileText, AlertTriangle, Search, Clock, CheckCircle, Sparkles, BookOpen, Shield, XCircle, Ban, Calendar, DollarSign } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Top 10 E-Rate Denial Reasons 2026 — and How to Fix Each One",
-  description: "The exact reasons USAC denies E-Rate funding in FY2026, with proven fixes for each. Includes downloadable appeal templates. Updated May 2026.",
+  title: "Top 10 E-Rate Denial Reasons 2026 [How to Fix Each One] | SkyRate",
+  description: "Discover the exact reasons USAC denies E-Rate funding in FY2026, and learn proven fixes for each. Download free appeal templates today.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/blog/top-erate-denial-reasons" },
   openGraph: {
-    title: "Top 10 E-Rate Denial Reasons 2026 — and How to Fix Each One",
-    description: "The exact reasons USAC denies E-Rate funding in FY2026, with proven fixes for each. Includes downloadable appeal templates. Updated May 2026.",
+    title: "Top 10 E-Rate Denial Reasons 2026 [How to Fix Each One] | SkyRate",
+    description: "Discover the exact reasons USAC denies E-Rate funding in FY2026, and learn proven fixes for each. Download free appeal templates today.",
     url: "https://skyrate.ai/blog/top-erate-denial-reasons",
     siteName: "SkyRate AI",
     type: "article",

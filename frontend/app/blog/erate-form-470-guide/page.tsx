@@ -5,13 +5,13 @@ import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowRight, ArrowLeft, FileText, Search, Clock, CheckCircle, Sparkles, BookOpen, Users, ShoppingCart, Target, BarChart3, Filter } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate Form 470 Guide 2026 — File & Win Bids | SkyRate",
-  description: "Learn exactly how to file E-Rate Form 470 in FY2026. Covers the 28-day bid window, vendor pitfalls, and the free SkyRate checklist used by 500+ districts.",
+  title: "E-Rate Form 470 Guide 2026 [File & Win More Bids] | SkyRate",
+  description: "Learn exactly how to file E-Rate Form 470 in FY2026. Avoid common vendor pitfalls and download the free SkyRate checklist used by 500+ districts.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/blog/erate-form-470-guide" },
   openGraph: {
-    title: "E-Rate Form 470 Guide 2026 — File & Win Bids | SkyRate",
-    description: "Learn exactly how to file E-Rate Form 470 in FY2026. Covers the 28-day bid window, vendor pitfalls, and the free SkyRate checklist used by 500+ districts.",
+    title: "E-Rate Form 470 Guide 2026 [File & Win More Bids] | SkyRate",
+    description: "Learn exactly how to file E-Rate Form 470 in FY2026. Avoid common vendor pitfalls and download the free SkyRate checklist used by 500+ districts.",
     url: "https://skyrate.ai/blog/erate-form-470-guide",
     siteName: "SkyRate AI",
     type: "article",

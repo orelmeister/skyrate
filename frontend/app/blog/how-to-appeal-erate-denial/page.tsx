@@ -5,13 +5,13 @@ import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowRight, ArrowLeft, FileText, AlertTriangle, Search, Clock, CheckCircle, Sparkles, BookOpen, Scale } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "How to Appeal an E-Rate Denial: Step-by-Step Guide | SkyRate AI",
-  description: "Learn how to appeal an E-Rate denial with our comprehensive guide. Understand denial codes, build your case, cite FCC orders, and submit a winning appeal letter.",
+  title: "How to Appeal an E-Rate Denial 2026 [Step-by-Step Guide] | SkyRate",
+  description: "Learn how to successfully appeal an E-Rate denial. Build a winning case using our free templates and proven FCC order citations.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/blog/how-to-appeal-erate-denial" },
   openGraph: {
-    title: "How to Appeal an E-Rate Denial: Step-by-Step Guide",
-    description: "Complete guide to appealing E-Rate denials with templates and strategies.",
+    title: "How to Appeal an E-Rate Denial 2026 [Step-by-Step Guide] | SkyRate",
+    description: "Learn how to successfully appeal an E-Rate denial. Build a winning case using our free templates and proven FCC order citations.",
     url: "https://skyrate.ai/blog/how-to-appeal-erate-denial",
     siteName: "SkyRate AI",
     type: "article",

@@ -5,13 +5,13 @@ import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowRight, ArrowLeft, Clock, Sparkles, BookOpen, Target, MapPin, Zap, Filter, Users, TrendingUp, FileText, CheckCircle, AlertTriangle, Search, DollarSign, BarChart3, Globe } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate Vendor Strategy: Finding Form 470 Opportunities | SkyRate AI",
-  description: "Learn proven strategies for E-Rate vendors to find and win Form 470 opportunities. Discover how to track postings, filter by manufacturer, and win more bids.",
+  title: "E-Rate Vendor Strategy 2026 [Find & Win Form 470 Bids] | SkyRate",
+  description: "Learn proven strategies for E-Rate vendors to find and win Form 470 opportunities. Start tracking postings and dominate your state's RFPs.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/blog/erate-vendor-form-470-strategy" },
   openGraph: {
-    title: "E-Rate Vendor Strategy: Finding Form 470 Opportunities",
-    description: "Proven strategies for E-Rate vendors to find and respond to Form 470 opportunities.",
+    title: "E-Rate Vendor Strategy 2026 [Find & Win Form 470 Bids] | SkyRate",
+    description: "Learn proven strategies for E-Rate vendors to find and win Form 470 opportunities. Start tracking postings and dominate your state's RFPs.",
     url: "https://skyrate.ai/blog/erate-vendor-form-470-strategy",
     siteName: "SkyRate AI",
     type: "article",

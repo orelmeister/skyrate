@@ -5,13 +5,13 @@ import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowRight, ArrowLeft, Clock, Sparkles, BookOpen, Monitor, BarChart3, Zap, Shield, Users, Brain, FileText, CheckCircle, AlertTriangle, Search, TrendingUp } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate Consultant Software: What to Look For | SkyRate AI",
-  description: "Find the best E-Rate consultant software. Compare features like FRN tracking, denial analysis, appeal generation, and portfolio management to grow your practice.",
+  title: "Best E-Rate Consultant Software 2026 [Compare Top Features] | SkyRate",
+  description: "Compare the best E-Rate consultant software for 2026. Discover how FRN tracking and automated appeal generation can rapidly grow your practice.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/blog/erate-consultant-software-guide" },
   openGraph: {
-    title: "E-Rate Consultant Software: What to Look For",
-    description: "Guide to choosing the right E-Rate consultant software for your practice.",
+    title: "Best E-Rate Consultant Software 2026 [Compare Top Features] | SkyRate",
+    description: "Compare the best E-Rate consultant software for 2026. Discover how FRN tracking and automated appeal generation can rapidly grow your practice.",
     url: "https://skyrate.ai/blog/erate-consultant-software-guide",
     siteName: "SkyRate AI",
     type: "article",
