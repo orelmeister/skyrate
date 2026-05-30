@@ -234,7 +234,7 @@ def _swap_spin(db: Session, user: User, new_spin: str) -> dict:
             detail=result.get("error", f"Invalid SPIN {new_spin} - not found in USAC") if result else f"SPIN {new_spin} verification failed",
         )
 
-    provider_name = result.get("provider_name") or result.get("company_name") or ""
+    provider_name = result.get("service_provider_name") or result.get("provider_name") or result.get("company_name") or ""
 
     # If primary validation didn't return a name, try fallback lookup
     if not provider_name:
