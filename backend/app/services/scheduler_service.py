@@ -1161,24 +1161,53 @@ def refresh_frn_disbursements():
 
         # Batch fetch disbursement data from USAC (dataset hbj5-2bpj)
         unique_frns = list(set(r.frn for r in frn_rows if r.frn))
-        batch_size = 200
+        batch_size = 50  # Socrata limits IN clause cardinality / URL length
+        import requests as _req
+        import time as _time
 
         for i in range(0, len(unique_frns), batch_size):
             batch = unique_frns[i:i + batch_size]
-            try:
-                quoted = ",".join(f"'{f}'" for f in batch)
-                url = "https://opendata.usac.org/resource/hbj5-2bpj.json"
-                params = {
-                    "$where": f"frn IN ({quoted})",
-                    "$limit": 5000,
-                    "$select": "frn, funding_year, total_authorized_disbursement, last_date_to_invoice, form_bear_flag, form_spi_flag",
-                }
-                import requests as _req
-                resp = _req.get(url, params=params, timeout=30)
-                resp.raise_for_status()
-                data = resp.json()
+            data = None
+            # Retry with exponential backoff on transient errors
+            for attempt in range(3):
+                try:
+                    quoted = ",".join(f"'{f}'" for f in batch)
+                    url = "https://opendata.usac.org/resource/hbj5-2bpj.json"
+                    params = {
+                        "$where": f"frn IN ({quoted})",
+                        "$limit": 5000,
+                        "$select": "frn, funding_year, total_authorized_disbursement, last_date_to_invoice, form_bear_flag, form_spi_flag",
+                    }
+                    resp = _req.get(url, params=params, timeout=30)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    break  # success
+                except _req.exceptions.HTTPError as http_err:
+                    code = http_err.response.status_code if http_err.response is not None else 0
+                    if code in (400, 429, 500, 502, 503, 504) and attempt < 2:
+                        wait = (4 ** attempt)  # 1s, 4s, 16s
+                        logger.warning(
+                            f"[disbursements] Batch {i} attempt {attempt+1} got HTTP {code}, "
+                            f"retrying in {wait}s (FRNs {batch[0]}..{batch[-1]})"
+                        )
+                        _time.sleep(wait)
+                    else:
+                        raise
+                except Exception:
+                    if attempt < 2:
+                        _time.sleep(4 ** attempt)
+                    else:
+                        raise
 
-                # Aggregate by FRN
+            if data is None:
+                logger.warning(
+                    f"[disbursements] Batch {i} permanently failed after 3 attempts "
+                    f"(FRNs {batch[0]}..{batch[-1]}), skipping"
+                )
+                continue
+
+            # Aggregate by FRN
+            try:
                 frn_agg = {}
                 for row in data:
                     frn_key = row.get("frn", "")
@@ -1239,12 +1268,19 @@ def refresh_frn_disbursements():
                     updated += 1
 
                 db.commit()
+                logger.info(f"[disbursements] Batch {i} processed: {len(frn_agg)} FRNs")
             except Exception as e:
-                logger.warning(f"[disbursements] Batch {i} failed: {e}")
+                logger.warning(f"[disbursements] Batch {i} DB write failed: {e}")
                 try:
                     db.rollback()
                 except Exception:
                     pass
+                # Reconnect session if connection was lost
+                try:
+                    db.execute(db.query(AdminFRNSnapshot.frn).limit(1))
+                except Exception:
+                    db.close()
+                    db = SessionLocal()
 
         logger.info(f"[disbursements] Refresh complete: {updated} FRNs updated")
     except Exception as e:

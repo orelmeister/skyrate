@@ -236,11 +236,17 @@ def _swap_spin(db: Session, user: User, new_spin: str) -> dict:
 
     provider_name = result.get("provider_name") or result.get("company_name") or ""
 
+    # If primary validation didn't return a name, try fallback lookup
+    if not provider_name:
+        fallback = _verify_spin_fallback(new_spin)
+        if fallback and fallback.get("provider_name"):
+            provider_name = fallback["provider_name"]
+
     # Transaction: update SPIN + clear search history
     try:
         profile.spin = new_spin
-        if provider_name:
-            profile.company_name = provider_name
+        # Always update company_name (even to empty) so stale name is cleared
+        profile.company_name = provider_name or profile.company_name
 
         db.commit()
     except Exception as e:
