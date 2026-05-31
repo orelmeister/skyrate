@@ -1159,15 +1159,50 @@ def refresh_admin_frn_snapshot():
                 else:
                     inserts.append(AdminFRNSnapshot(**rec))
             
-            if inserts:
-                for i in range(0, len(inserts), 1000):
-                    db.bulk_save_objects(inserts[i:i+1000])
-            if changes:
-                for i in range(0, len(changes), 1000):
-                    db.bulk_save_objects(changes[i:i+1000])
-            
-            db.commit()
-            logger.info(f"Admin FRN snapshot refreshed: {len(inserts)} inserts, {updates} updates, {len(changes)} alerts queued")
+            # Commit in-place updates (dirty ORM objects) in batches
+            # Flush updates accumulated on existing objects first
+            batch_commit_size = 500
+            try:
+                db.flush()
+                db.commit()
+            except Exception as flush_err:
+                logger.warning(f"Admin FRN snapshot flush updates failed: {flush_err}")
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+
+            # Insert new rows in chunks of 500
+            insert_ok = 0
+            for i in range(0, len(inserts), batch_commit_size):
+                chunk = inserts[i:i + batch_commit_size]
+                try:
+                    db.bulk_save_objects(chunk)
+                    db.commit()
+                    insert_ok += len(chunk)
+                except Exception as ins_err:
+                    logger.warning(f"Admin FRN snapshot insert batch {i} failed: {ins_err}")
+                    try:
+                        db.rollback()
+                    except Exception:
+                        pass
+
+            # Persist change-queue entries in chunks of 500
+            change_ok = 0
+            for i in range(0, len(changes), batch_commit_size):
+                chunk = changes[i:i + batch_commit_size]
+                try:
+                    db.bulk_save_objects(chunk)
+                    db.commit()
+                    change_ok += len(chunk)
+                except Exception as chg_err:
+                    logger.warning(f"Admin FRN snapshot change-queue batch {i} failed: {chg_err}")
+                    try:
+                        db.rollback()
+                    except Exception:
+                        pass
+
+            logger.info(f"Admin FRN snapshot refreshed: {insert_ok}/{len(inserts)} inserts, {updates} updates, {change_ok}/{len(changes)} alerts queued")
         else:
             logger.info("Admin FRN snapshot: No FRN records found to store")
 
@@ -1266,15 +1301,49 @@ def background_refresh_portfolio(uid: int, uemail: str, ben_to_org: dict):
                     rec["last_refreshed"] = now
                     inserts.append(AdminFRNSnapshot(**rec))
         
-        if inserts:
-            for i in range(0, len(inserts), 1000):
-                db_bg.bulk_save_objects(inserts[i:i+1000])
-        if changes:
-            for i in range(0, len(changes), 1000):
-                db_bg.bulk_save_objects(changes[i:i+1000])
-        
-        db_bg.commit()
-        logger.info(f"Background refresh for user {uid} complete: {len(inserts)} inserts, {updates} updates, {len(changes)} alerts")
+        # Commit in-place updates (dirty ORM objects) first
+        batch_commit_size = 500
+        try:
+            db_bg.flush()
+            db_bg.commit()
+        except Exception as flush_err:
+            logger.warning(f"Background refresh flush updates failed for user {uid}: {flush_err}")
+            try:
+                db_bg.rollback()
+            except Exception:
+                pass
+
+        # Insert new rows in chunks of 500
+        insert_ok = 0
+        for i in range(0, len(inserts), batch_commit_size):
+            chunk = inserts[i:i + batch_commit_size]
+            try:
+                db_bg.bulk_save_objects(chunk)
+                db_bg.commit()
+                insert_ok += len(chunk)
+            except Exception as ins_err:
+                logger.warning(f"Background refresh insert batch {i} failed for user {uid}: {ins_err}")
+                try:
+                    db_bg.rollback()
+                except Exception:
+                    pass
+
+        # Persist change-queue entries in chunks of 500
+        change_ok = 0
+        for i in range(0, len(changes), batch_commit_size):
+            chunk = changes[i:i + batch_commit_size]
+            try:
+                db_bg.bulk_save_objects(chunk)
+                db_bg.commit()
+                change_ok += len(chunk)
+            except Exception as chg_err:
+                logger.warning(f"Background refresh change-queue batch {i} failed for user {uid}: {chg_err}")
+                try:
+                    db_bg.rollback()
+                except Exception:
+                    pass
+
+        logger.info(f"Background refresh for user {uid} complete: {insert_ok}/{len(inserts)} inserts, {updates} updates, {change_ok}/{len(changes)} alerts")
     except Exception as e:
         logger.error(f"Background refresh exception: {str(e)}")
     finally:
@@ -1447,7 +1516,10 @@ def refresh_frn_disbursements():
                     if row.get("form_spi_flag") in ("Y", "y", True, "true", "1"):
                         entry["spi"] = True
 
-                # Upsert into frn_disbursements
+                # UPSERT into frn_disbursements using MySQL ON DUPLICATE KEY UPDATE
+                from sqlalchemy.dialects.mysql import insert as mysql_insert
+
+                upsert_rows = []
                 for frn_key, agg in frn_agg.items():
                     mode = "MIX" if (agg["bear"] and agg["spi"]) else ("BEAR" if agg["bear"] else ("SPI" if agg["spi"] else None))
                     last_date = None
@@ -1459,27 +1531,27 @@ def refresh_frn_disbursements():
                         except Exception:
                             pass
 
-                    existing = db.query(FRNDisbursement).filter(
-                        FRNDisbursement.frn == frn_key,
-                        FRNDisbursement.funding_year == str(agg["funding_year"]),
-                    ).first()
-                    if existing:
-                        existing.total_authorized_disbursement = agg["total"]
-                        existing.last_invoice_date = last_date
-                        existing.invoicing_mode = mode
-                        existing.disbursement_count = agg["count"]
-                        existing.updated_at = now
-                    else:
-                        db.add(FRNDisbursement(
-                            frn=frn_key,
-                            funding_year=str(agg["funding_year"]),
-                            total_authorized_disbursement=agg["total"],
-                            last_invoice_date=last_date,
-                            invoicing_mode=mode,
-                            disbursement_count=agg["count"],
-                            updated_at=now,
-                        ))
-                    updated += 1
+                    upsert_rows.append({
+                        "frn": frn_key,
+                        "funding_year": str(agg["funding_year"]),
+                        "total_authorized_disbursement": agg["total"],
+                        "last_invoice_date": last_date,
+                        "invoicing_mode": mode,
+                        "disbursement_count": agg["count"],
+                        "updated_at": now,
+                    })
+
+                if upsert_rows:
+                    stmt = mysql_insert(FRNDisbursement).values(upsert_rows)
+                    stmt = stmt.on_duplicate_key_update(
+                        total_authorized_disbursement=stmt.inserted.total_authorized_disbursement,
+                        last_invoice_date=stmt.inserted.last_invoice_date,
+                        invoicing_mode=stmt.inserted.invoicing_mode,
+                        disbursement_count=stmt.inserted.disbursement_count,
+                        updated_at=stmt.inserted.updated_at,
+                    )
+                    db.execute(stmt)
+                    updated += len(upsert_rows)
 
                 db.commit()
                 logger.info(f"[disbursements] Batch {i} processed: {len(frn_agg)} FRNs")
