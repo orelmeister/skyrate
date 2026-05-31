@@ -680,6 +680,16 @@ def _run_schema_migrations(engine):
         ("frn_report_history", "delivery_modes", "JSON DEFAULT NULL", None),
         ("frn_report_history", "recipient_email", "VARCHAR(255) DEFAULT NULL", None),
         ("frn_report_history", "viewed_at", "DATETIME DEFAULT NULL", None),
+        # FRN status change queue — enrichment columns for digest rendering
+        ("frn_status_changes_queue", "ben", "VARCHAR(64) DEFAULT NULL", None),
+        ("frn_status_changes_queue", "scope_type", "VARCHAR(16) DEFAULT NULL", None),
+        ("frn_status_changes_queue", "scope_value", "VARCHAR(128) DEFAULT NULL", None),
+        ("frn_status_changes_queue", "old_amount", "FLOAT DEFAULT NULL", None),
+        ("frn_status_changes_queue", "new_amount", "FLOAT DEFAULT NULL", None),
+        ("frn_status_changes_queue", "entity_name", "VARCHAR(512) DEFAULT NULL", None),
+        ("frn_status_changes_queue", "processed_at", "DATETIME DEFAULT NULL", None),
+        # Alert config — FRN digest tracking
+        ("alert_configs", "last_frn_digest_at", "DATETIME DEFAULT NULL", None),
     ]
     
     try:
@@ -749,6 +759,29 @@ def _run_schema_migrations(engine):
                     conn.execute(text(f"DROP INDEX `{idx_name}` ON `vendor_profiles`"))
                     conn.execute(text("CREATE INDEX `ix_vendor_profiles_spin` ON `vendor_profiles` (`spin`)"))
                 logger.info(f"Migration: Dropped unique index {idx_name} on vendor_profiles.spin, replaced with non-unique index")
+
+        # Add index on frn_status_changes_queue.ben if column exists but index doesn't
+        if inspector.has_table("frn_status_changes_queue"):
+            existing_indexes = inspector.get_indexes("frn_status_changes_queue")
+            has_ben_idx = any("ben" in idx.get("column_names", []) for idx in existing_indexes)
+            existing_cols = [c["name"] for c in inspector.get_columns("frn_status_changes_queue")]
+            if "ben" in existing_cols and not has_ben_idx:
+                with engine.begin() as conn:
+                    conn.execute(text("CREATE INDEX `ix_frn_status_changes_queue_ben` ON `frn_status_changes_queue` (`ben`)"))
+                logger.info("Migration: Added index ix_frn_status_changes_queue_ben")
+
+        # Retro-enable daily_digest for consultant/vendor users who have it OFF
+        if inspector.has_table("alert_configs") and inspector.has_table("users"):
+            with engine.begin() as conn:
+                result = conn.execute(text("""
+                    UPDATE alert_configs ac
+                    INNER JOIN users u ON ac.user_id = u.id
+                    SET ac.daily_digest = 1
+                    WHERE u.role IN ('consultant', 'vendor')
+                      AND ac.daily_digest = 0
+                """))
+                if result.rowcount > 0:
+                    logger.info(f"Migration: Retro-enabled daily_digest for {result.rowcount} consultant/vendor users")
     except Exception as e:
         logger.error(f"Schema migration error (non-fatal): {e}")
 

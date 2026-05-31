@@ -1080,8 +1080,14 @@ def refresh_admin_frn_snapshot():
                                 FrnStatusChangeQueue(
                                     user_id=rec["user_id"],
                                     frn=rec["frn"],
+                                    ben=rec.get("ben"),
+                                    scope_type="ben",
+                                    scope_value=rec.get("ben"),
                                     old_status=ex_status,
                                     new_status=rec_status,
+                                    old_amount=float(ex.amount_committed or 0),
+                                    new_amount=float(rec.get("amount_committed") or 0),
+                                    entity_name=rec.get("organization_name"),
                                     created_at=now,
                                     processed=0
                                 )
@@ -1180,8 +1186,14 @@ def background_refresh_portfolio(uid: int, uemail: str, ben_to_org: dict):
                                 FrnStatusChangeQueue(
                                     user_id=uid,
                                     frn=rec["frn"],
+                                    ben=rec.get("ben"),
+                                    scope_type="ben",
+                                    scope_value=rec.get("ben"),
                                     old_status=ex_status,
                                     new_status=rec_status,
+                                    old_amount=float(ex.amount_committed or 0),
+                                    new_amount=float(rec.get("amount_committed") or 0),
+                                    entity_name=rec.get("organization_name"),
                                     created_at=now,
                                     processed=0
                                 )

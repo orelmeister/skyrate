@@ -495,6 +495,9 @@ class AlertService:
         
         if not config:
             user = self.db.query(User).filter(User.id == user_id).first()
+            # Consultants and vendors get daily digest ON by default
+            role = user.role if user else None
+            digest_default = role in (UserRole.CONSULTANT.value, UserRole.VENDOR.value)
             config = AlertConfig(
                 user_id=user_id,
                 alert_on_denial=True,
@@ -508,7 +511,7 @@ class AlertService:
                 min_alert_amount=0,
                 email_notifications=True,
                 in_app_notifications=True,
-                daily_digest=False,  # Off by default
+                daily_digest=digest_default,
                 notification_email=user.email if user else None,
                 alert_filters={}
             )

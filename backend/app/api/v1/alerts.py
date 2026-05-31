@@ -56,7 +56,11 @@ def get_or_create_alert_config(user_id: int, db: Session) -> AlertConfig:
     config = db.query(AlertConfig).filter(AlertConfig.user_id == user_id).first()
     
     if not config:
-        config = AlertConfig(user_id=user_id)
+        from app.models.user import UserRole
+        user = db.query(User).filter(User.id == user_id).first()
+        role = user.role if user else None
+        digest_default = role in (UserRole.CONSULTANT.value, UserRole.VENDOR.value)
+        config = AlertConfig(user_id=user_id, daily_digest=digest_default)
         db.add(config)
         db.commit()
         db.refresh(config)
