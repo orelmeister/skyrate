@@ -82,6 +82,9 @@ class AlertConfig(Base):
     # FRN digest tracking
     last_frn_digest_at = Column(DateTime, nullable=True)  # Last time FRN digest was sent
     
+    # SMS gate (Commit 5: SMS-on-denial)
+    sms_enabled = Column(Boolean, default=False, nullable=False)
+    
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
