@@ -513,34 +513,94 @@ def _parse_date(date_str: str) -> Optional[datetime]:
 
 def send_daily_digests():
     """
-    Send daily digest emails to users who opted in.
-    Runs at 8 AM every day.
+    Send daily FRN digest emails to users who opted in.
+    Reads from frn_status_changes_queue and groups by user.
+    Runs at 07:00 America/New_York every day.
     """
-    logger.info("Running daily digest job...")
+    logger.info("Running FRN daily digest job...")
     
     db = SessionLocal()
     try:
-        alert_service = AlertService(db)
+        from ..models.frn_status_change import FrnStatusChangeQueue
+        from .email_service import EmailService
         
-        # Iterate all active users; auto-create AlertConfig if missing,
-        # then respect the per-user daily_digest flag.
-        users = db.query(User).filter(User.is_active == True).all()
+        alert_service = AlertService(db)
+        email_service = EmailService()
+        now = datetime.utcnow()
+        
+        # Get all unprocessed queue items
+        pending = db.query(FrnStatusChangeQueue).filter(
+            FrnStatusChangeQueue.processed == 0
+        ).order_by(FrnStatusChangeQueue.created_at.asc()).all()
+        
+        if not pending:
+            logger.info("FRN daily digest: no pending changes. Skipping.")
+            db.close()
+            return
+        
+        # Group by user_id
+        by_user = {}
+        for item in pending:
+            if item.user_id not in by_user:
+                by_user[item.user_id] = []
+            by_user[item.user_id].append(item)
         
         sent_count = 0
-        for user in users:
-            try:
-                config = alert_service.get_or_create_alert_config(user.id)
-                if not config.daily_digest:
-                    continue
-                if alert_service.send_daily_digest(user.id):
-                    sent_count += 1
-            except Exception as e:
-                logger.error(f"Error sending digest to user {user.id}: {e}")
+        skipped_count = 0
         
-        logger.info(f"Daily digest complete. Sent {sent_count} digests.")
+        for user_id, user_changes in by_user.items():
+            try:
+                config = alert_service.get_or_create_alert_config(user_id)
+                if not config.daily_digest:
+                    skipped_count += 1
+                    # Still mark as processed so they don't pile up
+                    for c in user_changes:
+                        c.processed = 1
+                        c.processed_at = now
+                    continue
+                
+                user = db.query(User).filter(User.id == user_id).first()
+                if not user or not user.is_active:
+                    for c in user_changes:
+                        c.processed = 1
+                        c.processed_at = now
+                    continue
+                
+                email_to = config.notification_email or user.email
+                user_name = user.first_name or user.email.split("@")[0]
+                
+                success = email_service.send_frn_digest_email(
+                    to_email=email_to,
+                    user_name=user_name,
+                    changes=user_changes,
+                    role=user.role or "consultant",
+                )
+                
+                if success:
+                    sent_count += 1
+                    config.last_frn_digest_at = now
+                
+                # Mark all as processed regardless (avoid re-sending on failure)
+                for c in user_changes:
+                    c.processed = 1
+                    c.processed_at = now
+                    
+            except Exception as e:
+                logger.error(f"Error sending FRN digest to user {user_id}: {e}")
+                # Mark as processed to avoid infinite retry
+                for c in user_changes:
+                    c.processed = 1
+                    c.processed_at = now
+        
+        db.commit()
+        logger.info(f"FRN daily digest complete. Sent {sent_count} digests, skipped {skipped_count} (opt-out). {len(pending)} queue items processed.")
         
     except Exception as e:
-        logger.error(f"Daily digest job failed: {e}")
+        logger.error(f"FRN daily digest job failed: {e}")
+        try:
+            db.rollback()
+        except:
+            pass
     finally:
         db.close()
 
@@ -1623,12 +1683,12 @@ def init_scheduler():
         next_run_time=boot + timedelta(seconds=90),
     )
 
-    # Daily digest - 8 AM every day
+    # Daily FRN digest - 07:00 America/New_York every day
     scheduler.add_job(
         send_daily_digests,
-        trigger=CronTrigger(hour=8, minute=0),
+        trigger=CronTrigger(hour=7, minute=0, timezone='America/New_York'),
         id='daily_digest',
-        name='Send daily digest emails',
+        name='Send FRN daily digest emails',
         replace_existing=True
     )
 

@@ -490,6 +490,123 @@ View all in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000
             email_type='digest'
         )
     
+    def send_frn_digest_email(
+        self,
+        to_email: str,
+        user_name: str,
+        changes: list,
+        role: str = "consultant",
+    ) -> bool:
+        """
+        Send FRN status change digest email using queue items.
+        Each change is a FrnStatusChangeQueue row with ben, frn, old_status, new_status,
+        old_amount, new_amount, entity_name.
+        """
+        from ..core.config import settings
+        
+        frontend_url = getattr(settings, 'FRONTEND_URL', 'https://skyrate.ai')
+        
+        # Group by entity/BEN
+        by_entity = {}
+        for c in changes:
+            key = c.entity_name or c.ben or "Unknown"
+            if key not in by_entity:
+                by_entity[key] = []
+            by_entity[key].append(c)
+        
+        # Build rows HTML
+        rows_html = ""
+        denial_count = 0
+        for entity, items in by_entity.items():
+            for item in items:
+                new_status = item.new_status or "Unknown"
+                is_denial = "denied" in new_status.lower()
+                if is_denial:
+                    denial_count += 1
+                status_color = "#dc2626" if is_denial else "#059669" if "committed" in new_status.lower() or "funded" in new_status.lower() else "#d97706"
+                
+                # Deep link: /dashboard/frn-status?frn=XXXXX
+                frn_link = f"{frontend_url}/dashboard/frn-status?frn={item.frn}"
+                
+                amount_cell = ""
+                if item.old_amount is not None and item.new_amount is not None and item.old_amount != item.new_amount:
+                    amount_cell = f"${item.old_amount:,.0f} -> ${item.new_amount:,.0f}"
+                elif item.new_amount is not None:
+                    amount_cell = f"${item.new_amount:,.0f}"
+                
+                rows_html += f"""
+                <tr>
+                    <td style="padding:8px 12px; border-bottom:1px solid #e5e7eb;">{entity}</td>
+                    <td style="padding:8px 12px; border-bottom:1px solid #e5e7eb;"><a href="{frn_link}" style="color:#2563eb;">{item.frn}</a></td>
+                    <td style="padding:8px 12px; border-bottom:1px solid #e5e7eb;">{item.old_status or '-'}</td>
+                    <td style="padding:8px 12px; border-bottom:1px solid #e5e7eb; color:{status_color}; font-weight:600;">{new_status}</td>
+                    <td style="padding:8px 12px; border-bottom:1px solid #e5e7eb;">{amount_cell}</td>
+                </tr>
+                """
+        
+        subject = f"[SkyRate] FRN Digest - {len(changes)} status change{'s' if len(changes) != 1 else ''}"
+        if denial_count:
+            subject += f" ({denial_count} denial{'s' if denial_count != 1 else ''})"
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"></head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0;">
+            <div style="max-width: 650px; margin: 0 auto; padding: 20px;">
+                <div style="background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+                    <h1 style="margin: 0; font-size: 22px;">FRN Status Digest</h1>
+                    <p style="margin: 5px 0 0 0; opacity: 0.8;">{datetime.now().strftime('%B %d, %Y')} | {len(changes)} change{'s' if len(changes) != 1 else ''} across {len(by_entity)} entit{'ies' if len(by_entity) != 1 else 'y'}</p>
+                </div>
+                <div style="background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+                    <p>Hi {user_name},</p>
+                    <p>Here are your FRN status changes since your last digest:</p>
+                    
+                    <table style="width:100%; border-collapse:collapse; background:white; border-radius:6px; overflow:hidden; font-size:13px;">
+                        <thead>
+                            <tr style="background:#f3f4f6;">
+                                <th style="padding:10px 12px; text-align:left; font-weight:600;">Entity</th>
+                                <th style="padding:10px 12px; text-align:left; font-weight:600;">FRN</th>
+                                <th style="padding:10px 12px; text-align:left; font-weight:600;">Old Status</th>
+                                <th style="padding:10px 12px; text-align:left; font-weight:600;">New Status</th>
+                                <th style="padding:10px 12px; text-align:left; font-weight:600;">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows_html}
+                        </tbody>
+                    </table>
+                    
+                    <a href="{frontend_url}/dashboard/frn-status" style="display:inline-block; background:#2563eb; color:white; padding:12px 24px; text-decoration:none; border-radius:6px; margin-top:15px;">
+                        View Full Dashboard
+                    </a>
+                </div>
+                <div style="text-align:center; color:#6b7280; font-size:12px; margin-top:20px;">
+                    <p>You're receiving this because FRN digest is enabled in your settings.</p>
+                    <p><a href="{frontend_url}/settings/notifications" style="color:#2563eb;">Manage preferences</a></p>
+                    <p>&copy; {datetime.now().year} SkyRate AI. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        # Plain text fallback
+        text_content = f"FRN Status Digest - {datetime.now().strftime('%B %d, %Y')}\n\n"
+        text_content += f"Hi {user_name},\n\n{len(changes)} FRN status changes:\n\n"
+        for c in changes[:20]:
+            text_content += f"- FRN {c.frn} ({c.entity_name or c.ben}): {c.old_status} -> {c.new_status}\n"
+        if len(changes) > 20:
+            text_content += f"\n...and {len(changes) - 20} more. View all: {frontend_url}/dashboard/frn-status\n"
+        
+        return self.send_email(
+            to_email=to_email,
+            subject=subject,
+            html_content=html_content,
+            text_content=text_content,
+            email_type='frn_digest'
+        )
+
     def send_weekly_summary_email(
         self,
         to_email: str,
