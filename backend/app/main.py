@@ -690,6 +690,7 @@ def _run_schema_migrations(engine):
         ("frn_status_changes_queue", "processed_at", "DATETIME DEFAULT NULL", None),
         # Alert config — FRN digest tracking
         ("alert_configs", "last_frn_digest_at", "DATETIME DEFAULT NULL", None),
+        ("alert_configs", "sms_enabled", "TINYINT(1) DEFAULT 0", None),
     ]
     
     try:
@@ -769,6 +770,23 @@ def _run_schema_migrations(engine):
                 with engine.begin() as conn:
                     conn.execute(text("CREATE INDEX `ix_frn_status_changes_queue_ben` ON `frn_status_changes_queue` (`ben`)"))
                 logger.info("Migration: Added index ix_frn_status_changes_queue_ben")
+
+            # Composite (scope_type, scope_value) index — speeds up per-user digest queries
+            has_scope_idx = any(
+                idx.get("column_names", []) == ["scope_type", "scope_value"]
+                for idx in existing_indexes
+            )
+            if (
+                "scope_type" in existing_cols
+                and "scope_value" in existing_cols
+                and not has_scope_idx
+            ):
+                with engine.begin() as conn:
+                    conn.execute(text(
+                        "CREATE INDEX `ix_frn_status_changes_queue_scope` "
+                        "ON `frn_status_changes_queue` (`scope_type`, `scope_value`)"
+                    ))
+                logger.info("Migration: Added composite index ix_frn_status_changes_queue_scope")
 
         # Retro-enable daily_digest for consultant/vendor users who have it OFF
         if inspector.has_table("alert_configs") and inspector.has_table("users"):
