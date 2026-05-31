@@ -1059,6 +1059,10 @@ async def add_monitored_ben(
     db.add(new_ben)
     db.commit()
     db.refresh(new_ben)
+
+    # Phase 5: event-driven USAC import — sync FRN data in background
+    from ...services.frn_sync_service import sync_frns_for_ben
+    background_tasks.add_task(sync_frns_for_ben, request.ben, current_user.id)
     
     return {
         "ben": new_ben.to_dict(),

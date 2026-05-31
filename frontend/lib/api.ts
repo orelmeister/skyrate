@@ -289,6 +289,7 @@ export interface FRNStatusResponse {
   total_frns: number;
   summary: FRNStatusSummary;
   frns: FRNStatusRecord[];
+  last_refreshed?: string;
   error?: string;
 }
 

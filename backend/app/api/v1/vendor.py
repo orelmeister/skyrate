@@ -511,15 +511,23 @@ async def get_frn_status(
     try:
         from utils.usac_client import USACDataClient
         from app.services.cache_service import get_cached, set_cached, make_cache_key
+        from datetime import datetime as _dt
         
         # Check cache first
         cache_key = make_cache_key("vendor_frn", spin=profile.spin, year=year, status=status, pending_reason=pending_reason)
         cached = get_cached(db, cache_key)
         if cached:
+            # Ensure last_refreshed is present for frontend display
+            if isinstance(cached, dict) and "last_refreshed" not in cached:
+                cached["last_refreshed"] = _dt.utcnow().isoformat()
             return cached
         
         client = USACDataClient()
         result = client.get_frn_status_by_spin(profile.spin, year, status, pending_reason, limit)
+        
+        # Tag with fetch timestamp
+        if isinstance(result, dict):
+            result["last_refreshed"] = _dt.utcnow().isoformat()
         
         # Cache for 6 hours
         set_cached(db, cache_key, result)

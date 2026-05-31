@@ -773,6 +773,7 @@ async def list_crns(
 @router.post("/crns/add")
 async def add_crn(
     data: AddCRNRequest,
+    background_tasks: BackgroundTasks,
     profile: ConsultantProfile = Depends(get_consultant_profile),
     current_user: User = Depends(require_role("admin", "consultant", "super")),
     db: Session = Depends(get_db)
@@ -854,6 +855,10 @@ async def add_crn(
     imported = _import_schools_for_crn(profile, crn_value, result["schools"], db)
     
     db.commit()
+
+    # Phase 5: event-driven USAC import — sync FRN data in background
+    from ...services.frn_sync_service import sync_portfolio_for_crn
+    background_tasks.add_task(sync_portfolio_for_crn, crn_value, current_user.id)
     
     return {
         "success": True,
@@ -3570,7 +3575,7 @@ async def get_portfolio_frn_status(
     try:
         from utils.usac_client import USACDataClient
         from ..models.admin_frn_snapshot import AdminFRNSnapshot
-        from ..models.frn_status_change import FRNStatusChange
+        from ..models.frn_status_change import FrnStatusChangeQueue
 
         def _background_refresh_portfolio(uid: int, uemail: str, bens: list, p_schools: list):
             db_bg = SessionLocal()
@@ -3626,11 +3631,17 @@ async def get_portfolio_frn_status(
                             if status_changed or amt_changed:
                                 if status_changed:
                                     changes.append(
-                                        FRNStatusChange(
+                                        FrnStatusChangeQueue(
                                             user_id=uid,
                                             frn=rec["frn"],
+                                            ben=rec["ben"],
+                                            scope_type="crn",
+                                            scope_value="",
                                             old_status=ex_status,
                                             new_status=rec_status,
+                                            old_amount=float(ex.amount_committed or 0),
+                                            new_amount=float(rec.get("amount_committed") or 0),
+                                            entity_name=entity_name,
                                             created_at=now,
                                             processed=0
                                         )

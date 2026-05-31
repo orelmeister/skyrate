@@ -3331,20 +3331,33 @@ function ConsultantPortalPage() {
                       <p className="text-teal-100 mt-1">Track FRN status across all your schools</p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => loadPortfolioFRNStatus(portfolioFrnYear, portfolioFrnStatusFilter, portfolioFrnPendingReason, true)}
-                    disabled={portfolioFrnLoading}
-                    className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
-                  >
+                  <div className="text-right text-sm text-teal-100">
                     {portfolioFrnLoading ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        Loading...
-                      </>
+                      <span className="flex items-center gap-2">
+                        <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        Syncing...
+                      </span>
                     ) : (
-                      <>Refresh Data</>
+                      <span>
+                        {portfolioFrnData?.last_refreshed ? (
+                          <>Last synced {(() => {
+                            const diff = Math.round((Date.now() - new Date(portfolioFrnData.last_refreshed).getTime()) / 60000);
+                            if (diff < 1) return "just now";
+                            if (diff < 60) return `${diff} min ago`;
+                            if (diff < 1440) return `${Math.round(diff / 60)}h ago`;
+                            return `${Math.round(diff / 1440)}d ago`;
+                          })()}</>
+                        ) : "Not yet synced"}
+                        {" — "}
+                        <button
+                          onClick={() => loadPortfolioFRNStatus(portfolioFrnYear, portfolioFrnStatusFilter, portfolioFrnPendingReason, true)}
+                          className="underline hover:text-white transition-colors"
+                        >
+                          Resync now
+                        </button>
+                      </span>
                     )}
-                  </button>
+                  </div>
                 </div>
               </div>
 
