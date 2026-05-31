@@ -1661,9 +1661,9 @@ function VendorPortalPage() {
                     </span>
                   ) : (
                     <span>
-                      {(frnStatusData as Record<string, unknown>)?.last_refreshed ? (
+                      {(frnStatusData as unknown as Record<string, unknown>)?.last_refreshed ? (
                         <>Last synced {(() => {
-                          const diff = Math.round((Date.now() - new Date((frnStatusData as Record<string, unknown>).last_refreshed as string).getTime()) / 60000);
+                          const diff = Math.round((Date.now() - new Date((frnStatusData as unknown as Record<string, unknown>).last_refreshed as string).getTime()) / 60000);
                           if (diff < 1) return "just now";
                           if (diff < 60) return `${diff} min ago`;
                           if (diff < 1440) return `${Math.round(diff / 60)}h ago`;
