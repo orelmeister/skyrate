@@ -1020,7 +1020,7 @@ async def activate_crn_after_payment(
         db.add(crn_record)
     
     # Import schools
-    imported = _import_schools_for_crn(profile, crn_value, result["schools"], db)
+    imported = _import_schools_for_crn(profile, crn_value, result.get("schools") or [], db)
     
     db.commit()
     
@@ -1790,7 +1790,6 @@ async def get_dashboard_stats(
         for app in form_471_data:
             # Get status from form_471_frn_status_name
             status = str(app.get("form_471_frn_status_name", "")).lower()
-            ben = app.get("ben")
             
             # Get committed amount for C1 calculation
             committed = float(app.get("funding_commitment_request") or 0)
@@ -1816,7 +1815,7 @@ async def get_dashboard_stats(
                     bens_with_denials.add(str(ben))
             elif status == "funded":
                 funded_count += 1
-            elif status in ["pending", "wave ready", "certified"]:
+            elif status in ["pending", "wave ready", "certified", "submitted"]:
                 pending_count += 1
                 
     except Exception as e:
@@ -2367,8 +2366,8 @@ async def list_schools(
                     school_data["status"] = "Pending"
                     school_data["status_color"] = "yellow"
                 else:
-                    actual_status = latest.get("form_471_frn_status_name") or latest.get("application_status") or "Unknown"
-                    school_data["status"] = actual_status if actual_status else "Unknown"
+                    actual = latest.get("form_471_frn_status_name") or latest.get("application_status")
+                    school_data["status"] = actual if actual else "No Applications"
                     school_data["status_color"] = "gray"
                 
                 school_data["latest_year"] = latest_year
@@ -2492,9 +2491,31 @@ async def add_school(
                 actual = latest.get("form_471_frn_status_name") or latest.get("application_status")
                 school_status = actual if actual else "No Applications"
                 status_color = "gray"
-        else:
-            school_status = "No Applications"
-            status_color = "gray"
+            
+            school = ConsultantSchool(
+                consultant_profile_id=profile.id,
+                ben=data.ben,
+                frn=data.frn,
+                school_name=school_name or "Unknown",
+                state=state,
+                status=school_status,
+                status_color=status_color,
+                applications_count=applications_count,
+                latest_year=int(latest_year) if latest_year else None,
+                last_synced=datetime.utcnow(),
+                notes=data.notes,
+                tags=data.tags or [],
+            )
+            db.add(school)
+            db.commit()
+            db.refresh(school)
+            
+            return {"success": True, "school": school.to_dict()}
+        
+        db.commit()
+        
+        return {"success": True, "school": school.to_dict()}
+    
     except Exception as e:
         print(f"Error fetching USAC data for BEN {data.ben}: {e}")
         # Continue with defaults if USAC lookup fails
@@ -3535,63 +3556,109 @@ async def get_portfolio_frn_status(
     # Step 2: refresh=True path - live USAC fetch + persist to local table.
     try:
         from utils.usac_client import USACDataClient
-        client = USACDataClient()
-        # Always fetch the full set (no year filter on USAC side), then we can
-        # filter locally and have all years cached for future filter changes.
-        batch_result = client.get_frn_status_batch(bens=school_bens)
-        if not batch_result.get("success"):
-            raise Exception(batch_result.get("error", "Batch FRN query failed"))
+        from ..models.admin_frn_snapshot import AdminFRNSnapshot
+        from ..models.frn_status_change import FRNStatusChange
 
-        # Map ben -> user info for the snapshot rows.
-        ben_to_org = {s.ben: s.school_name for s in profile.schools}
-        new_rows = []
-        now = datetime.utcnow()
-        for ben_key, ben_data in batch_result.get("results", {}).items():
-            entity_name = ben_data.get("entity_name") or ben_to_org.get(str(ben_key)) or ""
-            for frn in ben_data.get("frns", []):
-                new_rows.append(
-                    AdminFRNSnapshot(
-                        frn=frn.get("frn", ""),
-                        status=frn.get("status", "Unknown"),
-                        funding_year=str(frn.get("funding_year", "")),
-                        amount_requested=float(frn.get("commitment_amount") or frn.get("amount") or 0),
-                        amount_committed=float(frn.get("disbursed_amount") or 0),
-                        service_type=frn.get("service_type", ""),
-                        organization_name=entity_name,
-                        ben=str(ben_key),
-                        user_id=current_user.id,
-                        user_email=current_user.email,
-                        source="consultant",
-                        fcdl_date=frn.get("fcdl_date", ""),
-                        last_refreshed=now,
-                    )
-                )
+        def _background_refresh_portfolio(uid: int, uemail: str, bens: list, p_schools: list):
+            db_bg = SessionLocal()
+            try:
+                client = USACDataClient()
+                batch_result = client.get_frn_status_batch(bens=bens)
+                if not batch_result.get("success"):
+                    logger.error(f"Background refresh failed: {batch_result.get('error')}")
+                    return
 
-        # Insert new rows. We do NOT delete the old ones — the read path
-        # de-duplicates by (ben, frn) keeping the most recent last_refreshed
-        # so stale rows are harmless. Avoiding the DELETE also avoids long
-        # row-lock contention with the nightly scheduler refresh.
-        if new_rows:
-            db.bulk_save_objects(new_rows)
-            db.commit()
+                ben_to_org = {s.ben: s.school_name for s in p_schools}
+                now = datetime.utcnow()
+                
+                # Fetch existing to diff
+                existing_map = {}
+                for i in range(0, len(bens), 100):
+                    chunk = bens[i:i + 100]
+                    rows = db_bg.query(AdminFRNSnapshot).filter(AdminFRNSnapshot.ben.in_(chunk)).all()
+                    for r in rows:
+                        existing_map[(r.ben, r.frn)] = r
 
-        # Re-query with the user-selected filters.
-        rows = _query_local(school_bens, year, status_filter)
-        disb_map = _get_disb_map([r.frn for r in rows])
-        all_frns, schools_data, status_counts = _aggregate_rows(rows, disb_map)
-        from ...utils.source_tag import tag_source
-        tag_source(request, "usac_live", rows=len(all_frns), partial=False, user_id=current_user.id)
+                inserts = []
+                changes = []
+                updates = 0
+
+                for ben_key, ben_data in batch_result.get("results", {}).items():
+                    entity_name = ben_data.get("entity_name") or ben_to_org.get(str(ben_key)) or ""
+                    for frn in ben_data.get("frns", []):
+                        rec = {
+                            "frn": frn.get("frn", ""),
+                            "status": frn.get("status", "Unknown"),
+                            "funding_year": str(frn.get("funding_year", "")),
+                            "amount_requested": float(frn.get("commitment_amount") or frn.get("amount") or 0),
+                            "amount_committed": float(frn.get("disbursed_amount") or 0),
+                            "service_type": frn.get("service_type", ""),
+                            "organization_name": entity_name,
+                            "ben": str(ben_key),
+                            "user_id": uid,
+                            "user_email": uemail,
+                            "source": "consultant",
+                            "fcdl_date": frn.get("fcdl_date", ""),
+                        }
+
+                        key = (rec["ben"], rec["frn"])
+                        if key in existing_map:
+                            ex = existing_map[key]
+                            rec_status = str(rec["status"]) if rec.get("status") else "Unknown"
+                            ex_status = str(ex.status) if ex.status else "Unknown"
+                            
+                            status_changed = ex_status != rec_status
+                            amt_changed = float(ex.amount_committed or 0) != float(rec.get("amount_committed") or 0)
+                            
+                            if status_changed or amt_changed:
+                                if status_changed:
+                                    changes.append(
+                                        FRNStatusChange(
+                                            user_id=uid,
+                                            frn=rec["frn"],
+                                            old_status=ex_status,
+                                            new_status=rec_status,
+                                            created_at=now,
+                                            processed=0
+                                        )
+                                    )
+                                ex.status = rec_status
+                                ex.amount_committed = rec.get("amount_committed")
+                                ex.last_refreshed = now
+                                updates += 1
+                        else:
+                            rec["last_refreshed"] = now
+                            inserts.append(AdminFRNSnapshot(**rec))
+                
+                if inserts:
+                    for i in range(0, len(inserts), 1000):
+                        db_bg.bulk_save_objects(inserts[i:i+1000])
+                if changes:
+                    for i in range(0, len(changes), 1000):
+                        db_bg.bulk_save_objects(changes[i:i+1000])
+                
+                db_bg.commit()
+                logger.info(f"Background refresh for user {uid} complete: {len(inserts)} inserts, {updates} updates, {len(changes)} alerts")
+            except Exception as e:
+                logger.error(f"Background refresh exception: {str(e)}")
+            finally:
+                db_bg.close()
+
+        # Fire and return 202 Accepted instead of blocking
+        background_tasks.add_task(
+            _background_refresh_portfolio, 
+            current_user.id, 
+            current_user.email, 
+            school_bens, 
+            profile.schools
+        )
+        
         return {
             "success": True,
-            "from_cache": False,
-            "source": "usac_live",
-            "last_refreshed": now.isoformat(),
-            "total_frns": len(all_frns),
-            "total_schools": len(schools_data),
-            "summary": status_counts,
-            "year_filter": year,
-            "schools": schools_data,
+            "accepted": True,
+            "message": "Refresh started. Fetching thousands of records from USAC in the background. Please check back in 1-2 minutes.",
         }
+
     except Exception as e:
         try:
             db.rollback()
@@ -3958,6 +4025,32 @@ async def get_comprehensive_school_data(
         )
         c2_data = cached_c2.get("data", []) if cached_c2.get("success") else []
         
+        if not applications and not c2_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No data found for BEN {ben}"
+            )
+        
+        # Get basic info
+        entity_info = {}
+        if applications:
+            latest = applications[0]
+            entity_info = {
+                "name": latest.get('organization_name'),
+                "state": latest.get('state'),
+                "entity_type": latest.get('organization_entity_type_name'),
+                "contact_name": latest.get('cnct_name'),
+                "contact_email": latest.get('cnct_email'),
+            }
+        elif c2_data:
+            record = c2_data[0]
+            entity_info = {
+                "name": record.get('billed_entity_name'),
+                "state": record.get('state'),
+                "city": record.get('city'),
+                "entity_type": record.get('applicant_type'),
+            }
+        
         # Process C2 budget by cycle
         c2_budgets = {}
         for record in c2_data:
@@ -3976,11 +4069,6 @@ async def get_comprehensive_school_data(
         
         for app in applications:
             year = app.get('funding_year', 'Unknown')
-            service_type = (app.get('form_471_service_type_name') or '').lower()
-            status_name = app.get('form_471_frn_status_name', 'Unknown')
-            committed = float(app.get('funding_commitment_request', 0) or 0)
-            requested = float(app.get('original_total_pre_discount_costs', 0) or app.get('total_pre_discount_costs', 0) or 0)
-            
             if year not in years_data:
                 years_data[year] = {
                     "year": year,
@@ -3996,31 +4084,31 @@ async def get_comprehensive_school_data(
                 "frn": app.get('funding_request_number'),
                 "application_number": app.get('application_number'),
                 "service_type": app.get('form_471_service_type_name'),
-                "status": status_name,
-                "committed_amount": committed,
-                "requested_amount": requested,
+                "status": app.get('form_471_frn_status_name', 'Unknown'),
+                "committed_amount": app.get('funding_commitment_request', 0) or app.get('original_committed_amount', 0),
+                "requested_amount": app.get('original_total_pre_discount_costs', 0) or app.get('total_pre_discount_costs', 0) or 0,
                 "spin_name": app.get('spin_name'),
             })
             
             # Category 1 = Voice, Data Transmission, Internet Access
             # Category 2 = Internal Connections, Basic Maintenance, MIBS
-            is_c2 = 'internal' in service_type or 'maintenance' in service_type or 'mibs' in service_type
-            
+            is_c2 = 'internal' in app.get('form_471_service_type_name', '') or 'maintenance' in app.get('form_471_service_type_name', '') or 'mibs' in app.get('form_471_service_type_name', '')
+
             if is_c2:
-                years_data[year]["c2_funded"] += committed
-                years_data[year]["c2_requested"] += requested
-                if 'funded' in status_name.lower() or 'committed' in status_name.lower():
-                    c2_totals["funded"] += committed
-                c2_totals["requested"] += requested
+                years_data[year]["c2_funded"] += app.get('funding_commitment_request', 0) or app.get('original_committed_amount', 0)
+                years_data[year]["c2_requested"] += app.get('original_total_pre_discount_costs', 0) or app.get('total_pre_discount_costs', 0) or 0
+                if 'funded' in app.get('form_471_frn_status_name', 'Unknown').lower() or 'committed' in app.get('form_471_frn_status_name', 'Unknown').lower():
+                    c2_totals["funded"] += app.get('funding_commitment_request', 0) or app.get('original_committed_amount', 0)
+                c2_totals["requested"] += app.get('original_total_pre_discount_costs', 0) or app.get('total_pre_discount_costs', 0) or 0
             else:
-                years_data[year]["c1_funded"] += committed
-                years_data[year]["c1_requested"] += requested
-                if 'funded' in status_name.lower() or 'committed' in status_name.lower():
-                    c1_totals["funded"] += committed
-                c1_totals["requested"] += requested
+                years_data[year]["c1_funded"] += app.get('funding_commitment_request', 0) or app.get('original_committed_amount', 0)
+                years_data[year]["c1_requested"] += app.get('original_total_pre_discount_costs', 0) or app.get('total_pre_discount_costs', 0) or 0
+                if 'funded' in app.get('form_471_frn_status_name', 'Unknown').lower() or 'committed' in app.get('form_471_frn_status_name', 'Unknown').lower():
+                    c1_totals["funded"] += app.get('funding_commitment_request', 0) or app.get('original_committed_amount', 0)
+                c1_totals["requested"] += app.get('original_total_pre_discount_costs', 0) or app.get('total_pre_discount_costs', 0) or 0
             
             # Track status counts
-            status_key = status_name.lower()
+            status_key = app.get('form_471_frn_status_name', 'Unknown').lower()
             if status_key not in years_data[year]["status_summary"]:
                 years_data[year]["status_summary"][status_key] = 0
             years_data[year]["status_summary"][status_key] += 1

@@ -1049,11 +1049,59 @@ def refresh_admin_frn_snapshot():
 
         # Replace all rows in snapshot table atomically
         if all_frn_records:
-            db.query(AdminFRNSnapshot).delete()
+            from ..models.frn_status_change import FrnStatusChangeQueue
+            
+            existing_map = {}
+            frns = [r["frn"] for r in all_frn_records]
+            for i in range(0, len(frns), 2000):
+                chunk = frns[i:i + 2000]
+                rows = db.query(AdminFRNSnapshot).filter(AdminFRNSnapshot.frn.in_(chunk)).all()
+                for r in rows:
+                    existing_map[(r.ben, r.frn)] = r
+
+            inserts = []
+            changes = []
+            updates = 0
+
             for rec in all_frn_records:
-                db.add(AdminFRNSnapshot(**rec))
+                key = (rec["ben"], rec["frn"])
+                if key in existing_map:
+                    ex = existing_map[key]
+                    # Convert to string/float to safely compare
+                    rec_status = str(rec["status"]) if rec.get("status") else "Unknown"
+                    ex_status = str(ex.status) if ex.status else "Unknown"
+                    
+                    status_changed = ex_status != rec_status
+                    amt_changed = float(ex.amount_committed or 0) != float(rec.get("amount_committed") or 0)
+                    
+                    if status_changed or amt_changed:
+                        if status_changed and rec.get("user_id"):
+                            changes.append(
+                                FrnStatusChangeQueue(
+                                    user_id=rec["user_id"],
+                                    frn=rec["frn"],
+                                    old_status=ex_status,
+                                    new_status=rec_status,
+                                    created_at=now,
+                                    processed=0
+                                )
+                            )
+                        ex.status = rec_status
+                        ex.amount_committed = rec.get("amount_committed")
+                        ex.last_refreshed = now
+                        updates += 1
+                else:
+                    inserts.append(AdminFRNSnapshot(**rec))
+            
+            if inserts:
+                for i in range(0, len(inserts), 1000):
+                    db.bulk_save_objects(inserts[i:i+1000])
+            if changes:
+                for i in range(0, len(changes), 1000):
+                    db.bulk_save_objects(changes[i:i+1000])
+            
             db.commit()
-            logger.info(f"Admin FRN snapshot refreshed: {len(all_frn_records)} FRNs stored")
+            logger.info(f"Admin FRN snapshot refreshed: {len(inserts)} inserts, {updates} updates, {len(changes)} alerts queued")
         else:
             logger.info("Admin FRN snapshot: No FRN records found to store")
 
@@ -1065,6 +1113,100 @@ def refresh_admin_frn_snapshot():
             pass
     finally:
         db.close()
+
+
+def background_refresh_portfolio(uid: int, uemail: str, ben_to_org: dict):
+    """
+    Background task to pull USAC FRN data for a specific user's BENs and UPSERT them.
+    Used when adding a new CRN or manually requesting a refresh.
+    """
+    db_bg = SessionLocal()
+    try:
+        from utils.usac_client import USACDataClient
+        from ..models.admin_frn_snapshot import AdminFRNSnapshot
+        from ..models.frn_status_change import FrnStatusChangeQueue
+
+        client = USACDataClient()
+        bens = list(ben_to_org.keys())
+        batch_result = client.get_frn_status_batch(bens=bens)
+        if not batch_result.get("success"):
+            logger.error(f"Background refresh failed: {batch_result.get('error')}")
+            return
+
+        now = datetime.utcnow()
+        
+        # Fetch existing to diff
+        existing_map = {}
+        for i in range(0, len(bens), 100):
+            chunk = bens[i:i + 100]
+            rows = db_bg.query(AdminFRNSnapshot).filter(AdminFRNSnapshot.ben.in_(chunk)).all()
+            for r in rows:
+                existing_map[(r.ben, r.frn)] = r
+
+        inserts = []
+        changes = []
+        updates = 0
+
+        for ben_key, ben_data in batch_result.get("results", {}).items():
+            entity_name = ben_data.get("entity_name") or ben_to_org.get(str(ben_key)) or ""
+            for frn in ben_data.get("frns", []):
+                rec = {
+                    "frn": frn.get("frn", ""),
+                    "status": frn.get("status", "Unknown"),
+                    "funding_year": str(frn.get("funding_year", "")),
+                    "amount_requested": float(frn.get("commitment_amount") or frn.get("amount") or 0),
+                    "amount_committed": float(frn.get("disbursed_amount") or 0),
+                    "service_type": frn.get("service_type", ""),
+                    "organization_name": entity_name,
+                    "ben": str(ben_key),
+                    "user_id": uid,
+                    "user_email": uemail,
+                    "source": "consultant",
+                    "fcdl_date": frn.get("fcdl_date", ""),
+                }
+
+                key = (rec["ben"], rec["frn"])
+                if key in existing_map:
+                    ex = existing_map[key]
+                    rec_status = str(rec["status"]) if rec.get("status") else "Unknown"
+                    ex_status = str(ex.status) if ex.status else "Unknown"
+                    
+                    status_changed = ex_status != rec_status
+                    amt_changed = float(ex.amount_committed or 0) != float(rec.get("amount_committed") or 0)
+                    
+                    if status_changed or amt_changed:
+                        if status_changed:
+                            changes.append(
+                                FrnStatusChangeQueue(
+                                    user_id=uid,
+                                    frn=rec["frn"],
+                                    old_status=ex_status,
+                                    new_status=rec_status,
+                                    created_at=now,
+                                    processed=0
+                                )
+                            )
+                        ex.status = rec_status
+                        ex.amount_committed = rec.get("amount_committed")
+                        ex.last_refreshed = now
+                        updates += 1
+                else:
+                    rec["last_refreshed"] = now
+                    inserts.append(AdminFRNSnapshot(**rec))
+        
+        if inserts:
+            for i in range(0, len(inserts), 1000):
+                db_bg.bulk_save_objects(inserts[i:i+1000])
+        if changes:
+            for i in range(0, len(changes), 1000):
+                db_bg.bulk_save_objects(changes[i:i+1000])
+        
+        db_bg.commit()
+        logger.info(f"Background refresh for user {uid} complete: {len(inserts)} inserts, {updates} updates, {len(changes)} alerts")
+    except Exception as e:
+        logger.error(f"Background refresh exception: {str(e)}")
+    finally:
+        db_bg.close()
 
 
 def refresh_vendor_form470_snapshot():

@@ -873,9 +873,7 @@ function ConsultantPortalPage() {
   };
 
   // Load Portfolio FRN Status
-  // _retryCount is used internally for exponential backoff on warming responses;
-  // callers should leave it undefined.
-  const loadPortfolioFRNStatus = async (year?: number, statusFilter?: string, pendingReason?: string, refresh?: boolean, ben?: string, _retryCount?: number) => {
+  const loadPortfolioFRNStatus = async (year?: number, statusFilter?: string, pendingReason?: string, refresh?: boolean, ben?: string) => {
     setPortfolioFrnLoading(true);
     setPortfolioFrnError(null);
     try {
@@ -886,21 +884,6 @@ function ConsultantPortalPage() {
           // Regular consultant tried to look up a BEN not in their portfolio
           setUpgradeBen(data.ben || ben || '');
           setShowBenUpgradeModal(true);
-        } else if (data.warming) {
-          // Cache is warming in background — auto-retry with exponential backoff
-          // (20s, 30s, 45s, 60s, capped at 60s). Stops at retry 12 (~10 min total)
-          // so the spinner doesn't run forever if USAC is unavailable.
-          setPortfolioFrnData({ ...data, warming: true });
-          const next = (_retryCount ?? 0) + 1;
-          if (next > 12) {
-            setPortfolioFrnError("Cache warming is taking longer than usual. USAC may be slow — try Refresh from USAC, or come back in a few minutes.");
-            return;
-          }
-          const delayMs = Math.min(60000, [20000, 30000, 45000, 60000][Math.min(next - 1, 3)]);
-          setTimeout(() => {
-            loadPortfolioFRNStatus(year, statusFilter, pendingReason, false, ben, next);
-          }, delayMs);
-          return; // keep loading state active until retry resolves
         } else {
           setPortfolioFrnData(response.data);
         }
@@ -3346,23 +3329,21 @@ function ConsultantPortalPage() {
                     <div>
                       <h1 className="text-2xl font-bold">Portfolio FRN Status</h1>
                       <p className="text-teal-100 mt-1">Track FRN status across all your schools</p>
-                      {portfolioFrnData?.from_cache && (
-                        <p className="text-xs text-teal-200 mt-1">Data from cache - click Refresh to get latest</p>
-                      )}
                     </div>
                   </div>
                   <button
                     onClick={() => loadPortfolioFRNStatus(portfolioFrnYear, portfolioFrnStatusFilter, portfolioFrnPendingReason, true)}
                     disabled={portfolioFrnLoading}
                     className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
-                    title="Bypass cache and fetch fresh data from USAC"
                   >
                     {portfolioFrnLoading ? (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        Loading...
+                      </>
                     ) : (
-                      <span>🔄</span>
+                      <>Refresh Data</>
                     )}
-                    Refresh from USAC
                   </button>
                 </div>
               </div>
@@ -3449,53 +3430,23 @@ function ConsultantPortalPage() {
                 </div>
               </div>
 
-              {/* Warming banner — shown while backend builds the cache. Replaces the
-                  zero summary tiles so users don't think the year filter "shows 0". */}
-              {portfolioFrnData?.warming && (
-                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 flex items-start gap-4 shadow-sm">
-                  <div className="w-6 h-6 mt-0.5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin flex-shrink-0"></div>
-                  <div className="flex-1">
-                    <div className="font-semibold text-amber-900">Warming FRN cache for your portfolio</div>
-                    <div className="text-sm text-amber-800 mt-1">
-                      We&apos;re fetching live FRN data from USAC for {portfolioFrnData.total_schools || 0} schools. First load takes 1&ndash;3 minutes for large portfolios; subsequent loads are instant for 6 hours.
-                    </div>
-                    <div className="text-xs text-amber-700 mt-2">
-                      Auto-retrying&hellip; You can switch tabs or wait here.
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* Needs-refresh banner — backend has no local FRN rows for this
-                  portfolio yet. User must click Refresh from USAC, or wait for
-                  the nightly sync. */}
+                  portfolio yet. User must click Refresh Data. */}
               {portfolioFrnData?.needs_refresh && (
                 <div className="bg-sky-50 border border-sky-200 rounded-2xl p-6 flex items-start gap-4 shadow-sm">
                   <div className="text-3xl flex-shrink-0">📥</div>
                   <div className="flex-1">
                     <div className="font-semibold text-sky-900">Portfolio FRNs not loaded yet</div>
                     <div className="text-sm text-sky-800 mt-1">
-                      {portfolioFrnData.message || "Your portfolio FRN data hasn't been imported yet."}
+                      {portfolioFrnData.message || "Your portfolio FRN data hasn't been imported yet. Click 'Refresh Data' above to load it."}
                     </div>
-                    <button
-                      onClick={() => loadPortfolioFRNStatus(portfolioFrnYear, portfolioFrnStatusFilter, portfolioFrnPendingReason, true)}
-                      disabled={portfolioFrnLoading}
-                      className="mt-3 px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors text-sm font-medium inline-flex items-center gap-2 disabled:opacity-60"
-                    >
-                      {portfolioFrnLoading ? (
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <span>🔄</span>
-                      )}
-                      Refresh from USAC now
-                    </button>
                   </div>
                 </div>
               )}
 
-              {/* Summary Cards — Clickable to filter (hidden while warming or when
-                  portfolio is empty, so zero values aren't misread as real results) */}
-              {portfolioFrnData && !portfolioFrnData.warming && !portfolioFrnData.needs_refresh && (
+              {/* Summary Cards — Clickable to filter (hidden when portfolio is empty,
+                  so zero values aren't misread as real results) */}
+              {portfolioFrnData && !portfolioFrnData.needs_refresh && (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <button
                     onClick={() => { setPortfolioFrnStatusFilter(""); loadPortfolioFRNStatus(portfolioFrnYear, "", portfolioFrnPendingReason); }}
@@ -3724,20 +3675,22 @@ function ConsultantPortalPage() {
                 </div>
                 </>
               )}
+              {/* Initial Load State */}
               {!portfolioFrnLoading && !portfolioFrnData && (
                 <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
-                  <span className="text-4xl mb-4 block">📈</span>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">Portfolio FRN Status</h3>
-                  <p className="text-sm text-slate-500 mb-6 max-w-md mx-auto">
-                    Select optional filters above (year, status, pending reason) and click the button below to load FRN data across your portfolio.
+                  <div className="w-16 h-16 rounded-full bg-teal-100 flex items-center justify-center mx-auto mb-4">
+                    <span className="text-3xl">📈</span>
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900">Load FRN Status</h3>
+                  <p className="text-sm text-slate-600 mt-2 mb-4">
+                    Click the button below to load FRN data across your portfolio
                   </p>
                   <button
                     onClick={() => loadPortfolioFRNStatus(portfolioFrnYear, portfolioFrnStatusFilter, portfolioFrnPendingReason)}
                     disabled={portfolioFrnLoading}
-                    className="px-6 py-3 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-colors font-medium inline-flex items-center gap-2"
+                    className="px-6 py-2 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-colors font-medium"
                   >
-                    <span>🔍</span>
-                    Search FRN Status
+                    Load Data
                   </button>
                 </div>
               )}
@@ -3747,9 +3700,7 @@ function ConsultantPortalPage() {
                 <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
                   <div className="w-8 h-8 border-3 border-teal-200 border-t-teal-600 rounded-full animate-spin mx-auto mb-4"></div>
                   <p className="text-sm text-slate-500">
-                    {(portfolioFrnData as any)?.warming
-                      ? "Your FRN cache is warming up. This takes about 1-2 minutes for new portfolios. Retrying automatically..."
-                      : "Loading FRN status across your portfolio..."}
+                    Loading FRN status across your portfolio...
                   </p>
                 </div>
               )}

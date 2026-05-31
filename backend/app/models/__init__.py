@@ -34,6 +34,7 @@ from .prediction import PredictedLead, PredictionRefreshLog, PredictionType, Pre
 from .lead import Lead
 from .email_verification_token import EmailVerificationToken
 from .compliance_analysis import ComplianceAnalysis
+from .frn_status_change import FrnStatusChangeQueue
 
 __all__ = [
     "User",
