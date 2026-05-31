@@ -3478,14 +3478,27 @@ async def get_portfolio_frn_status(
             unique.append(r)
         return unique
 
+    _disb_table_warned = [False]
+
     def _get_disb_map(frn_list):
-        """Batch fetch disbursement data for a list of FRN strings."""
+        """Batch fetch disbursement data for a list of FRN strings.
+        Returns {} gracefully if the frn_disbursements table does not exist yet."""
         if not frn_list:
             return {}
-        disb_rows = db.query(FRNDisbursement).filter(
-            FRNDisbursement.frn.in_(frn_list)
-        ).all()
-        return {d.frn: d for d in disb_rows}
+        try:
+            disb_rows = db.query(FRNDisbursement).filter(
+                FRNDisbursement.frn.in_(frn_list)
+            ).all()
+            return {d.frn: d for d in disb_rows}
+        except Exception as e:
+            if not _disb_table_warned[0]:
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "[frn-status] frn_disbursements query failed (table may not exist): %s", e
+                )
+                _disb_table_warned[0] = True
+            db.rollback()
+            return {}
 
     # Step 1: query local denormalized table.
     if not refresh:
