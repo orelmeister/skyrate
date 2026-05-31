@@ -3574,10 +3574,11 @@ async def get_portfolio_frn_status(
     # Step 2: refresh=True path - live USAC fetch + persist to local table.
     try:
         from utils.usac_client import USACDataClient
-        from ..models.admin_frn_snapshot import AdminFRNSnapshot
-        from ..models.frn_status_change import FrnStatusChangeQueue
+        from ...models.admin_frn_snapshot import AdminFRNSnapshot
+        from ...models.frn_status_change import FrnStatusChangeQueue
 
         def _background_refresh_portfolio(uid: int, uemail: str, bens: list, p_schools: list):
+            from ...core.database import SessionLocal
             db_bg = SessionLocal()
             try:
                 client = USACDataClient()
