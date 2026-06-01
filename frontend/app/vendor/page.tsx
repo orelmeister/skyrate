@@ -154,14 +154,23 @@ function VendorPortalPage() {
     
     let filtered = frnStatusData.frns;
 
-    // Client-side search by FRN / Entity / BEN
+    // Client-side search by FRN / Entity / BEN / Pending Reason / Status / Invoicing Mode
     if (frnSearch.trim()) {
       const search = frnSearch.trim().toLowerCase();
       filtered = filtered.filter(frn =>
         (frn.frn || '').toLowerCase().includes(search) ||
         (frn.entity_name || '').toLowerCase().includes(search) ||
-        (frn.ben || '').toLowerCase().includes(search)
+        (frn.ben || '').toLowerCase().includes(search) ||
+        (frn.pending_reason || '').toLowerCase().includes(search) ||
+        (frn.status || '').toLowerCase().includes(search) ||
+        (frn.invoicing_mode || '').toLowerCase().includes(search)
       );
+    }
+
+    // Client-side filter by pending reason (separate input)
+    if (frnPendingReason.trim()) {
+      const pr = frnPendingReason.trim().toLowerCase();
+      filtered = filtered.filter(frn => (frn.pending_reason || '').toLowerCase().includes(pr));
     }
 
     // Filter by status if a filter is selected
@@ -186,7 +195,7 @@ function VendorPortalPage() {
       return frnTableSort.dir === 'asc' ? cmp : -cmp;
     });
     return sorted;
-  }, [frnStatusData?.frns, frnTableSort, frnStatusFilter, frnSearch]);
+  }, [frnStatusData?.frns, frnTableSort, frnStatusFilter, frnSearch, frnPendingReason]);
 
   // Toggle FRN table sort
   const toggleFrnTableSort = (field: string) => {

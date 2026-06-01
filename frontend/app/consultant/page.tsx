@@ -415,7 +415,10 @@ function ConsultantPortalPage() {
       filtered = filtered.filter(frn =>
         (frn.frn || '').toLowerCase().includes(search) ||
         (frn.entity_name || '').toLowerCase().includes(search) ||
-        (frn.ben || '').toLowerCase().includes(search)
+        (frn.ben || '').toLowerCase().includes(search) ||
+        (frn.pending_reason || '').toLowerCase().includes(search) ||
+        (frn.status || '').toLowerCase().includes(search) ||
+        (frn.invoicing_mode || '').toLowerCase().includes(search)
       );
     }
     // Then filter by status if a filter is selected
