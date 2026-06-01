@@ -154,20 +154,17 @@ function VendorPortalPage() {
     
     let filtered = frnStatusData.frns;
 
-    // Client-side search by FRN / Entity / BEN / Pending Reason / Status / Invoicing Mode
+    // Client-side search by FRN / Entity / BEN only (sub-status has its own input)
     if (frnSearch.trim()) {
       const search = frnSearch.trim().toLowerCase();
       filtered = filtered.filter(frn =>
         (frn.frn || '').toLowerCase().includes(search) ||
         (frn.entity_name || '').toLowerCase().includes(search) ||
-        (frn.ben || '').toLowerCase().includes(search) ||
-        (frn.pending_reason || '').toLowerCase().includes(search) ||
-        (frn.status || '').toLowerCase().includes(search) ||
-        (frn.invoicing_mode || '').toLowerCase().includes(search)
+        (frn.ben || '').toLowerCase().includes(search)
       );
     }
 
-    // Client-side filter by pending reason (separate input)
+    // Client-side filter by sub-status / pending reason (its own dedicated input)
     if (frnPendingReason.trim()) {
       const pr = frnPendingReason.trim().toLowerCase();
       filtered = filtered.filter(frn => (frn.pending_reason || '').toLowerCase().includes(pr));

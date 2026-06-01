@@ -408,18 +408,20 @@ function ConsultantPortalPage() {
   const sortedFlattenedFrns = useMemo(() => {
     if (!flattenedFrns.length) return [];
     
-    // First filter by search term
+    // Client-side search by FRN / Entity / BEN only (sub-status has its own input)
     let filtered = flattenedFrns;
     if (portfolioFrnSearch.trim()) {
       const search = portfolioFrnSearch.trim().toLowerCase();
       filtered = filtered.filter(frn =>
         (frn.frn || '').toLowerCase().includes(search) ||
         (frn.entity_name || '').toLowerCase().includes(search) ||
-        (frn.ben || '').toLowerCase().includes(search) ||
-        (frn.pending_reason || '').toLowerCase().includes(search) ||
-        (frn.status || '').toLowerCase().includes(search) ||
-        (frn.invoicing_mode || '').toLowerCase().includes(search)
+        (frn.ben || '').toLowerCase().includes(search)
       );
+    }
+    // Client-side filter by sub-status / pending reason (its own dedicated input, real-time)
+    if (portfolioFrnPendingReason.trim()) {
+      const pr = portfolioFrnPendingReason.trim().toLowerCase();
+      filtered = filtered.filter(frn => (frn.pending_reason || '').toLowerCase().includes(pr));
     }
     // Then filter by status if a filter is selected
     if (portfolioFrnStatusFilter) {
@@ -443,7 +445,7 @@ function ConsultantPortalPage() {
       return frnTableSort.dir === 'asc' ? cmp : -cmp;
     });
     return sorted;
-  }, [flattenedFrns, frnTableSort, portfolioFrnStatusFilter, portfolioFrnSearch]);
+  }, [flattenedFrns, frnTableSort, portfolioFrnStatusFilter, portfolioFrnSearch, portfolioFrnPendingReason]);
 
   // Reset visible count when the underlying dataset/filters change
   useEffect(() => {
