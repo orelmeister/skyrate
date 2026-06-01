@@ -1281,13 +1281,15 @@ def refresh_frn_disbursements():
             for attempt in range(3):
                 try:
                     quoted = ",".join(f"'{f}'" for f in batch)
-                    url = "https://opendata.usac.org/resource/hbj5-2bpj.json"
+                    # USAC dataset jpiu-tj8h = E-Rate Invoices and Authorized Disbursements (Forms 472/474).
+                    # invoice_type='Applicant' -> BEAR (Form 472); invoice_type='Service Provider' -> SPI (Form 474).
+                    url = "https://opendata.usac.org/resource/jpiu-tj8h.json"
                     params = {
-                        "$where": f"frn IN ({quoted})",
-                        "$limit": 5000,
-                        "$select": "frn, funding_year, total_authorized_disbursement, last_date_to_invoice, form_bear_flag, form_spi_flag",
+                        "$where": f"funding_request_number IN ({quoted})",
+                        "$limit": 50000,
+                        "$select": "funding_request_number, funding_year, invoice_type, approved_inv_line_amt, inv_line_completion_date",
                     }
-                    resp = _req.get(url, params=params, timeout=30)
+                    resp = _req.get(url, params=params, timeout=60)
                     resp.raise_for_status()
                     data = resp.json()
                     break  # success
@@ -1319,7 +1321,7 @@ def refresh_frn_disbursements():
             try:
                 frn_agg = {}
                 for row in data:
-                    frn_key = row.get("frn", "")
+                    frn_key = row.get("funding_request_number", "")
                     if not frn_key:
                         continue
                     if frn_key not in frn_agg:
@@ -1332,14 +1334,17 @@ def refresh_frn_disbursements():
                             "funding_year": row.get("funding_year", ""),
                         }
                     entry = frn_agg[frn_key]
-                    entry["total"] += float(row.get("total_authorized_disbursement") or 0)
+                    entry["total"] += float(row.get("approved_inv_line_amt") or 0)
                     entry["count"] += 1
-                    inv_date = row.get("last_date_to_invoice")
+                    inv_date = row.get("inv_line_completion_date")
                     if inv_date:
-                        entry["last_date"] = inv_date[:10] if len(inv_date) >= 10 else inv_date
-                    if row.get("form_bear_flag") in ("Y", "y", True, "true", "1"):
+                        inv_date_10 = inv_date[:10] if len(inv_date) >= 10 else inv_date
+                        if entry["last_date"] is None or inv_date_10 > entry["last_date"]:
+                            entry["last_date"] = inv_date_10
+                    itype = (row.get("invoice_type") or "").strip().lower()
+                    if itype == "applicant":
                         entry["bear"] = True
-                    if row.get("form_spi_flag") in ("Y", "y", True, "true", "1"):
+                    elif itype == "service provider":
                         entry["spi"] = True
 
                 # UPSERT into frn_disbursements using MySQL ON DUPLICATE KEY UPDATE
