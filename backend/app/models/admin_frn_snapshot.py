@@ -26,6 +26,7 @@ class AdminFRNSnapshot(Base):
     user_email = Column(String(256), nullable=True)
     source = Column(String(32), nullable=True)  # consultant / applicant / vendor
     fcdl_date = Column(String(64), nullable=True)
+    pending_reason = Column(String(256), nullable=True)
     last_refreshed = Column(DateTime, default=func.now(), nullable=False)
 
     __table_args__ = (

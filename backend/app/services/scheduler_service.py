@@ -1076,6 +1076,7 @@ def refresh_admin_frn_snapshot():
                                 "user_email": user_info.get("user_email"),
                                 "source": user_info.get("source", "unknown"),
                                 "fcdl_date": frn.get("fcdl_date", ""),
+                                "pending_reason": frn.get("pending_reason", ""),
                                 "last_refreshed": now,
                             })
             except Exception as e:
@@ -1102,6 +1103,7 @@ def refresh_admin_frn_snapshot():
                             "user_email": user.email if user else None,
                             "source": "vendor",
                             "fcdl_date": frn.get("fcdl_date", ""),
+                            "pending_reason": frn.get("pending_reason", ""),
                             "last_refreshed": now,
                         })
             except Exception as e:
@@ -1264,6 +1266,7 @@ def background_refresh_portfolio(uid: int, uemail: str, ben_to_org: dict):
                     "user_email": uemail,
                     "source": "consultant",
                     "fcdl_date": frn.get("fcdl_date", ""),
+                    "pending_reason": frn.get("pending_reason", ""),
                 }
 
                 key = (rec["ben"], rec["frn"])

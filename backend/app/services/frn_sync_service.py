@@ -152,6 +152,7 @@ def _sync_bens_to_snapshot(
                 "user_email": user_email,
                 "source": "consultant",
                 "fcdl_date": frn.get("fcdl_date", ""),
+                "pending_reason": frn.get("pending_reason", ""),
             }
 
             key = (rec["ben"], rec["frn"])

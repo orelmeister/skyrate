@@ -691,6 +691,8 @@ def _run_schema_migrations(engine):
         # Alert config — FRN digest tracking
         ("alert_configs", "last_frn_digest_at", "DATETIME DEFAULT NULL", None),
         ("alert_configs", "sms_enabled", "TINYINT(1) DEFAULT 0", None),
+        # Admin FRN snapshot — USAC PIA sub-status
+        ("admin_frn_snapshots", "pending_reason", "VARCHAR(256) DEFAULT NULL", None),
     ]
     
     try:

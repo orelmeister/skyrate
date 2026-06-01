@@ -3423,6 +3423,7 @@ async def get_portfolio_frn_status(
                 "ben": ben_str,
                 "entity_name": r.organization_name or "",
                 "fcdl_date": r.fcdl_date,
+                "pending_reason": r.pending_reason or "",
                 "total_authorized_disbursement": total_authorized_disbursement,
                 "last_invoice_date": last_invoice_date,
                 "invoicing_mode": invoicing_mode,
@@ -3618,6 +3619,7 @@ async def get_portfolio_frn_status(
                             "user_email": uemail,
                             "source": "consultant",
                             "fcdl_date": frn.get("fcdl_date", ""),
+                            "pending_reason": frn.get("pending_reason", ""),
                         }
 
                         key = (rec["ben"], rec["frn"])
