@@ -1135,8 +1135,10 @@ def refresh_admin_frn_snapshot():
                     
                     status_changed = ex_status != rec_status
                     amt_changed = float(ex.amount_committed or 0) != float(rec.get("amount_committed") or 0)
+                    pr_changed = (ex.pending_reason or "") != (rec.get("pending_reason") or "")
+                    fcdl_changed = (ex.fcdl_date or "") != (rec.get("fcdl_date") or "")
                     
-                    if status_changed or amt_changed:
+                    if status_changed or amt_changed or pr_changed or fcdl_changed:
                         if status_changed and rec.get("user_id"):
                             changes.append(
                                 FrnStatusChangeQueue(
@@ -1156,6 +1158,8 @@ def refresh_admin_frn_snapshot():
                             )
                         ex.status = rec_status
                         ex.amount_committed = rec.get("amount_committed")
+                        ex.pending_reason = rec.get("pending_reason", "")
+                        ex.fcdl_date = rec.get("fcdl_date", "")
                         ex.last_refreshed = now
                         updates += 1
                 else:
@@ -1277,8 +1281,10 @@ def background_refresh_portfolio(uid: int, uemail: str, ben_to_org: dict):
                     
                     status_changed = ex_status != rec_status
                     amt_changed = float(ex.amount_committed or 0) != float(rec.get("amount_committed") or 0)
+                    pr_changed = (ex.pending_reason or "") != (rec.get("pending_reason") or "")
+                    fcdl_changed = (ex.fcdl_date or "") != (rec.get("fcdl_date") or "")
                     
-                    if status_changed or amt_changed:
+                    if status_changed or amt_changed or pr_changed or fcdl_changed:
                         if status_changed:
                             changes.append(
                                 FrnStatusChangeQueue(
@@ -1298,6 +1304,8 @@ def background_refresh_portfolio(uid: int, uemail: str, ben_to_org: dict):
                             )
                         ex.status = rec_status
                         ex.amount_committed = rec.get("amount_committed")
+                        ex.pending_reason = rec.get("pending_reason", "")
+                        ex.fcdl_date = rec.get("fcdl_date", "")
                         ex.last_refreshed = now
                         updates += 1
                 else:

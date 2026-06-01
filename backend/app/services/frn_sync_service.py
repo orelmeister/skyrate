@@ -163,8 +163,10 @@ def _sync_bens_to_snapshot(
 
                 status_changed = ex_status != rec_status
                 amt_changed = float(ex.amount_committed or 0) != float(rec.get("amount_committed") or 0)
+                pr_changed = (ex.pending_reason or "") != (rec.get("pending_reason") or "")
+                fcdl_changed = (ex.fcdl_date or "") != (rec.get("fcdl_date") or "")
 
-                if status_changed or amt_changed:
+                if status_changed or amt_changed or pr_changed or fcdl_changed:
                     if status_changed:
                         queue_entries.append(
                             FrnStatusChangeQueue(
@@ -184,6 +186,8 @@ def _sync_bens_to_snapshot(
                         )
                     ex.status = rec_status
                     ex.amount_committed = rec.get("amount_committed")
+                    ex.pending_reason = rec.get("pending_reason", "")
+                    ex.fcdl_date = rec.get("fcdl_date", "")
                     ex.last_refreshed = now
                     updates += 1
             else:
