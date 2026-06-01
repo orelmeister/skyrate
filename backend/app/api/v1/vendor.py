@@ -528,6 +528,32 @@ async def get_frn_status(
         # Tag with fetch timestamp
         if isinstance(result, dict):
             result["last_refreshed"] = _dt.utcnow().isoformat()
+
+        # Write-back to unified admin_frn_snapshots cache via shared upsert helper
+        # so vendor rows stay populated and any cache-based reads see fresh data.
+        try:
+            if isinstance(result, dict) and result.get("success") and result.get("frns"):
+                from app.services.frn_upsert import upsert_frn_snapshots, build_rec_from_usac_frn
+                records = [
+                    build_rec_from_usac_frn(
+                        frn,
+                        ben=frn.get("ben", ""),
+                        entity_name=frn.get("entity_name", ""),
+                        user_id=current_user.id,
+                        user_email=current_user.email,
+                        source="vendor",
+                    )
+                    for frn in result.get("frns", [])
+                ]
+                upsert_frn_snapshots(
+                    db, records,
+                    scope_type="spin", scope_value=profile.spin or "",
+                    queue_status_changes=True,
+                )
+        except Exception as upsert_err:
+            # Never let cache writeback break the response
+            import logging as _lg
+            _lg.getLogger(__name__).warning(f"[vendor.frn-status] cache writeback failed: {upsert_err}")
         
         # Cache for 6 hours
         set_cached(db, cache_key, result)

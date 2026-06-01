@@ -3580,6 +3580,7 @@ async def get_portfolio_frn_status(
 
         def _background_refresh_portfolio(uid: int, uemail: str, bens: list, p_schools: list):
             from ...core.database import SessionLocal
+            from ...services.frn_upsert import upsert_frn_snapshots, build_rec_from_usac_frn
             db_bg = SessionLocal()
             try:
                 client = USACDataClient()
@@ -3589,87 +3590,24 @@ async def get_portfolio_frn_status(
                     return
 
                 ben_to_org = {s.ben: s.school_name for s in p_schools}
-                now = datetime.utcnow()
-                
-                # Fetch existing to diff
-                existing_map = {}
-                for i in range(0, len(bens), 100):
-                    chunk = bens[i:i + 100]
-                    rows = db_bg.query(AdminFRNSnapshot).filter(AdminFRNSnapshot.ben.in_(chunk)).all()
-                    for r in rows:
-                        existing_map[(r.ben, r.frn)] = r
-
-                inserts = []
-                changes = []
-                updates = 0
-
+                records = []
                 for ben_key, ben_data in batch_result.get("results", {}).items():
                     entity_name = ben_data.get("entity_name") or ben_to_org.get(str(ben_key)) or ""
                     for frn in ben_data.get("frns", []):
-                        rec = {
-                            "frn": frn.get("frn", ""),
-                            "status": frn.get("status", "Unknown"),
-                            "funding_year": str(frn.get("funding_year", "")),
-                            "amount_requested": float(frn.get("commitment_amount") or frn.get("amount") or 0),
-                            "amount_committed": float(frn.get("disbursed_amount") or 0),
-                            "service_type": frn.get("service_type", ""),
-                            "organization_name": entity_name,
-                            "ben": str(ben_key),
-                            "user_id": uid,
-                            "user_email": uemail,
-                            "source": "consultant",
-                            "fcdl_date": frn.get("fcdl_date", ""),
-                            "pending_reason": frn.get("pending_reason", ""),
-                        }
+                        records.append(build_rec_from_usac_frn(
+                            frn, ben=str(ben_key), entity_name=entity_name,
+                            user_id=uid, user_email=uemail, source="consultant",
+                        ))
 
-                        key = (rec["ben"], rec["frn"])
-                        if key in existing_map:
-                            ex = existing_map[key]
-                            rec_status = str(rec["status"]) if rec.get("status") else "Unknown"
-                            ex_status = str(ex.status) if ex.status else "Unknown"
-                            
-                            status_changed = ex_status != rec_status
-                            amt_changed = float(ex.amount_committed or 0) != float(rec.get("amount_committed") or 0)
-                            pr_changed = (ex.pending_reason or "") != (rec.get("pending_reason") or "")
-                            fcdl_changed = (ex.fcdl_date or "") != (rec.get("fcdl_date") or "")
-
-                            if status_changed or amt_changed or pr_changed or fcdl_changed:
-                                if status_changed:
-                                    changes.append(
-                                        FrnStatusChangeQueue(
-                                            user_id=uid,
-                                            frn=rec["frn"],
-                                            ben=rec["ben"],
-                                            scope_type="crn",
-                                            scope_value="",
-                                            old_status=ex_status,
-                                            new_status=rec_status,
-                                            old_amount=float(ex.amount_committed or 0),
-                                            new_amount=float(rec.get("amount_committed") or 0),
-                                            entity_name=entity_name,
-                                            created_at=now,
-                                            processed=0
-                                        )
-                                    )
-                                ex.status = rec_status
-                                ex.amount_committed = rec.get("amount_committed")
-                                ex.pending_reason = rec.get("pending_reason", "")
-                                ex.fcdl_date = rec.get("fcdl_date", "")
-                                ex.last_refreshed = now
-                                updates += 1
-                        else:
-                            rec["last_refreshed"] = now
-                            inserts.append(AdminFRNSnapshot(**rec))
-                
-                if inserts:
-                    for i in range(0, len(inserts), 1000):
-                        db_bg.bulk_save_objects(inserts[i:i+1000])
-                if changes:
-                    for i in range(0, len(changes), 1000):
-                        db_bg.bulk_save_objects(changes[i:i+1000])
-                
-                db_bg.commit()
-                logger.info(f"Background refresh for user {uid} complete: {len(inserts)} inserts, {updates} updates, {len(changes)} alerts")
+                result = upsert_frn_snapshots(
+                    db_bg, records,
+                    scope_type="crn", scope_value="",
+                    queue_status_changes=True,
+                )
+                logger.info(
+                    f"Background refresh for user {uid} complete: "
+                    f"{result['inserts']} inserts, {result['updates']} updates, {result['alerts']} alerts"
+                )
             except Exception as e:
                 logger.error(f"Background refresh exception: {str(e)}")
             finally:

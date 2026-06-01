@@ -1111,104 +1111,17 @@ def refresh_admin_frn_snapshot():
 
         # Replace all rows in snapshot table atomically
         if all_frn_records:
-            from ..models.frn_status_change import FrnStatusChangeQueue
-            
-            existing_map = {}
-            frns = [r["frn"] for r in all_frn_records]
-            for i in range(0, len(frns), 2000):
-                chunk = frns[i:i + 2000]
-                rows = db.query(AdminFRNSnapshot).filter(AdminFRNSnapshot.frn.in_(chunk)).all()
-                for r in rows:
-                    existing_map[(r.ben, r.frn)] = r
+            from .frn_upsert import upsert_frn_snapshots
 
-            inserts = []
-            changes = []
-            updates = 0
-
-            for rec in all_frn_records:
-                key = (rec["ben"], rec["frn"])
-                if key in existing_map:
-                    ex = existing_map[key]
-                    # Convert to string/float to safely compare
-                    rec_status = str(rec["status"]) if rec.get("status") else "Unknown"
-                    ex_status = str(ex.status) if ex.status else "Unknown"
-                    
-                    status_changed = ex_status != rec_status
-                    amt_changed = float(ex.amount_committed or 0) != float(rec.get("amount_committed") or 0)
-                    pr_changed = (ex.pending_reason or "") != (rec.get("pending_reason") or "")
-                    fcdl_changed = (ex.fcdl_date or "") != (rec.get("fcdl_date") or "")
-                    
-                    if status_changed or amt_changed or pr_changed or fcdl_changed:
-                        if status_changed and rec.get("user_id"):
-                            changes.append(
-                                FrnStatusChangeQueue(
-                                    user_id=rec["user_id"],
-                                    frn=rec["frn"],
-                                    ben=rec.get("ben"),
-                                    scope_type="ben",
-                                    scope_value=rec.get("ben"),
-                                    old_status=ex_status,
-                                    new_status=rec_status,
-                                    old_amount=float(ex.amount_committed or 0),
-                                    new_amount=float(rec.get("amount_committed") or 0),
-                                    entity_name=rec.get("organization_name"),
-                                    created_at=now,
-                                    processed=0
-                                )
-                            )
-                        ex.status = rec_status
-                        ex.amount_committed = rec.get("amount_committed")
-                        ex.pending_reason = rec.get("pending_reason", "")
-                        ex.fcdl_date = rec.get("fcdl_date", "")
-                        ex.last_refreshed = now
-                        updates += 1
-                else:
-                    inserts.append(AdminFRNSnapshot(**rec))
-            
-            # Commit in-place updates (dirty ORM objects) in batches
-            # Flush updates accumulated on existing objects first
-            batch_commit_size = 500
-            try:
-                db.flush()
-                db.commit()
-            except Exception as flush_err:
-                logger.warning(f"Admin FRN snapshot flush updates failed: {flush_err}")
-                try:
-                    db.rollback()
-                except Exception:
-                    pass
-
-            # Insert new rows in chunks of 500
-            insert_ok = 0
-            for i in range(0, len(inserts), batch_commit_size):
-                chunk = inserts[i:i + batch_commit_size]
-                try:
-                    db.bulk_save_objects(chunk)
-                    db.commit()
-                    insert_ok += len(chunk)
-                except Exception as ins_err:
-                    logger.warning(f"Admin FRN snapshot insert batch {i} failed: {ins_err}")
-                    try:
-                        db.rollback()
-                    except Exception:
-                        pass
-
-            # Persist change-queue entries in chunks of 500
-            change_ok = 0
-            for i in range(0, len(changes), batch_commit_size):
-                chunk = changes[i:i + batch_commit_size]
-                try:
-                    db.bulk_save_objects(chunk)
-                    db.commit()
-                    change_ok += len(chunk)
-                except Exception as chg_err:
-                    logger.warning(f"Admin FRN snapshot change-queue batch {i} failed: {chg_err}")
-                    try:
-                        db.rollback()
-                    except Exception:
-                        pass
-
-            logger.info(f"Admin FRN snapshot refreshed: {insert_ok}/{len(inserts)} inserts, {updates} updates, {change_ok}/{len(changes)} alerts queued")
+            result = upsert_frn_snapshots(
+                db, all_frn_records,
+                scope_type="ben", scope_value="",
+                queue_status_changes=True,
+            )
+            logger.info(
+                f"Admin FRN snapshot refreshed: "
+                f"{result['inserts']} inserts, {result['updates']} updates, {result['alerts']} alerts queued"
+            )
         else:
             logger.info("Admin FRN snapshot: No FRN records found to store")
 
@@ -1230,8 +1143,7 @@ def background_refresh_portfolio(uid: int, uemail: str, ben_to_org: dict):
     db_bg = SessionLocal()
     try:
         from utils.usac_client import USACDataClient
-        from ..models.admin_frn_snapshot import AdminFRNSnapshot
-        from ..models.frn_status_change import FrnStatusChangeQueue
+        from .frn_upsert import upsert_frn_snapshots, build_rec_from_usac_frn
 
         client = USACDataClient()
         bens = list(ben_to_org.keys())
@@ -1240,121 +1152,24 @@ def background_refresh_portfolio(uid: int, uemail: str, ben_to_org: dict):
             logger.error(f"Background refresh failed: {batch_result.get('error')}")
             return
 
-        now = datetime.utcnow()
-        
-        # Fetch existing to diff
-        existing_map = {}
-        for i in range(0, len(bens), 100):
-            chunk = bens[i:i + 100]
-            rows = db_bg.query(AdminFRNSnapshot).filter(AdminFRNSnapshot.ben.in_(chunk)).all()
-            for r in rows:
-                existing_map[(r.ben, r.frn)] = r
-
-        inserts = []
-        changes = []
-        updates = 0
-
+        records = []
         for ben_key, ben_data in batch_result.get("results", {}).items():
             entity_name = ben_data.get("entity_name") or ben_to_org.get(str(ben_key)) or ""
             for frn in ben_data.get("frns", []):
-                rec = {
-                    "frn": frn.get("frn", ""),
-                    "status": frn.get("status", "Unknown"),
-                    "funding_year": str(frn.get("funding_year", "")),
-                    "amount_requested": float(frn.get("commitment_amount") or frn.get("amount") or 0),
-                    "amount_committed": float(frn.get("disbursed_amount") or 0),
-                    "service_type": frn.get("service_type", ""),
-                    "organization_name": entity_name,
-                    "ben": str(ben_key),
-                    "user_id": uid,
-                    "user_email": uemail,
-                    "source": "consultant",
-                    "fcdl_date": frn.get("fcdl_date", ""),
-                    "pending_reason": frn.get("pending_reason", ""),
-                }
+                records.append(build_rec_from_usac_frn(
+                    frn, ben=str(ben_key), entity_name=entity_name,
+                    user_id=uid, user_email=uemail, source="consultant",
+                ))
 
-                key = (rec["ben"], rec["frn"])
-                if key in existing_map:
-                    ex = existing_map[key]
-                    rec_status = str(rec["status"]) if rec.get("status") else "Unknown"
-                    ex_status = str(ex.status) if ex.status else "Unknown"
-                    
-                    status_changed = ex_status != rec_status
-                    amt_changed = float(ex.amount_committed or 0) != float(rec.get("amount_committed") or 0)
-                    pr_changed = (ex.pending_reason or "") != (rec.get("pending_reason") or "")
-                    fcdl_changed = (ex.fcdl_date or "") != (rec.get("fcdl_date") or "")
-                    
-                    if status_changed or amt_changed or pr_changed or fcdl_changed:
-                        if status_changed:
-                            changes.append(
-                                FrnStatusChangeQueue(
-                                    user_id=uid,
-                                    frn=rec["frn"],
-                                    ben=rec.get("ben"),
-                                    scope_type="ben",
-                                    scope_value=rec.get("ben"),
-                                    old_status=ex_status,
-                                    new_status=rec_status,
-                                    old_amount=float(ex.amount_committed or 0),
-                                    new_amount=float(rec.get("amount_committed") or 0),
-                                    entity_name=rec.get("organization_name"),
-                                    created_at=now,
-                                    processed=0
-                                )
-                            )
-                        ex.status = rec_status
-                        ex.amount_committed = rec.get("amount_committed")
-                        ex.pending_reason = rec.get("pending_reason", "")
-                        ex.fcdl_date = rec.get("fcdl_date", "")
-                        ex.last_refreshed = now
-                        updates += 1
-                else:
-                    rec["last_refreshed"] = now
-                    inserts.append(AdminFRNSnapshot(**rec))
-        
-        # Commit in-place updates (dirty ORM objects) first
-        batch_commit_size = 500
-        try:
-            db_bg.flush()
-            db_bg.commit()
-        except Exception as flush_err:
-            logger.warning(f"Background refresh flush updates failed for user {uid}: {flush_err}")
-            try:
-                db_bg.rollback()
-            except Exception:
-                pass
-
-        # Insert new rows in chunks of 500
-        insert_ok = 0
-        for i in range(0, len(inserts), batch_commit_size):
-            chunk = inserts[i:i + batch_commit_size]
-            try:
-                db_bg.bulk_save_objects(chunk)
-                db_bg.commit()
-                insert_ok += len(chunk)
-            except Exception as ins_err:
-                logger.warning(f"Background refresh insert batch {i} failed for user {uid}: {ins_err}")
-                try:
-                    db_bg.rollback()
-                except Exception:
-                    pass
-
-        # Persist change-queue entries in chunks of 500
-        change_ok = 0
-        for i in range(0, len(changes), batch_commit_size):
-            chunk = changes[i:i + batch_commit_size]
-            try:
-                db_bg.bulk_save_objects(chunk)
-                db_bg.commit()
-                change_ok += len(chunk)
-            except Exception as chg_err:
-                logger.warning(f"Background refresh change-queue batch {i} failed for user {uid}: {chg_err}")
-                try:
-                    db_bg.rollback()
-                except Exception:
-                    pass
-
-        logger.info(f"Background refresh for user {uid} complete: {insert_ok}/{len(inserts)} inserts, {updates} updates, {change_ok}/{len(changes)} alerts")
+        result = upsert_frn_snapshots(
+            db_bg, records,
+            scope_type="ben", scope_value="",
+            queue_status_changes=True,
+        )
+        logger.info(
+            f"Background refresh for user {uid} complete: "
+            f"{result['inserts']} inserts, {result['updates']} updates, {result['alerts']} alerts"
+        )
     except Exception as e:
         logger.error(f"Background refresh exception: {str(e)}")
     finally:
