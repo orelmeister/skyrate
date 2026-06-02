@@ -133,6 +133,24 @@ async def create_ticket(
         import logging
         logging.getLogger(__name__).error(f"Failed to send ticket notification: {e}")
 
+    # Telegram instant alert (free, ~1s) so we never miss a ticket again.
+    try:
+        from ...services.telegram_alerts import send_alert
+        reporter = ticket.user_email or ticket.guest_email or "unknown"
+        send_alert(
+            title=f"New Ticket #{ticket.id}: {ticket.subject}",
+            body=(
+                f"From: {reporter}\n"
+                f"Category: {ticket.category}  Source: {ticket.source}\n\n"
+                f"{(ticket.message or '')[:1500]}"
+            ),
+            severity="warn",
+            link="https://skyrate.ai/admin",
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Telegram ticket alert failed: {e}")
+
     return {
         "success": True,
         "ticket": ticket.to_dict(),

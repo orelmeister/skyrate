@@ -123,7 +123,11 @@ class Settings(BaseSettings):
     TWILIO_AUTH_TOKEN: Optional[str] = None
     TWILIO_VERIFY_SERVICE_SID: Optional[str] = None
     TWILIO_FROM_NUMBER: Optional[str] = None  # Twilio phone number for sending SMS
-    
+
+    # Telegram alerts (ops notifications: new tickets, 500s, signup failures, etc.)
+    TELEGRAM_BOT_TOKEN: Optional[str] = None
+    TELEGRAM_ALERT_CHAT_ID: Optional[str] = None
+
     # USAC / Socrata
     SOCRATA_APP_TOKEN: Optional[str] = None
 

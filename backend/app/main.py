@@ -950,7 +950,20 @@ app.add_middleware(
 async def global_exception_handler(request: Request, exc: Exception):
     import traceback
     error_detail = f"{type(exc).__name__}: {str(exc)}"
-    logger.error(f"Unhandled exception on {request.url.path}: {error_detail}\n{traceback.format_exc()}")
+    tb = traceback.format_exc()
+    logger.error(f"Unhandled exception on {request.url.path}: {error_detail}\n{tb}")
+
+    # Fire-and-forget Telegram alert so we hear about prod 500s in real time.
+    try:
+        from .services.telegram_alerts import send_alert
+        send_alert(
+            title=f"500 on {request.method} {request.url.path}",
+            body=f"{error_detail}\n\n{tb[-1500:]}",
+            severity="error",
+        )
+    except Exception:
+        pass
+
     return JSONResponse(
         status_code=500,
         content={
