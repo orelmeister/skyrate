@@ -1235,12 +1235,39 @@ async def send_campaign(request: EmailCampaignRequest, background_tasks: Backgro
 
 @app.on_event("startup")
 async def startup_event():
-    print("🚀 SkyRate AI API v2 starting...")
+    print("[startup] SkyRate AI API v2 starting...")
+    # Self-heal: ensure vendor_form470_snapshots JSON columns are MEDIUMTEXT
+    # (TEXT's 64KB cap silently truncated some rows -> JSONDecodeError on read).
+    try:
+        from sqlalchemy import text as _sql_text
+        from app.core.database import engine as _engine
+        _cols = ("services_json", "manufacturers_json", "service_types_json", "categories_json")
+        with _engine.begin() as _c:
+            _rows = _c.execute(_sql_text(
+                "SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS "
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'vendor_form470_snapshots' "
+                "AND COLUMN_NAME IN ('services_json','manufacturers_json','service_types_json','categories_json')"
+            )).fetchall()
+            _need_alter = [r[0] for r in _rows if str(r[1]).lower() == "text"]
+            for _col in _need_alter:
+                print(f"[startup] healing vendor_form470_snapshots.{_col}: TEXT -> MEDIUMTEXT")
+                _c.execute(_sql_text(f"ALTER TABLE vendor_form470_snapshots MODIFY {_col} MEDIUMTEXT NULL"))
+            if _need_alter:
+                _del = _c.execute(_sql_text(
+                    "DELETE FROM vendor_form470_snapshots "
+                    "WHERE LENGTH(services_json) >= 65500 "
+                    "OR LENGTH(manufacturers_json) >= 65500 "
+                    "OR LENGTH(service_types_json) >= 65500 "
+                    "OR LENGTH(categories_json) >= 65500"
+                ))
+                print(f"[startup] deleted {_del.rowcount} truncated snapshot row(s) so next refresh repopulates clean")
+    except Exception as _heal_err:
+        print(f"[startup] vendor_form470_snapshots heal skipped: {_heal_err}")
     # Pre-warm services
     get_usac_service()
-    print("✅ USAC service ready")
+    print("[startup] USAC service ready")
     get_ai_service()
-    print("✅ AI service ready")
+    print("[startup] AI service ready")
 
 if __name__ == "__main__":
     import uvicorn

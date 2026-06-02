@@ -784,6 +784,22 @@ async def get_470_leads(
             q = q.filter(VendorForm470Snapshot.c2_budget_available <= max_deal_value)
         return q
 
+    def _safe_json_list(raw, row_id=None, field=None):
+        """Tolerantly decode a JSON-array column. Returns [] on any error so one
+        bad row never 500s the whole leads endpoint (MySQL TEXT 64KB truncation
+        was the original culprit — column is now MEDIUMTEXT but old rows may
+        still be truncated until the next snapshot refresh)."""
+        if not raw:
+            return []
+        try:
+            return _json.loads(raw)
+        except Exception as exc:
+            _log.warning(
+                "[470-leads] bad %s on row id=%s len=%s err=%s",
+                field, row_id, len(raw), exc,
+            )
+            return []
+
     def _row_to_lead(r):
         return {
             "application_number": r.application_number,
@@ -804,10 +820,10 @@ async def get_470_leads(
             "technical_phone": r.technical_phone,
             "cat1_description": r.cat1_description,
             "cat2_description": r.cat2_description,
-            "services": _json.loads(r.services_json) if r.services_json else [],
-            "manufacturers": _json.loads(r.manufacturers_json) if r.manufacturers_json else [],
-            "service_types": _json.loads(r.service_types_json) if r.service_types_json else [],
-            "categories": _json.loads(r.categories_json) if r.categories_json else [],
+            "services": _safe_json_list(r.services_json, r.id, "services_json"),
+            "manufacturers": _safe_json_list(r.manufacturers_json, r.id, "manufacturers_json"),
+            "service_types": _safe_json_list(r.service_types_json, r.id, "service_types_json"),
+            "categories": _safe_json_list(r.categories_json, r.id, "categories_json"),
             "c2_budget_total": r.c2_budget_total,
             "c2_budget_available": r.c2_budget_available,
             "c2_budget_cycle": r.c2_budget_cycle,
