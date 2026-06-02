@@ -16,8 +16,8 @@ from __future__ import annotations
 
 import html
 import logging
-import threading
-from typing import Optional
+import os
+from typing import Optional, Tuple
 
 import requests
 
@@ -36,7 +36,14 @@ _SEVERITY_PREFIX = {
 }
 
 
-def _post_sync(token: str, chat_id: str, text: str) -> None:
+def _resolve_credentials() -> Tuple[Optional[str], Optional[str]]:
+    """Read creds from Settings first, then env (in case Settings was cached)."""
+    token = getattr(settings, "TELEGRAM_BOT_TOKEN", None) or os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = getattr(settings, "TELEGRAM_ALERT_CHAT_ID", None) or os.environ.get("TELEGRAM_ALERT_CHAT_ID")
+    return token, (str(chat_id) if chat_id else None)
+
+
+def _post_sync(token: str, chat_id: str, text: str) -> Tuple[int, str]:
     try:
         r = requests.post(
             _TELEGRAM_API.format(token=token),
@@ -49,9 +56,13 @@ def _post_sync(token: str, chat_id: str, text: str) -> None:
             timeout=5,
         )
         if r.status_code != 200:
-            logger.warning("Telegram alert non-200: %s %s", r.status_code, r.text[:200])
-    except Exception as exc:  # pragma: no cover
+            logger.warning("Telegram alert non-200: %s %s", r.status_code, r.text[:300])
+        else:
+            logger.info("Telegram alert sent ok chat=%s len=%s", chat_id, len(text))
+        return r.status_code, r.text[:300]
+    except Exception as exc:
         logger.warning("Telegram alert failed: %s", exc)
+        return 0, str(exc)[:300]
 
 
 def send_alert(
@@ -64,12 +75,14 @@ def send_alert(
     Fire-and-forget alert to the configured Telegram chat.
 
     Never raises — alerting must never break the calling request.
-    Runs in a background thread so the calling handler isn't blocked by
-    Telegram latency.
+    Calls Telegram synchronously with a short timeout (<=5s). Telegram
+    sendMessage typically completes in <500ms; running synchronously
+    guarantees delivery before the request handler returns (background
+    daemon threads were being killed before the HTTP POST completed).
     """
-    token = getattr(settings, "TELEGRAM_BOT_TOKEN", None)
-    chat_id = getattr(settings, "TELEGRAM_ALERT_CHAT_ID", None)
+    token, chat_id = _resolve_credentials()
     if not token or not chat_id:
+        logger.info("Telegram alert skipped: token=%s chat_id=%s", bool(token), bool(chat_id))
         return
 
     prefix = _SEVERITY_PREFIX.get(severity, "[INFO]")
@@ -86,6 +99,18 @@ def send_alert(
     if len(text) > 4000:
         text = text[:3990] + "\n... (truncated)"
 
-    threading.Thread(
-        target=_post_sync, args=(token, str(chat_id), text), daemon=True
-    ).start()
+    _post_sync(token, chat_id, text)
+
+
+def send_alert_debug(title: str = "debug ping", body: str = "") -> dict:
+    """Synchronous helper used by /api/v1/debug/telegram to surface real errors."""
+    token, chat_id = _resolve_credentials()
+    if not token or not chat_id:
+        return {"ok": False, "reason": "missing_credentials",
+                "has_token": bool(token), "has_chat_id": bool(chat_id)}
+    text = f"<b>[DEBUG] {html.escape(title)}</b>"
+    if body:
+        text += f"\n\n{html.escape(body)}"
+    status, resp = _post_sync(token, chat_id, text)
+    return {"ok": status == 200, "status": status, "response": resp,
+            "chat_id_prefix": chat_id[:4]}

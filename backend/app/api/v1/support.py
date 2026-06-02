@@ -21,6 +21,19 @@ from ...models.support_ticket import (
 router = APIRouter(prefix="/support", tags=["Support"])
 
 
+@router.get("/_debug/telegram")
+def _debug_telegram(token: str = ""):
+    """Diagnostic: synchronously send a test alert and surface the Telegram API response.
+
+    Protected by a static token to avoid being abused. Returns
+    {ok, status, response, has_token, has_chat_id, chat_id_prefix}.
+    """
+    if token != "sk-tg-diag-2026":
+        raise HTTPException(status_code=404, detail="not found")
+    from ...services.telegram_alerts import send_alert_debug
+    return send_alert_debug(title="diagnostic ping", body="from /_debug/telegram")
+
+
 # ==================== SCHEMAS ====================
 
 class CreateTicketRequest(BaseModel):
