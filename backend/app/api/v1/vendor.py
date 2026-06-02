@@ -824,9 +824,9 @@ async def get_470_leads(
             if sort_by == "entity_name":
                 q = q.order_by(VendorForm470Snapshot.entity_name.asc())
             elif sort_by == "c2_budget_available":
-                q = q.order_by(VendorForm470Snapshot.c2_budget_available.desc().nullslast())
+                q = q.order_by(VendorForm470Snapshot.c2_budget_available.desc())
             else:
-                q = q.order_by(VendorForm470Snapshot.posting_date.desc().nullslast())
+                q = q.order_by(VendorForm470Snapshot.posting_date.desc())
 
             rows = q.offset(offset).limit(limit).all()
             leads = [_row_to_lead(r) for r in rows]
@@ -898,7 +898,7 @@ async def get_470_leads(
             # Return whatever snapshot rows exist with partial=true
             q = _build_query(db.query(VendorForm470Snapshot))
             total = q.count()
-            rows = q.order_by(VendorForm470Snapshot.posting_date.desc().nullslast()).offset(offset).limit(limit).all()
+            rows = q.order_by(VendorForm470Snapshot.posting_date.desc()).offset(offset).limit(limit).all()
             leads = [_row_to_lead(r) for r in rows]
             from ...utils.source_tag import tag_source
             tag_source(request, "snapshot_miss", rows=len(leads), partial=True, user_id=current_user.id)
