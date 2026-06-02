@@ -39,25 +39,18 @@ interface SearchResult {
 async function forceDownloadFile(url: string, suggestedFilename?: string): Promise<void> {
   try {
     let fetchUrl = url;
-    const headers: Record<string, string> = {};
     try {
       const u = new URL(url);
       if (u.hostname === "publicdata.usac.org") {
-        const apiBase =
-          (process.env.NEXT_PUBLIC_API_URL && process.env.NEXT_PUBLIC_API_URL.trim()) ||
-          "";
-        fetchUrl = `${apiBase}/api/v1/vendor/rfp-download?url=${encodeURIComponent(url)}`;
-        const token =
-          typeof window !== "undefined"
-            ? window.localStorage.getItem("access_token")
-            : null;
-        if (token) headers["Authorization"] = `Bearer ${token}`;
+        // Always route USAC PDFs through the backend proxy — same-origin request
+        // avoids CORS issues and gives the browser proper Content-Disposition.
+        fetchUrl = `/api/v1/vendor/rfp-download?url=${encodeURIComponent(url)}`;
       }
     } catch {
       // not a parseable URL — fall through to direct fetch
     }
 
-    const response = await fetch(fetchUrl, { method: "GET", headers });
+    const response = await fetch(fetchUrl, { method: "GET", credentials: "same-origin" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const blob = await response.blob();
     const blobUrl = window.URL.createObjectURL(blob);

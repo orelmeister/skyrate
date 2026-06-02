@@ -1185,10 +1185,7 @@ def _rfp_safe_filename(name: str) -> str:
 
 
 @router.get("/rfp-download")
-async def rfp_download_proxy(
-    url: str,
-    current_user: User = Depends(require_role("admin", "vendor", "super")),
-):
+async def rfp_download_proxy(url: str):
     """
     Server-side proxy for RFP document downloads from USAC's public-data host.
 
@@ -1196,6 +1193,10 @@ async def rfp_download_proxy(
     HTML wrappers / redirects, producing corrupt files that Word, Excel, and PDF
     readers reject. Streaming through the backend lets us validate the host,
     set a clean Content-Type/Content-Disposition, and force a proper attachment.
+
+    No auth is required: the proxied content is public USAC data already
+    accessible to anyone, and the host allow-list prevents the endpoint from
+    being abused as an open proxy.
     """
     import requests
     try:
