@@ -4,12 +4,15 @@ Handles school search, equipment matching, and lead generation
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 from datetime import datetime
+from urllib.parse import urlparse, unquote
 import sys
 import os
+import re
 import threading
 import uuid as uuid_mod
 
@@ -1147,6 +1150,118 @@ async def get_470_detail(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch 470 details: {str(e)}"
         )
+
+
+# Allowed hosts for RFP proxy. USAC's public document host is the only legitimate source.
+_RFP_ALLOWED_HOSTS = {"publicdata.usac.org"}
+
+# Map common file extensions to a stable Content-Type. Keeps Word/Excel/PDF
+# happy even if upstream returns a vague application/octet-stream.
+_RFP_EXT_CT = {
+    ".pdf":  "application/pdf",
+    ".doc":  "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls":  "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".ppt":  "application/vnd.ms-powerpoint",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".txt":  "text/plain; charset=utf-8",
+    ".zip":  "application/zip",
+    ".csv":  "text/csv; charset=utf-8",
+}
+
+
+def _rfp_safe_filename(name: str) -> str:
+    """Strip path separators and Windows-illegal chars, keep extension."""
+    name = unquote(name or "")
+    name = name.split("/")[-1].split("\\")[-1]
+    # remove leading "<digits>-" prefix (USAC adds an internal id)
+    name = re.sub(r"^\d+-", "", name)
+    # collapse repeated whitespace
+    name = re.sub(r"\s+", " ", name).strip()
+    # drop characters Windows refuses in filenames
+    name = re.sub(r'[<>:"|?*\x00-\x1f]', "", name)
+    return name or "document"
+
+
+@router.get("/rfp-download")
+async def rfp_download_proxy(
+    url: str,
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
+):
+    """
+    Server-side proxy for RFP document downloads from USAC's public-data host.
+
+    Why: the browser's direct fetch() to publicdata.usac.org sometimes lands on
+    HTML wrappers / redirects, producing corrupt files that Word, Excel, and PDF
+    readers reject. Streaming through the backend lets us validate the host,
+    set a clean Content-Type/Content-Disposition, and force a proper attachment.
+    """
+    import requests
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid URL")
+    if parsed.scheme not in ("http", "https") or parsed.hostname not in _RFP_ALLOWED_HOSTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"URL host not allowed; expected one of {sorted(_RFP_ALLOWED_HOSTS)}",
+        )
+
+    raw_name = parsed.path.rsplit("/", 1)[-1] if parsed.path else "document"
+    filename = _rfp_safe_filename(raw_name)
+    ext = os.path.splitext(filename)[1].lower()
+
+    try:
+        upstream = requests.get(url, allow_redirects=True, timeout=60, stream=True)
+    except requests.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"Upstream fetch failed: {e}")
+
+    if upstream.status_code != 200:
+        upstream.close()
+        raise HTTPException(
+            status_code=502,
+            detail=f"Upstream returned HTTP {upstream.status_code}",
+        )
+
+    upstream_ct = (upstream.headers.get("Content-Type") or "").lower()
+    # If we asked for a binary doc but USAC returned HTML, that's a stub/error page.
+    if ext in _RFP_EXT_CT and "html" in upstream_ct:
+        upstream.close()
+        raise HTTPException(
+            status_code=502,
+            detail="Upstream returned an HTML page instead of the requested document",
+        )
+
+    # Pick the cleanest Content-Type we can.
+    content_type = (
+        _RFP_EXT_CT.get(ext)
+        or (upstream_ct.split(";")[0].strip() if upstream_ct and "html" not in upstream_ct else None)
+        or "application/octet-stream"
+    )
+
+    def _iter():
+        try:
+            for chunk in upstream.iter_content(chunk_size=64 * 1024):
+                if chunk:
+                    yield chunk
+        finally:
+            upstream.close()
+
+    headers = {
+        # RFC 5987-encoded filename so spaces / unicode survive intact in browsers.
+        "Content-Disposition": (
+            f'attachment; filename="{filename}"; '
+            f"filename*=UTF-8''{requests.utils.quote(filename)}"
+        ),
+        "Cache-Control": "private, max-age=300",
+        "X-Content-Type-Options": "nosniff",
+    }
+    upstream_len = upstream.headers.get("Content-Length")
+    if upstream_len:
+        headers["Content-Length"] = upstream_len
+
+    return StreamingResponse(_iter(), media_type=content_type, headers=headers)
 
 
 @router.post("/470/search")

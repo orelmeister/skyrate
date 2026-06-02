@@ -32,16 +32,40 @@ interface SearchResult {
 }
 
 // Force-download a remote file via fetch + Blob.
-// Falls back to opening the URL in a new tab if the fetch fails (e.g. CORS).
+// For USAC (publicdata.usac.org) RFP documents we route through the backend
+// proxy `/api/v1/vendor/rfp-download` so we get clean Content-Type +
+// Content-Disposition headers and avoid the corrupt-file / Word-error issue
+// caused by browser CORS fallbacks landing on HTML wrappers.
 async function forceDownloadFile(url: string, suggestedFilename?: string): Promise<void> {
   try {
-    const response = await fetch(url, { method: "GET" });
+    let fetchUrl = url;
+    const headers: Record<string, string> = {};
+    try {
+      const u = new URL(url);
+      if (u.hostname === "publicdata.usac.org") {
+        const apiBase =
+          (process.env.NEXT_PUBLIC_API_URL && process.env.NEXT_PUBLIC_API_URL.trim()) ||
+          "";
+        fetchUrl = `${apiBase}/api/v1/vendor/rfp-download?url=${encodeURIComponent(url)}`;
+        const token =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem("access_token")
+            : null;
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+      }
+    } catch {
+      // not a parseable URL — fall through to direct fetch
+    }
+
+    const response = await fetch(fetchUrl, { method: "GET", headers });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const blob = await response.blob();
     const blobUrl = window.URL.createObjectURL(blob);
 
     let filename = suggestedFilename || url.split("/").pop() || "document.pdf";
     try { filename = decodeURIComponent(filename); } catch { /* leave as-is */ }
+    // strip USAC's leading numeric id prefix (e.g. "20766431-Real Name.pdf")
+    filename = filename.replace(/^\d+-/, "").replace(/\s+/g, " ").trim() || "document";
 
     const a = document.createElement("a");
     a.style.display = "none";
