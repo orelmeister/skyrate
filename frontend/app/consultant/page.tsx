@@ -218,6 +218,7 @@ function ConsultantPortalPage() {
   const [frnSortBy, setFrnSortBy] = useState<string>("name");
   const [selectedFRN, setSelectedFRN] = useState<any>(null);
   const [showFRNDetailModal, setShowFRNDetailModal] = useState(false);
+  const [notFiledExpanded, setNotFiledExpanded] = useState(false);
   const [frnTableSort, setFrnTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
   const [visibleFrnCount, setVisibleFrnCount] = useState<number>(25);
   const [schoolsTableSort, setSchoolsTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
@@ -3474,7 +3475,12 @@ function ConsultantPortalPage() {
                   >
                     <div className="text-sm text-slate-600 mb-1">Total FRNs</div>
                     <div className="text-3xl font-bold text-slate-900">{portfolioFrnData.total_frns}</div>
-                    <div className="text-xs text-slate-500 mt-1">Across {portfolioFrnData.total_schools} schools</div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      {portfolioFrnData.not_filed_schools?.length > 0 && portfolioFrnData.portfolio_total_schools
+                        ? `${portfolioFrnData.schools_filed ?? portfolioFrnData.total_schools} of ${portfolioFrnData.portfolio_total_schools} schools filed in FY${portfolioFrnData.year_filter}`
+                        : `Across ${portfolioFrnData.total_schools} schools`
+                      }
+                    </div>
                   </button>
                   <button
                     onClick={() => { setPortfolioFrnStatusFilter("Funded"); loadPortfolioFRNStatus(portfolioFrnYear, "Funded", portfolioFrnPendingReason); }}
@@ -3693,6 +3699,63 @@ function ConsultantPortalPage() {
                 </div>
                 </>
               )}
+
+              {/* Did Not File section — collapsible */}
+              {portfolioFrnData?.not_filed_schools?.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mt-4">
+                  <button
+                    type="button"
+                    onClick={() => setNotFiledExpanded(!notFiledExpanded)}
+                    className="w-full flex items-center justify-between p-4 border-b border-slate-200 hover:bg-slate-50 transition-colors text-left"
+                  >
+                    <div>
+                      <h3 className="font-semibold text-slate-900">
+                        Did Not File ({portfolioFrnData.not_filed_schools.length})
+                      </h3>
+                      <p className="text-sm text-slate-600">
+                        {portfolioFrnData.not_filed_summary?.lapsed || 0} lapsed &middot; {portfolioFrnData.not_filed_summary?.inactive || 0} inactive
+                      </p>
+                    </div>
+                    <span className="text-slate-400 text-lg">{notFiledExpanded ? '▾' : '▸'}</span>
+                  </button>
+                  {notFiledExpanded && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50 border-b border-slate-200">
+                          <tr>
+                            <th className="text-left px-4 py-3 font-medium text-slate-600">School</th>
+                            <th className="text-left px-4 py-3 font-medium text-slate-600">BEN</th>
+                            <th className="text-left px-4 py-3 font-medium text-slate-600">State</th>
+                            <th className="text-left px-4 py-3 font-medium text-slate-600">Last Active FY</th>
+                            <th className="text-center px-4 py-3 font-medium text-slate-600">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {(portfolioFrnData.not_filed_schools as Array<{ben: string; school_name: string; state: string | null; entity_type: string | null; last_active_year: number | null; status: string}>).map((school) => (
+                            <tr key={school.ben} className="hover:bg-slate-50">
+                              <td className="px-4 py-3">
+                                <div className="font-medium text-slate-900">{school.school_name}</div>
+                                {school.entity_type && <div className="text-xs text-slate-500">{school.entity_type}</div>}
+                              </td>
+                              <td className="px-4 py-3 font-mono text-xs text-slate-700">{school.ben}</td>
+                              <td className="px-4 py-3 text-slate-600">{school.state || '—'}</td>
+                              <td className="px-4 py-3 text-slate-600">{school.last_active_year ? `FY${school.last_active_year}` : 'Never'}</td>
+                              <td className="px-4 py-3 text-center">
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                  school.status === 'lapsed' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
+                                }`}>
+                                  {school.status === 'lapsed' ? 'Lapsed' : 'Inactive'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Initial Load State */}
               {!portfolioFrnLoading && !portfolioFrnData && (
                 <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">

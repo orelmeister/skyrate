@@ -3506,6 +3506,61 @@ async def get_portfolio_frn_status(
             db.rollback()
             return {}
 
+    def _compute_not_filed(filed_bens_set, selected_year):
+        """Compute non-filing schools for the selected year.
+        Returns (not_filed_schools, not_filed_summary) or empty values when not applicable."""
+        empty_result = ([], {"lapsed": 0, "inactive": 0})
+        # Only compute when a specific year is selected and not a single-BEN lookup
+        if selected_year is None or ben:
+            return empty_result
+        # Find BENs in portfolio that didn't file this year
+        non_filer_bens = [b for b in school_bens if b not in filed_bens_set]
+        if not non_filer_bens:
+            return empty_result
+        # Query last active year for each non-filer from admin_frn_snapshots
+        from sqlalchemy import cast, Integer as _SqlInt
+        last_year_rows = (
+            db.query(
+                AdminFRNSnapshot.ben,
+                _sqlfunc.max(cast(AdminFRNSnapshot.funding_year, _SqlInt)).label("last_year"),
+            )
+            .filter(AdminFRNSnapshot.ben.in_(non_filer_bens))
+            .group_by(AdminFRNSnapshot.ben)
+            .all()
+        )
+        last_year_map = {row.ben: row.last_year for row in last_year_rows}
+        # Build school lookup from profile
+        school_info_map = {s.ben: s for s in profile.schools}
+        not_filed_schools = []
+        lapsed_count = 0
+        inactive_count = 0
+        for b in non_filer_bens:
+            last_active = last_year_map.get(b)
+            # lapsed = last active within 2 years prior to selected year
+            if last_active and last_active >= (selected_year - 2):
+                status_label = "lapsed"
+                lapsed_count += 1
+            else:
+                status_label = "inactive"
+                inactive_count += 1
+            info = school_info_map.get(b)
+            not_filed_schools.append({
+                "ben": b,
+                "school_name": info.school_name if info else "Unknown",
+                "state": info.state if info else None,
+                "entity_type": info.entity_type if info else None,
+                "last_active_year": last_active,
+                "status": status_label,
+            })
+        # Sort: lapsed first (by last_active_year desc), then inactive (last_active_year desc, nulls last)
+        not_filed_schools.sort(
+            key=lambda x: (
+                0 if x["status"] == "lapsed" else 1,
+                -(x["last_active_year"] or 0),
+            )
+        )
+        return not_filed_schools, {"lapsed": lapsed_count, "inactive": inactive_count}
+
     # Step 1: query local denormalized table.
     if not refresh:
         rows = _query_local(school_bens, year, status_filter)
@@ -3518,6 +3573,8 @@ async def get_portfolio_frn_status(
             )
             from ...utils.source_tag import tag_source
             tag_source(request, "snapshot_hit", rows=len(all_frns), partial=False, user_id=current_user.id)
+            filed_bens = {s["ben"] for s in schools_data}
+            not_filed_schools, not_filed_summary = _compute_not_filed(filed_bens, year)
             return {
                 "success": True,
                 "from_cache": True,
@@ -3525,9 +3582,13 @@ async def get_portfolio_frn_status(
                 "last_refreshed": last_refreshed.isoformat() if last_refreshed else None,
                 "total_frns": len(all_frns),
                 "total_schools": len(schools_data),
+                "portfolio_total_schools": len(profile.schools),
+                "schools_filed": len(filed_bens),
                 "summary": status_counts,
                 "year_filter": year,
                 "schools": schools_data,
+                "not_filed_schools": not_filed_schools,
+                "not_filed_summary": not_filed_summary,
             }
         # No rows in local table for this portfolio at all (or year).
         # Check whether the table has *any* rows for these BENs (any year).
@@ -3539,12 +3600,15 @@ async def get_portfolio_frn_status(
         )
         if any_rows > 0:
             # Portfolio is loaded — the filter just doesn't match any rows.
+            not_filed_schools, not_filed_summary = _compute_not_filed(set(), year)
             return {
                 "success": True,
                 "from_cache": True,
                 "source": "local_db",
                 "total_frns": 0,
                 "total_schools": len(school_bens),
+                "portfolio_total_schools": len(profile.schools),
+                "schools_filed": 0,
                 "summary": {
                     "funded": {"count": 0, "amount": 0},
                     "denied": {"count": 0, "amount": 0},
@@ -3554,6 +3618,8 @@ async def get_portfolio_frn_status(
                 "schools": [],
                 "year_filter": year,
                 "message": "No FRNs match the selected filters.",
+                "not_filed_schools": not_filed_schools,
+                "not_filed_summary": not_filed_summary,
             }
         # Truly empty for this portfolio. Tell the client to hit Refresh.
         return {
