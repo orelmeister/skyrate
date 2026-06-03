@@ -3477,7 +3477,7 @@ function ConsultantPortalPage() {
                     <div className="text-3xl font-bold text-slate-900">{portfolioFrnData.total_frns}</div>
                     <div className="text-xs text-slate-500 mt-1">
                       {portfolioFrnData.not_filed_schools?.length > 0 && portfolioFrnData.portfolio_total_schools
-                        ? `${portfolioFrnData.schools_filed ?? portfolioFrnData.total_schools} of ${portfolioFrnData.portfolio_total_schools} schools filed in FY${portfolioFrnData.year_filter}`
+                        ? `${portfolioFrnData.schools_filed ?? portfolioFrnData.total_schools} of ${portfolioFrnData.portfolio_total_schools} schools filed in FY${portfolioFrnData.year_filter} \u00b7 ${portfolioFrnData.not_filed_summary?.lapsed || 0} lapsed \u00b7 ${portfolioFrnData.not_filed_summary?.inactive || 0} inactive`
                         : `Across ${portfolioFrnData.total_schools} schools`
                       }
                     </div>
