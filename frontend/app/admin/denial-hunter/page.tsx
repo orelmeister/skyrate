@@ -205,6 +205,40 @@ function deadlineColor(deadline: string | null): string {
   return "text-emerald-700";
 }
 
+function SortTh<K extends string>({
+  label,
+  col,
+  sortKey,
+  sortDir,
+  onSort,
+  align = "left",
+}: {
+  label: string;
+  col: K;
+  sortKey: K;
+  sortDir: "asc" | "desc";
+  onSort: (col: K) => void;
+  align?: "left" | "right";
+}) {
+  const active = sortKey === col;
+  return (
+    <th
+      className={`py-2 pr-3 cursor-pointer select-none hover:text-slate-700 ${
+        align === "right" ? "text-right" : "text-left"
+      } ${active ? "text-violet-700" : ""}`}
+      onClick={() => onSort(col)}
+      title="Click to sort"
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        <span className="text-[10px]">
+          {active ? (sortDir === "asc" ? "▲" : "▼") : "↕"}
+        </span>
+      </span>
+    </th>
+  );
+}
+
 function Card({
   title,
   children,
@@ -372,6 +406,32 @@ export default function DenialHunterDashboard() {
   const [filterYear, setFilterYear] = useState<string>("");
   const [search, setSearch] = useState<string>("");
 
+  // Sorting (client-side on the loaded page of leads)
+  type SortKey =
+    | "organization_name"
+    | "state"
+    | "funding_year"
+    | "service_type"
+    | "requested_amount"
+    | "appealability"
+    | "denial_category"
+    | "appeal_deadline"
+    | "cnct_name"
+    | "outreach_status";
+  const [sortKey, setSortKey] = useState<SortKey>("appeal_deadline");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const toggleSort = (key: SortKey) => {
+    setSortKey((prevKey) => {
+      if (prevKey === key) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return prevKey;
+      }
+      setSortDir("asc");
+      return key;
+    });
+  };
+
   // Detail panel
   const [detail, setDetail] = useState<LeadDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -479,6 +539,49 @@ export default function DenialHunterDashboard() {
     stats?.by_funding_year.forEach((r) => r.funding_year && s.add(r.funding_year));
     return Array.from(s).sort((a, b) => b - a);
   }, [leads, stats]);
+
+  // Client-side sorting of the currently loaded leads page.
+  const sortedLeads = useMemo(() => {
+    const appealRank: Record<string, number> = { high: 3, medium: 2, low: 1 };
+    const arr = [...leads];
+    arr.sort((a, b) => {
+      let av: any;
+      let bv: any;
+      switch (sortKey) {
+        case "requested_amount":
+        case "funding_year":
+          av = a[sortKey] ?? -Infinity;
+          bv = b[sortKey] ?? -Infinity;
+          break;
+        case "appealability":
+          av = appealRank[(a.appealability || "").toLowerCase()] ?? 0;
+          bv = appealRank[(b.appealability || "").toLowerCase()] ?? 0;
+          break;
+        case "appeal_deadline": {
+          const at = a.appeal_deadline ? Date.parse(a.appeal_deadline) : Infinity;
+          const bt = b.appeal_deadline ? Date.parse(b.appeal_deadline) : Infinity;
+          av = isNaN(at) ? Infinity : at;
+          bv = isNaN(bt) ? Infinity : bt;
+          break;
+        }
+        case "denial_category":
+          av = (a.denial_category_human || a.denial_category || "").toLowerCase();
+          bv = (b.denial_category_human || b.denial_category || "").toLowerCase();
+          break;
+        case "cnct_name":
+          av = (a.cnct_name || a.cnct_email || "").toLowerCase();
+          bv = (b.cnct_name || b.cnct_email || "").toLowerCase();
+          break;
+        default:
+          av = ((a[sortKey] as any) ?? "").toString().toLowerCase();
+          bv = ((b[sortKey] as any) ?? "").toString().toLowerCase();
+      }
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return arr;
+  }, [leads, sortKey, sortDir]);
 
   if (!_hasHydrated || !isAuthenticated || (user?.role !== "admin" && user?.role !== "super")) {
     return (
@@ -731,27 +834,27 @@ export default function DenialHunterDashboard() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-200">
-                  <th className="py-2 pr-3">Organization</th>
-                  <th className="py-2 pr-3">ST</th>
-                  <th className="py-2 pr-3">FY</th>
-                  <th className="py-2 pr-3">Service</th>
-                  <th className="py-2 pr-3 text-right">Requested</th>
-                  <th className="py-2 pr-3">Appeal</th>
-                  <th className="py-2 pr-3">Category</th>
-                  <th className="py-2 pr-3">Deadline</th>
-                  <th className="py-2 pr-3">Contact</th>
-                  <th className="py-2 pr-3">Status</th>
+                  <SortTh label="Organization" col="organization_name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortTh label="ST" col="state" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortTh label="FY" col="funding_year" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortTh label="Service" col="service_type" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortTh label="Requested" col="requested_amount" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} align="right" />
+                  <SortTh label="Appeal" col="appealability" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortTh label="Category" col="denial_category" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortTh label="Deadline" col="appeal_deadline" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortTh label="Contact" col="cnct_name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
+                  <SortTh label="Status" col="outreach_status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 </tr>
               </thead>
               <tbody>
-                {leads.length === 0 ? (
+                {sortedLeads.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="py-6 text-center text-slate-500">
                       {loadingLeads ? "Loading…" : "No leads match these filters."}
                     </td>
                   </tr>
                 ) : (
-                  leads.map((l) => {
+                  sortedLeads.map((l) => {
                     const days = daysUntil(l.appeal_deadline);
                     return (
                       <tr
