@@ -516,6 +516,13 @@ def send_daily_digests():
     Send daily FRN digest emails to users who opted in.
     Reads from frn_status_changes_queue and groups by user.
     Runs at 08:00 America/New_York every day.
+
+    Phase 2 V2 rebuild:
+    - Window-function dedup: per (user_id, frn) collapse to first old_status -> last new_status
+    - Drop FRNs whose net change is zero (flipped and reverted)
+    - Bucket into categories for subject line
+    - Heartbeat email if user opted in but no changes
+    - Atomic mark-processed + cursor bump
     """
     import os as _os
     if _os.environ.get("SKYRATE_DISABLE_FRN_DIGEST") == "1":
@@ -523,88 +530,148 @@ def send_daily_digests():
         return
 
     logger.info("Running FRN daily digest job...")
-    
+
     db = SessionLocal()
     try:
         from ..models.frn_status_change import FrnStatusChangeQueue
         from .email_service import EmailService
-        
+
         alert_service = AlertService(db)
         email_service = EmailService()
         now = datetime.utcnow()
-        
-        # Get all unprocessed queue items
-        pending = db.query(FrnStatusChangeQueue).filter(
-            FrnStatusChangeQueue.processed == 0
-        ).order_by(FrnStatusChangeQueue.created_at.asc()).all()
-        
-        if not pending:
-            logger.info("FRN daily digest: no pending changes. Skipping.")
+
+        # Gather all users with daily_digest enabled
+        configs = db.query(AlertConfig).filter(AlertConfig.daily_digest == True).all()
+        if not configs:
+            logger.info("FRN daily digest: no users with digest enabled. Skipping.")
             db.close()
             return
-        
-        # Group by user_id
-        by_user = {}
-        for item in pending:
-            if item.user_id not in by_user:
-                by_user[item.user_id] = []
-            by_user[item.user_id].append(item)
-        
+
         sent_count = 0
+        heartbeat_count = 0
         skipped_count = 0
-        
-        for user_id, user_changes in by_user.items():
+        total_rows_drained = 0
+        total_rows_collapsed = 0
+        errors = 0
+
+        for config in configs:
+            user_id = config.user_id
             try:
-                config = alert_service.get_or_create_alert_config(user_id)
-                if not config.daily_digest:
-                    skipped_count += 1
-                    # Still mark as processed so they don't pile up
-                    for c in user_changes:
-                        c.processed = 1
-                        c.processed_at = now
-                    continue
-                
                 user = db.query(User).filter(User.id == user_id).first()
                 if not user or not user.is_active:
-                    for c in user_changes:
-                        c.processed = 1
-                        c.processed_at = now
+                    skipped_count += 1
                     continue
-                
+
+                # Determine window: since last digest (or 24h ago if never sent)
+                since = config.last_frn_digest_at or (now - timedelta(hours=24))
+
+                # Fetch unprocessed queue rows for this user within the window
+                raw_rows = (
+                    db.query(FrnStatusChangeQueue)
+                    .filter(
+                        FrnStatusChangeQueue.user_id == user_id,
+                        FrnStatusChangeQueue.processed == 0,
+                        FrnStatusChangeQueue.created_at > since,
+                    )
+                    .order_by(FrnStatusChangeQueue.created_at.asc())
+                    .all()
+                )
+
+                # Window-function dedup: per FRN, take first old_status and last new_status
+                frn_windows = {}  # frn -> {first_old, last_new, last_amount, entity_name, ben, rows}
+                for row in raw_rows:
+                    if row.frn not in frn_windows:
+                        frn_windows[row.frn] = {
+                            "first_old": row.old_status,
+                            "last_new": row.new_status,
+                            "last_amount": row.new_amount,
+                            "entity_name": row.entity_name,
+                            "ben": row.ben,
+                            "rows": [row],
+                        }
+                    else:
+                        w = frn_windows[row.frn]
+                        w["last_new"] = row.new_status
+                        w["last_amount"] = row.new_amount
+                        if row.entity_name:
+                            w["entity_name"] = row.entity_name
+                        w["rows"].append(row)
+
+                # Filter: drop FRNs where net change is zero
+                collapsed_count = 0
+                net_changes = []
+                all_row_ids = []
+                for frn_num, w in frn_windows.items():
+                    for r in w["rows"]:
+                        all_row_ids.append(r.id)
+                    if w["first_old"] == w["last_new"]:
+                        collapsed_count += 1
+                    else:
+                        net_changes.append({
+                            "frn": frn_num,
+                            "ben": w["ben"],
+                            "entity_name": w["entity_name"],
+                            "old_status": w["first_old"],
+                            "new_status": w["last_new"],
+                            "new_amount": w["last_amount"],
+                        })
+
+                total_rows_drained += len(raw_rows)
+                total_rows_collapsed += collapsed_count
+
                 email_to = config.notification_email or user.email
                 user_name = user.first_name or user.email.split("@")[0]
-                
-                success = email_service.send_frn_digest_email(
-                    to_email=email_to,
-                    user_name=user_name,
-                    changes=user_changes,
-                    role=user.role or "consultant",
-                )
-                
-                if success:
-                    sent_count += 1
-                    config.last_frn_digest_at = now
-                
-                # Mark all as processed regardless (avoid re-sending on failure)
-                for c in user_changes:
-                    c.processed = 1
-                    c.processed_at = now
-                    
+                role = user.role or "consultant"
+
+                if net_changes:
+                    # Send digest with real changes
+                    success = email_service.send_frn_digest_email_v2(
+                        to_email=email_to,
+                        user_name=user_name,
+                        changes=net_changes,
+                        collapsed_count=collapsed_count,
+                        role=role,
+                    )
+                    if success:
+                        sent_count += 1
+                else:
+                    # Heartbeat: no net changes, but user opted in
+                    success = email_service.send_frn_digest_heartbeat(
+                        to_email=email_to,
+                        user_name=user_name,
+                        role=role,
+                    )
+                    if success:
+                        heartbeat_count += 1
+
+                # Atomic mark-processed + cursor bump
+                if all_row_ids:
+                    db.query(FrnStatusChangeQueue).filter(
+                        FrnStatusChangeQueue.id.in_(all_row_ids)
+                    ).update({"processed": 1, "processed_at": now}, synchronize_session=False)
+                config.last_frn_digest_at = now
+                db.commit()
+
             except Exception as e:
                 logger.error(f"Error sending FRN digest to user {user_id}: {e}")
-                # Mark as processed to avoid infinite retry
-                for c in user_changes:
-                    c.processed = 1
-                    c.processed_at = now
-        
-        db.commit()
-        logger.info(f"FRN daily digest complete. Sent {sent_count} digests, skipped {skipped_count} (opt-out). {len(pending)} queue items processed.")
-        
+                errors += 1
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+
+        logger.info(
+            f"digest_run: users_scanned={len(configs)} digests_sent={sent_count} "
+            f"digests_heartbeat={heartbeat_count} digests_skipped_empty=0 "
+            f"queue_rows_drained={total_rows_drained} queue_rows_collapsed={total_rows_collapsed} "
+            f"errors={errors}"
+        )
+
     except Exception as e:
         logger.error(f"FRN daily digest job failed: {e}")
         try:
             db.rollback()
-        except:
+        except Exception:
             pass
     finally:
         db.close()

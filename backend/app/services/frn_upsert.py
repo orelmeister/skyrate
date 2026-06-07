@@ -94,23 +94,28 @@ def upsert_frn_snapshots(
             fcdl_changed = ex_fcdl != rec_fcdl
 
             if status_changed or amt_changed or pr_changed or fcdl_changed:
-                if status_changed and queue_status_changes and rec.get("user_id"):
-                    alerts.append(
-                        FrnStatusChangeQueue(
-                            user_id=rec["user_id"],
-                            frn=frn,
-                            ben=ben,
-                            scope_type=scope_type,
-                            scope_value=scope_value or ben,
-                            old_status=ex_status,
-                            new_status=rec_status,
-                            old_amount=ex_amt,
-                            new_amount=rec_amt,
-                            entity_name=rec.get("organization_name"),
-                            created_at=now,
-                            processed=0,
+                if status_changed and queue_status_changes:
+                    # Resolve all owners for this BEN/FRN/SPIN and insert a row per owner
+                    from .frn_ownership import resolve_owners
+                    rec_spin = rec.get("spin") or ""
+                    owners = resolve_owners(db, ben=ben, frn=frn, spin=rec_spin)
+                    for owner_id in owners:
+                        alerts.append(
+                            FrnStatusChangeQueue(
+                                user_id=owner_id,
+                                frn=frn,
+                                ben=ben,
+                                scope_type=scope_type,
+                                scope_value=scope_value or ben,
+                                old_status=ex_status,
+                                new_status=rec_status,
+                                old_amount=ex_amt,
+                                new_amount=rec_amt,
+                                entity_name=rec.get("organization_name"),
+                                created_at=now,
+                                processed=0,
+                            )
                         )
-                    )
                 ex.status = rec_status
                 ex.amount_committed = rec_amt
                 ex.pending_reason = rec_pr

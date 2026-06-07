@@ -607,6 +607,242 @@ View all in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000
             email_type='frn_digest'
         )
 
+    def _get_role_frn_url(self, role: str, frn: str = "", ben: str = "", spin: str = "") -> str:
+        """Return role-aware deep link to the FRN status page."""
+        from ..core.config import settings
+        base = getattr(settings, 'FRONTEND_URL', 'https://skyrate.ai')
+        if role == "vendor":
+            url = f"{base}/vendor?tab=frn-status"
+            if frn:
+                url += f"&frn={frn}"
+            if spin:
+                url += f"&spin={spin}"
+        elif role == "applicant":
+            url = f"{base}/applicant-portal?tab=frn-status"
+            if frn:
+                url += f"&frn={frn}"
+        elif role in ("super", "admin"):
+            url = f"{base}/super?tab=frn-status"
+            if frn:
+                url += f"&frn={frn}"
+        else:
+            # consultant (default)
+            url = f"{base}/consultant?tab=frn-status"
+            if frn:
+                url += f"&frn={frn}"
+            if ben:
+                url += f"&ben={ben}"
+        return url
+
+    def send_frn_digest_email_v2(
+        self,
+        to_email: str,
+        user_name: str,
+        changes: list,
+        collapsed_count: int = 0,
+        role: str = "consultant",
+    ) -> bool:
+        """
+        V2 FRN digest email with deduped changes, bucketed categories,
+        role-aware links, and a proper subject line.
+        Each change is a dict with: frn, ben, entity_name, old_status, new_status, new_amount.
+        """
+        from ..core.config import settings
+        frontend_url = getattr(settings, 'FRONTEND_URL', 'https://skyrate.ai')
+
+        # Bucket changes by category
+        funded = []
+        denied = []
+        pia = []
+        amount_changed = []
+        cancelled = []
+        other = []
+
+        for c in changes:
+            ns = (c.get("new_status") or "").lower()
+            if "committed" in ns or "funded" in ns:
+                funded.append(c)
+            elif "denied" in ns:
+                denied.append(c)
+            elif "pia" in ns or "selective" in ns or "review" in ns:
+                pia.append(c)
+            elif "cancel" in ns or "withdrawn" in ns:
+                cancelled.append(c)
+            elif c.get("new_amount") is not None and c.get("old_status", "").lower() == c.get("new_status", "").lower():
+                amount_changed.append(c)
+            else:
+                other.append(c)
+
+        total = len(changes)
+        # Build subject line
+        parts = []
+        if funded:
+            parts.append(f"{len(funded)} funded")
+        if denied:
+            parts.append(f"{len(denied)} denied")
+        if pia:
+            parts.append(f"{len(pia)} PIA")
+        subject = f"[SkyRate] {total} FRN update{'s' if total != 1 else ''} in your portfolio"
+        if parts:
+            subject += " - " + ", ".join(parts)
+
+        # Build rows HTML (capped at 50)
+        display_changes = changes[:50]
+        overflow = total - 50 if total > 50 else 0
+
+        rows_html = ""
+        for c in display_changes:
+            ns = c.get("new_status") or "Unknown"
+            ns_lower = ns.lower()
+            if "denied" in ns_lower:
+                pill_class = "background:#fee2e2;color:#991b1b;"
+            elif "committed" in ns_lower or "funded" in ns_lower:
+                pill_class = "background:#d1fae5;color:#065f46;"
+            elif "pia" in ns_lower or "review" in ns_lower:
+                pill_class = "background:#fef3c7;color:#92400e;"
+            elif "cancel" in ns_lower or "withdrawn" in ns_lower:
+                pill_class = "background:#e5e7eb;color:#374151;"
+            else:
+                pill_class = "background:#e0e7ff;color:#3730a3;"
+
+            view_url = self._get_role_frn_url(role, frn=c.get("frn", ""), ben=c.get("ben", ""))
+            amount_str = f"${c['new_amount']:,.0f}" if c.get("new_amount") else "-"
+
+            rows_html += f"""
+            <tr>
+                <td style="padding:8px 12px; border-bottom:1px solid #e5e7eb;">{c.get('entity_name') or c.get('ben') or '-'}</td>
+                <td style="padding:8px 12px; border-bottom:1px solid #e5e7eb;">{c.get('frn', '-')}</td>
+                <td style="padding:8px 12px; border-bottom:1px solid #e5e7eb;">{c.get('old_status') or '-'}</td>
+                <td style="padding:8px 12px; border-bottom:1px solid #e5e7eb;"><span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:0.78em;font-weight:600;{pill_class}">{ns}</span></td>
+                <td style="padding:8px 12px; border-bottom:1px solid #e5e7eb;">{amount_str}</td>
+                <td style="padding:8px 12px; border-bottom:1px solid #e5e7eb;"><a href="{view_url}" style="display:inline-block;padding:4px 10px;background:#2563eb;color:#fff;text-decoration:none;border-radius:4px;font-size:0.82em;">View</a></td>
+            </tr>
+            """
+
+        overflow_html = ""
+        if overflow > 0:
+            all_url = self._get_role_frn_url(role)
+            overflow_html = f'<p style="color:#6b7280;font-size:0.85em;margin-top:12px;">+{overflow} more changes. <a href="{all_url}" style="color:#2563eb;">View all in portal</a></p>'
+
+        collapsed_html = ""
+        if collapsed_count > 0:
+            collapsed_html = f'<p style="color:#6b7280;font-size:0.85em;margin-top:8px;">{collapsed_count} FRN{"s" if collapsed_count != 1 else ""} flipped and reverted (no net change) - collapsed and not shown.</p>'
+
+        view_all_url = self._get_role_frn_url(role)
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"></head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0;">
+            <div style="max-width: 680px; margin: 0 auto; padding: 20px;">
+                <div style="background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+                    <h1 style="margin: 0; font-size: 22px;">FRN Daily Digest</h1>
+                    <p style="margin: 5px 0 0 0; opacity: 0.8;">{datetime.now().strftime('%B %d, %Y')}</p>
+                </div>
+                <div style="background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+                    <p>Hi {user_name},</p>
+                    <p>Here's what changed in your portfolio today.</p>
+
+                    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;">
+                        {"".join(f'<div style="flex:1;min-width:100px;background:#f8fafc;border-radius:8px;padding:14px;text-align:center;border:1px solid #e2e8f0;"><div style="font-size:1.6em;font-weight:bold;color:#1e3a5f;">{count}</div><div style="font-size:0.78em;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-top:2px;">{label}</div></div>' for label, count in [("Funded", len(funded)), ("Denied", len(denied)), ("PIA", len(pia)), ("Other", len(amount_changed) + len(cancelled) + len(other))] if count > 0)}
+                    </div>
+
+                    <table style="width:100%; border-collapse:collapse; background:white; border-radius:6px; overflow:hidden; font-size:13px;">
+                        <thead>
+                            <tr style="background:#f3f4f6;">
+                                <th style="padding:10px 12px; text-align:left; font-weight:600;">Entity</th>
+                                <th style="padding:10px 12px; text-align:left; font-weight:600;">FRN</th>
+                                <th style="padding:10px 12px; text-align:left; font-weight:600;">Was</th>
+                                <th style="padding:10px 12px; text-align:left; font-weight:600;">Now</th>
+                                <th style="padding:10px 12px; text-align:left; font-weight:600;">Amount</th>
+                                <th style="padding:10px 12px; text-align:left; font-weight:600;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows_html}
+                        </tbody>
+                    </table>
+
+                    {overflow_html}
+                    {collapsed_html}
+
+                    <a href="{view_all_url}" style="display:inline-block; background:#2563eb; color:white; padding:12px 24px; text-decoration:none; border-radius:6px; margin-top:15px;">
+                        View All in Portfolio
+                    </a>
+                </div>
+                <div style="text-align:center; color:#6b7280; font-size:12px; margin-top:20px;">
+                    <p>You're receiving this because FRN digest is enabled in your settings.</p>
+                    <p><a href="{frontend_url}/settings/notifications" style="color:#2563eb;">Manage preferences</a></p>
+                    <p>&copy; {datetime.now().year} SkyRate AI. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_content = f"FRN Daily Digest - {datetime.now().strftime('%B %d, %Y')}\n\n"
+        text_content += f"Hi {user_name},\n\n{total} FRN status changes:\n\n"
+        for c in display_changes[:20]:
+            text_content += f"- FRN {c.get('frn')} ({c.get('entity_name') or c.get('ben')}): {c.get('old_status')} -> {c.get('new_status')}\n"
+        if total > 20:
+            text_content += f"\n...and {total - 20} more. View all: {view_all_url}\n"
+
+        return self.send_email(
+            to_email=to_email,
+            subject=subject,
+            html_content=html_content,
+            text_content=text_content,
+            email_type='frn_digest'
+        )
+
+    def send_frn_digest_heartbeat(
+        self,
+        to_email: str,
+        user_name: str,
+        role: str = "consultant",
+    ) -> bool:
+        """Send a heartbeat email when no FRN changes occurred for a user's portfolio."""
+        from ..core.config import settings
+        frontend_url = getattr(settings, 'FRONTEND_URL', 'https://skyrate.ai')
+        view_all_url = self._get_role_frn_url(role)
+
+        subject = "[SkyRate] All quiet - no FRN changes today"
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8"></head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                <div style="background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+                    <h1 style="margin: 0; font-size: 22px;">FRN Daily Digest</h1>
+                    <p style="margin: 5px 0 0 0; opacity: 0.8;">{datetime.now().strftime('%B %d, %Y')}</p>
+                </div>
+                <div style="background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+                    <p>Hi {user_name},</p>
+                    <p>All quiet - no FRN status changes in your portfolio today. We will notify you as soon as something moves.</p>
+                    <a href="{view_all_url}" style="display:inline-block; background:#2563eb; color:white; padding:12px 24px; text-decoration:none; border-radius:6px; margin-top:10px;">
+                        View Portfolio Dashboard
+                    </a>
+                </div>
+                <div style="text-align:center; color:#6b7280; font-size:12px; margin-top:20px;">
+                    <p><a href="{frontend_url}/settings/notifications" style="color:#2563eb;">Manage preferences</a></p>
+                    <p>&copy; {datetime.now().year} SkyRate AI. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        text_content = f"Hi {user_name},\n\nAll quiet - no FRN status changes in your portfolio today.\n\nView your portfolio: {view_all_url}\n"
+
+        return self.send_email(
+            to_email=to_email,
+            subject=subject,
+            html_content=html_content,
+            text_content=text_content,
+            email_type='frn_digest'
+        )
+
     def send_weekly_summary_email(
         self,
         to_email: str,
