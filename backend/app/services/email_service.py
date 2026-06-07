@@ -618,7 +618,7 @@ View all in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000
             if spin:
                 url += f"&spin={spin}"
         elif role == "applicant":
-            url = f"{base}/applicant-portal?tab=frn-status"
+            url = f"{base}/applicant?tab=frn-status"
             if frn:
                 url += f"&frn={frn}"
         elif role in ("super", "admin"):

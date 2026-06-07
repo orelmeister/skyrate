@@ -56,6 +56,9 @@ class User(Base):
     # onboarding step 0. A scheduled job sends a follow-up email ~48h after.
     pending_identifier_reminder = Column(DateTime, nullable=True)
 
+    # Test account flag — skip real SMTP in digest jobs
+    is_test = Column(Boolean, default=False, nullable=False, server_default="0")
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

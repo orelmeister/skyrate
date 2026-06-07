@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, Suspense, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
@@ -204,6 +204,27 @@ function ApplicantDashboard() {
     }
     fetchDashboard();
   }, [_hasHydrated, isAuthenticated, token, user, router, checkingVerification, emailVerified]);
+
+  // Deep link handling: scroll to FRN from email links
+  // URL format: /applicant?tab=frn-status&frn=XXXXX
+  const searchParams = useSearchParams();
+  const frnParam = searchParams.get('frn');
+  const deepLinkHandled = useRef(false);
+
+  useEffect(() => {
+    if (frnParam && !isLoading && !deepLinkHandled.current) {
+      deepLinkHandled.current = true;
+      setSelectedTab("frn-status");
+      setTimeout(() => {
+        const el = document.querySelector(`[data-frn="${frnParam}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("frn-highlight");
+          setTimeout(() => el.classList.remove("frn-highlight"), 2000);
+        }
+      }, 800);
+    }
+  }, [frnParam, isLoading]);
 
   // Auto-load data when switching to live tabs
   useEffect(() => {

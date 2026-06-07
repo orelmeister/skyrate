@@ -562,6 +562,12 @@ def send_daily_digests():
                     skipped_count += 1
                     continue
 
+                # Skip test accounts (no real SMTP)
+                _email = (user.email or "").lower()
+                if getattr(user, 'is_test', False) or _email.endswith("@example.com") or _email.startswith("test_"):
+                    skipped_count += 1
+                    continue
+
                 # Determine window: since last digest (or 24h ago if never sent)
                 since = config.last_frn_digest_at or (now - timedelta(hours=24))
 
@@ -624,6 +630,21 @@ def send_daily_digests():
                 role = user.role or "consultant"
 
                 if net_changes:
+                    # Sanity guard: cap at 50 rows, skip if suspiciously large
+                    if len(net_changes) > 50:
+                        # Sort by severity for the cap: denied > PIA > funded > other
+                        def _severity(c):
+                            ns = (c.get("new_status") or "").lower()
+                            if "denied" in ns:
+                                return 0
+                            if "pia" in ns or "review" in ns:
+                                return 1
+                            if "committed" in ns or "funded" in ns:
+                                return 2
+                            return 3
+                        net_changes.sort(key=_severity)
+                        net_changes = net_changes[:50]
+
                     # Send digest with real changes
                     success = email_service.send_frn_digest_email_v2(
                         to_email=email_to,

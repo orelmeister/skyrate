@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, Suspense, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense, useMemo, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore, deriveRequiresPaymentSetup } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
@@ -402,6 +402,29 @@ function VendorPortalPage() {
     
     checkPaymentStatus();
   }, [_hasHydrated, isAuthenticated, user, router, checkingVerification, emailVerified]);
+
+  // Deep link handling: open FRN detail modal from email links
+  // URL format: /vendor?tab=frn-status&frn=XXXXX
+  const searchParams = useSearchParams();
+  const frnParam = searchParams.get('frn');
+  const deepLinkHandled = useRef(false);
+
+  useEffect(() => {
+    if (frnParam && !isLoading && !deepLinkHandled.current) {
+      deepLinkHandled.current = true;
+      setFrnSearch(frnParam);
+      setActiveTab("frn-status");
+      // Scroll to the matching row after a brief delay for render
+      setTimeout(() => {
+        const el = document.querySelector(`[data-frn="${frnParam}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("frn-highlight");
+          setTimeout(() => el.classList.remove("frn-highlight"), 2000);
+        }
+      }, 800);
+    }
+  }, [frnParam, isLoading]);
 
   // Load saved leads when the "leads" tab is activated
   useEffect(() => {

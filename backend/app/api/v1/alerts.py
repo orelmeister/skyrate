@@ -546,3 +546,89 @@ async def send_test_alert(
             "sms_error": sms_error,
         }
     }
+
+
+# ==================== FRN DIGEST PREVIEW ====================
+
+@router.get("/frn-digest/preview")
+def preview_frn_digest(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Preview what the next FRN daily digest would contain for the current user.
+    Returns the deduped payload without sending any email.
+    """
+    from ...models.frn_status_change import FrnStatusChangeQueue
+    from ...services.alert_service import AlertService
+
+    alert_service = AlertService(db)
+    config = alert_service.get_or_create_alert_config(current_user.id)
+
+    since = config.last_frn_digest_at or (datetime.utcnow() - timedelta(hours=24))
+
+    raw_rows = (
+        db.query(FrnStatusChangeQueue)
+        .filter(
+            FrnStatusChangeQueue.user_id == current_user.id,
+            FrnStatusChangeQueue.processed == 0,
+            FrnStatusChangeQueue.created_at > since,
+        )
+        .order_by(FrnStatusChangeQueue.created_at.asc())
+        .all()
+    )
+
+    # Window-function dedup: per FRN, take first old_status and last new_status
+    frn_windows: Dict[str, Dict[str, Any]] = {}
+    for row in raw_rows:
+        if row.frn not in frn_windows:
+            frn_windows[row.frn] = {
+                "first_old": row.old_status,
+                "last_new": row.new_status,
+                "last_amount": row.new_amount,
+                "entity_name": row.entity_name,
+                "ben": row.ben,
+            }
+        else:
+            w = frn_windows[row.frn]
+            w["last_new"] = row.new_status
+            w["last_amount"] = row.new_amount
+            if row.entity_name:
+                w["entity_name"] = row.entity_name
+
+    collapsed_count = 0
+    net_changes = []
+    for frn_num, w in frn_windows.items():
+        if w["first_old"] == w["last_new"]:
+            collapsed_count += 1
+        else:
+            role = current_user.role or "consultant"
+            if role == "vendor":
+                view_url = f"https://skyrate.ai/vendor?tab=frn-status&frn={frn_num}"
+            elif role == "applicant":
+                view_url = f"https://skyrate.ai/applicant?tab=frn-status&frn={frn_num}"
+            elif role in ("super", "admin"):
+                view_url = f"https://skyrate.ai/super?tab=frn-status&frn={frn_num}"
+            else:
+                view_url = f"https://skyrate.ai/consultant?tab=frn-status&frn={frn_num}&ben={w['ben'] or ''}"
+            net_changes.append({
+                "frn": frn_num,
+                "ben": w["ben"],
+                "entity_name": w["entity_name"],
+                "old_status": w["first_old"],
+                "new_status": w["last_new"],
+                "new_amount": w["last_amount"],
+                "view_url": view_url,
+            })
+
+    return {
+        "user_id": current_user.id,
+        "email": current_user.email,
+        "role": current_user.role,
+        "since": since.isoformat(),
+        "raw_queue_rows": len(raw_rows),
+        "collapsed_count": collapsed_count,
+        "net_changes_count": len(net_changes),
+        "changes": net_changes[:50],
+        "overflow": max(0, len(net_changes) - 50),
+    }
