@@ -1603,7 +1603,8 @@ class USACDataClient:
                         'f486_status': record.get('f486_case_status', ''),
                         'wave_number': record.get('wave_sequence_number', ''),
                         'fcdl_comment': record.get('fcdl_comment_frn', ''),
-                        'updated_at': record.get(':updated_at', '')
+                        'updated_at': record.get(':updated_at', ''),
+                        'contract_number': record.get('contract_number', ''),
                     })
                 
                 results[ben] = {

@@ -23,7 +23,7 @@ Usage:
 Expected keys in each rec dict (defaults are tolerated for missing keys):
     frn, status, funding_year, amount_requested, amount_committed,
     service_type, organization_name, ben, user_id, user_email, source,
-    fcdl_date, pending_reason
+    fcdl_date, pending_reason, spin, contract_number
 """
 
 import logging
@@ -116,6 +116,13 @@ def upsert_frn_snapshots(
                 ex.pending_reason = rec_pr
                 ex.fcdl_date = rec_fcdl
                 ex.last_refreshed = now
+                # Backfill spin/contract_number if newly available
+                rec_spin = rec.get("spin") or ""
+                rec_cn = rec.get("contract_number") or ""
+                if rec_spin and not ex.spin:
+                    ex.spin = rec_spin
+                if rec_cn and not ex.contract_number:
+                    ex.contract_number = rec_cn
                 updates += 1
         else:
             rec_copy = dict(rec)
@@ -200,4 +207,6 @@ def build_rec_from_usac_frn(
         "source": source,
         "fcdl_date": frn.get("fcdl_date", ""),
         "pending_reason": frn.get("pending_reason", ""),
+        "spin": frn.get("spin_name", "") or frn.get("spin", "") or "",
+        "contract_number": frn.get("contract_number", "") or "",
     }

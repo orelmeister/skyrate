@@ -214,6 +214,8 @@ function ConsultantPortalPage() {
   const [portfolioFrnStatusFilter, setPortfolioFrnStatusFilter] = useState<string>("");
   const [portfolioFrnPendingReason, setPortfolioFrnPendingReason] = useState<string>("");
   const [portfolioFrnSearch, setPortfolioFrnSearch] = useState<string>("");
+  const [portfolioFrnSpinSearch, setPortfolioFrnSpinSearch] = useState<string>("");
+  const [portfolioFrnCrnSearch, setPortfolioFrnCrnSearch] = useState<string>("");
   const [expandedSchools, setExpandedSchools] = useState<Set<string>>(new Set());
   const [frnSortBy, setFrnSortBy] = useState<string>("name");
   const [selectedFRN, setSelectedFRN] = useState<any>(null);
@@ -381,7 +383,7 @@ function ConsultantPortalPage() {
             entity_name: school.entity_name || school.ben,
             state: frn.state || '',
             funding_year: frn.funding_year || '',
-            spin_name: frn.spin_name || frn.service_provider_name || '',
+            spin_name: frn.spin_name || frn.spin || frn.service_provider_name || '',
             service_type: frn.service_type || '',
             status: frn.frn_status || frn.status || 'Unknown',
             pending_reason: frn.pending_reason || '',
@@ -398,6 +400,7 @@ function ConsultantPortalPage() {
             f486_status: frn.f486_status || frn.form_486_status || '',
             wave_number: frn.wave_number || '',
             fcdl_comment: frn.fcdl_comment || frn.fcdl_comment_frn || '',
+            contract_number: frn.contract_number || '',
           });
         }
       }
@@ -414,9 +417,9 @@ function ConsultantPortalPage() {
     if (portfolioFrnSearch.trim()) {
       const search = portfolioFrnSearch.trim().toLowerCase();
       filtered = filtered.filter(frn =>
-        (frn.frn || '').toLowerCase().includes(search) ||
-        (frn.entity_name || '').toLowerCase().includes(search) ||
-        (frn.ben || '').toLowerCase().includes(search)
+        String(frn.frn || '').toLowerCase().includes(search) ||
+        String(frn.entity_name || '').toLowerCase().includes(search) ||
+        String(frn.ben || '').toLowerCase().includes(search)
       );
     }
     // Client-side filter by sub-status / pending reason (its own dedicated input, real-time)
@@ -879,11 +882,11 @@ function ConsultantPortalPage() {
   };
 
   // Load Portfolio FRN Status
-  const loadPortfolioFRNStatus = async (year?: number, statusFilter?: string, pendingReason?: string, refresh?: boolean, ben?: string) => {
+  const loadPortfolioFRNStatus = async (year?: number, statusFilter?: string, pendingReason?: string, refresh?: boolean, ben?: string, search?: string, spinFilter?: string, crnFilter?: string) => {
     setPortfolioFrnLoading(true);
     setPortfolioFrnError(null);
     try {
-      const response = await api.getConsultantFRNStatus(year, statusFilter || undefined, 500, pendingReason || undefined, refresh, ben);
+      const response = await api.getConsultantFRNStatus(year, statusFilter || undefined, 500, pendingReason || undefined, refresh, ben, search || undefined, spinFilter || undefined, crnFilter || undefined);
       if (response.success && response.data) {
         const data = response.data as any;
         if (data.access_restricted) {
@@ -3423,17 +3426,40 @@ function ConsultantPortalPage() {
                       className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-56"
                     />
                   </div>
+                  <div>
+                    <label className="text-sm text-slate-600 mb-1 block">Search by SPIN</label>
+                    <input
+                      type="text"
+                      value={portfolioFrnSpinSearch}
+                      onChange={(e) => setPortfolioFrnSpinSearch(e.target.value)}
+                      placeholder="e.g., 143000331"
+                      className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-48"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-slate-600 mb-1 block">Search by CRN</label>
+                    <input
+                      type="text"
+                      value={portfolioFrnCrnSearch}
+                      onChange={(e) => setPortfolioFrnCrnSearch(e.target.value)}
+                      placeholder="e.g., CRN123456"
+                      className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-48"
+                    />
+                  </div>
                   <button
                     onClick={() => {
                       const searchTerm = portfolioFrnSearch.trim();
+                      const spinTerm = portfolioFrnSpinSearch.trim();
+                      const crnTerm = portfolioFrnCrnSearch.trim();
                       // Detect a BEN-like search (all digits, 5-10 chars)
                       const looksLikeBen = /^\d{5,10}$/.test(searchTerm);
-                      const benAlreadyLoaded = looksLikeBen && portfolioFrnData?.schools?.some((s: any) => s.ben === searchTerm);
+                      const benAlreadyLoaded = looksLikeBen && portfolioFrnData?.schools?.some((s: any) => String(s.ben) === searchTerm);
                       if (looksLikeBen && !benAlreadyLoaded) {
                         // Pass ben to backend — super/admin will get results, others get upsell
-                        loadPortfolioFRNStatus(portfolioFrnYear, portfolioFrnStatusFilter, portfolioFrnPendingReason, undefined, searchTerm);
+                        loadPortfolioFRNStatus(portfolioFrnYear, portfolioFrnStatusFilter, portfolioFrnPendingReason, undefined, searchTerm, undefined, spinTerm, crnTerm);
                       } else {
-                        loadPortfolioFRNStatus(portfolioFrnYear, portfolioFrnStatusFilter, portfolioFrnPendingReason);
+                        // Pass search term to backend for server-side filtering (fixes BEN search)
+                        loadPortfolioFRNStatus(portfolioFrnYear, portfolioFrnStatusFilter, portfolioFrnPendingReason, undefined, undefined, searchTerm, spinTerm, crnTerm);
                       }
                     }}
                     disabled={portfolioFrnLoading}

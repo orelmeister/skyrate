@@ -3304,6 +3304,9 @@ async def get_portfolio_frn_status(
     limit: int = 500,
     refresh: bool = False,
     ben: Optional[str] = None,
+    search: Optional[str] = None,
+    spin: Optional[str] = None,
+    crn: Optional[str] = None,
     profile: ConsultantProfile = Depends(get_consultant_profile),
     current_user: User = Depends(require_role("admin", "consultant", "super")),
     db: Session = Depends(get_db),
@@ -3428,6 +3431,8 @@ async def get_portfolio_frn_status(
                 "last_invoice_date": last_invoice_date,
                 "invoicing_mode": invoicing_mode,
                 "sub_status": sub_status,
+                "spin": getattr(r, 'spin', None) or "",
+                "contract_number": getattr(r, 'contract_number', None) or "",
             }
             all_frns.append(frn_dict)
             bucket = per_school.setdefault(
@@ -3465,11 +3470,28 @@ async def get_portfolio_frn_status(
         return all_frns, list(per_school.values()), status_counts
 
     def _query_local(bens, yr, st_filter):
+        from sqlalchemy import or_ as _or
         q = db.query(AdminFRNSnapshot).filter(AdminFRNSnapshot.ben.in_(bens))
         if yr is not None:
             q = q.filter(AdminFRNSnapshot.funding_year == str(yr))
         if st_filter:
             q = q.filter(AdminFRNSnapshot.status.ilike(f"%{st_filter}%"))
+        # Server-side search across FRN number, entity name, and BEN
+        if search:
+            search_term = f"%{search.strip()}%"
+            q = q.filter(
+                _or(
+                    AdminFRNSnapshot.frn.ilike(search_term),
+                    AdminFRNSnapshot.organization_name.ilike(search_term),
+                    AdminFRNSnapshot.ben.ilike(search_term),
+                )
+            )
+        # SPIN filter (service provider identification number / name)
+        if spin:
+            q = q.filter(AdminFRNSnapshot.spin.ilike(f"%{spin.strip()}%"))
+        # CRN filter (contract record number)
+        if crn:
+            q = q.filter(AdminFRNSnapshot.contract_number.ilike(f"%{crn.strip()}%"))
         # Dedupe by (ben, frn) keeping the most-recently-refreshed row. This
         # tolerates duplicate inserts from the on-demand refresh path (which
         # cannot reliably DELETE due to concurrent writer locks).

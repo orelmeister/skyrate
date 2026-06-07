@@ -1518,7 +1518,7 @@ class ApiClient {
   /**
    * Get FRN status for all schools in consultant's portfolio
    */
-  async getConsultantFRNStatus(year?: number, status?: string, limit: number = 500, pendingReason?: string, refresh?: boolean, ben?: string): Promise<ApiResponse<{
+  async getConsultantFRNStatus(year?: number, status?: string, limit: number = 500, pendingReason?: string, refresh?: boolean, ben?: string, search?: string, spin?: string, crn?: string): Promise<ApiResponse<{
     success: boolean;
     total_frns: number;
     total_schools: number;
@@ -1548,6 +1548,9 @@ class ApiClient {
     if (pendingReason) params.set('pending_reason', pendingReason);
     if (refresh) params.set('refresh', 'true');
     if (ben) params.set('ben', ben);
+    if (search) params.set('search', search);
+    if (spin) params.set('spin', spin);
+    if (crn) params.set('crn', crn);
     const queryString = params.toString() ? `?${params.toString()}` : '';
     // USAC batch can take 90-130s on cold cache for large portfolios.
     // 180s timeout ensures we don't abort prematurely; Cloudflare may still

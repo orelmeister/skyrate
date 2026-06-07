@@ -914,6 +914,27 @@ async def lifespan(app: FastAPI):
     except Exception as _heal_err:
         logger.warning(f"[startup] vendor_form470_snapshots heal skipped: {_heal_err}")
 
+    # Self-heal: ensure admin_frn_snapshots has spin + contract_number columns.
+    # Added in migration f1a2b3c4d5e6 but Alembic doesn't run automatically on deploy.
+    try:
+        from sqlalchemy import text as _sql_text2
+        with engine.begin() as _c2:
+            _existing = {r[0] for r in _c2.execute(_sql_text2(
+                "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'admin_frn_snapshots' "
+                "AND COLUMN_NAME IN ('spin','contract_number')"
+            )).fetchall()}
+            if 'spin' not in _existing:
+                logger.info("[startup] adding admin_frn_snapshots.spin column")
+                _c2.execute(_sql_text2("ALTER TABLE admin_frn_snapshots ADD COLUMN spin VARCHAR(64) NULL"))
+                _c2.execute(_sql_text2("CREATE INDEX ix_admin_frn_snap_spin ON admin_frn_snapshots (spin)"))
+            if 'contract_number' not in _existing:
+                logger.info("[startup] adding admin_frn_snapshots.contract_number column")
+                _c2.execute(_sql_text2("ALTER TABLE admin_frn_snapshots ADD COLUMN contract_number VARCHAR(128) NULL"))
+                _c2.execute(_sql_text2("CREATE INDEX ix_admin_frn_snap_contract ON admin_frn_snapshots (contract_number)"))
+    except Exception as _heal_err2:
+        logger.warning(f"[startup] admin_frn_snapshots spin/contract_number heal skipped: {_heal_err2}")
+
     yield
     
     # Shutdown
