@@ -515,8 +515,13 @@ def send_daily_digests():
     """
     Send daily FRN digest emails to users who opted in.
     Reads from frn_status_changes_queue and groups by user.
-    Runs at 07:00 America/New_York every day.
+    Runs at 08:00 America/New_York every day.
     """
+    import os as _os
+    if _os.environ.get("SKYRATE_DISABLE_FRN_DIGEST") == "1":
+        logger.info("FRN digest disabled via SKYRATE_DISABLE_FRN_DIGEST=1; skipping")
+        return
+
     logger.info("Running FRN daily digest job...")
     
     db = SessionLocal()
@@ -1586,10 +1591,10 @@ def init_scheduler():
         next_run_time=boot + timedelta(seconds=90),
     )
 
-    # Daily FRN digest - 07:00 America/New_York every day
+    # Daily FRN digest - 08:00 America/New_York every day
     scheduler.add_job(
         send_daily_digests,
-        trigger=CronTrigger(hour=7, minute=0, timezone='America/New_York'),
+        trigger=CronTrigger(hour=8, minute=0, timezone='America/New_York'),
         id='daily_digest',
         name='Send FRN daily digest emails',
         replace_existing=True

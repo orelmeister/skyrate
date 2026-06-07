@@ -677,6 +677,11 @@ class AlertService:
 
     def send_daily_digest(self, user_id: int) -> bool:
         """Send daily digest email with all unread alerts"""
+        import os as _os
+        if _os.environ.get("SKYRATE_DISABLE_FRN_DIGEST") == "1":
+            logger.info("FRN digest disabled via SKYRATE_DISABLE_FRN_DIGEST=1; skipping")
+            return False
+
         config = self.get_or_create_alert_config(user_id)
         
         if not config.daily_digest:
