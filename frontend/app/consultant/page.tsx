@@ -131,6 +131,9 @@ function ConsultantPortalPage() {
   const [newNotes, setNewNotes] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isRefreshingSchools, setIsRefreshingSchools] = useState(false);
+  // Bug C fix 2026-06-08: track add-school state so the modal shows feedback.
+  const [isAddingSchool, setIsAddingSchool] = useState(false);
+  const [addSchoolError, setAddSchoolError] = useState<string | null>(null);
   
   // Comprehensive school data state (includes C2 budget)
   const [comprehensiveSchoolData, setComprehensiveSchoolData] = useState<{
@@ -986,16 +989,32 @@ function ConsultantPortalPage() {
 
   const handleAddSchool = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Bug C fix 2026-06-08: show loading + feedback so users know the add succeeded.
+    // Previously the modal looked frozen because there was no toast/spinner and
+    // no error path - partner thought "nothing happened" when the add actually worked.
+    setIsAddingSchool(true);
+    setAddSchoolError(null);
+    const benToAdd = newBen.trim();
     try {
-      const response = await api.addConsultantSchool(newBen, newNotes || undefined);
+      const response = await api.addConsultantSchool(benToAdd, newNotes || undefined);
       if (response.success) {
         await loadData();
         setShowAddSchool(false);
         setNewBen("");
         setNewNotes("");
+        const addedName = (response.data as any)?.school?.school_name || (response.data as any)?.school_name || `BEN ${benToAdd}`;
+        // Visible confirmation - alert() matches the pattern already used by the CRN verify flow.
+        alert(`School added: ${addedName}`);
+      } else {
+        const msg = (response as any).error || "Failed to add school - response not successful.";
+        setAddSchoolError(msg);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to add school:", error);
+      const msg = error?.message || error?.error || "Failed to add school. Check the BEN and try again.";
+      setAddSchoolError(msg);
+    } finally {
+      setIsAddingSchool(false);
     }
   };
 
@@ -5194,15 +5213,28 @@ function ConsultantPortalPage() {
             <form onSubmit={handleAddSchool} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">BEN (Billed Entity Number)</label>
-                <input type="text" value={newBen} onChange={(e) => setNewBen(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Enter BEN..." required />
+                <input type="text" value={newBen} onChange={(e) => setNewBen(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Enter BEN..." required disabled={isAddingSchool} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Notes (Optional)</label>
-                <textarea value={newNotes} onChange={(e) => setNewNotes(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" rows={3} placeholder="Add any notes..." />
+                <textarea value={newNotes} onChange={(e) => setNewNotes(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" rows={3} placeholder="Add any notes..." disabled={isAddingSchool} />
               </div>
+              {addSchoolError && (
+                <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{addSchoolError}</div>
+              )}
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowAddSchool(false)} className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50">Cancel</button>
-                <button type="submit" className="flex-1 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl">Add School</button>
+                <button type="button" onClick={() => { setShowAddSchool(false); setAddSchoolError(null); }} disabled={isAddingSchool} className="flex-1 px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+                <button type="submit" disabled={isAddingSchool} className="flex-1 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                  {isAddingSchool ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+                      </svg>
+                      Adding...
+                    </>
+                  ) : "Add School"}
+                </button>
               </div>
             </form>
           </div>

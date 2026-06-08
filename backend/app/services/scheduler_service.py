@@ -1170,6 +1170,9 @@ def refresh_admin_frn_snapshot():
                                 "source": user_info.get("source", "unknown"),
                                 "fcdl_date": frn.get("fcdl_date", ""),
                                 "pending_reason": frn.get("pending_reason", ""),
+                                # Bug D fix 2026-06-08: map spin + contract_number so search-by-SPIN works.
+                                "spin": frn.get("spin_name") or frn.get("spin") or "",
+                                "contract_number": frn.get("contract_number", "") or "",
                                 "last_refreshed": now,
                             })
             except Exception as e:
@@ -1197,6 +1200,9 @@ def refresh_admin_frn_snapshot():
                             "source": "vendor",
                             "fcdl_date": frn.get("fcdl_date", ""),
                             "pending_reason": frn.get("pending_reason", ""),
+                            # Bug D fix 2026-06-08: map SPIN — vendor's own SPIN is always known.
+                            "spin": frn.get("spin_name") or frn.get("spin") or vp.spin or "",
+                            "contract_number": frn.get("contract_number", "") or "",
                             "last_refreshed": now,
                         })
             except Exception as e:

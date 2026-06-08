@@ -715,24 +715,32 @@ async def list_crns(
             ConsultantCRN.consultant_profile_id == profile.id
         ).order_by(ConsultantCRN.is_primary.desc(), ConsultantCRN.created_at).all()
 
-    # Count schools per CRN
+    # Count schools per CRN — STRICT source_crn match (bug fix 2026-06-08).
+    # The previous logic credited NULL-source rows to every primary CRN, causing
+    # double-counting whenever a profile had multiple primary CRNs. We now match
+    # strictly on source_crn, and surface any remaining NULL-source rows as a
+    # separate "legacy_count" field per profile so the UI can label them clearly.
     for crn_record in crns:
         scope_profile_id = crn_record.consultant_profile_id
-        if crn_record.is_primary:
-            count = db.query(ConsultantSchool).filter(
-                ConsultantSchool.consultant_profile_id == scope_profile_id,
-                or_(
-                    ConsultantSchool.source_crn == crn_record.crn,
-                    ConsultantSchool.source_crn.is_(None)
-                )
-            ).count()
-        else:
-            count = db.query(ConsultantSchool).filter(
-                ConsultantSchool.consultant_profile_id == scope_profile_id,
-                ConsultantSchool.source_crn == crn_record.crn
-            ).count()
+        count = db.query(ConsultantSchool).filter(
+            ConsultantSchool.consultant_profile_id == scope_profile_id,
+            ConsultantSchool.source_crn == crn_record.crn
+        ).count()
         crn_record.schools_count = count
     db.commit()
+
+    # Compute per-profile legacy (NULL-source) counts — should be 0 after Bug B
+    # backfill ran on 2026-06-08, but stays in place so future NULL-source rows
+    # (e.g. from add-school flows that don't tag source_crn) surface visibly.
+    legacy_by_profile: dict = {}
+    profile_ids_in_response = {c.consultant_profile_id for c in crns}
+    for pid in profile_ids_in_response:
+        legacy = db.query(ConsultantSchool).filter(
+            ConsultantSchool.consultant_profile_id == pid,
+            ConsultantSchool.source_crn.is_(None)
+        ).count()
+        if legacy > 0:
+            legacy_by_profile[pid] = legacy
 
     # Build response, attaching owner info when privileged so super/admin
     # can tell which consultant each CRN belongs to.
@@ -767,6 +775,7 @@ async def list_crns(
         "is_free_user": is_free_user,
         "can_add_free": is_free_user or len(crns) == 0,  # First CRN is always free
         "scope": "all" if is_privileged else "self",
+        "legacy_by_profile": legacy_by_profile,  # {profile_id: count} of NULL-source schools
     }
 
 
