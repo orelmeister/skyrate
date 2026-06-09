@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
@@ -34,6 +34,17 @@ function readRememberFlag(): boolean {
 }
 
 export default function SignInPage() {
+  // useSearchParams() requires a Suspense boundary for Next.js 14 static
+  // prerendering. Without this wrapper, `next build` fails with
+  // "useSearchParams() should be wrapped in a suspense boundary at /sign-in".
+  return (
+    <Suspense fallback={null}>
+      <SignInClient />
+    </Suspense>
+  );
+}
+
+function SignInClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectParam = safeRedirect(searchParams.get("redirect"));
