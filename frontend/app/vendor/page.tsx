@@ -161,6 +161,9 @@ function VendorPortalPage() {
   const [frnStatusFilter, setFrnStatusFilter] = useState<string>("");
   const [frnPendingReason, setFrnPendingReason] = useState<string>("");
   const [frnSearch, setFrnSearch] = useState<string>("");
+  // 2026-06-09: add SPIN / CRN search inputs (mirror consultant FRN tracker).
+  const [frnSpinSearch, setFrnSpinSearch] = useState<string>("");
+  const [frnCrnSearch, setFrnCrnSearch] = useState<string>("");
   const [selectedFRN, setSelectedFRN] = useState<FRNStatusRecord | null>(null);
   const [showFRNDetailModal, setShowFRNDetailModal] = useState(false);
   const [frnTableSort, setFrnTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
@@ -652,20 +655,20 @@ function VendorPortalPage() {
   };
 
   // FRN Status Monitoring functions (Sprint 2)
-  const loadFRNStatus = async (year?: number, status?: string, pendingReason?: string, ben?: string) => {
-    // Allow loading even without SPIN when a BEN is provided
-    if (!profile?.spin && !ben) {
+  const loadFRNStatus = async (year?: number, status?: string, pendingReason?: string, ben?: string, spinSearch?: string, crn?: string) => {
+    // Allow loading even without SPIN when a BEN / SPIN search / CRN is provided
+    if (!profile?.spin && !ben && !spinSearch && !crn) {
       return;
     }
     
     setFrnStatusLoading(true);
     try {
-      const response = await api.getFRNStatus(year, status || undefined, pendingReason || undefined, 500, ben);
+      const response = await api.getFRNStatus(year, status || undefined, pendingReason || undefined, 500, ben, spinSearch, crn);
       if (response.success && response.data) {
         setFrnStatusData(response.data);
-        // When a BEN lookup was performed, clear the search field so
-        // the client-side filter doesn't re-filter the BEN-scoped results.
-        if (ben) {
+        // When a BEN / SPIN / CRN scoped lookup was performed, clear the
+        // client-side text-search field so the table renders all returned rows.
+        if (ben || spinSearch || crn) {
           setFrnSearch("");
         }
       }
@@ -1808,16 +1811,39 @@ function VendorPortalPage() {
                         className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-56"
                       />
                     </div>
+                    {/* 2026-06-09: SPIN / CRN search (mirror of consultant FRN tracker). */}
+                    <div>
+                      <label className="text-sm text-slate-600 mb-1 block">Search by SPIN</label>
+                      <input
+                        type="text"
+                        value={frnSpinSearch}
+                        onChange={(e) => setFrnSpinSearch(e.target.value)}
+                        placeholder="e.g., 143000331"
+                        className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-48"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm text-slate-600 mb-1 block">Search by CRN</label>
+                      <input
+                        type="text"
+                        value={frnCrnSearch}
+                        onChange={(e) => setFrnCrnSearch(e.target.value)}
+                        placeholder="e.g., 470123"
+                        className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-48"
+                      />
+                    </div>
                     <button
                       onClick={() => {
                         const searchTerm = frnSearch.trim();
+                        const spinTerm = frnSpinSearch.trim();
+                        const crnTerm = frnCrnSearch.trim();
                         // Detect a BEN-like search (all digits, 5-10 chars)
                         const looksLikeBen = /^\d{5,10}$/.test(searchTerm);
                         if (looksLikeBen) {
                           // Pass ben to backend for server-side lookup
-                          loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason, searchTerm);
+                          loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason, searchTerm, spinTerm || undefined, crnTerm || undefined);
                         } else {
-                          loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason);
+                          loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason, undefined, spinTerm || undefined, crnTerm || undefined);
                         }
                       }}
                       disabled={frnStatusLoading}

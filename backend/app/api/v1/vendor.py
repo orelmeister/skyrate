@@ -467,20 +467,27 @@ async def get_frn_status(
     pending_reason: Optional[str] = None,
     limit: int = 500,
     ben: Optional[str] = None,
+    spin_search: Optional[str] = None,
+    crn: Optional[str] = None,
     profile: VendorProfile = Depends(get_vendor_profile),
     current_user: User = Depends(require_role("admin", "vendor", "super")),
     db: Session = Depends(get_db),
 ):
     """
     Get FRN status for all your contracts (filtered by your SPIN),
-    or look up any BEN's FRN status (super/admin can query any BEN).
-    
+    or look up any BEN's FRN status (super/admin can query any BEN),
+    or look up FRNs by SPIN name/number or contract number (CRN).
+
     Args:
         year: Optional funding year filter
         status: Optional status filter ('Funded', 'Denied', 'Pending')
         pending_reason: Optional pending reason filter (partial match)
         limit: Maximum records (default 500)
         ben: Optional BEN to look up directly (bypasses SPIN filter)
+        spin_search: Optional SPIN name/number to search across admin_frn_snapshots
+            (partial match on the `spin` column). Privileged-only.
+        crn: Optional contract number to search across admin_frn_snapshots
+            (partial match on `contract_number`). Privileged-only.
     """
     is_privileged = current_user.role in ("super", "admin")
 
@@ -503,6 +510,134 @@ async def get_frn_status(
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to fetch FRN status for BEN {ben}: {str(e)}"
+            )
+
+    # SPIN-name/CRN search against local admin_frn_snapshots
+    # (mirrors consultant.py /frn-status spin/crn filters). Privileged-only.
+    if (spin_search or crn) and is_privileged:
+        try:
+            from ...models.admin_frn_snapshot import AdminFRNSnapshot
+            from datetime import datetime as _dt
+
+            q = db.query(AdminFRNSnapshot)
+            if spin_search:
+                q = q.filter(AdminFRNSnapshot.spin.ilike(f"%{spin_search.strip()}%"))
+            if crn:
+                q = q.filter(AdminFRNSnapshot.contract_number.ilike(f"%{crn.strip()}%"))
+            if year is not None:
+                q = q.filter(AdminFRNSnapshot.funding_year == str(year))
+            if status:
+                q = q.filter(AdminFRNSnapshot.status.ilike(f"%{status}%"))
+            if pending_reason:
+                q = q.filter(AdminFRNSnapshot.pending_reason.ilike(f"%{pending_reason}%"))
+            rows = q.order_by(AdminFRNSnapshot.last_refreshed.desc()).limit(limit).all()
+
+            # If no local hits and a SPIN was searched, try live USAC fallback so
+            # un-cached SPINs still return data (matches the BEN-direct flow).
+            if not rows and spin_search:
+                try:
+                    from utils.usac_client import USACDataClient
+                    from ...services.frn_upsert import upsert_frn_snapshots, build_rec_from_usac_frn
+                    client = USACDataClient()
+                    live_result = client.get_frn_status_by_spin(
+                        spin_search.strip(), year, status, pending_reason, limit
+                    )
+                    if live_result and live_result.get("success"):
+                        live_frns = live_result.get("frns", []) or []
+                        if live_frns:
+                            try:
+                                records = [
+                                    build_rec_from_usac_frn(
+                                        f,
+                                        ben=f.get("ben", ""),
+                                        entity_name=f.get("entity_name", ""),
+                                        user_id=current_user.id,
+                                        user_email=current_user.email,
+                                        source="vendor",
+                                    )
+                                    for f in live_frns
+                                ]
+                                upsert_frn_snapshots(
+                                    db, records,
+                                    scope_type="spin", scope_value=spin_search.strip(),
+                                    queue_status_changes=False,
+                                )
+                                db.expire_all()
+                            except Exception as _upsert_err:
+                                import logging as _lg
+                                _lg.getLogger(__name__).warning(
+                                    f"[vendor.frn-status spin_search={spin_search}] cache writeback failed: {_upsert_err}"
+                                )
+                            # Re-run local query against the freshly upserted rows
+                            q2 = db.query(AdminFRNSnapshot).filter(
+                                AdminFRNSnapshot.spin.ilike(f"%{spin_search.strip()}%")
+                            )
+                            if year is not None:
+                                q2 = q2.filter(AdminFRNSnapshot.funding_year == str(year))
+                            if status:
+                                q2 = q2.filter(AdminFRNSnapshot.status.ilike(f"%{status}%"))
+                            if pending_reason:
+                                q2 = q2.filter(AdminFRNSnapshot.pending_reason.ilike(f"%{pending_reason}%"))
+                            rows = q2.order_by(AdminFRNSnapshot.last_refreshed.desc()).limit(limit).all()
+                except Exception as _live_err:
+                    import logging as _lg
+                    _lg.getLogger(__name__).warning(
+                        f"[vendor.frn-status spin_search={spin_search}] live USAC fetch failed: {_live_err}"
+                    )
+
+            # Build response in the same shape the frontend expects (mirrors
+            # USACDataClient.get_frn_status_by_spin output: success/frns/summary).
+            funded_count = funded_amount = 0
+            denied_count = denied_amount = 0
+            pending_count = pending_amount = 0
+            frns_out = []
+            for r in rows:
+                amount = float(r.amount_requested or 0)
+                disbursed = float(r.amount_committed or 0)
+                status_text = (r.status or "").lower()
+                if "funded" in status_text or "committed" in status_text:
+                    funded_count += 1
+                    funded_amount += amount
+                elif "denied" in status_text:
+                    denied_count += 1
+                    denied_amount += amount
+                else:
+                    pending_count += 1
+                    pending_amount += amount
+                frns_out.append({
+                    "frn": r.frn,
+                    "ben": r.ben,
+                    "entity_name": r.organization_name or "",
+                    "funding_year": r.funding_year,
+                    "status": r.status,
+                    "pending_reason": r.pending_reason or "",
+                    "commitment_amount": amount,
+                    "disbursed_amount": disbursed,
+                    "service_type": r.service_type or "",
+                    "fcdl_date": r.fcdl_date or "",
+                    "spin_name": getattr(r, "spin", None) or "",
+                    "contract_number": getattr(r, "contract_number", None) or "",
+                })
+
+            return {
+                "success": True,
+                "from_cache": True,
+                "source": "local_db",
+                "spin_search": spin_search,
+                "crn": crn,
+                "total_frns": len(frns_out),
+                "frns": frns_out,
+                "summary": {
+                    "funded": {"count": funded_count, "amount": funded_amount},
+                    "denied": {"count": denied_count, "amount": denied_amount},
+                    "pending": {"count": pending_count, "amount": pending_amount},
+                },
+                "last_refreshed": _dt.utcnow().isoformat(),
+            }
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to search by SPIN/CRN: {str(e)}"
             )
 
     if not profile.spin:
