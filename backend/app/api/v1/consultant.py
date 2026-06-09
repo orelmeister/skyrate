@@ -3652,7 +3652,69 @@ async def get_portfolio_frn_status(
                 "not_filed_schools": not_filed_schools,
                 "not_filed_summary": not_filed_summary,
             }
-        # Truly empty for this portfolio. Tell the client to hit Refresh.
+        # Bug fix 2026-06-09: single-BEN search with no local data → live USAC
+        # fetch + persist (mirrors vendor /frn-status?ben behavior). This is
+        # gated on the BEN-direct lookup path because hydrating a full portfolio
+        # synchronously can take 1-3 minutes; a single BEN is fast (1-2s).
+        if ben:
+            try:
+                from utils.usac_client import USACDataClient
+                from ...services.frn_upsert import upsert_frn_snapshots, build_rec_from_usac_frn
+                client = USACDataClient()
+                live_result = client.get_frn_status_by_ben(ben, year)
+                if live_result and live_result.get("success"):
+                    live_frns = live_result.get("frns", []) or []
+                    entity_name = live_result.get("entity_name") or ""
+                    # Persist to admin_frn_snapshots so future lookups are local-fast
+                    if live_frns:
+                        try:
+                            records = [
+                                build_rec_from_usac_frn(
+                                    f,
+                                    ben=str(ben),
+                                    entity_name=entity_name,
+                                    user_id=current_user.id,
+                                    user_email=current_user.email,
+                                    source="consultant",
+                                )
+                                for f in live_frns
+                            ]
+                            upsert_frn_snapshots(
+                                db, records,
+                                scope_type="ben", scope_value=str(ben),
+                                queue_status_changes=False,
+                            )
+                        except Exception as _upsert_err:
+                            logger.warning(f"[frn-status BEN={ben}] cache writeback failed: {_upsert_err}")
+                    # Re-run local query so output format is consistent with cache hits
+                    rows = _query_local(school_bens, year, status_filter)
+                    if rows:
+                        disb_map = _get_disb_map([r.frn for r in rows])
+                        all_frns, schools_data, status_counts = _aggregate_rows(rows, disb_map)
+                        last_refreshed = max(
+                            (r.last_refreshed for r in rows if r.last_refreshed),
+                            default=None,
+                        )
+                        filed_bens = {s["ben"] for s in schools_data}
+                        not_filed_schools, not_filed_summary = _compute_not_filed(filed_bens, year)
+                        return {
+                            "success": True,
+                            "from_cache": False,
+                            "source": "live_usac",
+                            "last_refreshed": last_refreshed.isoformat() if last_refreshed else None,
+                            "total_frns": len(all_frns),
+                            "total_schools": len(schools_data),
+                            "portfolio_total_schools": len(profile.schools),
+                            "schools_filed": len(filed_bens),
+                            "summary": status_counts,
+                            "year_filter": year,
+                            "schools": schools_data,
+                            "not_filed_schools": not_filed_schools,
+                            "not_filed_summary": not_filed_summary,
+                        }
+            except Exception as _live_err:
+                logger.warning(f"[frn-status BEN={ben}] live USAC fetch failed: {_live_err}")
+        # Truly empty for this portfolio (or BEN). Tell the client to hit Refresh.
         return {
             "success": True,
             "needs_refresh": True,
