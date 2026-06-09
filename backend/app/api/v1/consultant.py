@@ -3665,7 +3665,9 @@ async def get_portfolio_frn_status(
                 if live_result and live_result.get("success"):
                     live_frns = live_result.get("frns", []) or []
                     entity_name = live_result.get("entity_name") or ""
-                    # Persist to admin_frn_snapshots so future lookups are local-fast
+                    # Persist to admin_frn_snapshots so future lookups are local-fast.
+                    # upsert_frn_snapshots commits internally; we just need to drop
+                    # any cached identity-map entries so the re-query sees new rows.
                     if live_frns:
                         try:
                             records = [
@@ -3684,6 +3686,9 @@ async def get_portfolio_frn_status(
                                 scope_type="ben", scope_value=str(ben),
                                 queue_status_changes=False,
                             )
+                            # Force fresh read - SQLAlchemy may still hold the
+                            # earlier empty-result query in its session cache.
+                            db.expire_all()
                         except Exception as _upsert_err:
                             logger.warning(f"[frn-status BEN={ben}] cache writeback failed: {_upsert_err}")
                     # Re-run local query so output format is consistent with cache hits
