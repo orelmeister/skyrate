@@ -1,9 +1,21 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
+
+/**
+ * Safe redirect target check. Accepts only same-origin relative paths
+ * (must start with a single "/" and not "//" which would be protocol-
+ * relative). This prevents open-redirect abuse via ?redirect=https://evil.
+ */
+function safeRedirect(target: string | null): string | null {
+  if (!target) return null;
+  if (!target.startsWith("/")) return null;
+  if (target.startsWith("//")) return null;
+  return target;
+}
 
 declare global {
   interface Window {
@@ -23,6 +35,8 @@ function readRememberFlag(): boolean {
 
 export default function SignInPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectParam = safeRedirect(searchParams.get("redirect"));
   const { login, isAuthenticated, isLoading, error, clearError, user } = useAuthStore();
   const loginWithGoogle = useAuthStore((s) => s.loginWithGoogle);
   const refreshAccessToken = useAuthStore((s) => s.refreshAccessToken);
@@ -131,7 +145,7 @@ export default function SignInPage() {
                        user.role === 'admin' ? '/admin' :
                        user.role === 'super' ? '/super' :
                        user.role === 'applicant' ? '/applicant' : '/consultant';
-      router.push(dashboard);
+      router.push(redirectParam || dashboard);
       return;
     }
 
@@ -150,7 +164,7 @@ export default function SignInPage() {
                          u?.role === 'admin' ? '/admin' :
                          u?.role === 'super' ? '/super' :
                          u?.role === 'applicant' ? '/applicant' : '/consultant';
-        router.push(dashboard);
+        router.push(redirectParam || dashboard);
         return;
       }
       finishCheck();
@@ -176,7 +190,7 @@ export default function SignInPage() {
                        currentUser?.role === 'admin' ? '/admin' :
                        currentUser?.role === 'super' ? '/super' :
                        currentUser?.role === 'applicant' ? '/applicant' : '/consultant';
-      router.push(dashboard);
+      router.push(redirectParam || dashboard);
     }
   };
 

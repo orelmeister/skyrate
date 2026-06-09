@@ -215,14 +215,22 @@ function ApplicantDashboard() {
     if (frnParam && !isLoading && !deepLinkHandled.current) {
       deepLinkHandled.current = true;
       setSelectedTab("frn-status");
-      setTimeout(() => {
+      // Auto-load live FRN data if not already loaded so the row to scroll
+      // to actually exists in the DOM.
+      if (!liveFrnData) {
+        loadLiveFrnStatus(liveFrnYear, liveFrnStatusFilter, liveFrnPendingReason);
+      }
+      const tryScroll = () => {
         const el = document.querySelector(`[data-frn="${frnParam}"]`);
         if (el) {
           el.scrollIntoView({ behavior: "smooth", block: "center" });
           el.classList.add("frn-highlight");
           setTimeout(() => el.classList.remove("frn-highlight"), 2000);
+          return true;
         }
-      }, 800);
+        return false;
+      };
+      setTimeout(() => { if (!tryScroll()) setTimeout(tryScroll, 2500); }, 800);
     }
   }, [frnParam, isLoading]);
 

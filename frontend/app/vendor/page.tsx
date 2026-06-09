@@ -417,15 +417,25 @@ function VendorPortalPage() {
       deepLinkHandled.current = true;
       setFrnSearch(frnParam);
       setActiveTab("frn-status");
-      // Scroll to the matching row after a brief delay for render
-      setTimeout(() => {
+      // Auto-load FRN data if the table hasn't been populated yet so the
+      // target row exists. Without this, the email-link click lands on an
+      // empty tab and the scroll target is never found.
+      if (!frnStatusData && !frnStatusLoading) {
+        loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason);
+      }
+      // Scroll to the matching row after a brief delay for render.
+      // Two attempts so it survives the async data load.
+      const tryScroll = () => {
         const el = document.querySelector(`[data-frn="${frnParam}"]`);
         if (el) {
           el.scrollIntoView({ behavior: "smooth", block: "center" });
           el.classList.add("frn-highlight");
           setTimeout(() => el.classList.remove("frn-highlight"), 2000);
+          return true;
         }
-      }, 800);
+        return false;
+      };
+      setTimeout(() => { if (!tryScroll()) setTimeout(tryScroll, 2500); }, 800);
     }
   }, [frnParam, isLoading]);
 

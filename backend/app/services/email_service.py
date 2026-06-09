@@ -608,35 +608,35 @@ View all in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000
         )
 
     def _get_role_frn_url(self, role: str, frn: str = "", ben: str = "", spin: str = "") -> str:
-        """Return role-aware deep link to the FRN status page."""
+        """Return a deep link to the FRN status page.
+
+        - When `frn` is provided we return the universal redirect URL
+          `/frn/<FRN>?ben=<BEN>`. That tiny client page reads the logged-in
+          user's role and forwards to the matching portal (consultant for
+          super/admin/consultant, vendor, or applicant) with the right
+          ?tab=frn-status&frn=... query string. This means one URL works
+          for every role and survives role changes after the email is sent.
+        - When `frn` is empty (the "View All in Portfolio" button) we
+          fall back to the role-specific tab URL.
+        """
         from ..core.config import settings
         base = getattr(settings, 'FRONTEND_URL', 'https://skyrate.ai')
+
+        if frn:
+            # Universal redirect: /frn/<FRN>?ben=<BEN>
+            url = f"{base}/frn/{frn}"
+            if ben:
+                url += f"?ben={ben}"
+            return url
+
+        # No frn -> role-specific dashboard tab URL.
         if role == "vendor":
-            url = f"{base}/vendor?tab=frn-status"
-            if frn:
-                url += f"&frn={frn}"
-            if spin:
-                url += f"&spin={spin}"
-        elif role == "applicant":
-            url = f"{base}/applicant?tab=frn-status"
-            if frn:
-                url += f"&frn={frn}"
-        elif role in ("super", "admin", "consultant"):
-            # super/admin land in the consultant portal for deep-linking; the
-            # consultant page accepts those roles and handles ?frn=&ben= params.
-            # The /super page is a nav hub only and does not deep-link to FRNs.
-            url = f"{base}/consultant?tab=frn-status"
-            if frn:
-                url += f"&frn={frn}"
-            if ben:
-                url += f"&ben={ben}"
-        else:
-            url = f"{base}/consultant?tab=frn-status"
-            if frn:
-                url += f"&frn={frn}"
-            if ben:
-                url += f"&ben={ben}"
-        return url
+            return f"{base}/vendor?tab=frn-status"
+        if role == "applicant":
+            return f"{base}/applicant?tab=frn-status"
+        # consultant + super + admin all use the consultant portal because
+        # the /super page is a nav-hub only and does not deep-link to FRNs.
+        return f"{base}/consultant?tab=frn-status"
 
     def send_frn_digest_email_v2(
         self,
