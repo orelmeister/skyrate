@@ -621,12 +621,16 @@ View all in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000
             url = f"{base}/applicant?tab=frn-status"
             if frn:
                 url += f"&frn={frn}"
-        elif role in ("super", "admin"):
-            url = f"{base}/super?tab=frn-status"
+        elif role in ("super", "admin", "consultant"):
+            # super/admin land in the consultant portal for deep-linking; the
+            # consultant page accepts those roles and handles ?frn=&ben= params.
+            # The /super page is a nav hub only and does not deep-link to FRNs.
+            url = f"{base}/consultant?tab=frn-status"
             if frn:
                 url += f"&frn={frn}"
+            if ben:
+                url += f"&ben={ben}"
         else:
-            # consultant (default)
             url = f"{base}/consultant?tab=frn-status"
             if frn:
                 url += f"&frn={frn}"
