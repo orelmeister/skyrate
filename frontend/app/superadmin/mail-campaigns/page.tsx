@@ -219,7 +219,7 @@ export default function MailCampaignsPage() {
             <Link href="/super" className="text-slate-500 hover:text-slate-900 text-sm">
               &larr; Super
             </Link>
-            <span className="font-semibold text-slate-900">Mail Campaigns</span>
+            <h1 className="font-semibold text-slate-900">Mail Campaigns</h1>
             <Badge kind="purple">mail.skyrate.ai</Badge>
           </div>
           <span className="text-xs text-slate-500">{user?.email}</span>

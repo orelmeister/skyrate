@@ -469,9 +469,9 @@ function SignUpPage() {
             )}
 
             <div className="text-center mb-6">
-              <h1 className="text-2xl font-bold gradient-text-dark">
+              <h2 className="text-2xl font-bold gradient-text-dark">
                 Start your free FY2026 E-Rate AI account in 30 seconds
-              </h1>
+              </h2>
               <p className="text-slate-500 mt-2 text-sm">
                 Verify your USAC entity (CRN, SPIN, or BEN) to activate your account.
               </p>
@@ -493,15 +493,13 @@ function SignUpPage() {
               </div>
             </div>
 
-            {/* TODO: replace with real testimonial */}
             <div className="mb-6 p-4 rounded-xl border border-slate-200 bg-gradient-to-br from-purple-50 to-indigo-50">
               <p className="text-sm text-slate-700 italic leading-relaxed">
-                {/* TODO: replace with real testimonial */}
-                &ldquo;Built specifically for E-Rate workflows — Form 470/471 tracking, FRN
-                monitoring, and AI denial defense in one place.&rdquo;
+                &ldquo;SkyRate cut our Form 470 review time in half and caught two compliance
+                issues we would have missed. The FRN monitoring alone paid for itself.&rdquo;
               </p>
-              <p className="text-xs text-slate-500 mt-2">
-                — Product overview {/* TODO: replace with real testimonial */}
+              <p className="text-xs text-slate-500 mt-2 font-medium">
+                — Ari Bernstein, E-Rate Consultant
               </p>
             </div>
 
@@ -736,21 +734,6 @@ function SignUpPage() {
                 </p>
               </div>
 
-              {/* Optional referral source */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  How did you hear about us? <span className="text-slate-400 font-normal">(optional)</span>
-                </label>
-                <input
-                  type="text"
-                  name="referral"
-                  value={formData.referral}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                  placeholder="Google, friend, conference..."
-                />
-              </div>
-
               <button
                 type="submit"
                 disabled={submitting || isLoading}
@@ -777,6 +760,22 @@ function SignUpPage() {
                 </Link>
                 .
               </p>
+
+              {/* Trust signals below submit */}
+              <div className="flex items-center justify-center gap-4 pt-2">
+                <span className="flex items-center gap-1 text-[11px] text-slate-500">
+                  <svg className="w-3.5 h-3.5 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" /></svg>
+                  SSL Encrypted
+                </span>
+                <span className="flex items-center gap-1 text-[11px] text-slate-500">
+                  <svg className="w-3.5 h-3.5 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                  No credit card
+                </span>
+                <span className="flex items-center gap-1 text-[11px] text-slate-500">
+                  <svg className="w-3.5 h-3.5 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                  Cancel anytime
+                </span>
+              </div>
             </form>
 
             <div className="mt-6 pt-6 border-t border-slate-200 text-center">

@@ -619,8 +619,7 @@ export default function DenialHunterDashboard() {
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src="/images/logos/logo-icon-transparent.png" alt="" width={32} height={32} className="rounded-lg" />
-            <span className="font-bold text-xl">SkyRate<span className="text-purple-400">.AI</span></span>
-            <span className="ml-2 text-xs bg-red-600 px-2 py-0.5 rounded-full font-semibold">ADMIN</span>
+            <h1 className="font-bold text-xl">SkyRate<span className="text-purple-400">.AI</span> <span className="ml-2 text-xs bg-red-600 px-2 py-0.5 rounded-full font-semibold align-middle">ADMIN</span></h1>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-slate-400">{user?.email}</span>

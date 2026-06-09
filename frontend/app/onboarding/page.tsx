@@ -1271,7 +1271,7 @@ export default function OnboardingPage() {
               SkyRate<span className="text-purple-600">.AI</span>
             </span>
           </div>
-          <p className="text-sm text-slate-500">Welcome! Let&apos;s set up your E-Rate monitoring</p>
+          <h1 className="text-sm text-slate-500">Welcome! Let&apos;s set up your E-Rate monitoring</h1>
         </div>
 
         {/* Step Indicator */}
