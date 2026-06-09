@@ -3495,9 +3495,15 @@ async def get_portfolio_frn_status(
                     AdminFRNSnapshot.ben.ilike(search_term),
                 )
             )
-        # SPIN filter (service provider identification number / name)
+        # SPIN filter (matches either the numeric SPIN or the service provider NAME)
         if spin:
-            q = q.filter(AdminFRNSnapshot.spin.ilike(f"%{spin.strip()}%"))
+            spin_term = f"%{spin.strip()}%"
+            q = q.filter(
+                _or(
+                    AdminFRNSnapshot.spin.ilike(spin_term),
+                    AdminFRNSnapshot.spin_name.ilike(spin_term),
+                )
+            )
         # CRN filter (contract record number)
         if crn:
             q = q.filter(AdminFRNSnapshot.contract_number.ilike(f"%{crn.strip()}%"))

@@ -914,7 +914,7 @@ async def lifespan(app: FastAPI):
     except Exception as _heal_err:
         logger.warning(f"[startup] vendor_form470_snapshots heal skipped: {_heal_err}")
 
-    # Self-heal: ensure admin_frn_snapshots has spin + contract_number columns.
+    # Self-heal: ensure admin_frn_snapshots has spin + spin_name + contract_number columns.
     # Added in migration f1a2b3c4d5e6 but Alembic doesn't run automatically on deploy.
     try:
         from sqlalchemy import text as _sql_text2
@@ -922,18 +922,36 @@ async def lifespan(app: FastAPI):
             _existing = {r[0] for r in _c2.execute(_sql_text2(
                 "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
                 "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'admin_frn_snapshots' "
-                "AND COLUMN_NAME IN ('spin','contract_number')"
+                "AND COLUMN_NAME IN ('spin','spin_name','contract_number')"
             )).fetchall()}
             if 'spin' not in _existing:
                 logger.info("[startup] adding admin_frn_snapshots.spin column")
                 _c2.execute(_sql_text2("ALTER TABLE admin_frn_snapshots ADD COLUMN spin VARCHAR(64) NULL"))
                 _c2.execute(_sql_text2("CREATE INDEX ix_admin_frn_snap_spin ON admin_frn_snapshots (spin)"))
+            if 'spin_name' not in _existing:
+                logger.info("[startup] adding admin_frn_snapshots.spin_name column")
+                _c2.execute(_sql_text2("ALTER TABLE admin_frn_snapshots ADD COLUMN spin_name VARCHAR(255) NULL"))
+                _c2.execute(_sql_text2("CREATE INDEX ix_admin_frn_snap_spin_name ON admin_frn_snapshots (spin_name)"))
+                # One-time backfill: historically the `spin` column was populated
+                # with the SERVICE PROVIDER NAME (preferring `spin_name` over the
+                # numeric SPIN). Move those values into the new `spin_name`
+                # column so SPIN-by-number search starts working as data gets
+                # refreshed. Rows where `spin` is purely numeric are left alone
+                # (those already hold a real SPIN number).
+                logger.info("[startup] backfilling admin_frn_snapshots.spin_name from non-numeric spin values")
+                _bf = _c2.execute(_sql_text2(
+                    "UPDATE admin_frn_snapshots "
+                    "SET spin_name = spin "
+                    "WHERE spin IS NOT NULL AND spin <> '' "
+                    "AND spin NOT REGEXP '^[0-9]+$'"
+                ))
+                logger.info(f"[startup] spin_name backfill copied {_bf.rowcount} rows")
             if 'contract_number' not in _existing:
                 logger.info("[startup] adding admin_frn_snapshots.contract_number column")
                 _c2.execute(_sql_text2("ALTER TABLE admin_frn_snapshots ADD COLUMN contract_number VARCHAR(128) NULL"))
                 _c2.execute(_sql_text2("CREATE INDEX ix_admin_frn_snap_contract ON admin_frn_snapshots (contract_number)"))
     except Exception as _heal_err2:
-        logger.warning(f"[startup] admin_frn_snapshots spin/contract_number heal skipped: {_heal_err2}")
+        logger.warning(f"[startup] admin_frn_snapshots spin/spin_name/contract_number heal skipped: {_heal_err2}")
 
     yield
     

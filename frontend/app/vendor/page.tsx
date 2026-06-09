@@ -1828,8 +1828,8 @@ function VendorPortalPage() {
                         type="text"
                         value={frnSpinSearch}
                         onChange={(e) => setFrnSpinSearch(e.target.value)}
-                        placeholder="e.g., 143000331"
-                        className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-48"
+                        placeholder="SPIN # or provider name"
+                        className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-56"
                       />
                     </div>
                     <div>
@@ -1838,8 +1838,8 @@ function VendorPortalPage() {
                         type="text"
                         value={frnCrnSearch}
                         onChange={(e) => setFrnCrnSearch(e.target.value)}
-                        placeholder="e.g., 470123"
-                        className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-48"
+                        placeholder="Contract # (partial OK)"
+                        className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-56"
                       />
                     </div>
                     <button

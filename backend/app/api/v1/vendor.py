@@ -517,11 +517,18 @@ async def get_frn_status(
     if (spin_search or crn) and is_privileged:
         try:
             from ...models.admin_frn_snapshot import AdminFRNSnapshot
+            from sqlalchemy import or_ as _or
             from datetime import datetime as _dt
 
             q = db.query(AdminFRNSnapshot)
             if spin_search:
-                q = q.filter(AdminFRNSnapshot.spin.ilike(f"%{spin_search.strip()}%"))
+                _ss = f"%{spin_search.strip()}%"
+                q = q.filter(
+                    _or(
+                        AdminFRNSnapshot.spin.ilike(_ss),
+                        AdminFRNSnapshot.spin_name.ilike(_ss),
+                    )
+                )
             if crn:
                 q = q.filter(AdminFRNSnapshot.contract_number.ilike(f"%{crn.strip()}%"))
             if year is not None:
@@ -569,8 +576,12 @@ async def get_frn_status(
                                     f"[vendor.frn-status spin_search={spin_search}] cache writeback failed: {_upsert_err}"
                                 )
                             # Re-run local query against the freshly upserted rows
+                            _ss2 = f"%{spin_search.strip()}%"
                             q2 = db.query(AdminFRNSnapshot).filter(
-                                AdminFRNSnapshot.spin.ilike(f"%{spin_search.strip()}%")
+                                _or(
+                                    AdminFRNSnapshot.spin.ilike(_ss2),
+                                    AdminFRNSnapshot.spin_name.ilike(_ss2),
+                                )
                             )
                             if year is not None:
                                 q2 = q2.filter(AdminFRNSnapshot.funding_year == str(year))

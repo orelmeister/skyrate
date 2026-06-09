@@ -3451,8 +3451,8 @@ function ConsultantPortalPage() {
                       type="text"
                       value={portfolioFrnSpinSearch}
                       onChange={(e) => setPortfolioFrnSpinSearch(e.target.value)}
-                      placeholder="e.g., 143000331"
-                      className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-48"
+                      placeholder="SPIN # or provider name"
+                      className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-56"
                     />
                   </div>
                   <div>
@@ -3461,8 +3461,8 @@ function ConsultantPortalPage() {
                       type="text"
                       value={portfolioFrnCrnSearch}
                       onChange={(e) => setPortfolioFrnCrnSearch(e.target.value)}
-                      placeholder="e.g., CRN123456"
-                      className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-48"
+                      placeholder="Contract # (partial OK)"
+                      className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-56"
                     />
                   </div>
                   <button

@@ -28,6 +28,7 @@ class AdminFRNSnapshot(Base):
     fcdl_date = Column(String(64), nullable=True)
     pending_reason = Column(String(256), nullable=True)
     spin = Column(String(64), nullable=True, index=True)
+    spin_name = Column(String(255), nullable=True, index=True)
     contract_number = Column(String(128), nullable=True, index=True)
     last_refreshed = Column(DateTime, default=func.now(), nullable=False)
 

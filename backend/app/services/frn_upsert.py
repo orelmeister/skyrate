@@ -23,7 +23,7 @@ Usage:
 Expected keys in each rec dict (defaults are tolerated for missing keys):
     frn, status, funding_year, amount_requested, amount_committed,
     service_type, organization_name, ben, user_id, user_email, source,
-    fcdl_date, pending_reason, spin, contract_number
+    fcdl_date, pending_reason, spin, spin_name, contract_number
 """
 
 import logging
@@ -121,11 +121,18 @@ def upsert_frn_snapshots(
                 ex.pending_reason = rec_pr
                 ex.fcdl_date = rec_fcdl
                 ex.last_refreshed = now
-                # Backfill spin/contract_number if newly available
+                # Backfill spin/spin_name/contract_number if newly available.
+                # Treat numeric-looking values as authoritative SPIN numbers and
+                # always overwrite the spin column when we get one, since older
+                # rows historically stored the service-provider NAME here.
                 rec_spin = rec.get("spin") or ""
+                rec_spin_name = rec.get("spin_name") or ""
                 rec_cn = rec.get("contract_number") or ""
-                if rec_spin and not ex.spin:
-                    ex.spin = rec_spin
+                if rec_spin:
+                    if (not ex.spin) or (str(rec_spin).isdigit() and not str(ex.spin or "").isdigit()):
+                        ex.spin = rec_spin
+                if rec_spin_name and not ex.spin_name:
+                    ex.spin_name = rec_spin_name
                 if rec_cn and not ex.contract_number:
                     ex.contract_number = rec_cn
                 updates += 1
@@ -212,6 +219,10 @@ def build_rec_from_usac_frn(
         "source": source,
         "fcdl_date": frn.get("fcdl_date", ""),
         "pending_reason": frn.get("pending_reason", ""),
-        "spin": frn.get("spin_name", "") or frn.get("spin", "") or "",
+        # Store SPIN NUMBER and SPIN NAME in separate columns so search can
+        # match either. Historically these were collapsed into one column
+        # (preferring the name) which broke SPIN-by-number search.
+        "spin": frn.get("spin", "") or "",
+        "spin_name": frn.get("spin_name", "") or "",
         "contract_number": frn.get("contract_number", "") or "",
     }
