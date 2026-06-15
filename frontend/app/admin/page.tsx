@@ -879,6 +879,21 @@ function UsersTab({
 
 // ==================== TICKETS TAB ====================
 
+const EMAIL_TEMPLATES = [
+  {
+    label: "Milan Eaton Onboarding Fix",
+    text: `<p>Hi Milan,</p>\n\n<p>First and foremost, I want to sincerely apologize for the delay and frustration you experienced after signing up for your trial today.</p>\n\n<p><strong>What happened:</strong><br>\nImmediately after you verified your registration, our system kicked off an automated process to sync your organization's entire historical portfolio directly from the USAC database. Because your company (Erate Pro, LLC) has an extensive list of associated institutions and funding request details, the initial import took about six minutes to download and index in the background.</p>\n\n<p>While that synchronization was running, our website's redirect guard temporarily kept showing the onboarding page to protect you from accessing an empty dashboard. Once the data import finished, your account became 100% active.</p>\n\n<p><strong>Your account is now fully ready:</strong><br>\nYou can log in right now at <a href="https://skyrate.ai/sign-in" target="_blank" style="color: #7c3aed; font-weight: 600;">skyrate.ai/sign-in</a>. All of your school records, funding records, and real-time status alerts have been fully populated and are waiting for you.</p>\n\n<p>Since your trial is underway, I would love to hop on a quick 10-to-15 minute screen-share to walk you through the platform, show you how to maximize your alerts, and answer any questions you have.</p>\n\n<p>Please let me know if there is a day or time that works best for you this week, or simply reply to schedule a quick slot.</p>\n\n<p>Thank you so much for your patience, and welcome to erateapp!</p>\n\n<p>Best regards,<br>\n<strong>Ari Bernstein</strong><br>\nE-Rate Specialist & Partner<br>\n<a href="https://erateapp.com" style="color: #7c3aed;">erateapp.com</a></p>`
+  },
+  {
+    label: "General Onboarding Sync Delay",
+    text: `<p>Hi {{user_name}},</p>\n\n<p>I wanted to follow up on your signup and apologize if you noticed any temporary delay or onboarding redirect loops during your initial registration.</p>\n\n<p>Our system synchronizes your organization's entire historical portfolio directly from the USAC database upon first registration. If your profile manages many school districts, this initial sync can take a few minutes to fully index. To protect you from accessing an empty dashboard during this process, our system holds the onboarding state until completed.</p>\n\n<p><strong>Your account is now fully ready and populated!</strong><br>\nYou can sign in right now and see all your school records, funding requests, and real-time alerts. Let me know if you would like to schedule a 10-minute walkthrough so I can show you how to get the most out of our alerts!</p>\n\n<p>Best regards,<br>\nAri Bernstein<br>\nE-Rate Specialist & Partner</p>`
+  },
+  {
+    label: "Demo / Walkthrough Offer",
+    text: `<p>Hi {{user_name}},</p>\n\n<p>Thanks for registering for erateapp! I see your organization's portfolio is fully set up and ready to monitor.</p>\n\n<p>I would love to invite you to a short, 10-to-15 minute screen-share walkthrough where we can cover:<br>\n1. Setting up custom real-time alerts for your FRNs.<br>\n2. Tracking USAC funding commitments and appeal windows.<br>\n3. Customizing reports for your school districts.</p>\n\n<p>Please let me know if there's a day or time that works best for you this week to connect.</p>\n\n<p>Best regards,<br>\nAri Bernstein</p>`
+  }
+];
+
 function TicketsTab({
   tickets, total, statusFilter, setStatusFilter,
   selectedTicket, onSelectTicket, onCloseTicket,
@@ -927,19 +942,43 @@ function TicketsTab({
                   <span className="text-xs font-medium text-slate-700">{m.sender_name}{m.sender_type === "admin" ? " (Admin)" : ""}</span>
                   <span className="text-xs text-slate-400">{new Date(m.created_at).toLocaleString()}</span>
                 </div>
-                <p className="text-sm text-slate-800 whitespace-pre-wrap">{m.message}</p>
+                {/<[a-z][\s\S]*>/i.test(m.message) ? (
+                  <div className="text-sm text-slate-800" dangerouslySetInnerHTML={{ __html: m.message }} />
+                ) : (
+                  <p className="text-sm text-slate-800 whitespace-pre-wrap">{m.message}</p>
+                )}
               </div>
             ))}
           </div>
 
+          {/* Quick Templates select */}
+          <div className="mt-4 flex items-center gap-2 border-t pt-4">
+            <span className="text-xs font-semibold text-slate-500">Quick Templates:</span>
+            <select
+              onChange={(e) => {
+                const val = e.target.value;
+                if (!val) return;
+                const name = selectedTicket?.user_name || "there";
+                setReplyText(val.replace(/\{\{user_name\}\}/g, name));
+              }}
+              className="text-xs border rounded-lg px-2 py-1.5 focus:ring-purple-500 focus:outline-none"
+              defaultValue=""
+            >
+              <option value="">-- Choose a Template --</option>
+              {EMAIL_TEMPLATES.map((t, idx) => (
+                <option key={idx} value={t.text}>{t.label}</option>
+              ))}
+            </select>
+          </div>
+
           {/* Reply */}
-          <div className="mt-4 flex gap-2">
+          <div className="mt-2 flex gap-2">
             <textarea
               value={replyText}
               onChange={(e) => setReplyText(e.target.value)}
-              placeholder="Write a reply..."
+              placeholder="Write a reply (HTML or plain text)..."
               className="flex-1 px-3 py-2 border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
-              rows={3}
+              rows={4}
             />
             <button
               onClick={onReply}

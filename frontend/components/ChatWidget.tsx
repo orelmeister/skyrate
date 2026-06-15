@@ -199,7 +199,11 @@ export default function ChatWidget() {
                           <span className="font-medium text-slate-700">{m.sender_name}{m.sender_type === "admin" ? " (Support)" : ""}</span>
                           <span className="text-slate-400">{new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
-                        <p className="text-slate-700 whitespace-pre-wrap">{m.message}</p>
+                        {/<[a-z][\s\S]*>/i.test(m.message) ? (
+                          <div className="text-slate-700 space-y-1.5 break-words" dangerouslySetInnerHTML={{ __html: m.message }} />
+                        ) : (
+                          <p className="text-slate-700 whitespace-pre-wrap">{m.message}</p>
+                        )}
                       </div>
                     ))}
                     <div ref={messagesEndRef} />

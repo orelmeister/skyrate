@@ -248,6 +248,43 @@ async def add_message(
     # Update ticket status based on who replied
     if is_admin:
         ticket.status = TicketStatus.WAITING_USER.value
+        
+        # Send email notification to user on admin reply
+        try:
+            from ...services.email_service import get_email_service
+            email_svc = get_email_service()
+            user_email = ticket.user_email
+            if user_email:
+                formatted_body = data.message
+                if not ("<p>" in formatted_body or "<br>" in formatted_body or "</div>" in formatted_body):
+                    formatted_body = formatted_body.replace("\n", "<br>")
+
+                html_content = f"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; color: #1e293b; line-height: 1.6; padding: 20px; background-color: #f8fafc;">
+                    <div style="background-color: #ffffff; padding: 32px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                        <h2 style="color: #7c3aed; margin-top: 0; font-size: 20px; border-bottom: 2px solid #f1f5f9; padding-bottom: 12px;">New Reply to Support Ticket #{ticket.id}</h2>
+                        <p style="font-size: 14px; color: #64748b; margin-top: 8px;"><strong>Subject:</strong> {ticket.subject}</p>
+                        <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 16px 0;">
+                        <div style="font-size: 15px; color: #334155; line-height: 1.6;">
+                            {formatted_body}
+                        </div>
+                        <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 24px 0;">
+                        <p style="font-size: 13px; color: #64748b; text-align: center; margin-bottom: 0;">
+                            You can view and reply to this ticket directly in the app.
+                        </p>
+                    </div>
+                </div>
+                """
+                email_svc.send_email(
+                    to_email=user_email,
+                    subject=f"RE: [Ticket #{ticket.id}] {ticket.subject}",
+                    html_content=html_content,
+                    text_content=f"You received a new reply on Ticket #{ticket.id}:\n\n{data.message}",
+                    email_type='support'
+                )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to send support ticket reply email: {e}")
     else:
         ticket.status = TicketStatus.OPEN.value  # Re-open if user replies
 
