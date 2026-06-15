@@ -1172,7 +1172,7 @@ export default function OnboardingPage() {
       try {
         const res = await api.getProfile();
         if (res.success && res.data?.user) {
-          setUser(res.data.user);
+          setUser(res.data.user as any);
         }
       } catch (err) {
         console.error("Failed to refresh user profile during onboarding:", err);
