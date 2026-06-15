@@ -86,6 +86,17 @@ class SupportTicket(Base):
     assignee = relationship("User", foreign_keys=[assigned_to])
     messages = relationship("TicketMessage", back_populates="ticket", order_by="TicketMessage.created_at")
 
+    @property
+    def user_email(self) -> str:
+        return self.user.email if self.user else self.guest_email
+
+    @property
+    def user_name(self) -> str:
+        return (
+            f"{self.user.first_name or ''} {self.user.last_name or ''}".strip()
+            if self.user else self.guest_name
+        ) or "Unknown"
+
     def to_dict(self) -> dict:
         return {
             "id": self.id,
@@ -104,11 +115,8 @@ class SupportTicket(Base):
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
             "message_count": len(self.messages) if self.messages else 0,
-            "user_email": self.user.email if self.user else self.guest_email,
-            "user_name": (
-                f"{self.user.first_name or ''} {self.user.last_name or ''}".strip()
-                if self.user else self.guest_name
-            ),
+            "user_email": self.user_email,
+            "user_name": self.user_name,
         }
 
     def to_dict_with_messages(self) -> dict:

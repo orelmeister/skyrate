@@ -1155,7 +1155,7 @@ function ProfileDetailsStep({ onNext }: { onNext: () => void }) {
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { isAuthenticated, user, isLoading, _hasHydrated } = useAuthStore();
+  const { isAuthenticated, user, isLoading, _hasHydrated, setUser } = useAuthStore();
   const [step, setStep] = useState(0);
 
   useEffect(() => {
@@ -1164,6 +1164,25 @@ export default function OnboardingPage() {
       router.push("/sign-in");
     }
   }, [_hasHydrated, isAuthenticated, isLoading, router]);
+
+  // Refresh user profile from backend to ensure Zustand has latest state
+  // (e.g. after email verification, is_verified may have changed server-side).
+  useEffect(() => {
+    const fetchLatestProfile = async () => {
+      try {
+        const res = await api.getProfile();
+        if (res.success && res.data?.user) {
+          setUser(res.data.user);
+        }
+      } catch (err) {
+        console.error("Failed to refresh user profile during onboarding:", err);
+      }
+    };
+
+    if (isAuthenticated) {
+      fetchLatestProfile();
+    }
+  }, [isAuthenticated, setUser]);
 
   // Track onboarding view + step changes.
   useEffect(() => {

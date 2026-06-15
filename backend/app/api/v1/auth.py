@@ -468,7 +468,25 @@ async def register(
     
     db.commit()
     db.refresh(user)
-    
+
+    # Telegram alert on new registration
+    try:
+        from ...services.telegram_alerts import send_alert
+        send_alert(
+            title=f"New User Registered: {user.email}",
+            body=(
+                f"Name: {user.first_name or ''} {user.last_name or ''}\n"
+                f"Role: {user.role}\n"
+                f"Company: {user.company_name or 'N/A'}\n"
+                f"Phone: {user.phone or 'N/A'}"
+            ),
+            severity="info",
+            link="https://skyrate.ai/admin"
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Telegram registration alert failed: {e}")
+
     # Generate tokens with role included
     access_token = create_access_token(data={"sub": str(user.id), "role": user.role})
     refresh_token = create_refresh_token(data={"sub": str(user.id), "role": user.role})
