@@ -597,7 +597,8 @@ function UsersTab({
   type SortKey =
     | "email" | "name" | "role" | "identifier"
     | "email_verified" | "onboarding_completed"
-    | "last_login" | "days_since_signup" | "is_active";
+    | "last_login" | "days_since_signup" | "is_active"
+    | "company_name" | "phone";
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -628,6 +629,8 @@ function UsersTab({
         case "last_login": return u.last_login ? new Date(u.last_login).getTime() : 0;
         case "days_since_signup": return u.days_since_signup ?? -1;
         case "is_active": return u.is_active ? 1 : 0;
+        case "company_name": return (u.company_name || "").toLowerCase();
+        case "phone": return u.phone || "";
       }
     };
     const copy = [...users];
@@ -771,6 +774,8 @@ function UsersTab({
               </th>
               <SortTh k="email">Email</SortTh>
               <SortTh k="name">Name</SortTh>
+              <SortTh k="company_name">Company</SortTh>
+              <SortTh k="phone">Phone</SortTh>
               <SortTh k="role">Role</SortTh>
               <SortTh k="identifier">Identifier</SortTh>
               <SortTh k="email_verified" className="whitespace-nowrap">Verified</SortTh>
@@ -798,6 +803,8 @@ function UsersTab({
                 </td>
                 <td className="px-3 py-3 text-slate-900 max-w-[220px] truncate" title={u.email}>{u.email}</td>
                 <td className="px-3 py-3 max-w-[180px] truncate" title={u.full_name || u.first_name || ""}>{u.full_name || u.first_name || "—"}</td>
+                <td className="px-3 py-3 max-w-[150px] truncate text-slate-600 text-xs" title={u.company_name || ""}>{u.company_name || "—"}</td>
+                <td className="px-3 py-3 text-slate-600 text-xs whitespace-nowrap" title={u.phone || ""}>{u.phone || "—"}</td>
                 <td className="px-3 py-3">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                     u.role === "admin" ? "bg-red-100 text-red-700" :
