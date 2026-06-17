@@ -164,6 +164,9 @@ def _check_frn_deadlines_for_bens(db: Session, alert_service: AlertService, user
     """
     Shared logic: check Form 486, Invoice, Service Delivery, and Contract Expiration
     deadlines for a list of BENs using USAC data. Used by applicants, consultants, and super users.
+
+    If a user has more than 5 approaching deadlines, they are consolidated into a
+    single 'Multiple Deadlines Approaching' alert to avoid notification fatigue.
     """
     if not bens:
         return
@@ -178,6 +181,9 @@ def _check_frn_deadlines_for_bens(db: Session, alert_service: AlertService, user
         
         from ..models.alert import Alert, AlertType
         now = datetime.utcnow()
+
+        # Collect all pending deadline alerts before sending
+        pending_alerts = []  # list of dicts with alert details
         
         for ben, ben_data in batch_result.get("results", {}).items():
             entity_name = ben_data.get("entity_name", f"BEN {ben}")
@@ -204,15 +210,15 @@ def _check_frn_deadlines_for_bens(db: Session, alert_service: AlertService, user
                                 ).first()
                                 
                                 if not recent:
-                                    alert_service.alert_on_deadline(
-                                        user_id=user.id,
-                                        entity_id=frn_number,
-                                        entity_name=entity_name,
-                                        deadline_type="Appeal Deadline",
-                                        deadline_date=appeal_deadline,
-                                        days_remaining=days_remaining,
-                                        frn_details=[_build_frn_detail_row(ben, ben_data, frn, "Appeal Deadline", appeal_deadline, days_remaining)]
-                                    )
+                                    pending_alerts.append({
+                                        "entity_id": frn_number,
+                                        "entity_name": entity_name,
+                                        "deadline_type": "Appeal Deadline",
+                                        "deadline_date": appeal_deadline,
+                                        "days_remaining": days_remaining,
+                                        "frn_detail": _build_frn_detail_row(ben, ben_data, frn, "Appeal Deadline", appeal_deadline, days_remaining),
+                                        "is_appeal": True,
+                                    })
                 
                 # === Form 486 Deadline (120 days after FCDL date or service start) ===
                 if "funded" in status or "committed" in status:
@@ -238,15 +244,15 @@ def _check_frn_deadlines_for_bens(db: Session, alert_service: AlertService, user
                                 ).first()
                                 
                                 if not recent:
-                                    alert_service.alert_on_deadline(
-                                        user_id=user.id,
-                                        entity_id=frn_number,
-                                        entity_name=entity_name,
-                                        deadline_type="Form 486 Filing Deadline",
-                                        deadline_date=f486_deadline,
-                                        days_remaining=days_remaining,
-                                        frn_details=[_build_frn_detail_row(ben, ben_data, frn, "Form 486 Filing", f486_deadline, days_remaining)]
-                                    )
+                                    pending_alerts.append({
+                                        "entity_id": frn_number,
+                                        "entity_name": entity_name,
+                                        "deadline_type": "Form 486 Filing Deadline",
+                                        "deadline_date": f486_deadline,
+                                        "days_remaining": days_remaining,
+                                        "frn_detail": _build_frn_detail_row(ben, ben_data, frn, "Form 486 Filing", f486_deadline, days_remaining),
+                                        "is_appeal": False,
+                                    })
                 
                 # === Invoice Deadline (BEAR/SPI: 120 days after service end date) ===
                 if "funded" in status or "committed" in status:
@@ -268,15 +274,15 @@ def _check_frn_deadlines_for_bens(db: Session, alert_service: AlertService, user
                                 ).first()
                                 
                                 if not recent:
-                                    alert_service.alert_on_deadline(
-                                        user_id=user.id,
-                                        entity_id=frn_number,
-                                        entity_name=entity_name,
-                                        deadline_type="Invoice Filing Deadline (BEAR/SPI)",
-                                        deadline_date=invoice_deadline,
-                                        days_remaining=days_remaining,
-                                        frn_details=[_build_frn_detail_row(ben, ben_data, frn, "Invoice (BEAR/SPI)", invoice_deadline, days_remaining)]
-                                    )
+                                    pending_alerts.append({
+                                        "entity_id": frn_number,
+                                        "entity_name": entity_name,
+                                        "deadline_type": "Invoice Filing Deadline (BEAR/SPI)",
+                                        "deadline_date": invoice_deadline,
+                                        "days_remaining": days_remaining,
+                                        "frn_detail": _build_frn_detail_row(ben, ben_data, frn, "Invoice (BEAR/SPI)", invoice_deadline, days_remaining),
+                                        "is_appeal": False,
+                                    })
                 
                 # === Service Delivery Deadline (check service_end date approaching) ===
                 if "funded" in status or "committed" in status:
@@ -295,15 +301,15 @@ def _check_frn_deadlines_for_bens(db: Session, alert_service: AlertService, user
                                 ).first()
                                 
                                 if not recent:
-                                    alert_service.alert_on_deadline(
-                                        user_id=user.id,
-                                        entity_id=frn_number,
-                                        entity_name=entity_name,
-                                        deadline_type="Service Delivery Deadline",
-                                        deadline_date=svc_end,
-                                        days_remaining=days_remaining,
-                                        frn_details=[_build_frn_detail_row(ben, ben_data, frn, "Service Delivery End", svc_end, days_remaining)]
-                                    )
+                                    pending_alerts.append({
+                                        "entity_id": frn_number,
+                                        "entity_name": entity_name,
+                                        "deadline_type": "Service Delivery Deadline",
+                                        "deadline_date": svc_end,
+                                        "days_remaining": days_remaining,
+                                        "frn_detail": _build_frn_detail_row(ben, ben_data, frn, "Service Delivery End", svc_end, days_remaining),
+                                        "is_appeal": False,
+                                    })
                 
                 # === Contract Expiration  ===
                 contract_end_str = frn.get("contract_expiration") or frn.get("contract_end", "")
@@ -321,15 +327,60 @@ def _check_frn_deadlines_for_bens(db: Session, alert_service: AlertService, user
                             ).first()
                             
                             if not recent:
-                                alert_service.alert_on_deadline(
-                                    user_id=user.id,
-                                    entity_id=frn_number,
-                                    entity_name=entity_name,
-                                    deadline_type="Contract Expiration",
-                                    deadline_date=contract_end,
-                                    days_remaining=days_remaining,
-                                    frn_details=[_build_frn_detail_row(ben, ben_data, frn, "Contract Expiration", contract_end, days_remaining)]
-                                )
+                                pending_alerts.append({
+                                    "entity_id": frn_number,
+                                    "entity_name": entity_name,
+                                    "deadline_type": "Contract Expiration",
+                                    "deadline_date": contract_end,
+                                    "days_remaining": days_remaining,
+                                    "frn_detail": _build_frn_detail_row(ben, ben_data, frn, "Contract Expiration", contract_end, days_remaining),
+                                    "is_appeal": False,
+                                })
+
+        # --- Consolidation logic: if > 5 deadlines, send a single combined alert ---
+        if len(pending_alerts) > 5:
+            # Sort by days_remaining (most urgent first)
+            pending_alerts.sort(key=lambda x: x["days_remaining"])
+            all_frn_details = [a["frn_detail"] for a in pending_alerts]
+            soonest = pending_alerts[0]
+            deadline_types = list(set(a["deadline_type"] for a in pending_alerts))
+            alert_service.alert_on_deadline(
+                user_id=user.id,
+                entity_id="multiple",
+                entity_name=f"{len(pending_alerts)} FRNs",
+                deadline_type="Multiple Deadlines Approaching",
+                deadline_date=soonest["deadline_date"],
+                days_remaining=soonest["days_remaining"],
+                frn_details=all_frn_details,
+                extra_metadata={
+                    "consolidated": True,
+                    "total_deadlines": len(pending_alerts),
+                    "deadline_types": deadline_types,
+                }
+            )
+        else:
+            # Send individual alerts as before
+            for item in pending_alerts:
+                if item["is_appeal"]:
+                    alert_service.alert_on_deadline(
+                        user_id=user.id,
+                        entity_id=item["entity_id"],
+                        entity_name=item["entity_name"],
+                        deadline_type=item["deadline_type"],
+                        deadline_date=item["deadline_date"],
+                        days_remaining=item["days_remaining"],
+                        frn_details=[item["frn_detail"]]
+                    )
+                else:
+                    alert_service.alert_on_deadline(
+                        user_id=user.id,
+                        entity_id=item["entity_id"],
+                        entity_name=item["entity_name"],
+                        deadline_type=item["deadline_type"],
+                        deadline_date=item["deadline_date"],
+                        days_remaining=item["days_remaining"],
+                        frn_details=[item["frn_detail"]]
+                    )
     except Exception as e:
         logger.error(f"Error checking FRN deadlines for user {user.id}: {e}")
 
@@ -1086,8 +1137,10 @@ def _notify_admins_of_denial(
 
 def refresh_admin_frn_snapshot():
     """
-    Refresh the admin FRN snapshot table with ALL FRN data from USAC.
-    This runs every 6 hours so the admin FRN monitor loads instantly from DB.
+    Refresh the admin FRN snapshot table with FRN data from USAC.
+    Runs once daily at 10:00 AM Pacific (17:00 UTC), shortly after USAC's
+    9:00 AM PT database refresh. Uses a sliding 2-year funding year window
+    (current year + previous year) to avoid pulling records back to 2014.
     """
     logger.info("Running admin FRN snapshot refresh...")
 
@@ -1146,16 +1199,52 @@ def refresh_admin_frn_snapshot():
         all_frn_records = []
         now = datetime.utcnow()
 
-        # Batch fetch from USAC for all BENs (all years)
+        # Sliding funding year window: only current year and previous year
+        # to avoid pulling records back to 2014 on every refresh.
+        current_year = now.year
+        funding_years = [current_year, current_year - 1]
+
+        # Batch fetch from USAC for all BENs (sliding 2-year window)
         if all_bens:
             try:
                 client = USACDataClient()
-                batch_result = client.get_frn_status_batch(all_bens)
-                if batch_result.get("success"):
-                    for ben, ben_data in batch_result.get("results", {}).items():
-                        user_info = ben_to_user.get(str(ben), {})
-                        entity_name = ben_data.get("entity_name") or user_info.get("org") or ""
-                        for frn in ben_data.get("frns", []):
+                for fy in funding_years:
+                    batch_result = client.get_frn_status_batch(all_bens, year=fy)
+                    if batch_result.get("success"):
+                        for ben, ben_data in batch_result.get("results", {}).items():
+                            user_info = ben_to_user.get(str(ben), {})
+                            entity_name = ben_data.get("entity_name") or user_info.get("org") or ""
+                            for frn in ben_data.get("frns", []):
+                                all_frn_records.append({
+                                    "frn": frn.get("frn", ""),
+                                    "status": frn.get("status", "Unknown"),
+                                    "funding_year": str(frn.get("funding_year", "")),
+                                    "amount_requested": float(frn.get("commitment_amount", 0) or 0),
+                                    "amount_committed": float(frn.get("disbursed_amount", 0) or 0),
+                                    "service_type": frn.get("service_type", ""),
+                                    "organization_name": entity_name,
+                                    "ben": str(ben),
+                                    "user_id": user_info.get("user_id"),
+                                    "user_email": user_info.get("user_email"),
+                                    "source": user_info.get("source", "unknown"),
+                                    "fcdl_date": frn.get("fcdl_date", ""),
+                                    "pending_reason": frn.get("pending_reason", ""),
+                                    "spin": frn.get("spin_name") or frn.get("spin") or "",
+                                    "contract_number": frn.get("contract_number", "") or "",
+                                    "last_refreshed": now,
+                                })
+            except Exception as e:
+                logger.warning(f"Admin FRN snapshot BEN batch fetch failed: {e}")
+
+        # Fetch vendor SPIN FRNs (sliding 2-year window)
+        for vp in vendor_profiles:
+            try:
+                client = USACDataClient()
+                for fy in funding_years:
+                    spin_result = client.get_frn_status_by_spin(vp.spin, year=fy)
+                    if spin_result.get("success"):
+                        user = db.query(User).filter(User.id == vp.user_id).first()
+                        for frn in spin_result.get("frns", []):
                             all_frn_records.append({
                                 "frn": frn.get("frn", ""),
                                 "status": frn.get("status", "Unknown"),
@@ -1163,48 +1252,17 @@ def refresh_admin_frn_snapshot():
                                 "amount_requested": float(frn.get("commitment_amount", 0) or 0),
                                 "amount_committed": float(frn.get("disbursed_amount", 0) or 0),
                                 "service_type": frn.get("service_type", ""),
-                                "organization_name": entity_name,
-                                "ben": str(ben),
-                                "user_id": user_info.get("user_id"),
-                                "user_email": user_info.get("user_email"),
-                                "source": user_info.get("source", "unknown"),
+                                "organization_name": frn.get("entity_name") or vp.company_name or "",
+                                "ben": frn.get("ben", ""),
+                                "user_id": user.id if user else None,
+                                "user_email": user.email if user else None,
+                                "source": "vendor",
                                 "fcdl_date": frn.get("fcdl_date", ""),
                                 "pending_reason": frn.get("pending_reason", ""),
-                                # Bug D fix 2026-06-08: map spin + contract_number so search-by-SPIN works.
-                                "spin": frn.get("spin_name") or frn.get("spin") or "",
+                                "spin": frn.get("spin_name") or frn.get("spin") or vp.spin or "",
                                 "contract_number": frn.get("contract_number", "") or "",
                                 "last_refreshed": now,
                             })
-            except Exception as e:
-                logger.warning(f"Admin FRN snapshot BEN batch fetch failed: {e}")
-
-        # Fetch vendor SPIN FRNs
-        for vp in vendor_profiles:
-            try:
-                client = USACDataClient()
-                spin_result = client.get_frn_status_by_spin(vp.spin)
-                if spin_result.get("success"):
-                    user = db.query(User).filter(User.id == vp.user_id).first()
-                    for frn in spin_result.get("frns", []):
-                        all_frn_records.append({
-                            "frn": frn.get("frn", ""),
-                            "status": frn.get("status", "Unknown"),
-                            "funding_year": str(frn.get("funding_year", "")),
-                            "amount_requested": float(frn.get("commitment_amount", 0) or 0),
-                            "amount_committed": float(frn.get("disbursed_amount", 0) or 0),
-                            "service_type": frn.get("service_type", ""),
-                            "organization_name": frn.get("entity_name") or vp.company_name or "",
-                            "ben": frn.get("ben", ""),
-                            "user_id": user.id if user else None,
-                            "user_email": user.email if user else None,
-                            "source": "vendor",
-                            "fcdl_date": frn.get("fcdl_date", ""),
-                            "pending_reason": frn.get("pending_reason", ""),
-                            # Bug D fix 2026-06-08: map SPIN — vendor's own SPIN is always known.
-                            "spin": frn.get("spin_name") or frn.get("spin") or vp.spin or "",
-                            "contract_number": frn.get("contract_number", "") or "",
-                            "last_refreshed": now,
-                        })
             except Exception as e:
                 logger.warning(f"Admin FRN snapshot SPIN fetch failed for {vp.spin}: {e}")
 
@@ -1675,14 +1733,13 @@ def init_scheduler():
     # 12h jobs almost never fired - which is why scheduled alerts never reached users.
     boot = datetime.utcnow()
 
-    # Deadline check - every 6 hours (first run 90s after boot)
+    # Deadline check - daily at 10:30 AM Pacific (17:30 UTC), after snapshot refresh
     scheduler.add_job(
         check_upcoming_deadlines,
-        trigger=IntervalTrigger(hours=6),
+        trigger=CronTrigger(hour=17, minute=30, timezone='UTC'),
         id='check_deadlines',
-        name='Check upcoming deadlines',
+        name='Check upcoming deadlines (daily after snapshot refresh)',
         replace_existing=True,
-        next_run_time=boot + timedelta(seconds=90),
     )
 
     # Daily FRN digest - 08:00 America/New_York every day
@@ -1703,25 +1760,26 @@ def init_scheduler():
         replace_existing=True
     )
 
-    # FRN status sync - every hour (first run 2 min after boot)
-    scheduler.add_job(
-        sync_frn_statuses,
-        trigger=IntervalTrigger(hours=1),
-        id='sync_frn_statuses',
-        name='Sync FRN statuses from USAC',
-        replace_existing=True,
-        next_run_time=boot + timedelta(minutes=2),
-    )
+    # FRN status sync - DEACTIVATED: replaced by single daily admin snapshot refresh
+    # at 17:00 UTC (10:00 AM PT). The admin snapshot job now handles all FRN syncing.
+    # scheduler.add_job(
+    #     sync_frn_statuses,
+    #     trigger=IntervalTrigger(hours=1),
+    #     id='sync_frn_statuses',
+    #     name='Sync FRN statuses from USAC',
+    #     replace_existing=True,
+    #     next_run_time=boot + timedelta(minutes=2),
+    # )
 
-    # Consultant FRN status sync - every 2 hours (first run 3 min after boot)
-    scheduler.add_job(
-        sync_consultant_frn_statuses,
-        trigger=IntervalTrigger(hours=2),
-        id='sync_consultant_frn_statuses',
-        name='Sync consultant school FRN statuses from USAC',
-        replace_existing=True,
-        next_run_time=boot + timedelta(minutes=3),
-    )
+    # Consultant FRN status sync - DEACTIVATED: replaced by single daily admin snapshot refresh
+    # scheduler.add_job(
+    #     sync_consultant_frn_statuses,
+    #     trigger=IntervalTrigger(hours=2),
+    #     id='sync_consultant_frn_statuses',
+    #     name='Sync consultant school FRN statuses from USAC',
+    #     replace_existing=True,
+    #     next_run_time=boot + timedelta(minutes=3),
+    # )
 
     # Long-pending FRN check - every 12 hours (first run 4 min after boot)
     scheduler.add_job(
@@ -1733,12 +1791,13 @@ def init_scheduler():
         next_run_time=boot + timedelta(minutes=4),
     )
 
-    # Admin FRN snapshot refresh - every 6 hours (first run 5 min after boot)
+    # Admin FRN snapshot refresh - daily at 10:00 AM Pacific (17:00 UTC)
+    # Shortly after USAC's daily 9:00 AM PT database refresh.
     scheduler.add_job(
         refresh_admin_frn_snapshot,
-        trigger=IntervalTrigger(hours=6),
+        trigger=CronTrigger(hour=17, minute=0, timezone='UTC'),
         id='refresh_admin_frn_snapshot',
-        name='Refresh admin FRN snapshot from USAC',
+        name='Refresh admin FRN snapshot from USAC (daily 10:00 AM PT)',
         replace_existing=True,
         next_run_time=boot + timedelta(minutes=5),
     )

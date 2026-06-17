@@ -36,6 +36,45 @@ logger = logging.getLogger(__name__)
 _DIFF_FIELDS = ("status", "amount_committed", "pending_reason", "fcdl_date")
 
 
+def _deduplicate_frn_records(frn_records: list) -> list:
+    """
+    Deduplicate incoming FRN records by (ben, frn) key.
+    When duplicates exist, pick the record with the most authoritative status.
+    Priority: Funded/Committed/Denied > Pending/Under Review > Unknown/empty.
+    """
+    _STATUS_PRIORITY = {
+        "funded": 10,
+        "committed": 9,
+        "denied": 8,
+        "denied - final": 8,
+        "cancelled": 7,
+        "under review": 5,
+        "pending": 4,
+        "wave ready": 3,
+        "unknown": 1,
+        "": 0,
+    }
+
+    def _score(rec):
+        s = (rec.get("status") or "").strip().lower()
+        for key, val in _STATUS_PRIORITY.items():
+            if key in s:
+                return val
+        return 2  # default for unrecognized statuses
+
+    seen = {}  # (ben, frn) -> best record
+    for rec in frn_records:
+        ben = str(rec.get("ben", ""))
+        frn = str(rec.get("frn", ""))
+        if not frn:
+            continue
+        key = (ben, frn)
+        if key not in seen or _score(rec) > _score(seen[key]):
+            seen[key] = rec
+
+    return list(seen.values())
+
+
 def upsert_frn_snapshots(
     db,
     frn_records: list,
@@ -54,6 +93,9 @@ def upsert_frn_snapshots(
 
     if not frn_records:
         return {"inserts": 0, "updates": 0, "alerts": 0}
+
+    # Deduplicate incoming records to prevent flapping from Socrata duplicates
+    frn_records = _deduplicate_frn_records(frn_records)
 
     now = datetime.utcnow()
 
