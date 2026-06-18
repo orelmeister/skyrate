@@ -18,6 +18,7 @@ from ..models.alert import AlertConfig
 from ..models.user import User
 from ..models.applicant import ApplicantProfile, ApplicantFRN, ApplicantAutoAppeal
 from ..models.consultant import ConsultantProfile, ConsultantSchool
+from ..models.subscription import Subscription
 from .alert_service import AlertService
 
 logger = logging.getLogger(__name__)
@@ -619,6 +620,15 @@ def send_daily_digests():
                     skipped_count += 1
                     continue
 
+                # Skip users without an active/trialing subscription
+                sub = db.query(Subscription).filter(Subscription.user_id == user_id).first()
+                if not sub or sub.status not in ('active', 'trialing'):
+                    skipped_count += 1
+                    continue
+                if sub.status == 'trialing' and sub.trial_end and sub.trial_end < now:
+                    skipped_count += 1
+                    continue
+
                 # Determine window: since last digest (or 24h ago if never sent)
                 since = config.last_frn_digest_at or (now - timedelta(hours=24))
 
@@ -765,8 +775,16 @@ def send_weekly_summaries():
         users = db.query(User).filter(User.is_active == True).all()
         
         sent_count = 0
+        now = datetime.utcnow()
         for user in users:
             try:
+                # Skip users without an active/trialing subscription
+                sub = db.query(Subscription).filter(Subscription.user_id == user.id).first()
+                if not sub or sub.status not in ('active', 'trialing'):
+                    continue
+                if sub.status == 'trialing' and sub.trial_end and sub.trial_end < now:
+                    continue
+
                 config = alert_service.get_or_create_alert_config(user.id)
                 if not config.daily_digest:
                     continue
