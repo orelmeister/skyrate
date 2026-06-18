@@ -20,9 +20,8 @@ def resolve_owners(db: Session, *, ben: str = "", frn: str = "", spin: str = "")
       - Consultants: whose CRN portfolio contains a ConsultantSchool with this BEN
       - Applicants: whose ApplicantProfile.ben == this BEN OR have an ApplicantBEN row for it
       - Vendors: whose VendorProfile.spin == this SPIN (the awarded SPIN on the FRN)
-      - Super/Admin: always included (capped at digest time, not here)
+      - Super/Admin: routed by their explicit portfolio only (same as consultants)
     """
-    from ..models.user import User, UserRole
     from ..models.consultant import ConsultantProfile, ConsultantSchool
     from ..models.applicant import ApplicantProfile, ApplicantBEN
     from ..models.vendor import VendorProfile
@@ -71,16 +70,9 @@ def resolve_owners(db: Session, *, ben: str = "", frn: str = "", spin: str = "")
         for (uid,) in vendor_user_ids:
             owner_ids.add(uid)
 
-    # 4. Super/Admin users always receive all changes
-    admin_super = (
-        db.query(User.id)
-        .filter(
-            User.role.in_([UserRole.SUPER.value, UserRole.ADMIN.value]),
-            User.is_active == True,
-        )
-        .all()
-    )
-    for (uid,) in admin_super:
-        owner_ids.add(uid)
+    # 4. Super/Admin users — routed by their explicit portfolio only.
+    #    They are NOT auto-included for every FRN.  If an admin/super
+    #    has a ConsultantSchool with the BEN, they were already added
+    #    in step 1 above.
 
     return list(owner_ids)

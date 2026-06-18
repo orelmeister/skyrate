@@ -164,6 +164,10 @@ class SchoolUpdate(BaseModel):
     tags: Optional[List[str]] = None
 
 
+class SelectiveResyncRequest(BaseModel):
+    bens: List[str]
+
+
 class AppealGenerateRequest(BaseModel):
     frn: str
     additional_context: Optional[str] = None
@@ -1433,6 +1437,225 @@ async def resync_crn_schools(
             f"USAC returned {total_from_usac} unique schools "
             f"({consultants_count} from consultants dataset + {form471_count} from form_471, merged). "
             f"Added {imported['imported_count']} new, {imported['skipped_count']} already imported."
+        ),
+    }
+
+
+def _fetch_crn_schools_from_usac(crn_value: str) -> Dict[str, Any]:
+    """Shared helper: query both USAC sources and return merged school list
+    with existing-vs-new classification info.
+
+    Returns dict with keys:
+      consultants_schools, form471_schools, merged (dict ben->school),
+      consultants_count, form471_count, total_from_usac
+    """
+    usac_service = get_usac_service()
+
+    consultants_result = usac_service.verify_crn(crn_value)
+    consultants_schools = (
+        consultants_result.get("schools") or []
+        if consultants_result.get("valid")
+        else []
+    )
+
+    form471_schools: List[Dict] = []
+    try:
+        import datetime as _dt
+        current_year = _dt.datetime.now().year
+        recent_years = list(range(max(2016, current_year - 2), current_year + 1))
+        form471_result = usac_service.get_schools_by_crn(crn_value, years=recent_years)
+        form471_schools = form471_result.get("schools") or []
+    except Exception as e:
+        logger.warning(f"Resync preview CRN {crn_value}: form_471 fallback failed: {e}")
+
+    if not consultants_result.get("valid") and not form471_schools:
+        return {
+            "error": consultants_result.get("error", "USAC could not return schools for this CRN"),
+        }
+
+    merged: Dict[str, Dict] = {}
+    for s in consultants_schools:
+        ben = str(s.get("ben") or "").strip()
+        if ben:
+            merged[ben] = s
+    for s in form471_schools:
+        ben = str(s.get("ben") or "").strip()
+        if not ben:
+            continue
+        if ben in merged:
+            existing = merged[ben]
+            for k in ("organization_name", "state", "city", "entity_type", "applicant_type"):
+                if not existing.get(k) and s.get(k):
+                    existing[k] = s.get(k)
+        else:
+            merged[ben] = s
+
+    return {
+        "consultants_schools": consultants_schools,
+        "form471_schools": form471_schools,
+        "merged": merged,
+        "consultants_count": len(consultants_schools),
+        "form471_count": len(form471_schools),
+        "total_from_usac": len(merged),
+    }
+
+
+@router.post("/crns/{crn_id}/resync/preview")
+async def resync_crn_preview(
+    crn_id: int,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
+    db: Session = Depends(get_db),
+):
+    """Preview a CRN resync: show existing schools vs new schools from USAC
+    without importing anything. The frontend can use this to present a
+    selection modal before committing the import."""
+    is_privileged = current_user.role in ("admin", "super")
+
+    if is_privileged:
+        crn_record = db.query(ConsultantCRN).filter(ConsultantCRN.id == crn_id).first()
+    else:
+        crn_record = db.query(ConsultantCRN).filter(
+            ConsultantCRN.id == crn_id,
+            ConsultantCRN.consultant_profile_id == profile.id,
+        ).first()
+
+    if not crn_record:
+        raise HTTPException(status_code=404, detail="CRN not found")
+
+    owning_profile = db.query(ConsultantProfile).filter(
+        ConsultantProfile.id == crn_record.consultant_profile_id
+    ).first()
+    if not owning_profile:
+        raise HTTPException(status_code=404, detail="Owning consultant profile not found")
+
+    crn_value = crn_record.crn
+
+    usac_data = _fetch_crn_schools_from_usac(crn_value)
+    if "error" in usac_data:
+        raise HTTPException(status_code=400, detail=usac_data["error"])
+
+    merged = usac_data["merged"]
+
+    # Classify into existing vs new
+    existing_bens = set(
+        s.ben for s in db.query(ConsultantSchool).filter(
+            ConsultantSchool.consultant_profile_id == owning_profile.id,
+        ).all()
+    )
+
+    existing_schools = []
+    new_schools = []
+    for ben, school in merged.items():
+        entry = {
+            "ben": ben,
+            "organization_name": school.get("organization_name") or school.get("school_name") or "",
+            "state": school.get("state") or "",
+            "city": school.get("city") or "",
+            "entity_type": school.get("entity_type") or school.get("applicant_type") or "",
+        }
+        if ben in existing_bens:
+            existing_schools.append(entry)
+        else:
+            new_schools.append(entry)
+
+    return {
+        "success": True,
+        "crn": crn_value,
+        "consultants_dataset_count": usac_data["consultants_count"],
+        "form_471_dataset_count": usac_data["form471_count"],
+        "total_from_usac": usac_data["total_from_usac"],
+        "existing_schools": existing_schools,
+        "new_schools": new_schools,
+        "existing_count": len(existing_schools),
+        "new_count": len(new_schools),
+    }
+
+
+@router.post("/crns/{crn_id}/resync/selective")
+async def resync_crn_selective(
+    crn_id: int,
+    body: SelectiveResyncRequest,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
+    db: Session = Depends(get_db),
+):
+    """Import only the selected BENs from a CRN's USAC school list.
+
+    Accepts ``{"bens": ["12345", "67890", ...]}`` and imports only those
+    BENs that are (a) in the USAC dataset for this CRN and (b) not
+    already in the consultant's portfolio.
+    """
+    import time
+    start_time = time.time()
+
+    is_privileged = current_user.role in ("admin", "super")
+
+    if is_privileged:
+        crn_record = db.query(ConsultantCRN).filter(ConsultantCRN.id == crn_id).first()
+    else:
+        crn_record = db.query(ConsultantCRN).filter(
+            ConsultantCRN.id == crn_id,
+            ConsultantCRN.consultant_profile_id == profile.id,
+        ).first()
+
+    if not crn_record:
+        raise HTTPException(status_code=404, detail="CRN not found")
+
+    owning_profile = db.query(ConsultantProfile).filter(
+        ConsultantProfile.id == crn_record.consultant_profile_id
+    ).first()
+    if not owning_profile:
+        raise HTTPException(status_code=404, detail="Owning consultant profile not found")
+
+    crn_value = crn_record.crn
+    requested_bens = set(str(b).strip() for b in body.bens if str(b).strip())
+
+    if not requested_bens:
+        raise HTTPException(status_code=400, detail="No BENs provided")
+
+    usac_data = _fetch_crn_schools_from_usac(crn_value)
+    if "error" in usac_data:
+        raise HTTPException(status_code=400, detail=usac_data["error"])
+
+    merged = usac_data["merged"]
+
+    # Filter USAC schools to only the requested BENs
+    filtered_schools = [
+        merged[ben] for ben in requested_bens if ben in merged
+    ]
+    not_found_in_usac = [ben for ben in requested_bens if ben not in merged]
+
+    imported = _import_schools_for_crn(owning_profile, crn_value, filtered_schools, db)
+
+    # Refresh schools_count on the CRN record
+    new_count = db.query(ConsultantSchool).filter(
+        ConsultantSchool.consultant_profile_id == owning_profile.id,
+        ConsultantSchool.source_crn == crn_value,
+    ).count()
+    crn_record.schools_count = new_count
+    db.commit()
+
+    elapsed = time.time() - start_time
+    logger.info(
+        f"Selective resync CRN {crn_value} (id={crn_id}): "
+        f"requested={len(requested_bens)}, imported={imported['imported_count']}, "
+        f"skipped={imported['skipped_count']}, not_in_usac={len(not_found_in_usac)}, "
+        f"elapsed={elapsed:.2f}s"
+    )
+
+    return {
+        "success": True,
+        "crn": crn_value,
+        "requested_count": len(requested_bens),
+        "imported_count": imported["imported_count"],
+        "skipped_count": imported["skipped_count"],
+        "not_found_in_usac": not_found_in_usac,
+        "total_schools_for_crn": new_count,
+        "message": (
+            f"Imported {imported['imported_count']} of {len(requested_bens)} requested schools. "
+            f"{imported['skipped_count']} already in portfolio."
+            + (f" {len(not_found_in_usac)} BENs not found in USAC data." if not_found_in_usac else "")
         ),
     }
 

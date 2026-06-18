@@ -2041,6 +2041,50 @@ class ApiClient {
     });
   }
 
+  async resyncCRNPreview(crnId: number): Promise<ApiResponse<{
+    crn: string;
+    consultants_dataset_count: number;
+    form_471_dataset_count: number;
+    total_from_usac: number;
+    existing_schools: Array<{
+      ben: string;
+      organization_name: string;
+      state: string;
+      city: string;
+      entity_type: string;
+    }>;
+    new_schools: Array<{
+      ben: string;
+      organization_name: string;
+      state: string;
+      city: string;
+      entity_type: string;
+    }>;
+    existing_count: number;
+    new_count: number;
+  }>> {
+    return this.request(`/api/v1/consultant/crns/${crnId}/resync/preview`, {
+      method: 'POST',
+      timeoutMs: 120000,
+    });
+  }
+
+  async resyncCRNSelective(crnId: number, bens: string[]): Promise<ApiResponse<{
+    crn: string;
+    requested_count: number;
+    imported_count: number;
+    skipped_count: number;
+    not_found_in_usac: string[];
+    total_schools_for_crn: number;
+    message: string;
+  }>> {
+    return this.request(`/api/v1/consultant/crns/${crnId}/resync/selective`, {
+      method: 'POST',
+      body: JSON.stringify({ bens }),
+      timeoutMs: 120000,
+    });
+  }
+
   // ==================== VENDOR ====================
 
   async getVendorProfile(): Promise<ApiResponse<{ profile: VendorProfile }>> {

@@ -340,6 +340,22 @@ function ConsultantPortalPage() {
   const [replacingCrn, setReplacingCrn] = useState(false);
   const [replaceCrnError, setReplaceCrnError] = useState<string | null>(null);
 
+  // Selective resync modal state
+  const [showResyncModal, setShowResyncModal] = useState(false);
+  const [resyncCrnTarget, setResyncCrnTarget] = useState<{ id: number; crn: string } | null>(null);
+  const [resyncPreviewLoading, setResyncPreviewLoading] = useState(false);
+  const [resyncImporting, setResyncImporting] = useState(false);
+  const [resyncPreviewData, setResyncPreviewData] = useState<{
+    crn: string;
+    existing_schools: Array<{ ben: string; organization_name: string; state: string; city: string; entity_type: string }>;
+    new_schools: Array<{ ben: string; organization_name: string; state: string; city: string; entity_type: string }>;
+    existing_count: number;
+    new_count: number;
+    total_from_usac: number;
+  } | null>(null);
+  const [resyncSelectedBens, setResyncSelectedBens] = useState<Set<string>>(new Set());
+  const [resyncSearchQuery, setResyncSearchQuery] = useState("");
+
   // School search and filter state
   const [schoolSearchQuery, setSchoolSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -1191,30 +1207,58 @@ function ConsultantPortalPage() {
   };
 
   const handleResyncCRNSchools = async (crnId: number, crnNumber: string) => {
-    if (!confirm(`Re-pull every school for CRN ${crnNumber} from USAC?\n\nThis will check the full USAC consultants dataset and import any schools that weren't picked up the first time. Existing schools are kept.`)) {
-      return;
-    }
+    // Open selective resync modal instead of auto-importing everything
+    setResyncCrnTarget({ id: crnId, crn: crnNumber });
+    setResyncPreviewData(null);
+    setResyncSelectedBens(new Set());
+    setResyncSearchQuery("");
+    setShowResyncModal(true);
+    setResyncPreviewLoading(true);
     try {
-      const response = await api.resyncCRNSchools(crnId);
+      const response = await api.resyncCRNPreview(crnId);
+      if (response.success && response.data) {
+        setResyncPreviewData(response.data);
+        // Pre-select all new schools by default
+        const allNewBens = new Set(response.data.new_schools.map((s: any) => s.ben));
+        setResyncSelectedBens(allNewBens);
+      } else {
+        alert(response.error || "Failed to preview schools from USAC");
+        setShowResyncModal(false);
+      }
+    } catch (error: any) {
+      console.error("Failed to preview CRN schools:", error);
+      alert(error?.message || "Failed to preview schools from USAC");
+      setShowResyncModal(false);
+    } finally {
+      setResyncPreviewLoading(false);
+    }
+  };
+
+  const handleResyncSelectiveImport = async () => {
+    if (!resyncCrnTarget || resyncSelectedBens.size === 0) return;
+    setResyncImporting(true);
+    try {
+      const response = await api.resyncCRNSelective(resyncCrnTarget.id, Array.from(resyncSelectedBens));
       if (response.success && response.data) {
         const d = response.data;
-        const breakdown = (d.consultants_dataset_count !== undefined || d.form_471_dataset_count !== undefined)
-          ? `\nConsultants dataset: ${d.consultants_dataset_count ?? 0}\nForm 471 dataset: ${d.form_471_dataset_count ?? 0}\nMerged unique: ${d.usac_school_count}\n`
-          : `\nUSAC returned: ${d.usac_school_count} schools\n`;
+        setShowResyncModal(false);
         alert(
-          `Re-sync complete for ${d.crn}.${breakdown}` +
-          `Newly imported: ${d.imported_count}\n` +
+          `Import complete for CRN ${d.crn}.\n\n` +
+          `Imported: ${d.imported_count}\n` +
           `Already in portfolio: ${d.skipped_count}\n` +
-          `Total schools tied to this CRN: ${d.total_schools_for_crn}`
+          `Total schools for this CRN: ${d.total_schools_for_crn}` +
+          (d.not_found_in_usac.length > 0 ? `\n\n${d.not_found_in_usac.length} BENs not found in USAC data.` : "")
         );
         await loadCRNList();
         await loadData(true);
       } else {
-        alert(response.error || "Failed to re-sync schools");
+        alert(response.error || "Failed to import selected schools");
       }
     } catch (error: any) {
-      console.error("Failed to re-sync CRN schools:", error);
-      alert(error?.message || "Failed to re-sync schools");
+      console.error("Failed selective resync:", error);
+      alert(error?.message || "Failed to import selected schools");
+    } finally {
+      setResyncImporting(false);
     }
   };
 
@@ -4469,6 +4513,178 @@ function ConsultantPortalPage() {
                           ) : 'Verify & Replace'}
                         </button>
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Selective Resync Modal */}
+                {showResyncModal && resyncCrnTarget && (
+                  <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => !resyncImporting && !resyncPreviewLoading && setShowResyncModal(false)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 p-6 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h3 className="text-lg font-semibold text-slate-900">
+                            Re-sync Schools for CRN <span className="font-mono text-indigo-600">{resyncCrnTarget.crn}</span>
+                          </h3>
+                          <p className="text-sm text-slate-500 mt-0.5">
+                            Select which schools to import from USAC into your portfolio.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setShowResyncModal(false)}
+                          disabled={resyncImporting || resyncPreviewLoading}
+                          className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition disabled:opacity-50"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      </div>
+
+                      {resyncPreviewLoading ? (
+                        <div className="flex-1 flex items-center justify-center py-12">
+                          <div className="text-center">
+                            <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                            <p className="text-sm text-slate-500">Querying USAC for schools...</p>
+                            <p className="text-xs text-slate-400 mt-1">This may take 15-30 seconds</p>
+                          </div>
+                        </div>
+                      ) : resyncPreviewData ? (
+                        <>
+                          {/* Summary bar */}
+                          <div className="flex items-center gap-4 px-3 py-2 bg-slate-50 rounded-lg mb-3 text-xs">
+                            <span className="text-slate-600">
+                              USAC total: <strong className="text-slate-900">{resyncPreviewData.total_from_usac}</strong>
+                            </span>
+                            <span className="text-green-600">
+                              Already imported: <strong>{resyncPreviewData.existing_count}</strong>
+                            </span>
+                            <span className="text-indigo-600">
+                              New schools: <strong>{resyncPreviewData.new_count}</strong>
+                            </span>
+                            {resyncPreviewData.new_count > 0 && (
+                              <span className="ml-auto text-slate-500">
+                                Selected: <strong className="text-indigo-700">{resyncSelectedBens.size}</strong> of {resyncPreviewData.new_count}
+                              </span>
+                            )}
+                          </div>
+
+                          {resyncPreviewData.new_count === 0 ? (
+                            <div className="flex-1 flex items-center justify-center py-8">
+                              <div className="text-center">
+                                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                </div>
+                                <p className="text-sm font-medium text-slate-900">Portfolio is up to date</p>
+                                <p className="text-xs text-slate-500 mt-1">All {resyncPreviewData.existing_count} schools from USAC are already in your portfolio.</p>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              {/* Search + select controls */}
+                              <div className="flex items-center gap-2 mb-2">
+                                <input
+                                  type="text"
+                                  value={resyncSearchQuery}
+                                  onChange={(e) => setResyncSearchQuery(e.target.value)}
+                                  placeholder="Search by name, BEN, or state..."
+                                  className="flex-1 px-3 py-1.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                                <button
+                                  onClick={() => {
+                                    if (resyncPreviewData) {
+                                      setResyncSelectedBens(new Set(resyncPreviewData.new_schools.map(s => s.ben)));
+                                    }
+                                  }}
+                                  className="px-3 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50 border border-indigo-200 rounded-lg transition whitespace-nowrap"
+                                >
+                                  Select All
+                                </button>
+                                <button
+                                  onClick={() => setResyncSelectedBens(new Set())}
+                                  className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-lg transition whitespace-nowrap"
+                                >
+                                  Deselect All
+                                </button>
+                              </div>
+
+                              {/* School list */}
+                              <div className="flex-1 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100 min-h-0" style={{ maxHeight: '380px' }}>
+                                {resyncPreviewData.new_schools
+                                  .filter(s => {
+                                    if (!resyncSearchQuery) return true;
+                                    const q = resyncSearchQuery.toLowerCase();
+                                    return (
+                                      s.organization_name.toLowerCase().includes(q) ||
+                                      s.ben.toLowerCase().includes(q) ||
+                                      s.state.toLowerCase().includes(q) ||
+                                      s.city.toLowerCase().includes(q)
+                                    );
+                                  })
+                                  .map(school => (
+                                    <label
+                                      key={school.ben}
+                                      className="flex items-center gap-3 px-3 py-2.5 hover:bg-indigo-50/50 cursor-pointer transition"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={resyncSelectedBens.has(school.ben)}
+                                        onChange={(e) => {
+                                          const next = new Set(resyncSelectedBens);
+                                          if (e.target.checked) {
+                                            next.add(school.ben);
+                                          } else {
+                                            next.delete(school.ben);
+                                          }
+                                          setResyncSelectedBens(next);
+                                        }}
+                                        className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                      />
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-sm font-medium text-slate-900 truncate">{school.organization_name || 'Unknown'}</span>
+                                          <span className="text-[10px] font-mono text-slate-400 shrink-0">BEN {school.ben}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                          {school.state && <span className="text-xs text-slate-500">{school.city ? `${school.city}, ` : ''}{school.state}</span>}
+                                          {school.entity_type && <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded">{school.entity_type}</span>}
+                                        </div>
+                                      </div>
+                                    </label>
+                                  ))}
+                              </div>
+                            </>
+                          )}
+
+                          {/* Action buttons */}
+                          <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-slate-100">
+                            <button
+                              onClick={() => setShowResyncModal(false)}
+                              disabled={resyncImporting}
+                              className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition disabled:opacity-50"
+                            >
+                              Cancel
+                            </button>
+                            {resyncPreviewData.new_count > 0 && (
+                              <button
+                                onClick={handleResyncSelectiveImport}
+                                disabled={resyncImporting || resyncSelectedBens.size === 0}
+                                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition"
+                              >
+                                {resyncImporting ? (
+                                  <>
+                                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Importing...
+                                  </>
+                                ) : (
+                                  `Import ${resyncSelectedBens.size} School${resyncSelectedBens.size !== 1 ? 's' : ''}`
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      ) : null}
                     </div>
                   </div>
                 )}
