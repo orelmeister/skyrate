@@ -116,9 +116,9 @@ interface DisbursementRecord {
   inv_line_item_status: string;
 }
 
-type DisbursementFilter = 'all' | 'spi' | 'bear';
+export type DisbursementFilter = 'all' | 'spi' | 'bear';
 
-function DisbursementPanel({ frn, isOpen, onClose }: { frn: string; isOpen: boolean; onClose: () => void }) {
+export function DisbursementPanel({ frn, isOpen, onClose }: { frn: string; isOpen: boolean; onClose: () => void }) {
   const [records, setRecords] = useState<DisbursementRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -143,9 +143,15 @@ function DisbursementPanel({ frn, isOpen, onClose }: { frn: string; isOpen: bool
 
   const filtered = records.filter(r => {
     if (filter === 'all') return true;
-    const type = (r.invoice_type || r.form_nickname || '').toLowerCase();
-    if (filter === 'spi') return type.includes('spi') || type.includes('474');
-    if (filter === 'bear') return type.includes('bear') || type.includes('472');
+    const type = (r.invoice_type || '').toLowerCase();
+    const nickname = (r.form_nickname || '').toLowerCase();
+    
+    if (filter === 'spi') {
+      return type.includes('service provider') || type.includes('spi') || type.includes('474') || nickname.includes('spi') || nickname.includes('474');
+    }
+    if (filter === 'bear') {
+      return type.includes('applicant') || type.includes('bear') || type.includes('472') || nickname.includes('bear') || nickname.includes('472');
+    }
     return true;
   });
 
@@ -230,7 +236,7 @@ function DisbursementPanel({ frn, isOpen, onClose }: { frn: string; isOpen: bool
         </div>
 
         {/* Content */}
-        <div className="max-h-64 overflow-y-auto">
+        <div className="max-h-80 overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-8 text-sm text-slate-500">
               <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading disbursements...
@@ -242,48 +248,52 @@ function DisbursementPanel({ frn, isOpen, onClose }: { frn: string; isOpen: bool
               {records.length === 0 ? 'No disbursement records found for this FRN.' : 'No records match the selected filter.'}
             </div>
           ) : (
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-slate-50">
-                <tr className="text-slate-500 uppercase tracking-wider">
-                  <th className="px-3 py-2 text-left font-medium">Invoice</th>
-                  <th className="px-3 py-2 text-left font-medium">Type</th>
-                  <th className="px-3 py-2 text-left font-medium">Date</th>
-                  <th className="px-3 py-2 text-right font-medium">Requested</th>
-                  <th className="px-3 py-2 text-right font-medium">Approved</th>
-                  <th className="px-3 py-2 text-right font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filtered.map((r, i) => (
-                  <tr key={i} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-3 py-2 font-mono text-slate-800">{r.invoice_id || '-'}</td>
-                    <td className="px-3 py-2">
-                      <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                        (r.invoice_type || '').toLowerCase().includes('spi')
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'bg-purple-100 text-purple-700'
-                      }`}>
-                        {r.invoice_type || r.form_nickname || '-'}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-slate-600">{r.inv_line_completion_date?.slice(0, 10) || r.customer_billed_dt?.slice(0, 10) || '-'}</td>
-                    <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(r.requested_inv_line_amt)}</td>
-                    <td className="px-3 py-2 text-right font-medium text-emerald-700">{formatCurrency(r.approved_inv_line_amt)}</td>
-                    <td className="px-3 py-2 text-right">
-                      <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                        (r.inv_line_item_status || '').toLowerCase().includes('approv')
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : (r.inv_line_item_status || '').toLowerCase().includes('denied')
-                          ? 'bg-red-100 text-red-700'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}>
-                        {r.inv_line_item_status || '-'}
-                      </span>
-                    </td>
+            <div className="overflow-x-auto w-full">
+              <table className="w-full text-xs min-w-[500px]">
+                <thead className="sticky top-0 bg-slate-50 border-b border-slate-100">
+                  <tr className="text-slate-500 uppercase tracking-wider text-[10px] font-semibold">
+                    <th className="px-3 py-2 text-left">Invoice ID</th>
+                    <th className="px-3 py-2 text-left">Type</th>
+                    <th className="px-3 py-2 text-left">Billed</th>
+                    <th className="px-3 py-2 text-left">Disbursed Date</th>
+                    <th className="px-3 py-2 text-right">Requested</th>
+                    <th className="px-3 py-2 text-right">Approved</th>
+                    <th className="px-3 py-2 text-right">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filtered.map((r, i) => (
+                    <tr key={i} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-3 py-2 font-mono text-slate-800 font-semibold">{r.invoice_id || '-'}</td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
+                          (r.invoice_type || '').toLowerCase().includes('service provider') || (r.invoice_type || '').toLowerCase().includes('spi')
+                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : 'bg-purple-50 text-purple-700 border-purple-200'
+                        }`}>
+                          {(r.invoice_type || '').toLowerCase().includes('service provider') || (r.invoice_type || '').toLowerCase().includes('spi') ? 'SPI (474)' : 'BEAR (472)'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{r.customer_billed_dt?.slice(0, 10) || '-'}</td>
+                      <td className="px-3 py-2 text-slate-600 font-medium whitespace-nowrap">{r.inv_line_completion_date?.slice(0, 10) || '-'}</td>
+                      <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(r.requested_inv_line_amt)}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-emerald-700">{formatCurrency(r.approved_inv_line_amt)}</td>
+                      <td className="px-3 py-2 text-right">
+                        <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          (r.inv_line_item_status || '').toLowerCase().includes('approv') || (r.inv_line_item_status || '').toLowerCase().includes('paid') || (r.inv_line_item_status || '').toLowerCase().includes('sent')
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                            : (r.inv_line_item_status || '').toLowerCase().includes('deni')
+                            ? 'bg-red-50 text-red-700 border border-red-100'
+                            : 'bg-slate-50 text-slate-600 border border-slate-150'
+                        }`}>
+                          {r.inv_line_item_status || 'Paid'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
@@ -422,7 +432,7 @@ export default function FRNDetailModal({ isOpen, onClose, frn, ben, onViewInTab,
       <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={onClose} />
 
       {/* Slide-over panel */}
-      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-lg transform transition-transform duration-300 ease-out">
+      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-lg md:max-w-2xl transform transition-transform duration-300 ease-out">
         <div className="h-full flex flex-col bg-white shadow-2xl overflow-y-auto">
           {/* Header */}
           <div className="sticky top-0 z-10 bg-gradient-to-r from-teal-700 to-teal-600 px-6 py-5 flex items-start justify-between">

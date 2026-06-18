@@ -384,7 +384,7 @@ async def get_frn_disbursements(
         records = []
         for row in raw_data:
             records.append({
-                "invoice_id": row.get("invoice_number", ""),
+                "invoice_id": row.get("invoice_id", ""),
                 "invoice_type": row.get("invoice_type", ""),
                 "form_nickname": row.get("form_nickname", ""),
                 "customer_billed_dt": row.get("customer_billed_dt", ""),
@@ -493,7 +493,7 @@ async def get_frn_disbursements_pdf(
             requested = float(row.get("requested_inv_line_amt", 0) or 0)
             approved = float(row.get("approved_inv_line_amt", 0) or 0)
             table_data.append([
-                row.get("invoice_number", "")[:12],
+                row.get("invoice_id", "")[:12],
                 row.get("invoice_type", "")[:8],
                 billed,
                 completion,

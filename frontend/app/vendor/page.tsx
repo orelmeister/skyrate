@@ -13,6 +13,8 @@ import { TableExportBar } from "@/components/TableExportBar";
 import MissingIdentifierBanner from "@/components/MissingIdentifierBanner";
 import { SkeletonRows, SkeletonTable, SkeletonStatCards } from "@/components/Skeleton";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
+import { DisbursementPanel } from "@/components/FRNDetailModal";
+import { ChevronRight, ChevronDown } from "lucide-react";
 
 const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "470-leads", "predicted-leads", "competitive", "search", "leads", "settings"] as const;
 type VendorTab = typeof VENDOR_TABS[number];
@@ -166,6 +168,7 @@ function VendorPortalPage() {
   const [frnCrnSearch, setFrnCrnSearch] = useState<string>("");
   const [selectedFRN, setSelectedFRN] = useState<FRNStatusRecord | null>(null);
   const [showFRNDetailModal, setShowFRNDetailModal] = useState(false);
+  const [disbursementOpen, setDisbursementOpen] = useState(false);
   const [frnTableSort, setFrnTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
 
   // Sorted and filtered FRN data for table display
@@ -4489,7 +4492,7 @@ function VendorPortalPage() {
           {/* Backdrop */}
           <div 
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => setShowFRNDetailModal(false)}
+            onClick={() => { setShowFRNDetailModal(false); setDisbursementOpen(false); }}
           />
           
           {/* Modal */}
@@ -4527,7 +4530,7 @@ function VendorPortalPage() {
                   </div>
                 </div>
                 <button
-                  onClick={() => setShowFRNDetailModal(false)}
+                  onClick={() => { setShowFRNDetailModal(false); setDisbursementOpen(false); }}
                   className="p-2 hover:bg-white/20 rounded-lg transition-colors"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -4577,11 +4580,20 @@ function VendorPortalPage() {
                         ${selectedFRN.commitment_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || '0'}
                       </div>
                     </div>
-                    <div>
-                      <div className="text-xs text-green-600">Disbursed Amount</div>
-                      <div className="text-2xl font-bold text-green-700">
+                    <div 
+                      className="cursor-pointer hover:bg-green-100/70 p-1.5 rounded-lg transition-all select-none border border-transparent hover:border-green-200 relative group"
+                      onClick={() => setDisbursementOpen(!disbursementOpen)}
+                    >
+                      <div className="text-xs text-green-600 flex items-center gap-1 font-medium">
+                        Disbursed Amount
+                        {disbursementOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                      </div>
+                      <div className="text-2xl font-bold text-green-700 underline decoration-dashed decoration-green-400 group-hover:text-green-800">
                         ${selectedFRN.disbursed_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || '0'}
                       </div>
+                      <span className="text-[10px] text-green-600 block mt-0.5 font-medium group-hover:underline">
+                        {disbursementOpen ? 'Click to collapse' : 'Click to view schedule →'}
+                      </span>
                     </div>
                     <div>
                       <div className="text-xs text-green-600">Discount Rate</div>
@@ -4605,6 +4617,13 @@ function VendorPortalPage() {
                     </div>
                   )}
                 </div>
+
+                {/* Interactive Disbursement Panel */}
+                <DisbursementPanel 
+                  frn={selectedFRN.frn} 
+                  isOpen={disbursementOpen} 
+                  onClose={() => setDisbursementOpen(false)} 
+                />
 
                 {/* Status & Pending Reason */}
                 {selectedFRN.pending_reason && (
@@ -4705,7 +4724,7 @@ function VendorPortalPage() {
                 FRN: {selectedFRN.frn} • Application: {selectedFRN.application_number}
               </div>
               <button
-                onClick={() => setShowFRNDetailModal(false)}
+                onClick={() => { setShowFRNDetailModal(false); setDisbursementOpen(false); }}
                 className="px-4 py-2 text-slate-700 hover:bg-slate-200 rounded-xl transition-colors"
               >
                 Close
