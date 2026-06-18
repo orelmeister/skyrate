@@ -4333,7 +4333,7 @@ function ConsultantPortalPage() {
                                 Set as Primary
                               </button>
                             )}
-                            {(!crn.is_primary || user?.role === 'admin' || user?.role === 'super') && (
+                            {(!crn.is_primary || user?.role === 'admin' || user?.role === 'super' || isFreeUser) && (
                               <button
                                 onClick={() => handleRemoveCRN(crn.id, crn.crn, crn.is_primary)}
                                 className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
@@ -4344,7 +4344,7 @@ function ConsultantPortalPage() {
                                 </svg>
                               </button>
                             )}
-                            {crn.is_primary && user?.role !== 'admin' && user?.role !== 'super' && (
+                            {crn.is_primary && user?.role !== 'admin' && user?.role !== 'super' && !isFreeUser && (
                               <span className="text-[10px] text-slate-400 italic">Primary CRN — promote another to delete</span>
                             )}
                           </div>
