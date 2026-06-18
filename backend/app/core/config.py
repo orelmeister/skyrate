@@ -137,6 +137,10 @@ class Settings(BaseSettings):
     PERF_V2_ENABLED: bool = False
     # Shared secret for /v1/admin/jobs/usac-nightly-refresh (Cloud Scheduler).
     NIGHTLY_JOB_TOKEN: Optional[str] = None
+
+    # Blocked lists / security bans
+    BANNED_IPS: List[str] = []
+    BANNED_EMAILS: List[str] = ["vanshjoshi022@gmail.com"]
     
     # Hunter.io API for contact enrichment
     HUNTER_API_KEY: Optional[str] = None

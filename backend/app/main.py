@@ -73,6 +73,27 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class IPBlocklistMiddleware(BaseHTTPMiddleware):
+    """Block banned IP addresses with a 403 Forbidden response"""
+    
+    async def dispatch(self, request: Request, call_next) -> Response:
+        fwd = request.headers.get("x-forwarded-for")
+        if fwd:
+            client_ip = fwd.split(",")[0].strip()
+        else:
+            client_ip = (request.client.host if request.client else "unknown") or "unknown"
+            
+        if settings.BANNED_IPS and client_ip in settings.BANNED_IPS:
+            logger.warning(f"Blocked request from banned IP: {client_ip} to {request.url.path}")
+            return Response(
+                content="Forbidden",
+                status_code=403,
+                media_type="text/plain"
+            )
+            
+        return await call_next(request)
+
+
 class PerfTimingMiddleware(BaseHTTPMiddleware):
     """perf_v2: record per-request latency + cache-hit flag + source tag for /v1 endpoints.
 
@@ -982,6 +1003,9 @@ app = FastAPI(
 
 # Add security headers middleware
 app.add_middleware(SecurityHeadersMiddleware)
+
+# IP blocklist middleware
+app.add_middleware(IPBlocklistMiddleware)
 
 # perf_v2: record per-request latency / cache-hit telemetry.
 app.add_middleware(PerfTimingMiddleware)

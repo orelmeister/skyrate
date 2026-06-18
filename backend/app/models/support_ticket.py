@@ -71,6 +71,7 @@ class SupportTicket(Base):
     priority = Column(String(20), default=TicketPriority.MEDIUM.value)
     category = Column(String(30), default=TicketCategory.GENERAL.value)
     source = Column(String(30), default=TicketSource.CHAT_WIDGET.value)
+    ip_address = Column(String(64), nullable=True)
 
     # Admin fields
     assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -109,6 +110,7 @@ class SupportTicket(Base):
             "priority": self.priority,
             "category": self.category,
             "source": self.source,
+            "ip_address": self.ip_address,
             "assigned_to": self.assigned_to,
             "admin_notes": self.admin_notes,
             "created_at": self.created_at.isoformat() if self.created_at else None,

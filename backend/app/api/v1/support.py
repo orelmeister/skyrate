@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import datetime
+import logging
 
+from ...core.config import settings
 from ...core.database import get_db
 from ...core.security import get_current_user, decode_token
 from ...models.user import User, UserRole
@@ -17,6 +19,8 @@ from ...models.support_ticket import (
     SupportTicket, TicketMessage,
     TicketStatus, TicketPriority, TicketCategory, TicketSource
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/support", tags=["Support"])
 
@@ -89,6 +93,52 @@ async def create_ticket(
             detail="Guest email is required for unauthenticated tickets"
         )
 
+    # Capture client IP address
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        client_ip = fwd.split(",")[0].strip()
+    else:
+        client_ip = (request.client.host if request.client else "unknown") or "unknown"
+
+    # Check email blocklist
+    user_email = (user.email if user else data.guest_email or "").strip()
+    is_banned_email = False
+    if settings.BANNED_EMAILS:
+        is_banned_email = any(
+            user_email.lower() == banned.lower().strip() 
+            for banned in settings.BANNED_EMAILS
+        )
+
+    if is_banned_email:
+        logger.warning(
+            f"Shadow-blocked ticket submission from banned email: {user_email} (IP: {client_ip})"
+        )
+        return {
+            "success": True,
+            "ticket": {
+                "id": 9999,
+                "user_id": user.id if user else None,
+                "guest_name": data.guest_name,
+                "guest_email": data.guest_email,
+                "subject": data.subject,
+                "message": data.message,
+                "status": TicketStatus.OPEN.value,
+                "priority": TicketPriority.MEDIUM.value,
+                "category": data.category or TicketCategory.GENERAL.value,
+                "source": data.source or TicketSource.CHAT_WIDGET.value,
+                "ip_address": client_ip,
+                "assigned_to": None,
+                "admin_notes": "Shadow-blocked",
+                "created_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.utcnow().isoformat(),
+                "resolved_at": None,
+                "message_count": 1,
+                "user_email": user_email,
+                "user_name": data.guest_name or "Guest"
+            },
+            "message": "Support ticket created successfully. We'll get back to you soon!"
+        }
+
     ticket = SupportTicket(
         user_id=user.id if user else None,
         guest_name=data.guest_name if not user else None,
@@ -99,6 +149,7 @@ async def create_ticket(
         source=data.source or TicketSource.CHAT_WIDGET.value,
         status=TicketStatus.OPEN.value,
         priority=TicketPriority.MEDIUM.value,
+        ip_address=client_ip,
     )
     db.add(ticket)
     db.flush()
