@@ -4,11 +4,13 @@ Public USAC data lookups (FRN detail, entity info, etc.)
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime, timedelta
 import logging
 import requests
+import io
 
 from ...core.database import get_db
 from ...core.security import get_current_user
@@ -351,3 +353,182 @@ async def check_deadline_alerts(
         "frns_checked": len(unique_records),
         "bens_checked": len(bens_to_check),
     }
+
+
+# USAC Invoices and Authorized Disbursements dataset (jpiu-tj8h)
+DISBURSEMENTS_URL = "https://opendata.usac.org/resource/jpiu-tj8h.json"
+
+
+@router.get("/frn/{frn_number}/disbursements")
+async def get_frn_disbursements(
+    frn_number: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get disbursement/invoice records for a specific FRN from USAC dataset jpiu-tj8h.
+    Returns records sorted by inv_line_completion_date DESC.
+    """
+    try:
+        params = {
+            "$where": f"funding_request_number = '{frn_number}'",
+            "$limit": 200,
+            "$order": "inv_line_completion_date DESC",
+        }
+
+        response = requests.get(DISBURSEMENTS_URL, params=params, timeout=30)
+        response.raise_for_status()
+        raw_data = response.json()
+
+        # Standardize keys
+        records = []
+        for row in raw_data:
+            records.append({
+                "invoice_id": row.get("invoice_number", ""),
+                "invoice_type": row.get("invoice_type", ""),
+                "form_nickname": row.get("form_nickname", ""),
+                "customer_billed_dt": row.get("customer_billed_dt", ""),
+                "inv_line_completion_date": row.get("inv_line_completion_date", ""),
+                "requested_inv_line_amt": float(row.get("requested_inv_line_amt", 0) or 0),
+                "approved_inv_line_amt": float(row.get("approved_inv_line_amt", 0) or 0),
+                "inv_line_item_status": row.get("inv_line_item_status", ""),
+            })
+
+        return {
+            "success": True,
+            "frn": frn_number,
+            "count": len(records),
+            "disbursements": records,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching disbursements for FRN {frn_number}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch disbursement data: {str(e)}")
+
+
+@router.get("/frn/{frn_number}/disbursements/pdf")
+async def get_frn_disbursements_pdf(
+    frn_number: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Generate and stream a PDF disbursement statement for a given FRN.
+    Uses ReportLab to produce a professional tabular report.
+    """
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+
+    try:
+        # Fetch data from USAC
+        params = {
+            "$where": f"funding_request_number = '{frn_number}'",
+            "$limit": 200,
+            "$order": "inv_line_completion_date DESC",
+        }
+        response = requests.get(DISBURSEMENTS_URL, params=params, timeout=30)
+        response.raise_for_status()
+        raw_data = response.json()
+
+        if not raw_data:
+            raise HTTPException(status_code=404, detail=f"No disbursement records found for FRN {frn_number}")
+
+        # Build PDF in memory
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=letter,
+            leftMargin=0.5 * inch,
+            rightMargin=0.5 * inch,
+            topMargin=0.75 * inch,
+            bottomMargin=0.75 * inch,
+        )
+
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            "CustomTitle", parent=styles["Heading1"],
+            fontSize=16, alignment=TA_CENTER, spaceAfter=12
+        )
+        subtitle_style = ParagraphStyle(
+            "CustomSubtitle", parent=styles["Normal"],
+            fontSize=10, alignment=TA_CENTER, spaceAfter=20, textColor=colors.grey
+        )
+
+        elements = []
+        elements.append(Paragraph(f"Disbursement Statement", title_style))
+        elements.append(Paragraph(f"FRN: {frn_number} | Generated: {datetime.utcnow().strftime('%B %d, %Y')}", subtitle_style))
+        elements.append(Spacer(1, 12))
+
+        # Summary
+        total_requested = sum(float(r.get("requested_inv_line_amt", 0) or 0) for r in raw_data)
+        total_approved = sum(float(r.get("approved_inv_line_amt", 0) or 0) for r in raw_data)
+        summary_data = [
+            ["Total Invoices", str(len(raw_data))],
+            ["Total Requested", f"${total_requested:,.2f}"],
+            ["Total Approved", f"${total_approved:,.2f}"],
+        ]
+        summary_table = Table(summary_data, colWidths=[2 * inch, 2.5 * inch])
+        summary_table.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+            ("FONTSIZE", (0, 0), (-1, -1), 10),
+            ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 20))
+
+        # Detail table
+        header = ["Invoice ID", "Type", "Billed Date", "Completion Date", "Requested", "Approved", "Status"]
+        table_data = [header]
+
+        for row in raw_data:
+            billed = (row.get("customer_billed_dt") or "")[:10]
+            completion = (row.get("inv_line_completion_date") or "")[:10]
+            requested = float(row.get("requested_inv_line_amt", 0) or 0)
+            approved = float(row.get("approved_inv_line_amt", 0) or 0)
+            table_data.append([
+                row.get("invoice_number", "")[:12],
+                row.get("invoice_type", "")[:8],
+                billed,
+                completion,
+                f"${requested:,.2f}",
+                f"${approved:,.2f}",
+                (row.get("inv_line_item_status") or "")[:12],
+            ])
+
+        col_widths = [1.1 * inch, 0.7 * inch, 1.0 * inch, 1.1 * inch, 1.0 * inch, 1.0 * inch, 1.0 * inch]
+        detail_table = Table(table_data, colWidths=col_widths, repeatRows=1)
+        detail_table.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0d9488")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("ALIGN", (4, 0), (5, -1), "RIGHT"),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(detail_table)
+
+        doc.build(elements)
+        buffer.seek(0)
+
+        filename = f"FRN_{frn_number}_Disbursements.pdf"
+        return StreamingResponse(
+            buffer,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating disbursement PDF for FRN {frn_number}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}")

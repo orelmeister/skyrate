@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, Fragment } from 'react';
 import {
   X, AlertTriangle, Clock, Calendar, DollarSign,
   Building2, FileText, ChevronRight, Loader2, ExternalLink,
-  Shield, TrendingUp
+  Shield, TrendingUp, Download, ChevronDown, Filter, Info
 } from 'lucide-react';
 import { api } from '@/lib/api';
 
@@ -105,6 +105,202 @@ function formatCurrency(amount: number | undefined): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
 }
 
+interface DisbursementRecord {
+  invoice_id: string;
+  invoice_type: string;
+  form_nickname: string;
+  customer_billed_dt: string;
+  inv_line_completion_date: string;
+  requested_inv_line_amt: number;
+  approved_inv_line_amt: number;
+  inv_line_item_status: string;
+}
+
+type DisbursementFilter = 'all' | 'spi' | 'bear';
+
+function DisbursementPanel({ frn, isOpen, onClose }: { frn: string; isOpen: boolean; onClose: () => void }) {
+  const [records, setRecords] = useState<DisbursementRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<DisbursementFilter>('all');
+
+  useEffect(() => {
+    if (isOpen && frn) {
+      setLoading(true);
+      setError(null);
+      api.get<{ success: boolean; disbursements: DisbursementRecord[] }>(`/usac/frn/${frn}/disbursements`)
+        .then(resp => {
+          if (resp.success && resp.data?.disbursements) {
+            setRecords(resp.data.disbursements);
+          } else {
+            setError(resp.error || 'Failed to load disbursements');
+          }
+        })
+        .catch(() => setError('Network error'))
+        .finally(() => setLoading(false));
+    }
+  }, [isOpen, frn]);
+
+  const filtered = records.filter(r => {
+    if (filter === 'all') return true;
+    const type = (r.invoice_type || r.form_nickname || '').toLowerCase();
+    if (filter === 'spi') return type.includes('spi') || type.includes('474');
+    if (filter === 'bear') return type.includes('bear') || type.includes('472');
+    return true;
+  });
+
+  const handleCsvDownload = () => {
+    const headers = ['Invoice ID', 'Type', 'Form', 'Billed Date', 'Completion Date', 'Requested Amount', 'Approved Amount', 'Status'];
+    const rows = filtered.map(r => [
+      r.invoice_id,
+      r.invoice_type,
+      r.form_nickname,
+      r.customer_billed_dt?.slice(0, 10) || '',
+      r.inv_line_completion_date?.slice(0, 10) || '',
+      r.requested_inv_line_amt.toFixed(2),
+      r.approved_inv_line_amt.toFixed(2),
+      r.inv_line_item_status,
+    ]);
+    const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `FRN_${frn}_Disbursements.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePdfDownload = () => {
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    const url = `${baseUrl}/api/v1/usac/frn/${frn}/disbursements/pdf`;
+    const a = document.createElement('a');
+    a.href = token ? `${url}?token=${encodeURIComponent(token)}` : url;
+    a.target = '_blank';
+    a.click();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="mt-1 animate-in slide-in-from-top-2 duration-300">
+      <div className="bg-white rounded-xl border border-teal-200 shadow-lg overflow-hidden">
+        {/* Panel Header */}
+        <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-teal-50 to-emerald-50 border-b border-teal-100">
+          <h4 className="text-sm font-semibold text-teal-800 flex items-center gap-1.5">
+            <DollarSign className="h-4 w-4" /> Disbursement Schedule
+          </h4>
+          <button onClick={onClose} className="p-1 rounded hover:bg-teal-100 text-teal-600 transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-100">
+          <Filter className="h-3.5 w-3.5 text-slate-400" />
+          {(['all', 'spi', 'bear'] as DisbursementFilter[]).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                filter === f
+                  ? 'bg-teal-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {f === 'all' ? 'All' : f === 'spi' ? 'SPI (Form 474)' : 'BEAR (Form 472)'}
+            </button>
+          ))}
+          <div className="flex-1" />
+          <button
+            onClick={handleCsvDownload}
+            disabled={filtered.length === 0}
+            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-teal-700 bg-teal-50 hover:bg-teal-100 rounded transition-colors disabled:opacity-50"
+          >
+            <Download className="h-3 w-3" /> CSV
+          </button>
+          <button
+            onClick={handlePdfDownload}
+            disabled={records.length === 0}
+            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded transition-colors disabled:opacity-50"
+          >
+            <FileText className="h-3 w-3" /> PDF
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="max-h-64 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-8 text-sm text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading disbursements...
+            </div>
+          ) : error ? (
+            <div className="px-4 py-4 text-sm text-amber-700 bg-amber-50">{error}</div>
+          ) : filtered.length === 0 ? (
+            <div className="px-4 py-6 text-sm text-slate-500 text-center">
+              {records.length === 0 ? 'No disbursement records found for this FRN.' : 'No records match the selected filter.'}
+            </div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-slate-50">
+                <tr className="text-slate-500 uppercase tracking-wider">
+                  <th className="px-3 py-2 text-left font-medium">Invoice</th>
+                  <th className="px-3 py-2 text-left font-medium">Type</th>
+                  <th className="px-3 py-2 text-left font-medium">Date</th>
+                  <th className="px-3 py-2 text-right font-medium">Requested</th>
+                  <th className="px-3 py-2 text-right font-medium">Approved</th>
+                  <th className="px-3 py-2 text-right font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filtered.map((r, i) => (
+                  <tr key={i} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-3 py-2 font-mono text-slate-800">{r.invoice_id || '-'}</td>
+                    <td className="px-3 py-2">
+                      <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                        (r.invoice_type || '').toLowerCase().includes('spi')
+                          ? 'bg-blue-100 text-blue-700'
+                          : 'bg-purple-100 text-purple-700'
+                      }`}>
+                        {r.invoice_type || r.form_nickname || '-'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-slate-600">{r.inv_line_completion_date?.slice(0, 10) || r.customer_billed_dt?.slice(0, 10) || '-'}</td>
+                    <td className="px-3 py-2 text-right text-slate-700">{formatCurrency(r.requested_inv_line_amt)}</td>
+                    <td className="px-3 py-2 text-right font-medium text-emerald-700">{formatCurrency(r.approved_inv_line_amt)}</td>
+                    <td className="px-3 py-2 text-right">
+                      <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        (r.inv_line_item_status || '').toLowerCase().includes('approv')
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : (r.inv_line_item_status || '').toLowerCase().includes('denied')
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}>
+                        {r.inv_line_item_status || '-'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Footer summary */}
+        {filtered.length > 0 && !loading && (
+          <div className="px-4 py-2 border-t border-slate-100 bg-slate-50 flex items-center justify-between text-xs text-slate-600">
+            <span>{filtered.length} record{filtered.length !== 1 ? 's' : ''}</span>
+            <span className="font-medium text-emerald-700">
+              Total Approved: {formatCurrency(filtered.reduce((sum, r) => sum + r.approved_inv_line_amt, 0))}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ShimmerLine({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse bg-slate-200 rounded h-4 ${className}`} />;
 }
@@ -113,6 +309,7 @@ export default function FRNDetailModal({ isOpen, onClose, frn, ben, onViewInTab,
   const [data, setData] = useState<FRNData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [disbursementOpen, setDisbursementOpen] = useState(false);
 
   const fetchFreshData = useCallback(async () => {
     if (!frn) return;
@@ -140,6 +337,7 @@ export default function FRNDetailModal({ isOpen, onClose, frn, ben, onViewInTab,
     if (!isOpen) {
       setData(null);
       setError(null);
+      setDisbursementOpen(false);
     }
   }, [isOpen, frn, fetchFreshData]);
 
@@ -267,9 +465,15 @@ export default function FRNDetailModal({ isOpen, onClose, frn, ben, onViewInTab,
                     {loading && !display.commitment_amount ? <ShimmerLine className="w-20 mt-1" /> : formatCurrency(Number(display.commitment_amount))}
                   </p>
                 </div>
-                <div>
-                  <p className="text-slate-500 text-xs">Disbursed</p>
-                  <p className="font-semibold text-slate-900">
+                <div
+                  onClick={() => setDisbursementOpen(!disbursementOpen)}
+                  className="cursor-pointer group"
+                >
+                  <p className="text-slate-500 text-xs flex items-center gap-1">
+                    Disbursed
+                    <ChevronDown className={`h-3 w-3 text-slate-400 transition-transform duration-200 ${disbursementOpen ? 'rotate-180' : ''}`} />
+                  </p>
+                  <p className="font-semibold text-slate-900 group-hover:text-teal-700 group-hover:underline decoration-dotted underline-offset-2 transition-colors">
                     {loading && !display.disbursed_amount ? <ShimmerLine className="w-20 mt-1" /> : formatCurrency(Number(display.disbursed_amount))}
                   </p>
                 </div>
@@ -293,6 +497,13 @@ export default function FRNDetailModal({ isOpen, onClose, frn, ben, onViewInTab,
                 )}
               </div>
             </div>
+
+            {/* Disbursement Schedule Panel */}
+            <DisbursementPanel
+              frn={display.frn as string || frn}
+              isOpen={disbursementOpen}
+              onClose={() => setDisbursementOpen(false)}
+            />
 
             {/* Status Change (if from alert) */}
             {oldStatus && newStatus && oldStatus !== newStatus && (
