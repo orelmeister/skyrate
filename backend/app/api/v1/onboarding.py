@@ -397,8 +397,14 @@ async def update_alert_preferences(
     config.alert_on_deadline = data.alert_on_deadline
     config.alert_on_disbursement = data.alert_on_disbursement
     config.alert_on_funding_approved = data.alert_on_funding_approved
-    config.alert_on_form_470 = data.alert_on_form_470
-    config.alert_on_competitor = data.alert_on_competitor
+    # Vendor-only alert types: non-vendor/super/admin users cannot enable these
+    vendor_roles = ("vendor", "super", "admin")
+    if current_user.role in vendor_roles:
+        config.alert_on_form_470 = data.alert_on_form_470
+        config.alert_on_competitor = data.alert_on_competitor
+    else:
+        config.alert_on_form_470 = False
+        config.alert_on_competitor = False
     config.email_notifications = data.email_notifications
     config.push_notifications = data.push_notifications
     config.sms_notifications = data.sms_notifications

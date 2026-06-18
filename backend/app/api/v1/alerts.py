@@ -153,6 +153,16 @@ async def update_alert_config(
     
     # Update only provided fields
     update_data = data.dict(exclude_unset=True)
+
+    # Vendor-only alert types: non-vendor/super/admin users cannot enable these
+    vendor_roles = ("vendor", "super", "admin")
+    if current_user.role not in vendor_roles:
+        update_data.pop("alert_on_form_470", None)
+        update_data.pop("alert_on_competitor", None)
+        # Also ensure they stay False in the DB
+        config.alert_on_form_470 = False
+        config.alert_on_competitor = False
+
     for field, value in update_data.items():
         if hasattr(config, field):
             setattr(config, field, value)
