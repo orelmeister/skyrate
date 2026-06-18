@@ -1450,6 +1450,7 @@ async def remove_crn(
     scope of GET /crns). Regular consultants are scoped to their own profile.
     """
     is_privileged = current_user.role in ("admin", "super")
+    is_free_user = _is_free_crn_user(current_user)
 
     if is_privileged:
         crn_record = db.query(ConsultantCRN).filter(
@@ -1464,7 +1465,7 @@ async def remove_crn(
     if not crn_record:
         raise HTTPException(status_code=404, detail="CRN not found")
 
-    if crn_record.is_primary and not is_privileged:
+    if crn_record.is_primary and not is_privileged and not is_free_user:
         raise HTTPException(status_code=400, detail="Cannot remove primary CRN. Change your primary CRN first.")
 
     was_primary = crn_record.is_primary
@@ -1498,10 +1499,10 @@ async def remove_crn(
     db.delete(crn_record)
     db.flush()
 
-    # If admin/super removed a primary CRN, auto-promote another remaining CRN
+    # If admin/super or free/demo user removed a primary CRN, auto-promote another remaining CRN
     # on the owning profile (so the owner isn't left without a primary) and
     # update the legacy profile.crn mirror.
-    if was_primary and is_privileged:
+    if was_primary and (is_privileged or is_free_user):
         owning_profile = db.query(ConsultantProfile).filter(
             ConsultantProfile.id == owning_profile_id
         ).first()

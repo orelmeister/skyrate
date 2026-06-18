@@ -1147,7 +1147,7 @@ function ConsultantPortalPage() {
 
   const handleRemoveCRN = async (crnId: number, crnNumber: string, isPrimary: boolean) => {
     const isPrivileged = user?.role === 'admin' || user?.role === 'super';
-    if (isPrimary && !isPrivileged) {
+    if (isPrimary && !isPrivileged && !isFreeUser) {
       alert("Cannot remove your primary CRN. It's linked to your main subscription.");
       return;
     }
