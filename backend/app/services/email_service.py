@@ -236,7 +236,149 @@ class EmailService:
         except Exception as e:
             logger.error(f"Failed to send email to {to_email}: {e}")
             return False
-    
+
+    @staticmethod
+    def _fmt_money(value) -> str:
+        """Format a numeric value as USD currency. Falls back to the raw string."""
+        try:
+            return "${:,.2f}".format(float(value))
+        except (TypeError, ValueError):
+            return str(value) if value not in (None, "") else "N/A"
+
+    @staticmethod
+    def build_invoice_deadline_card(detail: Dict[str, Any]) -> str:
+        """
+        Build a standalone, email-client-safe HTML card for an approaching
+        invoicing deadline (BEAR/SPI). Severity is driven by days_remaining:
+        <= 7 days renders the red "urgent" variant, otherwise the amber
+        "critical warning" variant.
+        """
+        days_remaining = detail.get("days_remaining", 30)
+        try:
+            days_remaining = int(days_remaining)
+        except (TypeError, ValueError):
+            days_remaining = 30
+
+        urgent = days_remaining <= 7
+        accent = "#dc2626" if urgent else "#ea580c"
+        badge_bg = "#fee2e2" if urgent else "#ffedd5"
+        badge_fg = "#991b1b" if urgent else "#b45309"
+        banner_bg = "#fef2f2" if urgent else "#fff7ed"
+        banner_fg = "#991b1b" if urgent else "#9a3412"
+        eyebrow = "Urgent Invoice Action Required" if urgent else "Critical Invoice Deadline Warning"
+
+        entity_name = detail.get("entity_name") or f"BEN {detail.get('ben', '')}"
+        nickname = detail.get("frn_nickname") or ""
+        ben = detail.get("ben", "")
+        state = detail.get("state", "")
+        frn = detail.get("frn", "")
+        app_number = detail.get("application_number", "")
+        funding_year = detail.get("funding_year", "")
+        spin = detail.get("spin", "")
+        provider = detail.get("provider", "")
+        invoicing_mode = detail.get("invoicing_mode") or "BEAR/SPI"
+        approved = EmailService._fmt_money(detail.get("approved_funding"))
+        disbursed = EmailService._fmt_money(detail.get("disbursed"))
+        remaining = EmailService._fmt_money(detail.get("remaining"))
+        service_end = detail.get("service_end", "")
+        invoice_deadline = detail.get("invoice_deadline", "")
+        deep_link = detail.get("deep_link") or "https://skyrate.ai/consultant?tab=frn-status"
+        cta_label = "Submit Invoice Immediately" if urgent else "Inspect Invoicing Steps"
+
+        nickname_html = f"FRN Nickname: <strong>{nickname}</strong> | " if nickname else ""
+        state_html = f"({state})" if state else ""
+
+        if urgent:
+            banner_text = (
+                f"CRITICAL WARNING: Only {days_remaining} days remaining to invoice this FRN. "
+                f"Unclaimed funds ({remaining}) will be permanently forfeited back to USAC on "
+                f"<strong>{invoice_deadline}</strong> if {invoicing_mode} is not submitted."
+            )
+        else:
+            banner_text = (
+                f"Action Needed: Final E-Rate Invoicing ({invoicing_mode}) must be submitted to USAC by "
+                f"<strong>{invoice_deadline}</strong> ({days_remaining} days remaining)."
+            )
+
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <div style="max-width:640px;margin:24px auto;padding:0 16px;">
+    <div style="background-color:#ffffff;border:1px solid #e2e8f0;border-top:4px solid {accent};border-radius:8px;padding:24px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);text-align:left;">
+      <div style="margin-bottom:16px;border-bottom:1px solid #f1f5f9;padding-bottom:14px;">
+        <span style="font-size:11px;font-weight:bold;color:{accent};text-transform:uppercase;letter-spacing:0.8px;">{eyebrow}</span>
+        <h2 style="margin:4px 0 0 0;font-size:18px;color:#1e3a5f;">{entity_name}</h2>
+        <p style="margin:2px 0 8px 0;font-size:12px;color:#64748b;">{nickname_html}BEN: {ben} {state_html}</p>
+        <span style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;background-color:{badge_bg};color:{badge_fg};text-transform:uppercase;">{days_remaining} Days Remaining</span>
+      </div>
+      <div style="background-color:{banner_bg};border-left:4px solid {accent};padding:12px 16px;border-radius:0 6px 6px 0;font-size:13px;color:{banner_fg};font-weight:600;margin-bottom:20px;">
+        {banner_text}
+      </div>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+        <tr>
+          <td valign="top" width="33%" style="padding-right:8px;">
+            <div style="background-color:#f8fafc;padding:14px;border-radius:6px;border:1px solid #f1f5f9;font-size:13px;">
+              <div style="font-size:12px;text-transform:uppercase;color:#475569;letter-spacing:0.5px;border-bottom:1px solid #e2e8f0;padding-bottom:4px;margin-bottom:10px;">Funding Context</div>
+              <div style="margin-bottom:8px;"><strong>FRN:</strong> {frn}</div>
+              <div style="margin-bottom:8px;"><strong>Form 471 #:</strong> {app_number or 'N/A'}</div>
+              <div><strong>Funding Year:</strong> {funding_year or 'N/A'}</div>
+            </div>
+          </td>
+          <td valign="top" width="34%" style="padding:0 4px;">
+            <div style="background-color:#f8fafc;padding:14px;border-radius:6px;border:1px solid #f1f5f9;font-size:13px;">
+              <div style="font-size:12px;text-transform:uppercase;color:#475569;letter-spacing:0.5px;border-bottom:1px solid #e2e8f0;padding-bottom:4px;margin-bottom:10px;">Provider &amp; Mode</div>
+              <div style="margin-bottom:8px;"><strong>SPIN:</strong> {spin or 'N/A'}</div>
+              <div style="margin-bottom:8px;"><strong>Provider:</strong> {provider or 'N/A'}</div>
+              <div><strong>Invoicing Mode:</strong> <span style="font-weight:bold;color:#0f766e;">{invoicing_mode}</span></div>
+            </div>
+          </td>
+          <td valign="top" width="33%" style="padding-left:8px;">
+            <div style="background-color:#f8fafc;padding:14px;border-radius:6px;border:1px solid #f1f5f9;font-size:13px;">
+              <div style="font-size:12px;text-transform:uppercase;color:#475569;letter-spacing:0.5px;border-bottom:1px solid #e2e8f0;padding-bottom:4px;margin-bottom:10px;">Disbursement Status</div>
+              <div style="margin-bottom:8px;"><strong>Approved Funding:</strong> {approved}</div>
+              <div style="margin-bottom:8px;"><strong>Disbursed to Date:</strong> {disbursed}</div>
+              <div><strong>Remaining Balance:</strong> <span style="font-weight:bold;color:{accent};">{remaining}</span></div>
+            </div>
+          </td>
+        </tr>
+      </table>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #f1f5f9;">
+        <tr>
+          <td valign="middle" style="font-size:12px;color:#64748b;padding-top:14px;">Service End Date: {service_end or 'N/A'} | Invoice Deadline: {invoice_deadline or 'N/A'}</td>
+          <td valign="middle" align="right" style="padding-top:14px;">
+            <a href="{deep_link}" style="display:inline-block;background-color:{accent};color:#ffffff;padding:9px 18px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600;">{cta_label} &rarr;</a>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <p style="text-align:center;font-size:11px;color:#94a3b8;margin-top:16px;">
+      You are receiving this because invoicing-deadline alerts are enabled on your SkyRate AI account.
+      Manage alerts in <a href="https://skyrate.ai/settings/notifications" style="color:#2563eb;text-decoration:none;">Notification Settings</a>.
+    </p>
+  </div>
+</body>
+</html>"""
+
+    def send_invoice_deadline_email(self, to_email: str, detail: Dict[str, Any]) -> bool:
+        """Send a single approaching-invoicing-deadline alert email (card layout)."""
+        days_remaining = detail.get("days_remaining", 30)
+        entity_name = detail.get("entity_name") or detail.get("ben", "your FRN")
+        urgent = False
+        try:
+            urgent = int(days_remaining) <= 7
+        except (TypeError, ValueError):
+            pass
+        prefix = "URGENT" if urgent else "Action Needed"
+        subject = f"{prefix}: Invoice deadline in {days_remaining} days - {entity_name}"
+        html = self.build_invoice_deadline_card(detail)
+        return self.send_email(
+            to_email=to_email,
+            subject=subject,
+            html_content=html,
+            email_type='deadline',
+        )
+
     def send_alert_email(self, to_email: str, alert: Alert) -> bool:
         """Send a single alert notification email with rich FRN detail tables"""
         priority_colors = {

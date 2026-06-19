@@ -712,6 +712,9 @@ def _run_schema_migrations(engine):
         # Alert config — FRN digest tracking
         ("alert_configs", "last_frn_digest_at", "DATETIME DEFAULT NULL", None),
         ("alert_configs", "sms_enabled", "TINYINT(1) DEFAULT 0", None),
+        # Alert config — approaching invoicing-deadline alerts (opt-in 30/7-day cards)
+        ("alert_configs", "alert_on_invoice_deadline", "TINYINT(1) DEFAULT 0", None),
+        ("alert_configs", "invoice_deadline_intervals", "JSON DEFAULT NULL", None),
         # Admin FRN snapshot — USAC PIA sub-status
         ("admin_frn_snapshots", "pending_reason", "VARCHAR(256) DEFAULT NULL", None),
     ]
@@ -750,6 +753,25 @@ def _run_schema_migrations(engine):
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                 """))
             logger.info("Migration: Created pia_responses table")
+
+        # Ensure dispatched_deadline_alerts table exists (double-send protection
+        # for the opt-in invoicing-deadline alerts).
+        if not inspector.has_table("dispatched_deadline_alerts"):
+            with engine.begin() as conn:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS dispatched_deadline_alerts (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        user_id INT NOT NULL,
+                        frn VARCHAR(64) NOT NULL,
+                        deadline_type VARCHAR(50) NOT NULL,
+                        days_remaining INT NOT NULL,
+                        dispatched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE KEY uq_dispatched_deadline_alert (user_id, frn, deadline_type, days_remaining),
+                        INDEX ix_dispatched_deadline_user_frn (user_id, frn),
+                        FOREIGN KEY (user_id) REFERENCES users(id)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """))
+            logger.info("Migration: Created dispatched_deadline_alerts table")
 
         for table, column, col_type, _ in migrations:
             if not inspector.has_table(table):

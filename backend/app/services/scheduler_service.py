@@ -88,7 +88,248 @@ def check_upcoming_deadlines():
         db.close()
 
 
+def _maybe_invoice_detail(ben, ben_data, frn, intervals: list, now: datetime) -> Optional[dict]:
+    """
+    Return an invoice-deadline card-detail dict if this FRN's days-remaining to its
+    BEAR/SPI invoice deadline (service_end + 120 days) exactly matches one of the
+    configured intervals AND the FRN has not yet been invoiced. Otherwise None.
+    """
+    status = (frn.get("status") or "").lower()
+    if "funded" not in status and "committed" not in status:
+        return None
+    service_end_str = frn.get("service_end", "")
+    last_invoice = frn.get("last_invoice_date", "")
+    if not service_end_str or last_invoice:
+        return None
+    svc_end = _parse_date(service_end_str)
+    if not svc_end:
+        return None
+
+    invoice_deadline = svc_end + timedelta(days=120)
+    days_remaining = (invoice_deadline - now).days
+    if days_remaining not in intervals:
+        return None
+
+    approved = frn.get("commitment_amount") or frn.get("original_amount")
+    disbursed = frn.get("disbursed_amount")
+    remaining = None
+    try:
+        remaining = float(approved) - float(disbursed or 0)
+    except (TypeError, ValueError):
+        remaining = None
+
+    frn_number = frn.get("frn", "")
+    return {
+        "entity_name": ben_data.get("entity_name", f"BEN {ben}"),
+        "frn_nickname": frn.get("nickname", ""),
+        "ben": ben,
+        "state": ben_data.get("state", ""),
+        "frn": frn_number,
+        "application_number": frn.get("application_number", ""),
+        "funding_year": frn.get("funding_year", ""),
+        "spin": frn.get("spin", ""),
+        "provider": frn.get("spin_name") or frn.get("service_provider", ""),
+        "invoicing_mode": frn.get("invoicing_mode") or "BEAR/SPI",
+        "approved_funding": approved,
+        "disbursed": disbursed,
+        "remaining": remaining,
+        "service_end": svc_end.strftime("%m/%d/%Y"),
+        "invoice_deadline": invoice_deadline.strftime("%m/%d/%Y"),
+        "days_remaining": days_remaining,
+        "deep_link": f"https://skyrate.ai/consultant?tab=frn-status&frn={frn_number}",
+    }
+
+
+def _collect_invoice_deadline_details(db: Session, user, intervals: list, now: datetime) -> list:
+    """
+    Gather approaching invoicing-deadline card details for a single user across all
+    roles (applicant BEN, consultant school BENs, vendor SPIN). Only returns FRNs
+    whose days-remaining exactly matches one of the configured intervals.
+    """
+    from ..models.applicant import ApplicantProfile
+    from ..models.consultant import ConsultantProfile, ConsultantSchool
+
+    results = []
+    bens = []
+    role = user.role
+
+    if role in ('applicant', 'super'):
+        ap = db.query(ApplicantProfile).filter(ApplicantProfile.user_id == user.id).first()
+        if ap and getattr(ap, 'ben', None):
+            bens.append(ap.ben)
+
+    if role in ('consultant', 'super'):
+        cp = db.query(ConsultantProfile).filter(ConsultantProfile.user_id == user.id).first()
+        if cp:
+            schools = db.query(ConsultantSchool).filter(
+                ConsultantSchool.consultant_profile_id == cp.id
+            ).all()
+            bens.extend([s.ben for s in schools if s.ben])
+
+    try:
+        from utils.usac_client import USACDataClient
+        client = USACDataClient()
+    except Exception as e:
+        logger.error(f"Invoice sweep: USAC client init failed: {e}")
+        return results
+
+    bens = list({b for b in bens if b})
+    if bens:
+        try:
+            batch = client.get_frn_status_batch(bens)
+            if batch.get("success"):
+                for ben, ben_data in batch.get("results", {}).items():
+                    for frn in ben_data.get("frns", []):
+                        d = _maybe_invoice_detail(ben, ben_data, frn, intervals, now)
+                        if d:
+                            results.append(d)
+        except Exception as e:
+            logger.error(f"Invoice sweep: USAC batch error: {e}")
+
+    if role in ('vendor', 'super'):
+        from ..models.vendor import VendorProfile
+        vp = db.query(VendorProfile).filter(VendorProfile.user_id == user.id).first()
+        if vp and vp.spin:
+            try:
+                sr = client.get_frn_status_by_spin(vp.spin)
+                if sr.get("success"):
+                    for frn in sr.get("frns", []):
+                        ben = frn.get("ben", "")
+                        ben_data = {
+                            "entity_name": frn.get("entity_name") or f"FRN {frn.get('frn', '')}",
+                            "state": frn.get("state", ""),
+                        }
+                        d = _maybe_invoice_detail(ben, ben_data, frn, intervals, now)
+                        if d:
+                            results.append(d)
+            except Exception as e:
+                logger.error(f"Invoice sweep: USAC SPIN error: {e}")
+
+    return results
+
+
+def check_invoicing_deadlines():
+    """
+    Dedicated, opt-in sweep for approaching BEAR/SPI invoicing deadlines.
+
+    Runs only for users who set ``alert_on_invoice_deadline=True``. Fires a rich
+    invoice-deadline card email + in-app alert at exactly the configured day-out
+    intervals (default [30, 7]). Uses DispatchedDeadlineAlert for idempotent,
+    once-per-(user, frn, deadline_type, day) delivery so paying users are never
+    double-notified across the 6-hourly runs.
+
+    SAFETY: defaults OFF for every account (alert_on_invoice_deadline default
+    False), so this job is a no-op until a user explicitly opts in.
+    """
+    logger.info("Running invoicing-deadline check job...")
+
+    db = SessionLocal()
+    try:
+        from ..models.alert import Alert, AlertType, AlertPriority, DispatchedDeadlineAlert
+        from .email_service import EmailService
+
+        alert_service = AlertService(db)
+        email_service = EmailService()
+        now = datetime.utcnow()
+
+        users = db.query(User).filter(User.is_active == True).all()
+        processed = 0
+        sent = 0
+
+        for user in users:
+            try:
+                config = alert_service.get_or_create_alert_config(user.id)
+            except Exception as e:
+                logger.error(f"Invoice sweep: config error for user {user.id}: {e}")
+                continue
+
+            if not getattr(config, 'alert_on_invoice_deadline', False):
+                continue
+
+            intervals = config.invoice_deadline_intervals or [30, 7]
+            try:
+                intervals = sorted({int(x) for x in intervals if int(x) > 0}, reverse=True)
+            except (TypeError, ValueError):
+                intervals = [30, 7]
+            if not intervals:
+                continue
+
+            processed += 1
+            try:
+                details = _collect_invoice_deadline_details(db, user, intervals, now)
+            except Exception as e:
+                logger.error(f"Invoice sweep: collect error for user {user.id}: {e}")
+                continue
+
+            for detail in details:
+                frn_number = detail.get("frn", "")
+                days_remaining = detail.get("days_remaining")
+                try:
+                    existing = db.query(DispatchedDeadlineAlert).filter(
+                        DispatchedDeadlineAlert.user_id == user.id,
+                        DispatchedDeadlineAlert.frn == frn_number,
+                        DispatchedDeadlineAlert.deadline_type == "invoice_deadline",
+                        DispatchedDeadlineAlert.days_remaining == days_remaining,
+                    ).first()
+                    if existing:
+                        continue
+
+                    urgent = (days_remaining or 0) <= 7
+                    priority = AlertPriority.HIGH if urgent else AlertPriority.MEDIUM
+                    entity_label = detail.get("entity_name") or frn_number
+                    title = f"Invoice deadline in {days_remaining} days - {entity_label}"
+                    message = (
+                        f"FRN {frn_number} must be invoiced (BEAR/SPI) by "
+                        f"{detail.get('invoice_deadline', 'N/A')}. {days_remaining} days remain "
+                        f"before unclaimed funds are forfeited to USAC."
+                    )
+
+                    if config.in_app_notifications:
+                        db.add(Alert(
+                            user_id=user.id,
+                            alert_type=AlertType.DEADLINE_APPROACHING.value,
+                            priority=priority.value if isinstance(priority, AlertPriority) else priority,
+                            title=title,
+                            message=message,
+                            entity_type="frn",
+                            entity_id=frn_number,
+                            entity_name=detail.get("entity_name", ""),
+                            alert_metadata={"deadline_type": "invoice_deadline", **detail},
+                            is_read=False,
+                            is_dismissed=False,
+                            email_sent=False,
+                        ))
+
+                    if config.email_notifications and user.email:
+                        try:
+                            email_service.send_invoice_deadline_email(user.email, detail)
+                        except Exception as e:
+                            logger.error(f"Invoice sweep: email error for user {user.id} FRN {frn_number}: {e}")
+
+                    db.add(DispatchedDeadlineAlert(
+                        user_id=user.id,
+                        frn=frn_number,
+                        deadline_type="invoice_deadline",
+                        days_remaining=days_remaining,
+                        dispatched_at=now,
+                    ))
+                    db.commit()
+                    sent += 1
+                except Exception as e:
+                    db.rollback()
+                    logger.error(f"Invoice sweep: dispatch error for user {user.id} FRN {frn_number}: {e}")
+
+        logger.info(
+            f"Invoicing-deadline check complete. Opted-in users: {processed}, alerts dispatched: {sent}."
+        )
+    except Exception as e:
+        logger.error(f"Invoicing-deadline job failed: {e}")
+    finally:
+        db.close()
+
+
 def _check_user_deadlines(db: Session, alert_service: AlertService, config: AlertConfig):
+
     """Check deadlines for applicant users: Appeal, Form 486, Invoice, Service Delivery"""
     
     user = db.query(User).filter(User.id == config.user_id).first()
@@ -139,7 +380,10 @@ def _check_user_deadlines(db: Session, alert_service: AlertService, config: Aler
     # For applicant users, also check USAC FRN data for Form 486, Invoice, Service Delivery
     if user.role in ('applicant', 'super') and profile and getattr(profile, 'ben', None):
         bens = [profile.ben]
-        _check_frn_deadlines_for_bens(db, alert_service, user, bens, warning_days)
+        _check_frn_deadlines_for_bens(
+            db, alert_service, user, bens, warning_days,
+            skip_invoice=bool(getattr(config, 'alert_on_invoice_deadline', False)),
+        )
 
 
 def _build_frn_detail_row(ben, ben_data, frn, deadline_type, deadline_date, days_remaining):
@@ -161,13 +405,17 @@ def _build_frn_detail_row(ben, ben_data, frn, deadline_type, deadline_date, days
     }
 
 
-def _check_frn_deadlines_for_bens(db: Session, alert_service: AlertService, user, bens: list, warning_days: int):
+def _check_frn_deadlines_for_bens(db: Session, alert_service: AlertService, user, bens: list, warning_days: int, skip_invoice: bool = False):
     """
     Shared logic: check Form 486, Invoice, Service Delivery, and Contract Expiration
     deadlines for a list of BENs using USAC data. Used by applicants, consultants, and super users.
 
     If a user has more than 5 approaching deadlines, they are consolidated into a
     single 'Multiple Deadlines Approaching' alert to avoid notification fatigue.
+
+    When ``skip_invoice`` is True the legacy invoice-deadline branch is skipped
+    because the user has opted into the dedicated 30/7-day invoicing-deadline
+    card alerts (handled by check_invoicing_deadlines), preventing duplicates.
     """
     if not bens:
         return
@@ -256,7 +504,7 @@ def _check_frn_deadlines_for_bens(db: Session, alert_service: AlertService, user
                                     })
                 
                 # === Invoice Deadline (BEAR/SPI: 120 days after service end date) ===
-                if "funded" in status or "committed" in status:
+                if (not skip_invoice) and ("funded" in status or "committed" in status):
                     service_end_str = frn.get("service_end", "")
                     last_invoice = frn.get("last_invoice_date", "")
                     
@@ -415,7 +663,10 @@ def _check_consultant_deadlines(db: Session, alert_service: AlertService, config
         return
     
     # Use shared FRN deadline checker for all deadline types
-    _check_frn_deadlines_for_bens(db, alert_service, user, bens, warning_days)
+    _check_frn_deadlines_for_bens(
+        db, alert_service, user, bens, warning_days,
+        skip_invoice=bool(getattr(config, 'alert_on_invoice_deadline', False)),
+    )
 
 
 def _check_vendor_deadlines(db: Session, alert_service: AlertService, config: AlertConfig):
@@ -455,7 +706,7 @@ def _check_vendor_deadlines(db: Session, alert_service: AlertService, config: Al
             ben_data = {"entity_name": entity_name, "state": frn.get("state", "")}
             
             # === Invoice Deadline (BEAR/SPI: 120 days after service end date) ===
-            if "funded" in status or "committed" in status:
+            if (not getattr(config, 'alert_on_invoice_deadline', False)) and ("funded" in status or "committed" in status):
                 service_end_str = frn.get("service_end", "")
                 last_invoice = frn.get("last_invoice_date", "")
                 
@@ -1757,6 +2008,16 @@ def init_scheduler():
         trigger=CronTrigger(hour=17, minute=30, timezone='UTC'),
         id='check_deadlines',
         name='Check upcoming deadlines (daily after snapshot refresh)',
+        replace_existing=True,
+    )
+
+    # Invoicing-deadline sweep (opt-in) - daily at 18:00 UTC, after deadline check.
+    # No-op until a user enables alert_on_invoice_deadline; idempotent per day-bucket.
+    scheduler.add_job(
+        check_invoicing_deadlines,
+        trigger=CronTrigger(hour=18, minute=0, timezone='UTC'),
+        id='check_invoicing_deadlines',
+        name='Check approaching BEAR/SPI invoicing deadlines (opt-in)',
         replace_existing=True,
     )
 

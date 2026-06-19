@@ -29,6 +29,8 @@ class AlertConfigUpdate(BaseModel):
     alert_on_form_470: Optional[bool] = None
     alert_on_competitor: Optional[bool] = None
     deadline_warning_days: Optional[int] = None
+    alert_on_invoice_deadline: Optional[bool] = None
+    invoice_deadline_intervals: Optional[List[int]] = None
     min_alert_amount: Optional[float] = None
     email_notifications: Optional[bool] = None
     in_app_notifications: Optional[bool] = None
@@ -153,6 +155,15 @@ async def update_alert_config(
     
     # Update only provided fields
     update_data = data.dict(exclude_unset=True)
+
+    # Sanitize invoice-deadline intervals: positive whole days, deduped, capped at 1 year
+    if "invoice_deadline_intervals" in update_data:
+        raw = update_data.get("invoice_deadline_intervals")
+        try:
+            cleaned = sorted({int(x) for x in (raw or []) if 0 < int(x) <= 365}, reverse=True)
+        except (TypeError, ValueError):
+            cleaned = []
+        update_data["invoice_deadline_intervals"] = cleaned or [30, 7]
 
     # Vendor-only alert types: non-vendor/super/admin users cannot enable these
     vendor_roles = ("vendor", "super", "admin")

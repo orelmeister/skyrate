@@ -21,6 +21,8 @@ interface AlertConfig {
   alert_on_form_470: boolean;
   alert_on_competitor: boolean;
   deadline_warning_days: number;
+  alert_on_invoice_deadline: boolean;
+  invoice_deadline_intervals: number[];
   min_alert_amount: number;
   email_notifications: boolean;
   in_app_notifications: boolean;
@@ -184,7 +186,7 @@ function NotificationSettingsContent() {
     }
   };
 
-  const updateConfig = (field: keyof AlertConfig, value: boolean | number | string) => {
+  const updateConfig = (field: keyof AlertConfig, value: boolean | number | string | number[]) => {
     if (!config) return;
     setConfig({ ...config, [field]: value });
   };
@@ -551,6 +553,56 @@ function NotificationSettingsContent() {
                 />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
               </label>
+            </div>
+
+            {/* Invoicing Deadlines (BEAR/SPI) */}
+            <div className="py-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-medium text-gray-900">🧾 Invoicing Deadlines (BEAR/SPI)</h3>
+                  <p className="text-sm text-gray-500">Alert before the 120-day invoice deadline so funds are not forfeited</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={config.alert_on_invoice_deadline}
+                    onChange={(e) => updateConfig('alert_on_invoice_deadline', e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+              {config.alert_on_invoice_deadline && (
+                <div className="mt-3 pl-1">
+                  <p className="text-xs font-medium text-gray-600 mb-2">Notify me this many days before the deadline:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {[60, 30, 14, 7, 3, 1].map((d) => {
+                      const selected = (config.invoice_deadline_intervals || []).includes(d);
+                      return (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => {
+                            const current = config.invoice_deadline_intervals || [];
+                            const next = selected
+                              ? current.filter((x) => x !== d)
+                              : [...current, d].sort((a, b) => b - a);
+                            updateConfig('invoice_deadline_intervals', next.length ? next : [30, 7]);
+                          }}
+                          className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                            selected
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                          }`}
+                        >
+                          {d} {d === 1 ? 'day' : 'days'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">Defaults to 30 and 7 days if none selected.</p>
+                </div>
+              )}
             </div>
 
             {/* Disbursements */}

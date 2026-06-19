@@ -3,7 +3,7 @@ Alert Model
 Handles alerts and alert configurations for users
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum, ForeignKey, Float, JSON
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum, ForeignKey, Float, JSON, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -56,6 +56,14 @@ class AlertConfig(Base):
     
     # Deadline thresholds (days before deadline to alert)
     deadline_warning_days = Column(Integer, default=14)  # Alert 14 days before deadline
+
+    # Approaching invoicing-deadline alerts (BEAR/SPI 120-day window).
+    # Opt-in (default False) so the dedicated 30/7-day card alerts only fire for
+    # users who explicitly enable them. When True, the legacy invoice branch in
+    # the deadline sweep is skipped for this user to avoid duplicate notifications.
+    alert_on_invoice_deadline = Column(Boolean, default=False, nullable=False)
+    # Days-before-deadline intervals at which to send the invoicing alert.
+    invoice_deadline_intervals = Column(JSON, default=lambda: [30, 7])
     
     # Amount thresholds (only alert if above this amount)
     min_alert_amount = Column(Float, default=0)
@@ -104,6 +112,8 @@ class AlertConfig(Base):
             "alert_on_form_470": self.alert_on_form_470,
             "alert_on_competitor": self.alert_on_competitor,
             "deadline_warning_days": self.deadline_warning_days,
+            "alert_on_invoice_deadline": self.alert_on_invoice_deadline,
+            "invoice_deadline_intervals": self.invoice_deadline_intervals or [30, 7],
             "min_alert_amount": self.min_alert_amount,
             "email_notifications": self.email_notifications,
             "in_app_notifications": self.in_app_notifications,
@@ -293,3 +303,30 @@ class Alert(Base):
                 "manufacturers": manufacturers,
             }
         )
+
+
+class DispatchedDeadlineAlert(Base):
+    """
+    Transaction log of dispatched invoicing-deadline alerts.
+
+    Guarantees single-delivery: before sending an invoice-deadline alert at a
+    given interval, the sweep checks for an existing row matching
+    (user_id, frn, deadline_type, days_remaining). If present, the alert is
+    skipped. This survives scheduler restarts and prevents duplicate emails.
+    """
+    __tablename__ = "dispatched_deadline_alerts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    frn = Column(String(64), nullable=False, index=True)
+    deadline_type = Column(String(50), nullable=False)
+    days_remaining = Column(Integer, nullable=False)
+    dispatched_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "frn", "deadline_type", "days_remaining",
+            name="uq_dispatched_deadline_alert",
+        ),
+        Index("ix_dispatched_deadline_user_frn", "user_id", "frn"),
+    )
