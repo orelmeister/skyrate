@@ -57,6 +57,17 @@ class SubscriptionUpdate(BaseModel):
     end_date: Optional[datetime] = None
 
 
+class StripeSubscriptionInvoiceCreate(BaseModel):
+    user_id: int
+    plan: str  # "monthly" or "yearly"
+
+
+class ManualPlanOverride(BaseModel):
+    plan: str  # "monthly" or "yearly"
+    duration_days: int = 365
+    payment_reference: str  # "Check #4831", "USD Wire Ref #9923"
+
+
 # ==================== DEPENDENCIES ====================
 
 AdminUser = Depends(require_role("admin", "super"))
@@ -450,6 +461,167 @@ async def update_subscription(
     db.refresh(sub)
     
     return {"success": True, "subscription": sub.to_dict()}
+
+
+@router.post("/invoices/create-stripe-ach")
+async def create_stripe_subscription_ach_invoice(
+    data: StripeSubscriptionInvoiceCreate,
+    current_user: User = AdminUser,
+    db: Session = Depends(get_db)
+):
+    """
+    Enterprise Invoicing: Creates a Stripe subscription billed directly via
+    direct ACH invoice (us_bank_account), due immediately upon receipt.
+    Once client pays via Stripe's Hosted Invoice portal, webhooks auto-promote
+    their access to ACTIVE.
+    """
+    user = db.query(User).filter(User.id == data.user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    # 1. Resolve Stripe Price ID based on User Role and selected plan
+    settings = get_settings()
+    price_id = None
+    if user.role == "consultant":
+        price_id = settings.STRIPE_CONSULTANT_YEARLY_PRICE_ID if data.plan == "yearly" else settings.STRIPE_CONSULTANT_MONTHLY_PRICE_ID
+    elif user.role == "vendor":
+        price_id = settings.STRIPE_VENDOR_YEARLY_PRICE_ID if data.plan == "yearly" else settings.STRIPE_VENDOR_MONTHLY_PRICE_ID
+    else:
+        price_id = settings.STRIPE_PRICE_YEARLY if data.plan == "yearly" else settings.STRIPE_PRICE_MONTHLY
+
+    if not price_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Stripe product price configuration not found for this user role and plan"
+        )
+
+    # 2. Try importing Stripe
+    try:
+        import stripe
+        stripe.api_key = settings.STRIPE_SECRET_KEY
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stripe module is not installed on the system"
+        )
+
+    if not settings.STRIPE_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stripe is not configured on this server environment"
+        )
+
+    try:
+        # 3. Resolve or Create Stripe Customer
+        stripe_cust_id = None
+        if user.subscription and user.subscription.stripe_customer_id:
+            # Check if stripe_customer_id is valid (not local manual placeholder)
+            if not user.subscription.stripe_customer_id.startswith("MANUAL_OFFLINE_"):
+                stripe_cust_id = user.subscription.stripe_customer_id
+
+        if not stripe_cust_id:
+            customer = stripe.Customer.create(
+                email=user.email,
+                name=f"{user.first_name or ''} {user.last_name or ''}".strip() or user.email,
+                metadata={"user_id": user.id}
+            )
+            stripe_cust_id = customer.id
+
+        # 4. Create Stripe Subscription with collection_method="send_invoice" & days_until_due=0 (Immediately on Receipt)
+        sub = stripe.Subscription.create(
+            customer=stripe_cust_id,
+            items=[{"price": price_id}],
+            collection_method="send_invoice",
+            days_until_due=0,  # Due immediately upon receipt
+            payment_settings={
+                "payment_method_types": ["us_bank_account"]  # Restrict payment type strictly to secure ACH
+            },
+            metadata={
+                "user_id": user.id,
+                "plan": data.plan
+            }
+        )
+
+        # 5. Initialize or update local DB Subscription state
+        local_sub = user.subscription
+        if not local_sub:
+            from ...models.subscription import Subscription
+            local_sub = Subscription(user_id=user.id, price_cents=0)
+            db.add(local_sub)
+
+        local_sub.stripe_customer_id = stripe_cust_id
+        local_sub.stripe_subscription_id = sub.id
+        local_sub.status = "unpaid"
+        local_sub.plan = data.plan
+        db.commit()
+
+        # Retrieve the generated invoice's payment link if available
+        hosted_invoice_url = None
+        if sub.latest_invoice:
+            try:
+                inv = stripe.Invoice.retrieve(sub.latest_invoice)
+                hosted_invoice_url = inv.hosted_invoice_url
+            except Exception:
+                pass
+
+        return {
+            "success": True,
+            "subscription_id": sub.id,
+            "stripe_customer_id": stripe_cust_id,
+            "hosted_invoice_url": hosted_invoice_url,
+            "due": "immediately_on_receipt",
+            "message": "Immediate ACH Subscription invoice created and dispatched successfully"
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Stripe Invoicing Error: {str(e)}"
+        )
+
+
+@router.post("/users/{user_id}/assign-plan")
+async def manual_plan_override(
+    user_id: int,
+    data: ManualPlanOverride,
+    current_user: User = AdminUser,
+    db: Session = Depends(get_db)
+):
+    """
+    Offline Payments: Manually updates user's subscription record (check, wire, direct).
+    Logs the payment transaction reference, promotes status directly to ACTIVE,
+    and unlocks all SaaS portal capabilities instantly without Stripe.
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    local_sub = user.subscription
+    if not local_sub:
+        from ...models.subscription import Subscription
+        local_sub = Subscription(user_id=user.id)
+        db.add(local_sub)
+
+    local_sub.status = "active"  # promote immediately
+    local_sub.plan = data.plan
+    local_sub.price_cents = 0  # offline payment
+    local_sub.start_date = datetime.utcnow()
+    local_sub.end_date = datetime.utcnow() + timedelta(days=data.duration_days)
+    local_sub.current_period_end = local_sub.end_date
+    
+    # Store audit credentials in the database fields
+    local_sub.stripe_customer_id = f"MANUAL_OFFLINE_{user.id}"
+    local_sub.stripe_subscription_id = f"OFFLINE_{data.payment_reference.upper().replace(' ', '_')}"
+
+    db.commit()
+    db.refresh(local_sub)
+
+    return {
+        "success": True,
+        "subscription": local_sub.to_dict(),
+        "payment_reference": data.payment_reference,
+        "message": f"User plan manually upgraded to {data.plan} successfully. Payment reference logged."
+    }
 
 
 # ==================== ANALYTICS ====================
