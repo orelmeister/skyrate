@@ -6,7 +6,7 @@ support ticket management, FRN monitoring, and user communications
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, text
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import datetime, timedelta
@@ -300,24 +300,89 @@ async def delete_user(
     current_user: User = AdminUser,
     db: Session = Depends(get_db)
 ):
-    """Delete a user"""
+    """Delete a user and all owned child records in a single transaction.
+
+    The users table is referenced by ~21 foreign keys. A bare ``db.delete(user)``
+    fails because SQLAlchemy tries to NULL out NOT-NULL child FKs (e.g.
+    alert_configs.user_id), raising IntegrityError 1452. This handler instead
+    explicitly removes owned child rows bottom-up and nullifies optional
+    references (leads, support tickets) so historical records are preserved.
+    The FK map was derived from information_schema on 2026-06-19.
+    """
     user = db.query(User).filter(User.id == user_id).first()
-    
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
-    
+
     if user.id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot delete yourself"
         )
-    
-    db.delete(user)
-    db.commit()
-    
+
+    # Executed in dependency order (children before parents). CASCADE FKs
+    # (email_verification_tokens, usac_sync_jobs, user_usac_cache) are handled
+    # automatically by the final DELETE FROM users.
+    purge_statements = [
+        # --- Preserve optional references by nullifying them ---
+        "UPDATE leads SET assigned_to_user_id = NULL WHERE assigned_to_user_id = :uid",
+        "UPDATE support_tickets SET user_id = NULL WHERE user_id = :uid",
+        "UPDATE support_tickets SET assigned_to = NULL WHERE assigned_to = :uid",
+        "UPDATE ticket_messages SET sender_id = NULL WHERE sender_id = :uid",
+        "UPDATE promo_invites SET used_by_user_id = NULL WHERE used_by_user_id = :uid",
+        # --- Applicant profile subtree (bottom-up) ---
+        "DELETE FROM applicant_auto_appeals WHERE applicant_profile_id IN (SELECT id FROM applicant_profiles WHERE user_id = :uid)",
+        "DELETE FROM applicant_status_history WHERE applicant_profile_id IN (SELECT id FROM applicant_profiles WHERE user_id = :uid)",
+        "DELETE FROM applicant_frns WHERE applicant_profile_id IN (SELECT id FROM applicant_profiles WHERE user_id = :uid)",
+        "DELETE FROM applicant_bens WHERE applicant_profile_id IN (SELECT id FROM applicant_profiles WHERE user_id = :uid)",
+        "DELETE FROM applicant_profiles WHERE user_id = :uid",
+        # --- Vendor profile subtree (bottom-up) ---
+        "DELETE FROM vendor_alert_matches WHERE subscription_id IN (SELECT id FROM vendor_alert_subscriptions WHERE vendor_profile_id IN (SELECT id FROM vendor_profiles WHERE user_id = :uid))",
+        "UPDATE vendor_in_app_notifications SET subscription_id = NULL WHERE subscription_id IN (SELECT id FROM vendor_alert_subscriptions WHERE vendor_profile_id IN (SELECT id FROM vendor_profiles WHERE user_id = :uid))",
+        "DELETE FROM vendor_alert_subscriptions WHERE vendor_profile_id IN (SELECT id FROM vendor_profiles WHERE user_id = :uid)",
+        "DELETE FROM vendor_searches WHERE vendor_profile_id IN (SELECT id FROM vendor_profiles WHERE user_id = :uid)",
+        "DELETE FROM saved_leads WHERE vendor_profile_id IN (SELECT id FROM vendor_profiles WHERE user_id = :uid)",
+        "DELETE FROM predicted_leads WHERE vendor_profile_id IN (SELECT id FROM vendor_profiles WHERE user_id = :uid)",
+        "DELETE FROM vendor_in_app_notifications WHERE vendor_profile_id IN (SELECT id FROM vendor_profiles WHERE user_id = :uid)",
+        "DELETE FROM vendor_push_subscriptions WHERE vendor_profile_id IN (SELECT id FROM vendor_profiles WHERE user_id = :uid)",
+        "DELETE FROM vendor_profiles WHERE user_id = :uid",
+        # --- Consultant profile subtree (bottom-up) ---
+        "DELETE FROM consultant_crns WHERE consultant_profile_id IN (SELECT id FROM consultant_profiles WHERE user_id = :uid)",
+        "DELETE FROM consultant_schools WHERE consultant_profile_id IN (SELECT id FROM consultant_profiles WHERE user_id = :uid)",
+        "DELETE FROM consultant_profiles WHERE user_id = :uid",
+        # --- Flat user-owned records ---
+        "UPDATE compliance_analyses SET prior_analysis_id = NULL WHERE user_id = :uid",
+        "DELETE FROM compliance_analyses WHERE user_id = :uid",
+        "DELETE FROM alerts WHERE user_id = :uid",
+        "DELETE FROM alert_configs WHERE user_id = :uid",
+        "DELETE FROM frn_report_history WHERE user_id = :uid",
+        "DELETE FROM frn_watches WHERE user_id = :uid",
+        "DELETE FROM pia_responses WHERE user_id = :uid",
+        "DELETE FROM push_subscriptions WHERE user_id = :uid",
+        "DELETE FROM query_history WHERE user_id = :uid",
+        "DELETE FROM subscriptions WHERE user_id = :uid",
+        "DELETE FROM promo_invites WHERE created_by_admin_id = :uid",
+        # --- Finally the user (CASCADE FKs handled by DB) ---
+        "DELETE FROM users WHERE id = :uid",
+    ]
+
+    try:
+        # Detach the ORM-loaded user so the final raw DELETE is not shadowed
+        # by SQLAlchemy relationship cascade attempts.
+        db.expunge(user)
+        for stmt in purge_statements:
+            db.execute(text(stmt), {"uid": user_id})
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete user: {exc}"
+        )
+
     return {"success": True, "message": "User deleted"}
 
 
