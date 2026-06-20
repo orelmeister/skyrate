@@ -2791,6 +2791,26 @@ class ApiClient {
   }
 
   /**
+   * Create immediate Stripe ACH Subscription Invoice for a user
+   */
+  async createAdminStripeAchInvoice(userId: number, plan: 'monthly' | 'yearly'): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/admin/invoices/create-stripe-ach', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, plan })
+    });
+  }
+
+  /**
+   * Manually override a user plan directly (Offline payments: Cash, Check, Wire)
+   */
+  async assignAdminManualPlan(userId: number, data: { plan: 'monthly' | 'yearly'; duration_days: number; payment_reference: string }): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/users/${userId}/assign-plan`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  /**
    * Get admin analytics
    */
   async getAdminAnalytics(): Promise<ApiResponse<any>> {

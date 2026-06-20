@@ -104,6 +104,15 @@ function AdminDashboard() {
   const [emailMessage, setEmailMessage] = useState("");
   const [emailSending, setEmailSending] = useState(false);
 
+  // Manual Billing & Overrides Modal states
+  const [planModalUser, setPlanModalUser] = useState<any | null>(null);
+  const [modalPlan, setModalPlan] = useState<"monthly" | "yearly">("yearly");
+  const [modalDuration, setModalDuration] = useState<number>(365);
+  const [modalRef, setModalRef] = useState<string>("");
+  const [modalActionType, setModalActionType] = useState<"stripe" | "manual">("stripe");
+  const [modalSubmitting, setModalSubmitting] = useState<boolean>(false);
+  const [invoiceUrl, setInvoiceUrl] = useState<string | null>(null);
+
   // Auth guard — wait for Zustand hydration before redirecting
   useEffect(() => {
     if (!_hasHydrated) return;
@@ -367,6 +376,14 @@ function AdminDashboard() {
                     alert(`Failed to delete user: ${e?.message || e}`);
                   }
                 }}
+                onManagePlan={(u) => {
+                  setPlanModalUser(u);
+                  setModalPlan("yearly");
+                  setModalDuration(365);
+                  setModalRef("");
+                  setModalActionType("stripe");
+                  setInvoiceUrl(null);
+                }}
               />
             )}
             {activeTab === "tickets" && (
@@ -413,6 +430,199 @@ function AdminDashboard() {
           </>
         )}
       </main>
+
+      {/* Enterprise & Manual Plan Management Modal */}
+      {planModalUser && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-xl border shadow-xl max-w-md w-full overflow-hidden my-8">
+            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="font-bold text-lg">Manage Plan &amp; Billing</h2>
+                <p className="text-xs text-slate-300">User: {planModalUser.email}</p>
+              </div>
+              <button
+                onClick={() => setPlanModalUser(null)}
+                className="text-slate-400 hover:text-white transition-colors text-xl font-bold"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Method Switcher tabs */}
+              <div className="flex bg-slate-100 p-1 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => { setModalActionType("stripe"); setInvoiceUrl(null); }}
+                  className={`flex-1 text-center py-2 text-xs font-semibold rounded-md transition-all ${
+                    modalActionType === "stripe"
+                      ? "bg-white text-purple-600 shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  💳 Stripe ACH Invoice
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setModalActionType("manual"); setInvoiceUrl(null); }}
+                  className={`flex-1 text-center py-2 text-xs font-semibold rounded-md transition-all ${
+                    modalActionType === "manual"
+                      ? "bg-white text-amber-600 shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  💰 Direct Check / Wire
+                </button>
+              </div>
+
+              {/* Shared Plan Selector */}
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                  Select Subscription Plan
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { key: "monthly", label: "Monthly Plan" },
+                    { key: "yearly", label: "Yearly Plan" },
+                  ].map((p) => (
+                    <button
+                      key={p.key}
+                      type="button"
+                      onClick={() => setModalPlan(p.key as any)}
+                      className={`p-3 rounded-lg border text-center text-sm font-semibold transition-all ${
+                        modalPlan === p.key
+                          ? modalActionType === "stripe"
+                            ? "bg-purple-50 border-purple-500 text-purple-700 font-bold"
+                            : "bg-amber-50 border-amber-500 text-amber-700 font-bold"
+                          : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dynamic Action Fields */}
+              {modalActionType === "stripe" ? (
+                <div className="space-y-3 bg-purple-50/50 p-4 rounded-lg border border-purple-100">
+                  <p className="text-xs text-purple-800 leading-relaxed">
+                    This issues an official Stripe Subscription Invoice sent directly to the client's email.
+                    The payment is due <strong>immediately on receipt</strong> and accepts secure ACH bank transfer/wire.
+                    Once paid, our systems automatically upgrade the user account.
+                  </p>
+                  {invoiceUrl && (
+                    <div className="pt-2 border-t border-purple-200">
+                      <span className="block text-[10px] font-bold text-purple-700 uppercase tracking-wider mb-1">
+                        Dispatched Hosted Invoice URL
+                      </span>
+                      <a
+                        href={invoiceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-blue-600 hover:underline break-all block font-semibold"
+                      >
+                        {invoiceUrl}
+                      </a>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3 bg-amber-50/50 p-4 rounded-lg border border-amber-100">
+                  <p className="text-xs text-amber-800 leading-relaxed mb-3">
+                    Manually activate the user's SaaS plan without using Stripe (e.g. for offline bank wires, cash, or physical paper checks received). Promotes account instantly.
+                  </p>
+                  
+                  <div>
+                    <label className="block text-xs font-semibold text-amber-900 mb-1">
+                      Payment Reference (Required for audit log)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Check #4023 or Wire Ref #9923"
+                      value={modalRef}
+                      onChange={(e) => setModalRef(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Duration (days):</label>
+                    <select
+                      value={modalDuration}
+                      onChange={(e) => setModalDuration(Number(e.target.value))}
+                      className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    >
+                      <option value={30}>30 Days (Monthly Duration)</option>
+                      <option value={365}>365 Days (1-Year Duration)</option>
+                      <option value={1095}>1095 Days (3-Year Enterprise)</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Submit Buttons */}
+              <div className="pt-4 border-t flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPlanModalUser(null)}
+                  className="px-4 py-2 border rounded-lg text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  disabled={modalSubmitting}
+                  onClick={async () => {
+                    setModalSubmitting(true);
+                    try {
+                      if (modalActionType === "stripe") {
+                        const res = await api.createAdminStripeAchInvoice(planModalUser.id, modalPlan);
+                        if (res.data?.success) {
+                          setInvoiceUrl(res.data.hosted_invoice_url || null);
+                          alert(res.data.message || "Stripe invoice created!");
+                          loadUsers();
+                        } else {
+                          alert(res.data?.error || "Failed to create invoice");
+                        }
+                      } else {
+                        if (!modalRef.trim()) {
+                          alert("Please enter a check # or Wire ID");
+                          setModalSubmitting(false);
+                          return;
+                        }
+                        const res = await api.assignAdminManualPlan(planModalUser.id, {
+                          plan: modalPlan,
+                          duration_days: modalDuration,
+                          payment_reference: modalRef,
+                        });
+                        if (res.data?.success) {
+                          alert(res.data.message || "Manual plan assigned!");
+                          setPlanModalUser(null);
+                          setModalRef("");
+                          loadUsers();
+                        } else {
+                          alert(res.data?.error || "Failed to assign manual plan");
+                        }
+                      }
+                    } catch (e: any) {
+                      alert(`Error processing plan request: ${e?.message || e}`);
+                    }
+                    setModalSubmitting(false);
+                  }}
+                  className={`px-4 py-2 text-white font-bold rounded-lg text-sm shadow-md transition-all ${
+                    modalActionType === "stripe"
+                      ? "bg-purple-600 hover:bg-purple-700 shadow-purple-600/10"
+                      : "bg-amber-600 hover:bg-amber-700 shadow-md shadow-amber-600/10"
+                  }`}
+                >
+                  {modalSubmitting ? "Processing..." : modalActionType === "stripe" ? "📧 Dispatch Invoice" : "🚀 Activate Instantly"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -580,6 +790,7 @@ function UsersTab({
   onboardingIncomplete, setOnboardingIncomplete,
   onEmailUser,
   onDeleteUser,
+  onManagePlan,
 }: {
   users: any[]; total: number; search: string; setSearch: (s: string) => void;
   roleFilter: string; setRoleFilter: (r: string) => void;
@@ -589,6 +800,7 @@ function UsersTab({
   onboardingIncomplete: boolean; setOnboardingIncomplete: (v: boolean) => void;
   onEmailUser: (id: number) => void;
   onDeleteUser: (user: any) => void;
+  onManagePlan: (user: any) => void;
 }) {
   const [selectedUsers, setSelectedUsers] = useState<Set<number>>(new Set());
 
@@ -860,6 +1072,19 @@ function UsersTab({
                   className="px-3 py-3 whitespace-nowrap text-right sticky right-0 bg-white group-hover:bg-slate-50 z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)]"
                 >
                   <div className="flex items-center justify-end gap-3">
+                    {/* Environment-gated plan override modal trigger */}
+                    {(process.env.NEXT_PUBLIC_ENABLE_ENTERPRISE_BILLING !== "false") && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent row actions collisions
+                          onManagePlan(u);
+                        }}
+                        className="text-xs text-amber-600 hover:text-amber-800 hover:underline font-medium"
+                        title="Manage Billing Invoices & Subscription overrides"
+                      >
+                        Plan
+                      </button>
+                    )}
                     <button
                       onClick={() => onEmailUser(u.id)}
                       className="text-xs text-purple-600 hover:underline"
