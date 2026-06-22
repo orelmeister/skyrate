@@ -1198,7 +1198,7 @@ function ChatTab() {
     if (!silent) setLoadingList(true);
     try {
       const res = await api.getAdminTickets({ limit: 100 });
-      const list = (res as any)?.tickets || [];
+      const list = (res as any)?.data?.tickets || [];
       list.sort((a: any, b: any) =>
         new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
       );
@@ -1214,7 +1214,7 @@ function ChatTab() {
     if (!silent) setLoadingThread(true);
     try {
       const res = await api.getAdminTicket(id);
-      const t = (res as any)?.ticket || null;
+      const t = (res as any)?.data?.ticket || null;
       setThread(t);
       api.markTicketRead(id).catch(() => {});
     } catch {
@@ -1324,7 +1324,7 @@ function ChatTab() {
     setSearchingUsers(true);
     try {
       const res = await api.getAdminUsers({ search: q.trim(), limit: 10 });
-      setUserResults((res as any)?.users || []);
+      setUserResults((res as any)?.data?.users || []);
     } catch {
       setUserResults([]);
     } finally {
@@ -1337,7 +1337,7 @@ function ChatTab() {
     setCreating(true);
     try {
       const res = await api.startAdminChat({ user_id: pickedUser.id, message: newChatMessage.trim() });
-      const newTicket = (res as any)?.ticket;
+      const newTicket = (res as any)?.data?.ticket;
       setShowNewChat(false);
       setPickedUser(null);
       setUserQuery("");
