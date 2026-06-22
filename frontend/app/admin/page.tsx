@@ -9,7 +9,7 @@ import { useTabParam } from "@/hooks/useTabParam";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { TableExportBar } from "@/components/TableExportBar";
 
-const ADMIN_TABS = ["overview", "users", "tickets", "frn", "promo", "communications", "blog"] as const;
+const ADMIN_TABS = ["overview", "users", "chat", "tickets", "frn", "promo", "communications", "blog"] as const;
 type AdminTab = typeof ADMIN_TABS[number];
 
 // ==================== TYPES ====================
@@ -290,6 +290,7 @@ function AdminDashboard() {
           {[
             { key: "overview", label: "Overview", icon: "📊" },
             { key: "users", label: "Users", icon: "👥" },
+            { key: "chat", label: "Chat", icon: "💬" },
             { key: "tickets", label: "Support Tickets", icon: "🎫" },
             { key: "frn", label: "FRN Monitor", icon: "📡" },
             { key: "promo", label: "Promo Invites", icon: "🎟️" },
@@ -350,6 +351,7 @@ function AdminDashboard() {
         ) : (
           <>
             {activeTab === "overview" && dashboard && <OverviewTab dashboard={dashboard} setActiveTab={setActiveTab} />}
+            {activeTab === "chat" && <ChatTab />}
             {activeTab === "users" && (
               <UsersTab
                 users={users}
@@ -1157,6 +1159,411 @@ function TicketAttachment({ ticketId, m }: { ticketId: number; m: any }) {
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
       {m.file_name || "attachment"}
     </a>
+  );
+}
+
+// ==================== CHAT TAB (admin live conversations) ====================
+// Two-pane conversation view (sidebar list + live thread) built on top of the
+// existing support-ticket system. Admins can also start a new conversation with
+// any user. Lightweight polling keeps the open thread and list fresh.
+
+function ChatTab() {
+  const [conversations, setConversations] = useState<any[]>([]);
+  const [loadingList, setLoadingList] = useState(true);
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [thread, setThread] = useState<any | null>(null);
+  const [loadingThread, setLoadingThread] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const [sending, setSending] = useState(false);
+
+  // Voice recording
+  const [isRecording, setIsRecording] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
+  const chunksRef = React.useRef<Blob[]>([]);
+
+  // New-chat modal
+  const [showNewChat, setShowNewChat] = useState(false);
+  const [userQuery, setUserQuery] = useState("");
+  const [userResults, setUserResults] = useState<any[]>([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [pickedUser, setPickedUser] = useState<any | null>(null);
+  const [newChatMessage, setNewChatMessage] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  const messagesEndRef = React.useRef<HTMLDivElement | null>(null);
+
+  async function loadList(silent = false) {
+    if (!silent) setLoadingList(true);
+    try {
+      const res = await api.getAdminTickets({ limit: 100 });
+      const list = (res as any)?.tickets || [];
+      list.sort((a: any, b: any) =>
+        new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
+      );
+      setConversations(list);
+    } catch {
+      /* keep stale list on transient errors */
+    } finally {
+      if (!silent) setLoadingList(false);
+    }
+  }
+
+  async function loadThread(id: number, silent = false) {
+    if (!silent) setLoadingThread(true);
+    try {
+      const res = await api.getAdminTicket(id);
+      const t = (res as any)?.ticket || null;
+      setThread(t);
+      api.markTicketRead(id).catch(() => {});
+    } catch {
+      /* ignore */
+    } finally {
+      if (!silent) setLoadingThread(false);
+    }
+  }
+
+  function openConversation(id: number) {
+    setSelectedId(id);
+    setReplyText("");
+    loadThread(id);
+  }
+
+  useEffect(() => {
+    loadList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Lightweight polling: refresh list + open thread every 12s.
+  useEffect(() => {
+    const iv = setInterval(() => {
+      loadList(true);
+      if (selectedId) loadThread(selectedId, true);
+    }, 12000);
+    return () => clearInterval(iv);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  // Auto-scroll thread to bottom when it changes.
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [thread?.messages?.length]);
+
+  async function handleSendText() {
+    const text = replyText.trim();
+    if (!text || !selectedId) return;
+    setSending(true);
+    try {
+      await api.replyToTicket(selectedId, text);
+      setReplyText("");
+      await loadThread(selectedId, true);
+      await loadList(true);
+    } catch (e: any) {
+      alert(`Failed to send: ${e?.message || e}`);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      chunksRef.current = [];
+      mr.ondataavailable = (ev) => { if (ev.data.size > 0) chunksRef.current.push(ev.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
+        if (!selectedId || blob.size === 0) return;
+        setUploading(true);
+        try {
+          const ext = (mr.mimeType || "audio/webm").includes("ogg") ? "ogg" : "webm";
+          await api.addTicketAttachment(selectedId, blob, "", `voice-note.${ext}`);
+          await loadThread(selectedId, true);
+          await loadList(true);
+        } catch (e: any) {
+          alert(`Failed to send voice note: ${e?.message || e}`);
+        } finally {
+          setUploading(false);
+        }
+      };
+      mr.start();
+      mediaRecorderRef.current = mr;
+      setIsRecording(true);
+    } catch {
+      alert("Microphone access denied or unavailable.");
+    }
+  }
+
+  function stopRecording() {
+    mediaRecorderRef.current?.stop();
+    mediaRecorderRef.current = null;
+    setIsRecording(false);
+  }
+
+  async function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !selectedId) return;
+    setUploading(true);
+    try {
+      await api.addTicketAttachment(selectedId, file, "", file.name);
+      await loadThread(selectedId, true);
+      await loadList(true);
+    } catch (err: any) {
+      alert(`Failed to upload: ${err?.message || err}`);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function searchUsers(q: string) {
+    setUserQuery(q);
+    if (q.trim().length < 2) { setUserResults([]); return; }
+    setSearchingUsers(true);
+    try {
+      const res = await api.getAdminUsers({ search: q.trim(), limit: 10 });
+      setUserResults((res as any)?.users || []);
+    } catch {
+      setUserResults([]);
+    } finally {
+      setSearchingUsers(false);
+    }
+  }
+
+  async function handleCreateChat() {
+    if (!pickedUser || !newChatMessage.trim()) return;
+    setCreating(true);
+    try {
+      const res = await api.startAdminChat({ user_id: pickedUser.id, message: newChatMessage.trim() });
+      const newTicket = (res as any)?.ticket;
+      setShowNewChat(false);
+      setPickedUser(null);
+      setUserQuery("");
+      setUserResults([]);
+      setNewChatMessage("");
+      await loadList(true);
+      if (newTicket?.id) openConversation(newTicket.id);
+    } catch (e: any) {
+      alert(`Failed to start chat: ${e?.message || e}`);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  const filtered = conversations.filter((c) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      (c.user_name || "").toLowerCase().includes(q) ||
+      (c.user_email || "").toLowerCase().includes(q) ||
+      (c.subject || "").toLowerCase().includes(q)
+    );
+  });
+
+  function relativeTime(iso?: string) {
+    if (!iso) return "";
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h`;
+    return `${Math.floor(hrs / 24)}d`;
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+      <div className="flex h-[calc(100vh-220px)] min-h-[480px]">
+        {/* Sidebar: conversation list */}
+        <div className="w-full sm:w-80 border-r flex flex-col bg-slate-50">
+          <div className="p-3 border-b bg-white flex items-center gap-2">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search conversations…"
+              className="flex-1 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+            <button
+              onClick={() => setShowNewChat(true)}
+              title="New chat"
+              className="shrink-0 w-9 h-9 flex items-center justify-center bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {loadingList ? (
+              <div className="p-6 text-center text-slate-400 text-sm">Loading…</div>
+            ) : filtered.length === 0 ? (
+              <div className="p-6 text-center text-slate-400 text-sm">No conversations</div>
+            ) : (
+              filtered.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => openConversation(c.id)}
+                  className={`w-full text-left px-3 py-3 border-b hover:bg-white transition-colors ${
+                    selectedId === c.id ? "bg-white border-l-4 border-l-purple-600" : ""
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-sm text-slate-800 truncate">{c.user_name || c.user_email || "Unknown"}</span>
+                    <span className="text-[11px] text-slate-400 shrink-0">{relativeTime(c.updated_at || c.created_at)}</span>
+                  </div>
+                  <p className="text-xs text-slate-500 truncate mt-0.5">{c.subject}</p>
+                  <div className="mt-1"><StatusBadge status={c.status} /></div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Main: message thread */}
+        <div className="hidden sm:flex flex-1 flex-col">
+          {!selectedId ? (
+            <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
+              Select a conversation or start a new chat
+            </div>
+          ) : (
+            <>
+              <div className="px-4 py-3 border-b bg-white flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-slate-800">{thread?.user_name || thread?.user_email || "Conversation"}</p>
+                  <p className="text-xs text-slate-500">{thread?.subject}</p>
+                </div>
+                {thread && <StatusBadge status={thread.status} />}
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
+                {loadingThread && !thread ? (
+                  <div className="text-center text-slate-400 text-sm py-8">Loading…</div>
+                ) : (
+                  (thread?.messages || []).map((m: any) => {
+                    const isAdmin = m.sender_type === "admin";
+                    const isHtml = typeof m.message === "string" && /<[a-z][\s\S]*>/i.test(m.message);
+                    return (
+                      <div key={m.id} className={`flex ${isAdmin ? "justify-end" : "justify-start"}`}>
+                        <div className={`max-w-[75%] rounded-2xl px-4 py-2 ${isAdmin ? "bg-purple-600 text-white" : "bg-white border text-slate-800"}`}>
+                          <p className={`text-[11px] mb-0.5 ${isAdmin ? "text-purple-200" : "text-slate-400"}`}>
+                            {m.sender_name || (isAdmin ? "Admin" : "User")} · {relativeTime(m.created_at)}
+                          </p>
+                          {m.message && (
+                            isHtml ? (
+                              <div className="text-sm prose-sm" dangerouslySetInnerHTML={{ __html: m.message }} />
+                            ) : (
+                              <p className="text-sm whitespace-pre-wrap">{m.message}</p>
+                            )
+                          )}
+                          {m.has_attachment && <TicketAttachment ticketId={selectedId} m={m} />}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Composer */}
+              <div className="p-3 border-t bg-white flex items-end gap-2">
+                <label className="shrink-0 w-9 h-9 flex items-center justify-center text-slate-500 hover:text-purple-600 cursor-pointer" title="Attach file">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
+                  <input type="file" className="hidden" onChange={handleFilePick} disabled={uploading} />
+                </label>
+                <button
+                  onClick={isRecording ? stopRecording : startRecording}
+                  disabled={uploading}
+                  title={isRecording ? "Stop recording" : "Record voice note"}
+                  className={`shrink-0 w-9 h-9 flex items-center justify-center rounded-lg ${isRecording ? "bg-red-600 text-white animate-pulse" : "text-slate-500 hover:text-purple-600"}`}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4" /></svg>
+                </button>
+                <textarea
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendText(); } }}
+                  placeholder={uploading ? "Uploading…" : "Type a message…"}
+                  rows={1}
+                  className="flex-1 px-3 py-2 text-sm border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 max-h-32"
+                />
+                <button
+                  onClick={handleSendText}
+                  disabled={sending || !replyText.trim()}
+                  className="shrink-0 px-4 h-9 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {sending ? "…" : "Send"}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* New chat modal */}
+      {showNewChat && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowNewChat(false)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-lg text-slate-800">New conversation</h3>
+              <button onClick={() => setShowNewChat(false)} className="text-slate-400 hover:text-slate-600">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            {!pickedUser ? (
+              <>
+                <input
+                  value={userQuery}
+                  onChange={(e) => searchUsers(e.target.value)}
+                  placeholder="Search user by name or email…"
+                  autoFocus
+                  className="w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                <div className="mt-2 max-h-60 overflow-y-auto divide-y border rounded-lg">
+                  {searchingUsers ? (
+                    <div className="p-4 text-center text-slate-400 text-sm">Searching…</div>
+                  ) : userResults.length === 0 ? (
+                    <div className="p-4 text-center text-slate-400 text-sm">{userQuery.trim().length < 2 ? "Type at least 2 characters" : "No users found"}</div>
+                  ) : (
+                    userResults.map((u) => (
+                      <button key={u.id} onClick={() => setPickedUser(u)} className="w-full text-left px-3 py-2 hover:bg-slate-50">
+                        <p className="text-sm font-medium text-slate-800">{`${u.first_name || ""} ${u.last_name || ""}`.trim() || u.email}</p>
+                        <p className="text-xs text-slate-500">{u.email} · {u.role}</p>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2 mb-3">
+                  <div>
+                    <p className="text-sm font-medium text-slate-800">{`${pickedUser.first_name || ""} ${pickedUser.last_name || ""}`.trim() || pickedUser.email}</p>
+                    <p className="text-xs text-slate-500">{pickedUser.email}</p>
+                  </div>
+                  <button onClick={() => setPickedUser(null)} className="text-xs text-purple-600 hover:underline">Change</button>
+                </div>
+                <textarea
+                  value={newChatMessage}
+                  onChange={(e) => setNewChatMessage(e.target.value)}
+                  placeholder="Type your message…"
+                  rows={4}
+                  autoFocus
+                  className="w-full px-3 py-2 text-sm border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                <button
+                  onClick={handleCreateChat}
+                  disabled={creating || !newChatMessage.trim()}
+                  className="mt-3 w-full px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {creating ? "Sending…" : "Send message"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -19,7 +19,7 @@ from ...models.subscription import Subscription, SubscriptionStatus
 from ...models.consultant import ConsultantProfile, ConsultantSchool
 from ...models.vendor import VendorProfile, VendorSearch
 from ...models.application import QueryHistory
-from ...models.support_ticket import SupportTicket, TicketMessage, TicketStatus
+from ...models.support_ticket import SupportTicket, TicketMessage, TicketStatus, TicketSource
 from ...models.applicant import ApplicantProfile, ApplicantFRN, ApplicantBEN
 from ...models.alert import Alert
 from ...models.admin_frn_snapshot import AdminFRNSnapshot
@@ -753,6 +753,13 @@ class AdminReplyRequest(BaseModel):
     message: str
 
 
+class AdminStartChatRequest(BaseModel):
+    user_id: int
+    message: str
+    subject: Optional[str] = None
+    category: Optional[str] = "general"
+
+
 class EmailUserRequest(BaseModel):
     subject: str
     message: str
@@ -797,6 +804,78 @@ async def list_tickets(
         "total": total,
         "tickets": [t.to_dict() for t in tickets]
     }
+
+
+@router.post("/tickets")
+async def admin_start_chat(
+    data: AdminStartChatRequest,
+    current_user: User = AdminUser,
+    db: Session = Depends(get_db)
+):
+    """Admin-initiated conversation with a user (Chat tab 'New chat').
+
+    Creates a SupportTicket owned by the target user with an initial admin
+    message, so it flows through the same conversation system as the support
+    widget. Notifies the user by email.
+    """
+    if not (data.message or "").strip():
+        raise HTTPException(status_code=400, detail="Message is required")
+
+    user = db.query(User).filter(User.id == data.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    subject = (data.subject or "").strip() or "Message from SkyRate"
+    ticket = SupportTicket(
+        user_id=user.id,
+        subject=subject[:500],
+        message=data.message.strip(),
+        status=TicketStatus.WAITING_USER.value,
+        category=data.category or "general",
+        source=TicketSource.ADMIN.value,
+    )
+    db.add(ticket)
+    db.flush()
+
+    initial_message = TicketMessage(
+        ticket_id=ticket.id,
+        sender_type="admin",
+        sender_id=current_user.id,
+        sender_name=f"{current_user.first_name or 'Admin'} {current_user.last_name or ''}".strip(),
+        message=data.message.strip(),
+    )
+    db.add(initial_message)
+    ticket.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(ticket)
+
+    # Notify the user by email that an admin reached out.
+    if user.email:
+        try:
+            from ...services.email_service import EmailService
+            EmailService().send_email(
+                to_email=user.email,
+                subject=f"{subject} [Ticket #{ticket.id}]",
+                html_content=f"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px;">
+                    <h2 style="color: #7c3aed;">SkyRate AI Support</h2>
+                    <p>A member of our team sent you a message:</p>
+                    <div style="background: #f8fafc; padding: 16px; border-radius: 8px; border-left: 4px solid #7c3aed;">
+                        <p>{data.message.strip()}</p>
+                    </div>
+                    <p style="color: #64748b; font-size: 12px; margin-top: 16px;">
+                        Reply from your
+                        <a href="https://skyrate.ai/settings" style="color: #7c3aed;">SkyRate dashboard</a>.
+                    </p>
+                </div>
+                """,
+                email_type='support'
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to send admin chat email: {e}")
+
+    return {"success": True, "ticket": ticket.to_dict_with_messages()}
 
 
 @router.get("/tickets/{ticket_id}")

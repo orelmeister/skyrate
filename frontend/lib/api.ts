@@ -2858,6 +2858,16 @@ class ApiClient {
   }
 
   /**
+   * Start a new admin-initiated conversation with a user (Chat tab).
+   */
+  async startAdminChat(data: { user_id: number; message: string; subject?: string; category?: string }): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/admin/tickets', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  /**
    * Get FRN monitor data (admin)
    */
   async getAdminFRNMonitor(params?: { status?: string; funding_year?: number; search?: string; limit?: number }): Promise<ApiResponse<any>> {
