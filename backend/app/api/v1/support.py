@@ -4,7 +4,7 @@ Handles support ticket creation, viewing, and messaging.
 Supports both authenticated users and guest visitors.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, UploadFile, File, Form, Response
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
@@ -347,3 +347,141 @@ async def add_message(
         "success": True,
         "message": message.to_dict()
     }
+
+
+# ==================== ATTACHMENTS / VOICE NOTES ====================
+
+# Allowed attachment MIME types (voice notes + common docs/images).
+ALLOWED_ATTACHMENT_MIME_PREFIXES = ("audio/", "image/")
+ALLOWED_ATTACHMENT_MIME_EXACT = {"application/pdf"}
+MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+def _assert_ticket_access(ticket: Optional[SupportTicket], current_user: User):
+    """Raise if the ticket is missing or the user may not access it."""
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    is_admin = current_user.role in [UserRole.ADMIN.value, "super"]
+    if ticket.user_id != current_user.id and not is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return is_admin
+
+
+@router.post("/tickets/{ticket_id}/messages/upload")
+async def upload_message_attachment(
+    ticket_id: int,
+    message: str = Form(""),
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Attach a voice note (or file) to a ticket as a new message.
+
+    Accepts multipart/form-data with an optional text `message` plus a `file`.
+    The binary is stored in-DB (DO App Platform filesystem is ephemeral).
+    """
+    ticket = db.query(SupportTicket).filter(SupportTicket.id == ticket_id).first()
+    is_admin = _assert_ticket_access(ticket, current_user)
+
+    mime = (file.content_type or "application/octet-stream").lower()
+    if not (mime.startswith(ALLOWED_ATTACHMENT_MIME_PREFIXES) or mime in ALLOWED_ATTACHMENT_MIME_EXACT):
+        raise HTTPException(status_code=400, detail=f"Unsupported attachment type: {mime}")
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty attachment")
+    if len(raw) > MAX_ATTACHMENT_BYTES:
+        raise HTTPException(status_code=413, detail="Attachment too large (max 10 MB)")
+
+    msg = TicketMessage(
+        ticket_id=ticket.id,
+        sender_type="admin" if is_admin else "user",
+        sender_id=current_user.id,
+        sender_name=(
+            f"{current_user.first_name or ''} {current_user.last_name or ''}".strip()
+            or current_user.email
+        ),
+        message=(message or "").strip(),
+        file_data=raw,
+        file_name=file.filename or "voice-note.webm",
+        mime_type=mime,
+    )
+    db.add(msg)
+
+    # Mirror the status transitions used by text replies.
+    ticket.status = (
+        TicketStatus.WAITING_USER.value if is_admin else TicketStatus.OPEN.value
+    )
+    ticket.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(msg)
+
+    # Instant Telegram alert on inbound user attachments so nothing is missed.
+    if not is_admin:
+        try:
+            from ...services.telegram_alerts import send_alert
+            send_alert(
+                title=f"Voice/attachment on Ticket #{ticket.id}",
+                body=f"From: {ticket.user_email or 'user'}\nFile: {msg.file_name} ({mime})",
+                severity="warn",
+                link="https://skyrate.ai/admin",
+            )
+        except Exception as e:
+            logger.warning(f"Telegram attachment alert failed: {e}")
+
+    return {"success": True, "message": msg.to_dict()}
+
+
+@router.get("/tickets/{ticket_id}/messages/{message_id}/attachment")
+async def get_message_attachment(
+    ticket_id: int,
+    message_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Stream a message's binary attachment (voice note / file)."""
+    ticket = db.query(SupportTicket).filter(SupportTicket.id == ticket_id).first()
+    _assert_ticket_access(ticket, current_user)
+
+    msg = (
+        db.query(TicketMessage)
+        .filter(TicketMessage.id == message_id, TicketMessage.ticket_id == ticket_id)
+        .first()
+    )
+    if not msg or msg.file_data is None:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    return Response(
+        content=msg.file_data,
+        media_type=msg.mime_type or "application/octet-stream",
+        headers={
+            "Content-Disposition": f'inline; filename="{msg.file_name or "attachment"}"',
+            "Cache-Control": "private, max-age=3600",
+        },
+    )
+
+
+@router.post("/tickets/{ticket_id}/read")
+async def mark_ticket_read(
+    ticket_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Mark messages from the opposite party as read (for unread badges)."""
+    ticket = db.query(SupportTicket).filter(SupportTicket.id == ticket_id).first()
+    is_admin = _assert_ticket_access(ticket, current_user)
+
+    # Admins read user messages; users read admin messages.
+    other_party = "user" if is_admin else "admin"
+    now = datetime.utcnow()
+    updated = (
+        db.query(TicketMessage)
+        .filter(
+            TicketMessage.ticket_id == ticket_id,
+            TicketMessage.sender_type == other_party,
+            TicketMessage.read_at.is_(None),
+        )
+        .update({TicketMessage.read_at: now}, synchronize_session=False)
+    )
+    db.commit()
+    return {"success": True, "marked_read": updated}

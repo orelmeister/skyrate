@@ -33,6 +33,17 @@ export default function ChatWidget() {
   const [replyText, setReplyText] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Voice note state (gated for safe rollback — set NEXT_PUBLIC_ENABLE_VOICE_NOTES=false to disable)
+  const VOICE_NOTES_ENABLED = process.env.NEXT_PUBLIC_ENABLE_VOICE_NOTES !== "false";
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [attachmentUrls, setAttachmentUrls] = useState<Record<number, string>>({});
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+
   // Determine source based on current path
   const getSource = () => {
     if (typeof window === "undefined") return "chat_widget";
@@ -100,6 +111,93 @@ export default function ChatWidget() {
       alert("Failed to send reply");
     }
   }
+
+  function cleanupRecording() {
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      mediaStreamRef.current = null;
+    }
+    mediaRecorderRef.current = null;
+    setIsRecording(false);
+    setRecordingTime(0);
+  }
+
+  async function startRecording() {
+    if (!selectedTicket) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      audioChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        cleanupRecording();
+        if (blob.size > 0) await sendVoiceNote(blob);
+      };
+      recorder.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+      recordTimerRef.current = setInterval(() => {
+        setRecordingTime((t) => {
+          // Hard cap at 2 minutes to keep payloads small.
+          if (t >= 120) {
+            stopRecording();
+            return t;
+          }
+          return t + 1;
+        });
+      }, 1000);
+    } catch {
+      alert("Microphone access was blocked. Please allow mic permission to send a voice note.");
+      cleanupRecording();
+    }
+  }
+
+  function stopRecording() {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop(); // triggers onstop -> sendVoiceNote
+    } else {
+      cleanupRecording();
+    }
+  }
+
+  async function sendVoiceNote(blob: Blob) {
+    if (!selectedTicket) return;
+    setUploading(true);
+    try {
+      const res = await api.addTicketAttachment(selectedTicket.id, blob, "", "voice-note.webm");
+      if (!res.success) {
+        alert(res.error || "Failed to send voice note");
+      } else {
+        openTicket(selectedTicket); // Refresh thread
+      }
+    } catch {
+      alert("Failed to send voice note");
+    }
+    setUploading(false);
+  }
+
+  // Preload authenticated attachment object URLs for audio messages.
+  useEffect(() => {
+    const msgs = selectedTicket?.messages || [];
+    msgs.forEach((m: any) => {
+      if (m.has_attachment && !attachmentUrls[m.id]) {
+        api.getTicketAttachmentUrl(selectedTicket.id, m.id).then((url) => {
+          if (url) setAttachmentUrls((prev) => ({ ...prev, [m.id]: url }));
+        });
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTicket?.messages]);
 
   useEffect(() => {
     if (isOpen && isAuthenticated && stage === "conversations") {
@@ -201,27 +299,68 @@ export default function ChatWidget() {
                         </div>
                         {/<[a-z][\s\S]*>/i.test(m.message) ? (
                           <div className="text-slate-700 space-y-1.5 break-words" dangerouslySetInnerHTML={{ __html: m.message }} />
-                        ) : (
+                        ) : m.message ? (
                           <p className="text-slate-700 whitespace-pre-wrap">{m.message}</p>
+                        ) : null}
+                        {m.has_attachment && (
+                          m.mime_type?.startsWith("audio/") ? (
+                            attachmentUrls[m.id] ? (
+                              <audio controls src={attachmentUrls[m.id]} className="mt-1.5 w-full h-9" />
+                            ) : (
+                              <p className="text-slate-400 mt-1 italic">Loading voice note…</p>
+                            )
+                          ) : (
+                            <a
+                              href={attachmentUrls[m.id] || "#"}
+                              download={m.file_name}
+                              className="mt-1.5 inline-flex items-center gap-1 text-purple-600 hover:underline"
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
+                              {m.file_name || "attachment"}
+                            </a>
+                          )
                         )}
                       </div>
                     ))}
                     <div ref={messagesEndRef} />
                   </div>
-                  <div className="flex gap-2 pt-2 border-t">
+                  <div className="flex gap-2 pt-2 border-t items-center">
                     <input
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
-                      placeholder="Type a reply..."
-                      className="flex-1 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      placeholder={isRecording ? "Recording…" : "Type a reply..."}
+                      disabled={isRecording || uploading}
+                      className="flex-1 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-slate-50"
                       onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleReply()}
                     />
+                    {VOICE_NOTES_ENABLED && (
+                      isRecording ? (
+                        <button
+                          onClick={stopRecording}
+                          title="Stop & send voice note"
+                          className="flex items-center gap-1 px-3 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700"
+                        >
+                          <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
+                          {recordingTime}s
+                        </button>
+                      ) : (
+                        <button
+                          onClick={startRecording}
+                          disabled={uploading}
+                          title="Record voice note"
+                          aria-label="Record voice note"
+                          className="px-3 py-2 border rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
+                        </button>
+                      )
+                    )}
                     <button
                       onClick={handleReply}
-                      disabled={!replyText.trim()}
+                      disabled={!replyText.trim() || isRecording || uploading}
                       className="px-3 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50"
                     >
-                      Send
+                      {uploading ? "…" : "Send"}
                     </button>
                   </div>
                 </div>

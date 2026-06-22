@@ -1126,6 +1126,40 @@ const EMAIL_TEMPLATES = [
   }
 ];
 
+function TicketAttachment({ ticketId, m }: { ticketId: number; m: any }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let revoked = false;
+    api.getTicketAttachmentUrl(ticketId, m.id).then((u) => {
+      if (u && !revoked) setUrl(u);
+    });
+    return () => {
+      revoked = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticketId, m.id]);
+
+  const isAudio = m.mime_type?.startsWith("audio/");
+  if (isAudio) {
+    return url ? (
+      <audio controls src={url} className="mt-2 w-full h-9" />
+    ) : (
+      <p className="text-xs text-slate-400 mt-1 italic">Loading voice note…</p>
+    );
+  }
+  return (
+    <a
+      href={url || "#"}
+      download={m.file_name}
+      className="mt-2 inline-flex items-center gap-1 text-sm text-purple-600 hover:underline"
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
+      {m.file_name || "attachment"}
+    </a>
+  );
+}
+
 function TicketsTab({
   tickets, total, statusFilter, setStatusFilter,
   selectedTicket, onSelectTicket, onCloseTicket,
@@ -1176,9 +1210,10 @@ function TicketsTab({
                 </div>
                 {/<[a-z][\s\S]*>/i.test(m.message) ? (
                   <div className="text-sm text-slate-800" dangerouslySetInnerHTML={{ __html: m.message }} />
-                ) : (
+                ) : m.message ? (
                   <p className="text-sm text-slate-800 whitespace-pre-wrap">{m.message}</p>
-                )}
+                ) : null}
+                {m.has_attachment && <TicketAttachment ticketId={selectedTicket.id} m={m} />}
               </div>
             ))}
           </div>

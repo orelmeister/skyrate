@@ -717,6 +717,11 @@ def _run_schema_migrations(engine):
         ("alert_configs", "invoice_deadline_intervals", "JSON DEFAULT NULL", None),
         # Admin FRN snapshot — USAC PIA sub-status
         ("admin_frn_snapshots", "pending_reason", "VARCHAR(256) DEFAULT NULL", None),
+        # Support chat voice notes / attachments + read tracking on ticket messages
+        ("ticket_messages", "file_data", "LONGBLOB DEFAULT NULL", None),
+        ("ticket_messages", "file_name", "VARCHAR(255) DEFAULT NULL", None),
+        ("ticket_messages", "mime_type", "VARCHAR(100) DEFAULT NULL", None),
+        ("ticket_messages", "read_at", "DATETIME DEFAULT NULL", None),
     ]
     
     try:

@@ -3,7 +3,7 @@ Support Ticket Model
 Handles support tickets and messages for the chat/support widget
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum, ForeignKey, Text, LargeBinary
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -141,8 +141,17 @@ class TicketMessage(Base):
     sender_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     sender_name = Column(String(255), nullable=True)  # Display name
 
-    # Message content
-    message = Column(Text, nullable=False)
+    # Message content (may be empty when the message is an attachment-only voice note)
+    message = Column(Text, nullable=False, default="")
+
+    # Optional attachment (voice note / file). Stored as a BLOB in-DB because the
+    # DO App Platform filesystem is ephemeral (same pattern as blog hero images).
+    file_data = Column(LargeBinary, nullable=True)
+    file_name = Column(String(255), nullable=True)
+    mime_type = Column(String(100), nullable=True)
+
+    # Read tracking (set when the opposite party views the message)
+    read_at = Column(DateTime, nullable=True)
 
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
@@ -162,5 +171,13 @@ class TicketMessage(Base):
                 if self.sender else "System"
             ),
             "message": self.message,
+            "has_attachment": self.file_data is not None,
+            "file_name": self.file_name,
+            "mime_type": self.mime_type,
+            "attachment_url": (
+                f"/api/v1/support/tickets/{self.ticket_id}/messages/{self.id}/attachment"
+                if self.file_data is not None else None
+            ),
+            "read_at": self.read_at.isoformat() if self.read_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

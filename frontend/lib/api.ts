@@ -2977,6 +2977,59 @@ class ApiClient {
     });
   }
 
+  /**
+   * Upload a voice note / file attachment to a support ticket as a new message.
+   * Uses multipart/form-data; the browser sets the boundary automatically.
+   */
+  async addTicketAttachment(ticketId: number, file: Blob, message: string = '', filename?: string): Promise<ApiResponse<any>> {
+    const formData = new FormData();
+    formData.append('message', message);
+    formData.append('file', file, filename || 'voice-note.webm');
+
+    const token = this.getAccessToken();
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/support/tickets/${ticketId}/messages/upload`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return { success: false, error: data?.detail || 'Upload failed' };
+      }
+      return data;
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'Upload failed' };
+    }
+  }
+
+  /**
+   * Fetch a message attachment as an object URL (audio/file playback).
+   * Needed because <audio>/<img> tags cannot send Authorization headers.
+   * Caller is responsible for URL.revokeObjectURL() when done.
+   */
+  async getTicketAttachmentUrl(ticketId: number, messageId: number): Promise<string | null> {
+    const token = this.getAccessToken();
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/support/tickets/${ticketId}/messages/${messageId}/attachment`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      );
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Mark messages from the opposite party as read (for unread badges).
+   */
+  async markTicketRead(ticketId: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/support/tickets/${ticketId}/read`, { method: 'POST' });
+  }
+
   // ==================== ONBOARDING ====================
 
   /**
