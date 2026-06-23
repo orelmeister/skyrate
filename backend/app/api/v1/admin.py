@@ -19,6 +19,7 @@ from ...core.security import get_current_user, require_role, hash_password
 from ...models.user import User, UserRole
 from ...models.subscription import Subscription, SubscriptionStatus
 from ...models.consultant import ConsultantProfile, ConsultantSchool
+from ...models.account_seat import AccountSeat
 from ...models.vendor import VendorProfile, VendorSearch
 from ...models.application import QueryHistory
 from ...models.support_ticket import SupportTicket, TicketMessage, TicketStatus, TicketSource
@@ -72,6 +73,14 @@ class ManualPlanOverride(BaseModel):
     plan: str  # "monthly" or "yearly"
     duration_days: int = 365
     payment_reference: str  # "Check #4831", "USD Wire Ref #9923"
+
+
+class SeatLimitUpdate(BaseModel):
+    seat_limit: int
+
+
+class SeatInviteCreate(BaseModel):
+    email: EmailStr
 
 
 # ==================== DEPENDENCIES ====================
@@ -728,6 +737,208 @@ async def manual_plan_override(
         "payment_reference": data.payment_reference,
         "message": f"User plan manually upgraded to {data.plan} successfully. Payment reference logged."
     }
+
+
+# ==================== TEAM SEATS ====================
+
+@router.get("/users/{user_id}/seats")
+async def list_user_seats(
+    user_id: int,
+    current_user: User = AdminUser,
+    db: Session = Depends(get_db)
+):
+    """List the team seats for a user's account."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    profile = db.query(ConsultantProfile).filter(
+        ConsultantProfile.user_id == user.id
+    ).first()
+
+    subscription = db.query(Subscription).filter(
+        Subscription.user_id == user_id
+    ).first()
+    seat_limit = subscription.seat_limit if subscription else 0
+
+    if profile is None:
+        seats = []
+    else:
+        seats = db.query(AccountSeat).filter(
+            AccountSeat.consultant_profile_id == profile.id,
+            AccountSeat.status != "removed"
+        ).order_by(AccountSeat.created_at.asc()).all()
+
+    used = sum(1 for s in seats if s.status in ("invited", "active"))
+
+    return {
+        "success": True,
+        "is_consultant": profile is not None,
+        "has_subscription": subscription is not None,
+        "seat_limit": seat_limit,
+        "used": used,
+        "seats": [s.to_dict() for s in seats]
+    }
+
+
+@router.put("/users/{user_id}/seat-limit")
+async def set_user_seat_limit(
+    user_id: int,
+    data: SeatLimitUpdate,
+    current_user: User = AdminUser,
+    db: Session = Depends(get_db)
+):
+    """Set the seat capacity on a user's subscription."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    subscription = db.query(Subscription).filter(
+        Subscription.user_id == user_id
+    ).first()
+    if not subscription:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User has no subscription. Assign a plan before configuring seats."
+        )
+
+    new_limit = max(0, int(data.seat_limit))
+
+    profile = db.query(ConsultantProfile).filter(
+        ConsultantProfile.user_id == user.id
+    ).first()
+    if profile is None:
+        active_or_invited = 0
+    else:
+        active_or_invited = db.query(AccountSeat).filter(
+            AccountSeat.consultant_profile_id == profile.id,
+            AccountSeat.status.in_(["invited", "active"])
+        ).count()
+
+    if new_limit < active_or_invited:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot set limit below the {active_or_invited} seat(s) already in use. Revoke a seat first."
+        )
+
+    subscription.seat_limit = new_limit
+    db.commit()
+    db.refresh(subscription)
+
+    return {"success": True, "seat_limit": subscription.seat_limit}
+
+
+@router.post("/users/{user_id}/seats")
+async def invite_user_seat(
+    user_id: int,
+    data: SeatInviteCreate,
+    current_user: User = AdminUser,
+    db: Session = Depends(get_db)
+):
+    """Invite a team member to a consultant account's seat."""
+    owner = db.query(User).filter(User.id == user_id).first()
+    if not owner:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    profile = db.query(ConsultantProfile).filter(
+        ConsultantProfile.user_id == owner.id
+    ).first()
+    if profile is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Seats are only available for consultant accounts."
+        )
+
+    subscription = db.query(Subscription).filter(
+        Subscription.user_id == user_id
+    ).first()
+    seat_limit = subscription.seat_limit if subscription else 0
+
+    email = data.email.lower().strip()
+
+    if db.query(User).filter(User.email == email).first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A user with this email already exists and cannot be added as a seat."
+        )
+
+    if db.query(AccountSeat).filter(
+        AccountSeat.consultant_profile_id == profile.id,
+        AccountSeat.invited_email == email,
+        AccountSeat.status.in_(["invited", "active"])
+    ).first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This email already has a pending or active seat on this account."
+        )
+
+    used = db.query(AccountSeat).filter(
+        AccountSeat.consultant_profile_id == profile.id,
+        AccountSeat.status.in_(["invited", "active"])
+    ).count()
+    if used >= seat_limit:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Seat limit reached ({used}/{seat_limit}). Increase the seat limit first."
+        )
+
+    seat = AccountSeat(
+        consultant_profile_id=profile.id,
+        invited_email=email,
+        seat_role="seat",
+        status="invited",
+        invite_token=secrets.token_urlsafe(32),
+        invite_expires_at=datetime.utcnow() + timedelta(days=7),
+        invited_by_admin_id=current_user.id
+    )
+    db.add(seat)
+    db.commit()
+    db.refresh(seat)
+
+    return {"success": True, "seat": seat.to_dict()}
+
+
+@router.post("/seats/{seat_id}/resend")
+async def resend_seat_invite(
+    seat_id: int,
+    current_user: User = AdminUser,
+    db: Session = Depends(get_db)
+):
+    """Regenerate the invite token for a pending seat."""
+    seat = db.query(AccountSeat).filter(AccountSeat.id == seat_id).first()
+    if not seat:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Seat not found")
+
+    if seat.status != "invited":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only pending invites can be resent."
+        )
+
+    seat.invite_token = secrets.token_urlsafe(32)
+    seat.invite_expires_at = datetime.utcnow() + timedelta(days=7)
+    db.commit()
+    db.refresh(seat)
+
+    return {"success": True, "seat": seat.to_dict()}
+
+
+@router.delete("/seats/{seat_id}")
+async def revoke_seat(
+    seat_id: int,
+    current_user: User = AdminUser,
+    db: Session = Depends(get_db)
+):
+    """Revoke a seat (soft-remove)."""
+    seat = db.query(AccountSeat).filter(AccountSeat.id == seat_id).first()
+    if not seat:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Seat not found")
+
+    seat.status = "removed"
+    seat.invite_token = None
+    db.commit()
+
+    return {"success": True}
 
 
 # ==================== ANALYTICS ====================

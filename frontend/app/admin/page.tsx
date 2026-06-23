@@ -137,11 +137,33 @@ function AdminDashboard() {
   const [modalSubmitting, setModalSubmitting] = useState<boolean>(false);
   const [invoiceUrl, setInvoiceUrl] = useState<string | null>(null);
 
+  // Team Seats (Phase 7) drawer state
+  const [seatData, setSeatData] = useState<any>(null);
+  const [seatLimitInput, setSeatLimitInput] = useState<number>(0);
+  const [seatEmail, setSeatEmail] = useState("");
+  const [seatBusy, setSeatBusy] = useState(false);
+
   // Retain the last opened user during the drawer's slide-out animation so the
   // panel keeps rendering its contents while it transitions off-screen.
   const lastDrawerUserRef = React.useRef<any>(null);
   if (planModalUser) lastDrawerUserRef.current = planModalUser;
   const drawerUser = planModalUser ?? lastDrawerUserRef.current;
+
+  const loadSeats = async (userId: number) => {
+    try {
+      const res = await api.getUserSeats(userId);
+      if (res.data?.success) {
+        setSeatData(res.data);
+        setSeatLimitInput(res.data.seat_limit ?? 0);
+      }
+    } catch (e) { /* non-fatal */ }
+  };
+
+  // Load team-seat data whenever the billing/seats drawer opens for a user.
+  useEffect(() => {
+    if (planModalUser) { loadSeats(planModalUser.id); }
+    else { setSeatData(null); setSeatEmail(""); }
+  }, [planModalUser]);
 
   // Auth guard — wait for Zustand hydration before redirecting
   useEffect(() => {
@@ -678,6 +700,183 @@ function AdminDashboard() {
               </div>
             </section>
             {/* Future per-user sections (e.g. Team Seats) can be appended below. */}
+            <section className="bg-white rounded-lg border border-slate-200 p-5 shadow-sm">
+              <div className="mb-4">
+                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Team Seats</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Add team members who share this account&apos;s access but cannot manage billing.
+                </p>
+              </div>
+
+              {seatData && !seatData.is_consultant ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Seats are only available for consultant accounts.
+                </div>
+              ) : seatData && !seatData.has_subscription ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Assign a subscription plan above before configuring seats.
+                </div>
+              ) : seatData ? (
+                <div className="space-y-5">
+                  {/* Seat limit row */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Seat Limit</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        value={seatLimitInput}
+                        onChange={(e) => setSeatLimitInput(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                        className="w-24 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                      />
+                      <button
+                        type="button"
+                        disabled={seatBusy}
+                        onClick={async () => {
+                          setSeatBusy(true);
+                          try {
+                            const res = await api.setUserSeatLimit(drawerUser.id, seatLimitInput);
+                            if (res.data?.success) {
+                              alert("Seat limit updated.");
+                              await loadSeats(drawerUser.id);
+                            } else {
+                              alert(res.data?.detail || res.data?.error || "Request failed");
+                            }
+                          } catch (e: any) {
+                            alert(e?.message || "Request failed");
+                          }
+                          setSeatBusy(false);
+                        }}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow-sm transition-all"
+                      >
+                        Update Limit
+                      </button>
+                      <span className="text-xs text-slate-500">
+                        Used {seatData.used} / {seatData.seat_limit}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Seat list */}
+                  {seatData.seats && seatData.seats.length > 0 && (
+                    <div className="space-y-2">
+                      {seatData.seats.map((seat: any) => (
+                        <div
+                          key={seat.id}
+                          className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-sm text-slate-800 truncate">{seat.invited_email}</span>
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${
+                                seat.status === "invited"
+                                  ? "bg-amber-100 text-amber-700"
+                                  : seat.status === "active"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : "bg-slate-100 text-slate-500"
+                              }`}
+                            >
+                              {seat.status}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {seat.status === "invited" && (
+                              <button
+                                type="button"
+                                disabled={seatBusy}
+                                onClick={async () => {
+                                  setSeatBusy(true);
+                                  try {
+                                    const res = await api.resendSeatInvite(seat.id);
+                                    if (res.data?.success) {
+                                      await loadSeats(drawerUser.id);
+                                    } else {
+                                      alert(res.data?.detail || res.data?.error || "Request failed");
+                                    }
+                                  } catch (e: any) {
+                                    alert(e?.message || "Request failed");
+                                  }
+                                  setSeatBusy(false);
+                                }}
+                                className="px-2.5 py-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+                              >
+                                Resend
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              disabled={seatBusy}
+                              onClick={async () => {
+                                if (!confirm(`Revoke seat for ${seat.invited_email}?`)) return;
+                                setSeatBusy(true);
+                                try {
+                                  const res = await api.revokeSeat(seat.id);
+                                  if (res.data?.success) {
+                                    await loadSeats(drawerUser.id);
+                                  } else {
+                                    alert(res.data?.detail || res.data?.error || "Request failed");
+                                  }
+                                } catch (e: any) {
+                                  alert(e?.message || "Request failed");
+                                }
+                                setSeatBusy(false);
+                              }}
+                              className="px-2.5 py-1 text-xs font-semibold text-rose-600 hover:text-rose-800 disabled:opacity-50"
+                            >
+                              Revoke
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Invite row */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Invite Team Member</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="email"
+                        value={seatEmail}
+                        onChange={(e) => setSeatEmail(e.target.value)}
+                        placeholder="teammate@example.com"
+                        className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                      />
+                      <button
+                        type="button"
+                        disabled={seatBusy || seatData.used >= seatData.seat_limit}
+                        onClick={async () => {
+                          setSeatBusy(true);
+                          try {
+                            const res = await api.inviteUserSeat(drawerUser.id, seatEmail);
+                            if (res.data?.success) {
+                              setSeatEmail("");
+                              await loadSeats(drawerUser.id);
+                              alert("Seat invite created.");
+                            } else {
+                              alert(res.data?.detail || res.data?.error || "Request failed");
+                            }
+                          } catch (e: any) {
+                            alert(e?.message || "Request failed");
+                          }
+                          setSeatBusy(false);
+                        }}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow-sm transition-all"
+                      >
+                        Invite Seat
+                      </button>
+                    </div>
+                    {seatData.used >= seatData.seat_limit && (
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        Increase the seat limit to invite more team members.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-xs text-slate-400">Loading seats…</div>
+              )}
+            </section>
           </div>
         )}
       </SlideOverDrawer>

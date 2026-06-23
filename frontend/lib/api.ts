@@ -2847,6 +2847,39 @@ class ApiClient {
   }
 
   /**
+   * Team seats (admin) — list, set limit, invite, resend, revoke
+   */
+  async getUserSeats(userId: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/users/${userId}/seats`);
+  }
+
+  async setUserSeatLimit(userId: number, seatLimit: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/users/${userId}/seat-limit`, {
+      method: 'PUT',
+      body: JSON.stringify({ seat_limit: seatLimit })
+    });
+  }
+
+  async inviteUserSeat(userId: number, email: string): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/users/${userId}/seats`, {
+      method: 'POST',
+      body: JSON.stringify({ email })
+    });
+  }
+
+  async resendSeatInvite(seatId: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/seats/${seatId}/resend`, {
+      method: 'POST'
+    });
+  }
+
+  async revokeSeat(seatId: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/seats/${seatId}`, {
+      method: 'DELETE'
+    });
+  }
+
+  /**
    * Get admin analytics
    */
   async getAdminAnalytics(): Promise<ApiResponse<any>> {
