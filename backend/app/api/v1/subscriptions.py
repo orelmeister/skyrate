@@ -18,6 +18,7 @@ import json
 
 from ...core.database import get_db
 from ...core.security import get_current_user
+from ...core.accounts import resolve_billing_user, require_account_owner
 from ...core.config import settings, is_test_account, is_valid_coupon
 from ...models.user import User
 from ...models.subscription import Subscription, SubscriptionStatus, SubscriptionPlan
@@ -143,12 +144,13 @@ async def get_payment_status(
     
     EXCEPTION: Test accounts automatically get free access.
     """
+    billing_user = resolve_billing_user(current_user, db)
     # Check if this is a test account - auto-grant free subscription
-    if is_test_account(current_user.email):
-        subscription = current_user.subscription
+    if is_test_account(billing_user.email):
+        subscription = billing_user.subscription
         # If no subscription or not active, grant free access
         if not subscription or not subscription.is_active:
-            subscription = grant_free_subscription(current_user, db, reason="test_account")
+            subscription = grant_free_subscription(billing_user, db, reason="test_account")
         
         return PaymentStatusResponse(
             requires_payment_setup=False,
@@ -157,7 +159,7 @@ async def get_payment_status(
             plan=subscription.plan
         )
     
-    subscription = current_user.subscription
+    subscription = billing_user.subscription
     
     if not subscription:
         return PaymentStatusResponse(
@@ -209,7 +211,7 @@ async def get_payment_status(
 @router.post("/redeem-coupon", response_model=RedeemCouponResponse)
 async def redeem_coupon(
     data: RedeemCouponRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_account_owner),
     db: Session = Depends(get_db)
 ):
     """
@@ -256,7 +258,8 @@ async def get_subscription_status(
     """
     Get current subscription status.
     """
-    subscription = current_user.subscription
+    billing_user = resolve_billing_user(current_user, db)
+    subscription = billing_user.subscription
     
     if not subscription:
         return SubscriptionResponse(
@@ -289,7 +292,7 @@ async def get_subscription_status(
 @router.post("/create-checkout", response_model=CheckoutResponse)
 async def create_checkout_session(
     data: CreateCheckoutRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_account_owner),
     db: Session = Depends(get_db)
 ):
     """

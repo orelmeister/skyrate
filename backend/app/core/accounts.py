@@ -74,6 +74,26 @@ def resolve_account(user: User, db: Session) -> Tuple[User, ConsultantProfile]:
     return user, profile
 
 
+def resolve_billing_user(user: User, db: Session) -> User:
+    """Return the user whose subscription governs this user's access.
+
+    For an active SEAT this is the account OWNER; otherwise the user themselves.
+    Unlike resolve_account this creates NOTHING, so it is safe to call for
+    vendor/applicant roles (which must never get a ConsultantProfile)."""
+    seat = get_active_seat(user, db)
+    if seat is not None:
+        profile = (
+            db.query(ConsultantProfile)
+            .filter(ConsultantProfile.id == seat.consultant_profile_id)
+            .first()
+        )
+        if profile is not None:
+            owner = db.query(User).filter(User.id == profile.user_id).first()
+            if owner is not None:
+                return owner
+    return user
+
+
 async def require_account_owner(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
