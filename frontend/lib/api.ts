@@ -2807,6 +2807,26 @@ class ApiClient {
   }
 
   /**
+   * Create a new user directly from the admin Users tab.
+   * Roles are restricted server-side to applicant/consultant/vendor — admins
+   * cannot create admin/super accounts here. Password is optional; when blank
+   * the backend mints a strong temporary one.
+   */
+  async createAdminUser(payload: {
+    email: string;
+    role: string;
+    full_name?: string;
+    company_name?: string;
+    phone?: string;
+    password?: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/admin/users', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  /**
    * Create immediate Stripe ACH Subscription Invoice for a user
    */
   async createAdminStripeAchInvoice(userId: number, plan: 'monthly' | 'yearly'): Promise<ApiResponse<any>> {

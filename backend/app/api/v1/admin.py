@@ -4,6 +4,8 @@ Handles user management, subscriptions oversight, analytics,
 support ticket management, FRN monitoring, and user communications
 """
 
+import secrets
+
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, text
@@ -32,14 +34,18 @@ router = APIRouter(prefix="/admin", tags=["Admin Portal"])
 
 # ==================== SCHEMAS ====================
 
+# Roles an admin may assign when creating a user from the Users tab.
+# Intentionally excludes "admin"/"super" to prevent privilege escalation.
+CREATABLE_USER_ROLES = {"applicant", "consultant", "vendor"}
+
+
 class UserCreate(BaseModel):
     email: EmailStr
-    password: str
     role: str
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
+    full_name: Optional[str] = None
     company_name: Optional[str] = None
-    is_active: bool = True
+    phone: Optional[str] = None
+    password: Optional[str] = None
 
 
 class UserUpdate(BaseModel):
@@ -287,29 +293,76 @@ async def create_user(
     current_user: User = AdminUser,
     db: Session = Depends(get_db)
 ):
-    """Create a new user (admin only)"""
-    # Check email
-    existing = db.query(User).filter(User.email == data.email.lower()).first()
-    if existing:
+    """Create a new user from the admin Users tab (admin only).
+
+    Roles are restricted to applicant/consultant/vendor — admins cannot mint
+    new admin/super accounts through this endpoint. If no password is supplied a
+    strong random temporary one is generated and hashed.
+    """
+    # Validate role — block self-escalation to admin/super.
+    role = (data.role or "").strip().lower()
+    if role not in CREATABLE_USER_ROLES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already exists"
+            detail=f"Invalid role. Must be one of: {', '.join(sorted(CREATABLE_USER_ROLES))}",
         )
-    
+
+    # Enforce email uniqueness.
+    email = data.email.lower().strip()
+    existing = db.query(User).filter(User.email == email).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A user with this email already exists.",
+        )
+
+    # Use the supplied password, else mint a strong random temporary one.
+    raw_password = (
+        data.password.strip()
+        if (data.password and data.password.strip())
+        else secrets.token_urlsafe(16)
+    )
+
+    # Split optional full_name into the model's first_name/last_name columns;
+    # fall back to the email local-part so first_name is never blank.
+    first_name = ""
+    last_name = ""
+    if data.full_name and data.full_name.strip():
+        parts = data.full_name.strip().split(None, 1)
+        first_name = parts[0]
+        last_name = parts[1] if len(parts) > 1 else ""
+    if not first_name:
+        first_name = email.split("@")[0]
+
     user = User(
-        email=data.email.lower(),
-        password_hash=hash_password(data.password),
-        role=data.role,
-        first_name=data.first_name,
-        last_name=data.last_name,
-        company_name=data.company_name,
-        is_active=data.is_active,
+        email=email,
+        password_hash=hash_password(raw_password),
+        role=role,
+        first_name=first_name,
+        last_name=last_name,
+        company_name=(data.company_name or "").strip() or None,
+        phone=data.phone.strip() if (data.phone and data.phone.strip()) else None,
+        is_active=True,
+        is_verified=False,
+        email_verified=False,
+        onboarding_completed=False,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
-    
-    return {"success": True, "user": user.to_dict()}
+
+    # NOTE: an invitation/welcome email could be dispatched here in a later
+    # phase. Intentionally not wired in this phase.
+
+    return {
+        "success": True,
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "role": user.role,
+            "full_name": user.full_name,
+        },
+    }
 
 
 @router.put("/users/{user_id}")

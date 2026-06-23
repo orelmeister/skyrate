@@ -434,6 +434,10 @@ function AdminDashboard() {
                   setModalActionType("stripe");
                   setInvoiceUrl(null);
                 }}
+                onCreated={async () => {
+                  await loadUsers();
+                  await loadFunnelCounts();
+                }}
               />
             )}
             {activeTab === "tickets" && (
@@ -946,6 +950,7 @@ function UsersTab({
   onEmailUser,
   onDeleteUser,
   onManagePlan,
+  onCreated,
 }: {
   users: any[]; total: number; search: string; setSearch: (s: string) => void;
   roleFilter: string; setRoleFilter: (r: string) => void;
@@ -962,8 +967,48 @@ function UsersTab({
   onEmailUser: (id: number) => void;
   onDeleteUser: (user: any) => void;
   onManagePlan: (user: any) => void;
+  onCreated: () => void | Promise<void>;
 }) {
   const [selectedUsers, setSelectedUsers] = useState<Set<number>>(new Set());
+
+  // "Add New User" modal — local state, mirrors the createAdminUser payload.
+  const [showCreate, setShowCreate] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createForm, setCreateForm] = useState<{
+    email: string; role: string; full_name: string;
+    company_name: string; phone: string; password: string;
+  }>({ email: "", role: "applicant", full_name: "", company_name: "", phone: "", password: "" });
+
+  async function handleCreateUser(e: React.FormEvent) {
+    e.preventDefault();
+    if (!createForm.email.trim()) {
+      alert("Email is required.");
+      return;
+    }
+    setCreating(true);
+    try {
+      const res = await api.createAdminUser({
+        email: createForm.email.trim(),
+        role: createForm.role,
+        full_name: createForm.full_name.trim() || undefined,
+        company_name: createForm.company_name.trim() || undefined,
+        phone: createForm.phone.trim() || undefined,
+        password: createForm.password.trim() || undefined,
+      });
+      if (res.error || res.success === false) {
+        alert(`Failed to create user: ${res.error || "Unknown error"}`);
+      } else {
+        alert(`User ${createForm.email.trim()} created.`);
+        setShowCreate(false);
+        setCreateForm({ email: "", role: "applicant", full_name: "", company_name: "", phone: "", password: "" });
+        await onCreated();
+      }
+    } catch (err: any) {
+      alert(`Failed to create user: ${err?.message || err}`);
+    } finally {
+      setCreating(false);
+    }
+  }
 
   // Client-side sorting. sortKey points to a field on the user object;
   // for nested/computed fields we map it in the comparator below.
@@ -1162,6 +1207,13 @@ function UsersTab({
           <option value="admin">Admin</option>
         </select>
         <span className="text-sm text-slate-500">{total} users</span>
+        <button
+          type="button"
+          onClick={() => setShowCreate(true)}
+          className="ml-auto px-4 py-2 bg-purple-600 text-white text-sm font-semibold rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+        >
+          + Add New User
+        </button>
       </div>
 
       {/* Funnel-drilldown filter chips. Each is a toggle that maps 1:1 to a
@@ -1356,11 +1408,117 @@ function UsersTab({
           </tbody>
         </table>
       </div>
+
+      {/* Add New User modal — admin can create applicant/consultant/vendor
+          accounts directly. Server blocks admin/super self-escalation. */}
+      {showCreate && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => { if (!creating) setShowCreate(false); }}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Add New User</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Create a SkyRate account directly. Admin and super roles cannot be assigned here.
+              </p>
+            </div>
+            <form onSubmit={handleCreateUser} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Email <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={createForm.email}
+                  onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                  placeholder="user@example.com"
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Role <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={createForm.role}
+                  onChange={(e) => setCreateForm({ ...createForm, role: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="applicant">Applicant</option>
+                  <option value="consultant">Consultant</option>
+                  <option value="vendor">Vendor</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Full name</label>
+                <input
+                  type="text"
+                  value={createForm.full_name}
+                  onChange={(e) => setCreateForm({ ...createForm, full_name: e.target.value })}
+                  placeholder="Optional"
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Company</label>
+                <input
+                  type="text"
+                  value={createForm.company_name}
+                  onChange={(e) => setCreateForm({ ...createForm, company_name: e.target.value })}
+                  placeholder="Optional"
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Phone</label>
+                <input
+                  type="tel"
+                  value={createForm.phone}
+                  onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
+                  placeholder="Optional"
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Password</label>
+                <input
+                  type="text"
+                  value={createForm.password}
+                  onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                  placeholder="Leave blank to auto-generate"
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">Leave blank to auto-generate a strong temporary password.</p>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={creating}
+                  onClick={() => setShowCreate(false)}
+                  className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="px-4 py-2 bg-purple-600 text-white text-sm font-semibold rounded-lg hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+                >
+                  {creating ? "Creating..." : "Create User"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
-// ==================== TICKETS TAB ====================
 
 const EMAIL_TEMPLATES = [
   {
