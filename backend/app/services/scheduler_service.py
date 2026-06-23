@@ -937,11 +937,30 @@ def send_daily_digests():
                 total_rows_drained += len(raw_rows)
                 total_rows_collapsed += collapsed_count
 
+                # --- ◄ NEW: Consolidated deadline alerts query ---
+                from ..models.alert import Alert, AlertType
+                deadline_alerts = (
+                    db.query(Alert)
+                    .filter(
+                        Alert.user_id == user_id,
+                        Alert.alert_type.in_([
+                            AlertType.DEADLINE_APPROACHING.value,
+                            AlertType.APPEAL_DEADLINE.value,
+                            AlertType.FORM_486_DUE.value,
+                            AlertType.NO_DISBURSEMENT_WARNING.value
+                        ]),
+                        Alert.email_sent == False,
+                        Alert.is_dismissed == False,
+                        Alert.created_at > since,
+                    )
+                    .all()
+                )
+
                 email_to = config.notification_email or user.email
                 user_name = user.first_name or user.email.split("@")[0]
                 role = user.role or "consultant"
 
-                if net_changes:
+                if net_changes or deadline_alerts:
                     # Sanity guard: cap at 50 rows, skip if suspiciously large
                     if len(net_changes) > 50:
                         # Sort by severity for the cap: denied > PIA > funded > other
@@ -957,18 +976,27 @@ def send_daily_digests():
                         net_changes.sort(key=_severity)
                         net_changes = net_changes[:50]
 
-                    # Send digest with real changes
+                    # Convert Alert models to dictionaries for rendering
+                    deadlines_list = [a.to_dict() for a in deadline_alerts]
+
+                    # Send digest with real changes + deadlines
                     success = email_service.send_frn_digest_email_v2(
                         to_email=email_to,
                         user_name=user_name,
                         changes=net_changes,
                         collapsed_count=collapsed_count,
                         role=role,
+                        deadlines=deadlines_list,
                     )
                     if success:
                         sent_count += 1
+                        # Mark those deadline alerts as email_notified
+                        if deadline_alerts:
+                            for alert in deadline_alerts:
+                                alert.email_sent = True
+                                alert.email_sent_at = now
                 else:
-                    # Heartbeat: no net changes, but user opted in
+                    # Heartbeat: no net changes and no deadlines, but user opted in
                     success = email_service.send_frn_digest_heartbeat(
                         to_email=email_to,
                         user_name=user_name,

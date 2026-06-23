@@ -98,9 +98,22 @@ class AlertService:
         # Send email if requested
         # email_notifications: controls immediate email delivery
         # daily_digest: controls the 8 AM summary (independent of immediate emails)
-        # Both can be enabled - user gets immediate emails AND daily digest
+        # Both can be enabled - user gets immediate emails AND daily digest.
+        # BUT to prevent inbox bombardment (such as receiving dozens of separate emails 
+        # for upcoming deadlines or status changes at the exact same moment), 
+        # if daily_digest is enabled and the alert is a status change or deadline,
+        # we SUPPRESS the real-time email so they only get the consolidated morning email!
         if send_email is None:
             send_email = config.email_notifications
+            if config.daily_digest and alert_type in (
+                AlertType.FRN_STATUS_CHANGE,
+                AlertType.DEADLINE_APPROACHING,
+                AlertType.SUBSTATUS_CHANGE,
+                AlertType.FORM_486_DUE,
+                AlertType.APPEAL_DEADLINE,
+                AlertType.NO_DISBURSEMENT_WARNING
+            ):
+                send_email = False
         
         if send_email:
             self._send_alert_email(alert, config)

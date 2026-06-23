@@ -787,11 +787,13 @@ View all in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000
         changes: list,
         collapsed_count: int = 0,
         role: str = "consultant",
+        deadlines: list = None,
     ) -> bool:
         """
         V2 FRN digest email with deduped changes, bucketed categories,
         role-aware links, and a proper subject line.
         Each change is a dict with: frn, ben, entity_name, old_status, new_status, new_amount.
+        Optionally displays approaching deadlines consolidated in a dedicated block.
         """
         from ..core.config import settings
         frontend_url = getattr(settings, 'FRONTEND_URL', 'https://skyrate.ai')
@@ -819,22 +821,37 @@ View all in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000
             else:
                 other.append(c)
 
-        total = len(changes)
-        # Build subject line
-        parts = []
-        if funded:
-            parts.append(f"{len(funded)} funded")
-        if denied:
-            parts.append(f"{len(denied)} denied")
-        if pia:
-            parts.append(f"{len(pia)} PIA")
-        subject = f"[SkyRate] {total} FRN update{'s' if total != 1 else ''} in your portfolio"
-        if parts:
-            subject += " - " + ", ".join(parts)
+        total_changes = len(changes)
+        total_deadlines = len(deadlines) if deadlines else 0
 
-        # Build rows HTML (capped at 50)
+        # Build subject line
+        subject_parts = []
+        if total_changes > 0:
+            change_details = []
+            if funded:
+                change_details.append(f"{len(funded)} funded")
+            if denied:
+                change_details.append(f"{len(denied)} denied")
+            if pia:
+                change_details.append(f"{len(pia)} PIA")
+            change_summary = f"{total_changes} update{'s' if total_changes != 1 else ''}"
+            if change_details:
+                change_summary += f" ({', '.join(change_details)})"
+            subject_parts.append(change_summary)
+
+        if total_deadlines > 0:
+            subject_parts.append(f"{total_deadlines} deadline{'s' if total_deadlines != 1 else ''} approaching")
+
+        if len(subject_parts) == 2:
+            subject = f"[SkyRate] Portfolio Updates: {subject_parts[0]} & {subject_parts[1]}"
+        elif total_deadlines > 0:
+            subject = f"[SkyRate] {subject_parts[0]} in your portfolio"
+        else:
+            subject = f"[SkyRate] {subject_parts[0] if subject_parts else 'Portfolio update'} in your portfolio"
+
+        # Build status changes rows HTML (capped at 50)
         display_changes = changes[:50]
-        overflow = total - 50 if total > 50 else 0
+        overflow = total_changes - 50 if total_changes > 50 else 0
 
         rows_html = ""
         for c in display_changes:
@@ -874,6 +891,92 @@ View all in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000
         if collapsed_count > 0:
             collapsed_html = f'<p style="color:#6b7280;font-size:0.85em;margin-top:8px;">{collapsed_count} FRN{"s" if collapsed_count != 1 else ""} flipped and reverted (no net change) - collapsed and not shown.</p>'
 
+        # Build Deadlines Section HTML
+        deadlines_section_html = ""
+        if deadlines:
+            deadlines_rows = ""
+            for item in deadlines[:50]:
+                priority = (item.get("priority") or "medium").lower()
+                if priority == "critical":
+                    badge_style = "background:#fee2e2;color:#b91c1c;"
+                elif priority == "high":
+                    badge_style = "background:#ffedd5;color:#c2410c;"
+                elif priority == "medium":
+                    badge_style = "background:#fef3c7;color:#b45309;"
+                else:
+                    badge_style = "background:#eff6ff;color:#1d4ed8;"
+
+                entity_id = item.get("entity_id") or ""
+                view_url = self._get_role_frn_url(role, frn=entity_id if entity_id != "multiple" else "")
+                
+                metadata = item.get("metadata") or {}
+                deadline_date_raw = metadata.get("deadline_date") or ""
+                try:
+                    if deadline_date_raw:
+                        from datetime import datetime as dt
+                        deadline_date = datetime.fromisoformat(deadline_date_raw).strftime("%B %d, %Y")
+                    else:
+                        deadline_date = "-"
+                except Exception:
+                    deadline_date = deadline_date_raw or "-"
+
+                deadlines_rows += f"""
+                <tr>
+                    <td style="padding:8px 12px; border-bottom:1px solid #e5e7eb;">{item.get('entity_name') or '-'}</td>
+                    <td style="padding:8px 12px; border-bottom:1px solid #e5e7eb;">{entity_id}</td>
+                    <td style="padding:8px 12px; border-bottom:1px solid #e5e7eb;">{metadata.get('deadline_type') or item.get('title') or '-'}</td>
+                    <td style="padding:8px 12px; border-bottom:1px solid #e5e7eb; white-space:nowrap;">{deadline_date}</td>
+                    <td style="padding:8px 12px; border-bottom:1px solid #e5e7eb; text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:12px;font-size:0.78em;font-weight:600;{badge_style}">{metadata.get('days_remaining', '-')} days</span></td>
+                    <td style="padding:8px 12px; border-bottom:1px solid #e5e7eb;"><a href="{view_url}" style="display:inline-block;padding:4px 10px;background:#2563eb;color:#fff;text-decoration:none;border-radius:4px;font-size:0.82em;">View</a></td>
+                </tr>
+                """
+            
+            deadlines_section_html = f"""
+            <h2 style="margin:25px 0 10px 0; font-size:16px; color:#1e3a5f; text-transform:uppercase; letter-spacing:0.5px; border-bottom:2px solid #f3f4f6; padding-bottom:6px;">Approaching Deadlines</h2>
+            <table style="width:100%; border-collapse:collapse; background:white; border-radius:6px; overflow:hidden; font-size:13px; margin-bottom:15px;">
+                <thead>
+                    <tr style="background:#f3f4f6;">
+                        <th style="padding:10px 12px; text-align:left; font-weight:600;">Entity</th>
+                        <th style="padding:10px 12px; text-align:left; font-weight:600;">FRN</th>
+                        <th style="padding:10px 12px; text-align:left; font-weight:600;">Deadline Type</th>
+                        <th style="padding:10px 12px; text-align:left; font-weight:600;">Target Date</th>
+                        <th style="padding:10px 12px; text-align:center; font-weight:600;">Time Left</th>
+                        <th style="padding:10px 12px; text-align:left; font-weight:600;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {deadlines_rows}
+                </tbody>
+            </table>
+            """
+
+        status_changes_section_html = ""
+        if changes:
+            status_changes_section_html = f"""
+            <h2 style="margin:20px 0 10px 0; font-size:16px; color:#1e3a5f; text-transform:uppercase; letter-spacing:0.5px; border-bottom:2px solid #f3f4f6; padding-bottom:6px;">FRN Status Changes</h2>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;">
+                {"".join(f'<div style="flex:1;min-width:100px;background:#f8fafc;border-radius:8px;padding:14px;text-align:center;border:1px solid #e2e8f0;"><div style="font-size:1.6em;font-weight:bold;color:#1e3a5f;">{count}</div><div style="font-size:0.78em;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-top:2px;">{label}</div></div>' for label, count in [("Funded", len(funded)), ("Denied", len(denied)), ("PIA", len(pia)), ("Other", len(amount_changed) + len(cancelled) + len(other))] if count > 0)}
+            </div>
+
+            <table style="width:100%; border-collapse:collapse; background:white; border-radius:6px; overflow:hidden; font-size:13px; margin-bottom:15px;">
+                <thead>
+                    <tr style="background:#f3f4f6;">
+                        <th style="padding:10px 12px; text-align:left; font-weight:600;">Entity</th>
+                        <th style="padding:10px 12px; text-align:left; font-weight:600;">FRN</th>
+                        <th style="padding:10px 12px; text-align:left; font-weight:600;">Was</th>
+                        <th style="padding:10px 12px; text-align:left; font-weight:600;">Now</th>
+                        <th style="padding:10px 12px; text-align:left; font-weight:600;">Amount</th>
+                        <th style="padding:10px 12px; border-bottom:1px solid #e5e7eb;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows_html}
+                </tbody>
+            </table>
+            {overflow_html}
+            {collapsed_html}
+            """
+
         view_all_url = self._get_role_frn_url(role)
 
         html_content = f"""
@@ -888,30 +991,10 @@ View all in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000
                 </div>
                 <div style="background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
                     <p>Hi {user_name},</p>
-                    <p>Here's what changed in your portfolio today.</p>
+                    <p>Here is your consolidated daily portfolio digest for today.</p>
 
-                    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;">
-                        {"".join(f'<div style="flex:1;min-width:100px;background:#f8fafc;border-radius:8px;padding:14px;text-align:center;border:1px solid #e2e8f0;"><div style="font-size:1.6em;font-weight:bold;color:#1e3a5f;">{count}</div><div style="font-size:0.78em;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-top:2px;">{label}</div></div>' for label, count in [("Funded", len(funded)), ("Denied", len(denied)), ("PIA", len(pia)), ("Other", len(amount_changed) + len(cancelled) + len(other))] if count > 0)}
-                    </div>
-
-                    <table style="width:100%; border-collapse:collapse; background:white; border-radius:6px; overflow:hidden; font-size:13px;">
-                        <thead>
-                            <tr style="background:#f3f4f6;">
-                                <th style="padding:10px 12px; text-align:left; font-weight:600;">Entity</th>
-                                <th style="padding:10px 12px; text-align:left; font-weight:600;">FRN</th>
-                                <th style="padding:10px 12px; text-align:left; font-weight:600;">Was</th>
-                                <th style="padding:10px 12px; text-align:left; font-weight:600;">Now</th>
-                                <th style="padding:10px 12px; text-align:left; font-weight:600;">Amount</th>
-                                <th style="padding:10px 12px; text-align:left; font-weight:600;"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {rows_html}
-                        </tbody>
-                    </table>
-
-                    {overflow_html}
-                    {collapsed_html}
+                    {status_changes_section_html}
+                    {deadlines_section_html}
 
                     <a href="{view_all_url}" style="display:inline-block; background:#2563eb; color:white; padding:12px 24px; text-decoration:none; border-radius:6px; margin-top:15px;">
                         View All in Portfolio
@@ -928,11 +1011,17 @@ View all in Dashboard: {getattr(settings, 'FRONTEND_URL', 'http://localhost:3000
         """
 
         text_content = f"FRN Daily Digest - {datetime.now().strftime('%B %d, %Y')}\n\n"
-        text_content += f"Hi {user_name},\n\n{total} FRN status changes:\n\n"
-        for c in display_changes[:20]:
-            text_content += f"- FRN {c.get('frn')} ({c.get('entity_name') or c.get('ben')}): {c.get('old_status')} -> {c.get('new_status')}\n"
-        if total > 20:
-            text_content += f"\n...and {total - 20} more. View all: {view_all_url}\n"
+        text_content += f"Hi {user_name},\n\n"
+        if total_changes > 0:
+            text_content += f"{total_changes} FRN status changes:\n"
+            for c in display_changes[:20]:
+                text_content += f"- FRN {c.get('frn')} ({c.get('entity_name') or c.get('ben')}): {c.get('old_status')} -> {c.get('new_status')}\n"
+        if total_deadlines > 0:
+            text_content += f"\n{total_deadlines} approaching deadlines:\n"
+            for item in deadlines[:20]:
+                meta = item.get("metadata") or {}
+                text_content += f"- {item.get('entity_name')} (FRN {item.get('entity_id')}): {meta.get('deadline_type')} in {meta.get('days_remaining')} days\n"
+        text_content += f"\nView all: {view_all_url}\n"
 
         return self.send_email(
             to_email=to_email,
