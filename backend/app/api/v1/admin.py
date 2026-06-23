@@ -176,7 +176,28 @@ async def list_users(
             data["days_since_signup"] = None
         data["has_identifier"] = False  # default, overwritten in role branches below
 
-        if u.role == "consultant" and u.consultant_profile:
+        # Check if they are an active team seat
+        seat = db.query(AccountSeat).filter(AccountSeat.user_id == u.id, AccountSeat.status == "active").first()
+        
+        if seat:
+            data["role"] = "seat"
+            owner_profile = db.query(ConsultantProfile).filter(ConsultantProfile.id == seat.consultant_profile_id).first()
+            if owner_profile:
+                owner_user = db.query(User).filter(User.id == owner_profile.user_id).first()
+                owner_schools = db.query(ConsultantSchool).filter(
+                    ConsultantSchool.consultant_profile_id == owner_profile.id
+                ).all()
+                data["portfolio"] = {
+                    "crn": owner_profile.crn,
+                    "schools_count": len(owner_schools),
+                    "schools": [{"ben": s.ben, "name": s.school_name, "state": s.state} for s in owner_schools[:10]],
+                    "owner_email": owner_user.email if owner_user else None,
+                    "company_name": owner_profile.company_name
+                }
+                # Automatically attribute owner's company to seat details
+                data["company_name"] = owner_profile.company_name
+                data["has_identifier"] = bool(owner_profile.crn)
+        elif u.role == "consultant" and u.consultant_profile:
             schools = db.query(ConsultantSchool).filter(
                 ConsultantSchool.consultant_profile_id == u.consultant_profile.id
             ).all()

@@ -1528,15 +1528,20 @@ function UsersTab({
                     u.role === "admin" ? "bg-red-100 text-red-700" :
                     u.role === "consultant" ? "bg-purple-100 text-purple-700" :
                     u.role === "vendor" ? "bg-blue-100 text-blue-700" :
+                    u.role === "seat" ? "bg-sky-100 text-sky-700 border border-sky-200" :
                     "bg-green-100 text-green-700"
-                  }`}>{u.role}</span>
+                  }`}
+                  title={u.role === "seat" && u.portfolio?.owner_email ? `Seat of ${u.portfolio.owner_email}` : undefined}
+                  >
+                    {u.role}
+                  </span>
                 </td>
                 <td className="px-3 py-3 text-xs">
                   {(() => {
                     // Identifier presence: backend pre-computes has_identifier
                     // and exposes the raw value via portfolio.crn/spin/ben.
                     const identValue =
-                      u.role === "consultant" ? u.portfolio?.crn :
+                      u.role === "consultant" || u.role === "seat" ? u.portfolio?.crn :
                       u.role === "vendor" ? u.portfolio?.spin :
                       u.role === "applicant" ? u.portfolio?.ben : null;
                     if (u.has_identifier && identValue) {
