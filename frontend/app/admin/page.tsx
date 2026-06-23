@@ -52,6 +52,23 @@ interface DashboardData {
   generated_at: string;
 }
 
+// Derive a 1-2 char avatar label from a user's name, falling back to email.
+function userInitials(u: any): string {
+  const name = (u?.full_name || u?.first_name || "").trim();
+  if (name) {
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+  }
+  const email = (u?.email || "").trim();
+  return email ? email.slice(0, 2).toUpperCase() : "?";
+}
+
+// Friendly display name for a user, falling back to email.
+function userDisplayName(u: any): string {
+  return ((u?.full_name || u?.first_name || u?.email || "User").trim()) || "User";
+}
+
 // ==================== MAIN COMPONENT ====================
 
 export default function AdminDashboardPage() {
@@ -119,6 +136,12 @@ function AdminDashboard() {
   const [modalActionType, setModalActionType] = useState<"stripe" | "manual">("stripe");
   const [modalSubmitting, setModalSubmitting] = useState<boolean>(false);
   const [invoiceUrl, setInvoiceUrl] = useState<string | null>(null);
+
+  // Retain the last opened user during the drawer's slide-out animation so the
+  // panel keeps rendering its contents while it transitions off-screen.
+  const lastDrawerUserRef = React.useRef<any>(null);
+  if (planModalUser) lastDrawerUserRef.current = planModalUser;
+  const drawerUser = planModalUser ?? lastDrawerUserRef.current;
 
   // Auth guard — wait for Zustand hydration before redirecting
   useEffect(() => {
@@ -458,26 +481,28 @@ function AdminDashboard() {
         )}
       </main>
 
-      {/* Enterprise & Manual Plan Management Modal */}
-      {planModalUser && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-xl border shadow-xl max-w-md w-full overflow-hidden my-8">
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
-              <div>
-                <h2 className="font-bold text-lg">Manage Plan &amp; Billing</h2>
-                <p className="text-xs text-slate-300">User: {planModalUser.email}</p>
+      {/* Per-user detail slide-over drawer (Billing & future sections) */}
+      <SlideOverDrawer
+        open={!!planModalUser}
+        onClose={() => setPlanModalUser(null)}
+        title={drawerUser ? userDisplayName(drawerUser) : ""}
+        subtitle={drawerUser?.email}
+        avatarLabel={drawerUser ? userInitials(drawerUser) : undefined}
+      >
+        {drawerUser && (
+          <div className="p-6 space-y-8">
+            {/* ===================== Billing & Subscription ===================== */}
+            <section>
+              <div className="mb-4">
+                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Billing &amp; Subscription</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Issue a Stripe ACH subscription invoice or apply a manual check/wire plan override.
+                </p>
               </div>
-              <button
-                onClick={() => setPlanModalUser(null)}
-                className="text-slate-400 hover:text-white transition-colors text-xl font-bold"
-              >
-                &times;
-              </button>
-            </div>
 
-            <div className="p-6 space-y-4">
-              {/* Method Switcher tabs */}
-              <div className="flex bg-slate-100 p-1 rounded-lg">
+              <div className="space-y-4">
+                {/* Method Switcher tabs */}
+                <div className="flex bg-slate-100 p-1 rounded-lg">
                 <button
                   type="button"
                   onClick={() => { setModalActionType("stripe"); setInvoiceUrl(null); }}
@@ -604,7 +629,7 @@ function AdminDashboard() {
                     setModalSubmitting(true);
                     try {
                       if (modalActionType === "stripe") {
-                        const res = await api.createAdminStripeAchInvoice(planModalUser.id, modalPlan);
+                        const res = await api.createAdminStripeAchInvoice(drawerUser.id, modalPlan);
                         if (res.data?.success) {
                           setInvoiceUrl(res.data.hosted_invoice_url || null);
                           alert(res.data.message || "Stripe invoice created!");
@@ -618,7 +643,7 @@ function AdminDashboard() {
                           setModalSubmitting(false);
                           return;
                         }
-                        const res = await api.assignAdminManualPlan(planModalUser.id, {
+                        const res = await api.assignAdminManualPlan(drawerUser.id, {
                           plan: modalPlan,
                           duration_days: modalDuration,
                           payment_reference: modalRef,
@@ -646,10 +671,112 @@ function AdminDashboard() {
                   {modalSubmitting ? "Processing..." : modalActionType === "stripe" ? "📧 Dispatch Invoice" : "🚀 Activate Instantly"}
                 </button>
               </div>
+              </div>
+            </section>
+            {/* Future per-user sections (e.g. Team Seats) can be appended below. */}
+          </div>
+        )}
+      </SlideOverDrawer>
+    </div>
+  );
+}
+
+// ==================== SLIDE-OVER DRAWER ====================
+
+// Reusable right-anchored slide-over panel used as the per-user detail surface.
+// Self-manages mount/visibility so it can animate in AND out via Tailwind
+// transitions. Closes on Escape and backdrop click; focuses the close button
+// when opened.
+function SlideOverDrawer({
+  open,
+  onClose,
+  title,
+  subtitle,
+  avatarLabel,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  subtitle?: string;
+  avatarLabel?: string;
+  children: React.ReactNode;
+}) {
+  const [mounted, setMounted] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const closeBtnRef = React.useRef<HTMLButtonElement | null>(null);
+
+  // Mount, then flip to visible on the next frame so the slide-in transition
+  // runs from off-screen. On close, hide first, then unmount after the
+  // transition completes.
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      const id = requestAnimationFrame(() => setVisible(true));
+      return () => cancelAnimationFrame(id);
+    }
+    setVisible(false);
+    const t = setTimeout(() => setMounted(false), 300);
+    return () => clearTimeout(t);
+  }, [open]);
+
+  // Focus the close button once the panel is fully open.
+  useEffect(() => {
+    if (visible) closeBtnRef.current?.focus();
+  }, [visible]);
+
+  // Escape-to-close while mounted.
+  useEffect(() => {
+    if (!mounted) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mounted, onClose]);
+
+  if (!mounted) return null;
+
+  return (
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={title || "Details"}>
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        className={`absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-300 ${
+          visible ? "opacity-100" : "opacity-0"
+        }`}
+      />
+      {/* Panel */}
+      <div
+        className={`absolute top-0 right-0 h-full w-full max-w-[520px] bg-white shadow-2xl flex flex-col transition-transform duration-300 ease-out ${
+          visible ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
+        {/* Header */}
+        <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            {avatarLabel && (
+              <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center text-sm font-bold shrink-0">
+                {avatarLabel}
+              </div>
+            )}
+            <div className="min-w-0">
+              <h2 className="font-bold text-lg truncate">{title}</h2>
+              {subtitle && <p className="text-xs text-slate-300 truncate">{subtitle}</p>}
             </div>
           </div>
+          <button
+            ref={closeBtnRef}
+            onClick={onClose}
+            aria-label="Close panel"
+            className="text-slate-400 hover:text-white transition-colors text-2xl font-bold leading-none shrink-0"
+          >
+            &times;
+          </button>
         </div>
-      )}
+        {/* Scrollable body — additional sections can be appended by callers. */}
+        <div className="flex-1 overflow-y-auto">{children}</div>
+      </div>
     </div>
   );
 }
