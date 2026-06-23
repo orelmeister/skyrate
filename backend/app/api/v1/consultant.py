@@ -783,6 +783,7 @@ async def add_crn(
     background_tasks: BackgroundTasks,
     profile: ConsultantProfile = Depends(get_consultant_profile),
     current_user: User = Depends(require_role("admin", "consultant", "super")),
+    _owner: User = Depends(require_account_owner),
     db: Session = Depends(get_db)
 ):
     """
@@ -883,6 +884,7 @@ async def create_crn_checkout(
     data: CRNCheckoutRequest,
     profile: ConsultantProfile = Depends(get_consultant_profile),
     current_user: User = Depends(require_role("admin", "consultant", "super")),
+    _owner: User = Depends(require_account_owner),
     db: Session = Depends(get_db)
 ):
     """
@@ -975,6 +977,7 @@ async def activate_crn_after_payment(
     session_id: str = Query(..., description="Stripe checkout session ID"),
     profile: ConsultantProfile = Depends(get_consultant_profile),
     current_user: User = Depends(require_role("admin", "consultant", "super")),
+    _owner: User = Depends(require_account_owner),
     db: Session = Depends(get_db)
 ):
     """
