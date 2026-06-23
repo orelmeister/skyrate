@@ -722,6 +722,8 @@ def _run_schema_migrations(engine):
         ("ticket_messages", "file_name", "VARCHAR(255) DEFAULT NULL", None),
         ("ticket_messages", "mime_type", "VARCHAR(100) DEFAULT NULL", None),
         ("ticket_messages", "read_at", "DATETIME DEFAULT NULL", None),
+        # Team seats (Phase 4) — admin-granted seat capacity on subscriptions
+        ("subscriptions", "seat_limit", "INT NOT NULL DEFAULT 0", None),
     ]
     
     try:

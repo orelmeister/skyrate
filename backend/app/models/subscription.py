@@ -34,6 +34,7 @@ class Subscription(Base):
     plan = Column(String(50), nullable=False, default=SubscriptionPlan.MONTHLY.value)
     status = Column(String(50), nullable=False, default=SubscriptionStatus.TRIALING.value, index=True)
     price_cents = Column(Integer, nullable=False)
+    seat_limit = Column(Integer, nullable=False, default=0, server_default="0")  # admin-granted team seat capacity (Phase 4 seats feature)
     
     # Stripe integration
     stripe_customer_id = Column(String(255), index=True)
@@ -74,6 +75,7 @@ class Subscription(Base):
             "plan": self.plan,
             "status": self.status,
             "price_dollars": self.price_dollars,
+            "seat_limit": self.seat_limit,
             "is_active": self.is_active,
             "start_date": self.start_date.isoformat() if self.start_date else None,
             "end_date": self.end_date.isoformat() if self.end_date else None,

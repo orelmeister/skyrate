@@ -2,6 +2,7 @@
 from .user import User, UserRole
 from .subscription import Subscription, SubscriptionStatus, SubscriptionPlan
 from .consultant import ConsultantProfile, ConsultantSchool, ConsultantCRN
+from .account_seat import AccountSeat
 from .vendor import VendorProfile, VendorSearch, SavedLead, OrganizationEnrichmentCache
 from .vendor_alerts import (
     VendorAlertSubscription,
@@ -45,6 +46,7 @@ __all__ = [
     "ConsultantProfile",
     "ConsultantSchool",
     "ConsultantCRN",
+    "AccountSeat",
     "VendorProfile",
     "VendorSearch",
     "SavedLead",
