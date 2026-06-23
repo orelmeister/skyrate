@@ -12,6 +12,7 @@ USAC Datasets used:
 
 import requests
 import pandas as pd
+import math
 from typing import Dict, List, Optional, Any
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -73,6 +74,24 @@ def map_field_name(field_name: str) -> str:
         USAC API field name
     """
     return FIELD_NAME_MAPPING.get(field_name, field_name)
+
+
+def safe_float(val) -> float:
+    """
+    Safely convert a value to float, handling None, pandas/numpy NaN, and out of range values.
+    Returns 0.0 for any invalid or non-JSON compliant floats.
+    """
+    try:
+        if val is None:
+            return 0.0
+        if pd.isna(val):
+            return 0.0
+        f_val = float(val)
+        if math.isnan(f_val) or math.isinf(f_val):
+            return 0.0
+        return f_val
+    except (ValueError, TypeError):
+        return 0.0
 
 
 class USACDataClient:
@@ -538,7 +557,7 @@ class USACDataClient:
             state = record.get('state', '')
             service_type = record.get('service_type', '')
             category = record.get('category', '')
-            amount = float(record.get(amount_col) or 0)
+            amount = safe_float(record.get(amount_col))
             
             # Skip invalid year values
             if year_val and str(year_val) not in ['nan', 'None', '']:
@@ -693,7 +712,7 @@ class USACDataClient:
                 frn = record.get('funding_request_number', '')
                 
                 # Get amount (approved if available, else requested)
-                amount = float(record.get('approved_inv_line_amt') or record.get('requested_inv_line_amt') or 0)
+                amount = safe_float(record.get('approved_inv_line_amt') or record.get('requested_inv_line_amt'))
                 status = record.get('inv_line_item_status', '')
                 
                 if service_type:
@@ -888,8 +907,8 @@ class USACDataClient:
                 category = record.get('chosen_category_of_service', '')
                 
                 # Get commitment/funding amounts - USAC uses pre/post discount fields
-                pre_discount = float(record.get('pre_discount_extended_eligible_line_item_costs', 0) or 0)
-                post_discount = float(record.get('post_discount_extended_eligible_line_item_costs', 0) or 0)
+                pre_discount = safe_float(record.get('pre_discount_extended_eligible_line_item_costs'))
+                post_discount = safe_float(record.get('post_discount_extended_eligible_line_item_costs'))
                 committed = post_discount  # Use post-discount as committed amount
                 discount_rate = 0
                 if pre_discount > 0:
