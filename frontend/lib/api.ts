@@ -2880,6 +2880,25 @@ class ApiClient {
   }
 
   /**
+   * Team seats (owner / public) — accept invite, list/invite/remove own team
+   */
+  async validateSeatToken(token: string): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/auth/validate-seat/${encodeURIComponent(token)}`);
+  }
+
+  async getMyTeam(): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/consultant/my-team');
+  }
+
+  async inviteMyTeam(email: string): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/consultant/my-team/invite', { method: 'POST', body: JSON.stringify({ email }) });
+  }
+
+  async removeMyTeamSeat(seatId: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/consultant/my-team/${seatId}`, { method: 'DELETE' });
+  }
+
+  /**
    * Get admin analytics
    */
   async getAdminAnalytics(): Promise<ApiResponse<any>> {

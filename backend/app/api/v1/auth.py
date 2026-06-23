@@ -25,6 +25,7 @@ from ...models.user import User, UserRole
 from ...models.subscription import Subscription, SubscriptionStatus
 from ...models.consultant import ConsultantProfile, ConsultantSchool
 from ...models.vendor import VendorProfile
+from ...models.account_seat import AccountSeat
 from ...services.usac_service import get_usac_service
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -67,6 +68,13 @@ class UserRegister(BaseModel):
         if errors:
             raise ValueError(f"Password must contain {', '.join(errors)}")
         return v
+
+
+class SeatAcceptRequest(BaseModel):
+    token: str
+    password: str = Field(..., min_length=8)
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
 
 
 class UserLogin(BaseModel):
@@ -291,6 +299,85 @@ async def validate_promo_token(token: str, db: Session = Depends(get_db)):
         "role": invite.role,
         "trial_days": invite.trial_days,
     }
+
+
+# ==================== TEAM SEAT INVITES ====================
+
+@router.get("/validate-seat/{token}")
+async def validate_seat_token(token: str, db: Session = Depends(get_db)):
+    """Validate a team-seat invite token. PUBLIC — no auth."""
+    seat = db.query(AccountSeat).filter(AccountSeat.invite_token == token).first()
+    if not seat:
+        raise HTTPException(status_code=404, detail="Invalid invite link")
+    if seat.status != "invited":
+        raise HTTPException(status_code=400, detail="This invite has already been used or revoked")
+    if seat.invite_expires_at and seat.invite_expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="This invite link has expired")
+    profile = db.query(ConsultantProfile).filter(ConsultantProfile.id == seat.consultant_profile_id).first()
+    owner = db.query(User).filter(User.id == profile.user_id).first() if profile else None
+    return {
+        "valid": True,
+        "email": seat.invited_email,
+        "owner_company": (profile.company_name if profile else None),
+        "owner_name": (owner.full_name or owner.email) if owner else None,
+    }
+
+
+@router.post("/accept-seat", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute")
+async def accept_seat(
+    request: Request,
+    data: SeatAcceptRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Accept a team-seat invite: create a consultant login that INHERITS the
+    owner's subscription/CRN via the account resolver. No own subscription/CRN."""
+    seat = db.query(AccountSeat).filter(AccountSeat.invite_token == data.token).first()
+    if not seat:
+        raise HTTPException(status_code=404, detail="Invalid invite link")
+    if seat.status != "invited":
+        raise HTTPException(status_code=400, detail="This invite has already been used or revoked")
+    if seat.invite_expires_at and seat.invite_expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="This invite link has expired")
+
+    profile = db.query(ConsultantProfile).filter(ConsultantProfile.id == seat.consultant_profile_id).first()
+    if not profile:
+        raise HTTPException(status_code=400, detail="This invite is no longer valid")
+
+    if db.query(User).filter(User.email == seat.invited_email).first():
+        raise HTTPException(status_code=400, detail="An account with this email already exists. Please sign in instead.")
+
+    email_local = seat.invited_email.split("@")[0]
+    user = User(
+        email=seat.invited_email,
+        password_hash=hash_password(data.password),
+        role="consultant",
+        first_name=data.first_name or email_local,
+        last_name=data.last_name or "",
+        is_active=True,
+        is_verified=False,
+    )
+    db.add(user)
+    db.flush()  # get user.id
+
+    seat.user_id = user.id
+    seat.status = "active"
+    seat.accepted_at = datetime.utcnow()
+    seat.invite_token = None  # consume the single-use token
+
+    db.commit()
+    db.refresh(user)
+
+    access_token = create_access_token(data={"sub": str(user.id), "role": user.role})
+    refresh_token = create_refresh_token(data={"sub": str(user.id), "role": user.role})
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        user=user.to_dict(include_profile=True),
+    )
 
 
 # ==================== REGISTRATION & LOGIN ====================

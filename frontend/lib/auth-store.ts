@@ -140,6 +140,7 @@ interface AuthState {
     identifier?: string,
   ) => Promise<boolean>;
   register: (data: RegisterData) => Promise<boolean>;
+  acceptSeat: (payload: { token: string; password: string; first_name?: string; last_name?: string }) => Promise<boolean>;
   logout: () => void;
   clearError: () => void;
   setUser: (user: User | null) => void;
@@ -300,6 +301,34 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false, 
             error: "Network error. Please check your connection." 
           });
+          return false;
+        }
+      },
+
+      acceptSeat: async (payload) => {
+        set({ isLoading: true, error: null });
+        try {
+          const response = await fetch(`${API_URL}/api/v1/auth/accept-seat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const result = await response.json();
+          if (!response.ok) {
+            set({ isLoading: false, error: normalizeErrorDetail(result?.detail, "Could not accept invite.") });
+            return false;
+          }
+          set({
+            user: result.user,
+            token: result.access_token,
+            refreshToken: result.refresh_token,
+            isAuthenticated: true,
+            isLoading: false,
+            error: null,
+          });
+          return true;
+        } catch (error) {
+          set({ isLoading: false, error: "Network error. Please check your connection." });
           return false;
         }
       },

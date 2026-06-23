@@ -17,6 +17,146 @@ import MissingIdentifierBanner from "@/components/MissingIdentifierBanner";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { useTabParam } from "@/hooks/useTabParam";
 
+// ==================== MY TEAM (OWNER SEATS) ====================
+// Self-contained panel rendered in the Settings tab. Hidden entirely for team
+// SEATS (the /my-team endpoint returns 403 for them) and for non-owners.
+function MyTeamPanel() {
+  const [team, setTeam] = useState<any | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [visible, setVisible] = useState(true);
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const loadTeam = async () => {
+    const res = await api.getMyTeam();
+    if (res.data?.success) {
+      setTeam(res.data);
+      setVisible(true);
+    } else {
+      // 403 (seat / non-owner) or any failure -> hide the panel entirely.
+      setVisible(false);
+    }
+    setLoaded(true);
+  };
+
+  useEffect(() => {
+    loadTeam();
+  }, []);
+
+  const handleInvite = async () => {
+    const trimmed = email.trim();
+    if (!trimmed) return;
+    setBusy(true);
+    const res = await api.inviteMyTeam(trimmed);
+    setBusy(false);
+    if (res.data?.success) {
+      setEmail("");
+      await loadTeam();
+      alert("Invite sent.");
+    } else {
+      alert(res.data?.detail || res.data?.error || res.error || "Request failed");
+    }
+  };
+
+  const handleRemove = async (seatId: number) => {
+    if (!confirm("Remove this team member? They will lose access to your account.")) return;
+    setBusy(true);
+    const res = await api.removeMyTeamSeat(seatId);
+    setBusy(false);
+    if (res.data?.success) {
+      await loadTeam();
+    } else {
+      alert(res.data?.detail || res.data?.error || res.error || "Request failed");
+    }
+  };
+
+  if (!loaded || !visible || !team) return null;
+
+  const seatLimit: number = team.seat_limit || 0;
+  const used: number = team.used || 0;
+  const seats: any[] = team.seats || [];
+  const atLimit = used >= seatLimit;
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-6">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-lg font-semibold text-slate-900">My Team</h2>
+        <span className="text-sm font-medium text-slate-500">
+          Used {used} / {seatLimit}
+        </span>
+      </div>
+      <p className="text-sm text-slate-500 mb-4">
+        Invite teammates to share your account. They sign in with their own
+        credentials and can do everything except manage billing.
+      </p>
+
+      {seatLimit === 0 ? (
+        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-600">
+          Your plan doesn&apos;t include team seats yet. Contact your administrator
+          to add seats.
+        </div>
+      ) : (
+        <>
+          {seats.length > 0 && (
+            <div className="space-y-2 mb-4">
+              {seats.map((seat) => (
+                <div
+                  key={seat.id}
+                  className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-sm text-slate-800 truncate">{seat.invited_email}</span>
+                    <span
+                      className={`px-2 py-0.5 text-[10px] font-semibold rounded-full uppercase ${
+                        seat.status === "active"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-amber-100 text-amber-700"
+                      }`}
+                    >
+                      {seat.status}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleRemove(seat.id)}
+                    disabled={busy}
+                    className="px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:text-white hover:bg-red-500 border border-slate-200 hover:border-red-500 rounded-md transition disabled:opacity-50"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="teammate@example.com"
+              disabled={busy || atLimit}
+              onKeyDown={(e) => e.key === "Enter" && !busy && !atLimit && handleInvite()}
+              className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
+            />
+            <button
+              onClick={handleInvite}
+              disabled={busy || atLimit}
+              className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition whitespace-nowrap"
+            >
+              Invite
+            </button>
+          </div>
+          {atLimit && (
+            <p className="mt-2 text-xs text-slate-400">
+              Seat limit reached. Contact your administrator to add more seats.
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 const CONSULTANT_TABS = ["dashboard", "schools", "funding", "frn-status", "appeals", "pia", "service-search", "settings"] as const;
 type ConsultantTab = typeof CONSULTANT_TABS[number];
 
@@ -4782,6 +4922,8 @@ function ConsultantPortalPage() {
                   🔔 Manage Notification Settings →
                 </Link>
               </div>
+
+              <MyTeamPanel />
 
               <div className="bg-white rounded-2xl border border-slate-200 p-6">
                 <h2 className="text-lg font-semibold text-slate-900 mb-4">

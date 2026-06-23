@@ -6,9 +6,9 @@ Handles school portfolios, funding data, and appeal generation
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 import csv
 import io
 import sys
@@ -16,6 +16,7 @@ import os
 import json
 import logging
 import requests
+import secrets
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +27,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..
 
 from ...core.database import get_db
 from ...core.security import get_current_user, require_role
-from ...core.accounts import resolve_account
+from ...core.accounts import resolve_account, require_account_owner
 from ...models.user import User
 from ...models.consultant import ConsultantProfile, ConsultantSchool, ConsultantCRN
+from ...models.account_seat import AccountSeat
 from ...models.application import SchoolSnapshot, Application, AppealRecord
 from ...models.user_usac_cache import UserUsacCache, UsacSyncJob
 from ...core.config import get_settings
@@ -5112,4 +5114,91 @@ async def sync_usac_last_status(
             else None
         ),
     }
+
+
+# ==================== TEAM SEATS (OWNER) ====================
+
+class TeamInviteRequest(BaseModel):
+    email: EmailStr
+
+
+@router.get("/my-team")
+async def get_my_team(
+    current_user: User = Depends(require_account_owner),
+    db: Session = Depends(get_db)
+):
+    """Owner view of their team seats. Seats themselves get 403 via the guard."""
+    profile = db.query(ConsultantProfile).filter(ConsultantProfile.user_id == current_user.id).first()
+    subscription = current_user.subscription
+    seat_limit = subscription.seat_limit if subscription else 0
+    if profile is None:
+        return {"success": True, "seat_limit": seat_limit, "used": 0, "seats": []}
+    seats = db.query(AccountSeat).filter(
+        AccountSeat.consultant_profile_id == profile.id,
+        AccountSeat.status != "removed"
+    ).order_by(AccountSeat.created_at.asc()).all()
+    used = sum(1 for s in seats if s.status in ("invited", "active"))
+    return {"success": True, "seat_limit": seat_limit, "used": used, "seats": [s.to_dict() for s in seats]}
+
+
+@router.post("/my-team/invite")
+async def invite_my_team(
+    data: TeamInviteRequest,
+    current_user: User = Depends(require_account_owner),
+    db: Session = Depends(get_db)
+):
+    """Owner invites a seat within the admin-granted seat_limit. Owner can NEVER
+    exceed the limit (only an admin can raise it)."""
+    profile = db.query(ConsultantProfile).filter(ConsultantProfile.user_id == current_user.id).first()
+    if profile is None:
+        raise HTTPException(status_code=400, detail="Complete your consultant profile before inviting team members.")
+    subscription = current_user.subscription
+    seat_limit = subscription.seat_limit if subscription else 0
+    email = data.email.lower().strip()
+
+    if db.query(User).filter(User.email == email).first():
+        raise HTTPException(status_code=409, detail="A user with this email already exists and cannot be added as a seat.")
+    if db.query(AccountSeat).filter(
+        AccountSeat.consultant_profile_id == profile.id,
+        AccountSeat.invited_email == email,
+        AccountSeat.status.in_(["invited", "active"])
+    ).first():
+        raise HTTPException(status_code=409, detail="This email already has a pending or active seat.")
+    used = db.query(AccountSeat).filter(
+        AccountSeat.consultant_profile_id == profile.id,
+        AccountSeat.status.in_(["invited", "active"])
+    ).count()
+    if used >= seat_limit:
+        raise HTTPException(status_code=400, detail=f"Seat limit reached ({used}/{seat_limit}). Contact your administrator to add more seats.")
+
+    seat = AccountSeat(
+        consultant_profile_id=profile.id,
+        invited_email=email,
+        seat_role="seat",
+        status="invited",
+        invite_token=secrets.token_urlsafe(32),
+        invite_expires_at=datetime.utcnow() + timedelta(days=7),
+        invited_by_admin_id=None,
+    )
+    db.add(seat)
+    db.commit()
+    db.refresh(seat)
+    return {"success": True, "seat": seat.to_dict()}
+
+
+@router.delete("/my-team/{seat_id}")
+async def remove_my_team_seat(
+    seat_id: int,
+    current_user: User = Depends(require_account_owner),
+    db: Session = Depends(get_db)
+):
+    """Owner removes/reassigns a seat they own (soft remove)."""
+    profile = db.query(ConsultantProfile).filter(ConsultantProfile.user_id == current_user.id).first()
+    seat = db.query(AccountSeat).filter(AccountSeat.id == seat_id).first()
+    if not seat or profile is None or seat.consultant_profile_id != profile.id:
+        raise HTTPException(status_code=404, detail="Seat not found")
+    seat.status = "removed"
+    seat.invite_token = None
+    db.commit()
+    return {"success": True}
 
