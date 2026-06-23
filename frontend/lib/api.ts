@@ -2757,6 +2757,22 @@ class ApiClient {
   }
 
   /**
+   * Headline cohort counts for the Users funnel-leak KPI cards.
+   * Each integer mirrors a 1:1 filter on getAdminUsers so a card can drill in.
+   */
+  async getAdminUsersFunnelCounts(): Promise<ApiResponse<{
+    success: boolean;
+    counts: {
+      missing_identifier: number;
+      email_unverified: number;
+      onboarding_incomplete: number;
+      never_logged_in: number;
+    };
+  }>> {
+    return this.request('/api/v1/admin/users/funnel-counts');
+  }
+
+  /**
    * List all users (admin) with optional funnel-drilldown filters.
    * The four boolean filters mirror the backend `list_users` query params and
    * are mutually composable so admins can isolate funnel-collapse cohorts.

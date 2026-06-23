@@ -91,6 +91,13 @@ function AdminDashboard() {
   const [userNeverLogged, setUserNeverLogged] = useState(false);
   const [userEmailUnverified, setUserEmailUnverified] = useState(false);
   const [userOnbIncomplete, setUserOnbIncomplete] = useState(false);
+  // Headline funnel-leak cohort counts powering the Users KPI stat cards.
+  const [funnelCounts, setFunnelCounts] = useState<{
+    missing_identifier: number;
+    email_unverified: number;
+    onboarding_incomplete: number;
+    never_logged_in: number;
+  } | null>(null);
 
   // Ticket state
   const [ticketStatusFilter, setTicketStatusFilter] = useState("");
@@ -153,6 +160,23 @@ function AdminDashboard() {
     activeTab, userSearch, userRoleFilter, ticketStatusFilter,
     userMissingIdent, userNeverLogged, userEmailUnverified, userOnbIncomplete,
   ]);
+
+  // Headline funnel-leak counts are global (not filter-dependent), so load them
+  // once when the Users tab opens rather than on every filter change.
+  useEffect(() => {
+    if ((user?.role === "admin" || user?.role === "super") && activeTab === "users") {
+      loadFunnelCounts();
+    }
+  }, [user, activeTab]);
+
+  async function loadFunnelCounts() {
+    try {
+      const res = await api.getAdminUsersFunnelCounts();
+      if (res.data?.counts) setFunnelCounts(res.data.counts);
+    } catch (e) {
+      console.error("Failed to load funnel counts", e);
+    }
+  }
 
   async function loadDashboard() {
     setLoading(true);
@@ -368,6 +392,7 @@ function AdminDashboard() {
                 setEmailUnverified={setUserEmailUnverified}
                 onboardingIncomplete={userOnbIncomplete}
                 setOnboardingIncomplete={setUserOnbIncomplete}
+                funnelCounts={funnelCounts}
                 onEmailUser={(id) => { setEmailUserId(id); setActiveTab("communications"); }}
                 onDeleteUser={async (u) => {
                   if (!confirm(`Delete user ${u.email}? This cannot be undone.`)) return;
@@ -790,6 +815,7 @@ function UsersTab({
   neverLoggedIn, setNeverLoggedIn,
   emailUnverified, setEmailUnverified,
   onboardingIncomplete, setOnboardingIncomplete,
+  funnelCounts,
   onEmailUser,
   onDeleteUser,
   onManagePlan,
@@ -800,6 +826,12 @@ function UsersTab({
   neverLoggedIn: boolean; setNeverLoggedIn: (v: boolean) => void;
   emailUnverified: boolean; setEmailUnverified: (v: boolean) => void;
   onboardingIncomplete: boolean; setOnboardingIncomplete: (v: boolean) => void;
+  funnelCounts: {
+    missing_identifier: number;
+    email_unverified: number;
+    onboarding_incomplete: number;
+    never_logged_in: number;
+  } | null;
   onEmailUser: (id: number) => void;
   onDeleteUser: (user: any) => void;
   onManagePlan: (user: any) => void;
@@ -904,8 +936,85 @@ function UsersTab({
     (emailUnverified ? 1 : 0) +
     (onboardingIncomplete ? 1 : 0);
 
+  // Derive a 1-2 char avatar label from the user's name, falling back to email.
+  function initialsFor(u: any): string {
+    const name = (u.full_name || u.first_name || "").trim();
+    if (name) {
+      const parts = name.split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      return name.slice(0, 2).toUpperCase();
+    }
+    const email = (u.email || "").trim();
+    return email ? email.slice(0, 2).toUpperCase() : "?";
+  }
+
   return (
     <div className="space-y-4">
+      {/* Funnel-leak KPI stat cards — headline drill-down layer. Each card is a
+          big clickable toggle that mirrors a funnel filter and shows real counts
+          from GET /admin/users/funnel-counts. The compact chips below still work. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          {
+            label: "Funnel Leak A",
+            sub: "Missing CRN/SPIN/BEN",
+            count: funnelCounts?.missing_identifier,
+            active: missingIdentifier,
+            toggle: () => setMissingIdentifier(!missingIdentifier),
+            icon: "\u{1F3DB}\uFE0F", // classical building
+            iconClass: "bg-red-50 text-red-500",
+          },
+          {
+            label: "Funnel Leak B",
+            sub: "Email unverified",
+            count: funnelCounts?.email_unverified,
+            active: emailUnverified,
+            toggle: () => setEmailUnverified(!emailUnverified),
+            icon: "\u{1F4E7}", // envelope
+            iconClass: "bg-orange-50 text-orange-500",
+          },
+          {
+            label: "Funnel Leak C",
+            sub: "Onboarding incomplete",
+            count: funnelCounts?.onboarding_incomplete,
+            active: onboardingIncomplete,
+            toggle: () => setOnboardingIncomplete(!onboardingIncomplete),
+            icon: "\u{1F3C1}", // chequered flag
+            iconClass: "bg-amber-50 text-amber-500",
+          },
+          {
+            label: "Funnel Leak D",
+            sub: "Never logged in",
+            count: funnelCounts?.never_logged_in,
+            active: neverLoggedIn,
+            toggle: () => setNeverLoggedIn(!neverLoggedIn),
+            icon: "\u{1F510}", // closed lock with key
+            iconClass: "bg-blue-50 text-blue-500",
+          },
+        ].map((card) => (
+          <button
+            key={card.label}
+            type="button"
+            onClick={card.toggle}
+            aria-pressed={card.active}
+            className={`text-left bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between transition-all cursor-pointer group focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+              card.active
+                ? "border-purple-400 ring-2 ring-purple-200"
+                : "border-slate-200 hover:border-purple-300"
+            }`}
+          >
+            <div className="space-y-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{card.label}</span>
+              <h4 className={`text-lg font-black transition-colors ${card.active ? "text-purple-600" : "text-slate-800 group-hover:text-purple-600"}`}>
+                {card.count == null ? "—" : `${card.count} Users`}
+              </h4>
+              <p className="text-xs text-slate-500">{card.sub}</p>
+            </div>
+            <span className={`text-xl p-2 rounded-lg ${card.iconClass}`}>{card.icon}</span>
+          </button>
+        ))}
+      </div>
+
       <div className="flex items-center gap-3 flex-wrap">
         <input
           type="text"
@@ -986,8 +1095,7 @@ function UsersTab({
                   className="rounded border-slate-300"
                 />
               </th>
-              <SortTh k="email">Email</SortTh>
-              <SortTh k="name">Name</SortTh>
+              <SortTh k="name">User Identity</SortTh>
               <SortTh k="company_name">Company</SortTh>
               <SortTh k="phone">Phone</SortTh>
               <SortTh k="role">Role</SortTh>
@@ -1015,8 +1123,22 @@ function UsersTab({
                     className="rounded border-slate-300"
                   />
                 </td>
-                <td className="px-3 py-3 text-slate-900 max-w-[220px] truncate" title={u.email}>{u.email}</td>
-                <td className="px-3 py-3 max-w-[180px] truncate" title={u.full_name || u.first_name || ""}>{u.full_name || u.first_name || "—"}</td>
+                <td className="px-3 py-3">
+                  <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 shrink-0 rounded-full bg-purple-50 text-purple-600 font-bold flex items-center justify-center text-xs">
+                      {initialsFor(u)}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900 flex items-center gap-1 max-w-[200px] truncate" title={u.full_name || u.first_name || u.email || ""}>
+                        <span className="truncate">{u.full_name || u.first_name || "—"}</span>
+                        {u.email_verified && (
+                          <span className="text-green-500 text-[11px] shrink-0" title="Email verified">{"\u2714"}</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-400 max-w-[200px] truncate" title={u.email || ""}>{u.email || "—"}</div>
+                    </div>
+                  </div>
+                </td>
                 <td className="px-3 py-3 max-w-[150px] truncate text-slate-600 text-xs" title={u.company_name || ""}>{u.company_name || "—"}</td>
                 <td className="px-3 py-3 text-slate-600 text-xs whitespace-nowrap" title={u.phone || ""}>{u.phone || "—"}</td>
                 <td className="px-3 py-3">

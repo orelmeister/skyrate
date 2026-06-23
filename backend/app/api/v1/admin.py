@@ -198,6 +198,59 @@ async def list_users(
     }
 
 
+@router.get("/users/funnel-counts")
+async def get_users_funnel_counts(
+    current_user: User = AdminUser,
+    db: Session = Depends(get_db)
+):
+    """Return headline cohort counts for the Users funnel-leak KPI cards.
+
+    Each count mirrors a 1:1 filter on the /users listing so the admin can
+    click a card to drill into that cohort:
+      - missing_identifier: consultants w/o CRN, vendors w/o SPIN, applicants w/o BEN.
+      - email_unverified:   users.email_verified is NULL/0.
+      - onboarding_incomplete: users.onboarding_completed is NULL/0.
+      - never_logged_in:    users.last_login IS NULL.
+
+    Declared BEFORE /users/{user_id} so the literal path is matched first.
+    """
+    never_logged_in = db.query(User).filter(User.last_login.is_(None)).count()
+
+    email_unverified = db.query(User).filter(
+        (User.email_verified.is_(None)) | (User.email_verified == False)  # noqa: E712
+    ).count()
+
+    onboarding_incomplete = db.query(User).filter(
+        (User.onboarding_completed.is_(None)) | (User.onboarding_completed == False)  # noqa: E712
+    ).count()
+
+    cons_with_crn = db.query(ConsultantProfile.user_id).filter(
+        ConsultantProfile.crn.isnot(None), ConsultantProfile.crn != ""
+    )
+    vend_with_spin = db.query(VendorProfile.user_id).filter(
+        VendorProfile.spin.isnot(None), VendorProfile.spin != ""
+    )
+    appl_with_ben = db.query(ApplicantProfile.user_id).filter(
+        ApplicantProfile.ben.isnot(None), ApplicantProfile.ben != ""
+    )
+    missing_identifier = db.query(User).filter(
+        User.role.in_(("consultant", "vendor", "applicant")),
+        ~User.id.in_(cons_with_crn),
+        ~User.id.in_(vend_with_spin),
+        ~User.id.in_(appl_with_ben),
+    ).count()
+
+    return {
+        "success": True,
+        "counts": {
+            "missing_identifier": missing_identifier,
+            "email_unverified": email_unverified,
+            "onboarding_incomplete": onboarding_incomplete,
+            "never_logged_in": never_logged_in,
+        },
+    }
+
+
 @router.get("/users/{user_id}")
 async def get_user(
     user_id: int,
