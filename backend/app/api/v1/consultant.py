@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..
 
 from ...core.database import get_db
 from ...core.security import get_current_user, require_role
+from ...core.accounts import resolve_account
 from ...models.user import User
 from ...models.consultant import ConsultantProfile, ConsultantSchool, ConsultantCRN
 from ...models.application import SchoolSnapshot, Application, AppealRecord
@@ -261,22 +262,13 @@ async def get_consultant_profile(
     current_user: User = Depends(require_role("admin", "consultant", "super")),
     db: Session = Depends(get_db)
 ) -> ConsultantProfile:
-    """Get or create consultant profile for current user"""
-    profile = db.query(ConsultantProfile).filter(
-        ConsultantProfile.user_id == current_user.id
-    ).first()
-    
-    if not profile:
-        # Auto-create profile
-        profile = ConsultantProfile(
-            user_id=current_user.id,
-            company_name=current_user.company_name,
-            contact_name=current_user.full_name,
-        )
-        db.add(profile)
-        db.commit()
-        db.refresh(profile)
-    
+    """Get the consultant profile for the current user's ACCOUNT.
+
+    For an account owner this is their own profile (auto-created if missing).
+    For an active team seat this resolves to the OWNER's profile so the seat
+    inherits the account's full data access.
+    """
+    _owner, profile = resolve_account(current_user, db)
     return profile
 
 
