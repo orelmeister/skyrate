@@ -1492,8 +1492,12 @@ function UsersTab({
           </thead>
           <tbody>
             {sortedUsers.map((u) => (
-              <tr key={u.id} className="border-b last:border-0 hover:bg-slate-50 group">
-                <td className="px-3 py-3 sticky left-0 bg-white group-hover:bg-slate-50 z-10">
+              <tr
+                key={u.id}
+                onClick={() => onManagePlan(u)}
+                className="border-b last:border-0 hover:bg-slate-50 group cursor-pointer"
+              >
+                <td className="px-3 py-3 sticky left-0 bg-white group-hover:bg-slate-50 z-10" onClick={(e) => e.stopPropagation()}>
                   <input
                     type="checkbox"
                     checked={selectedUsers.has(u.id)}
@@ -1572,6 +1576,7 @@ function UsersTab({
                 </td>
                 <td
                   className="px-3 py-3 whitespace-nowrap text-right sticky right-0 bg-white group-hover:bg-slate-50 z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)]"
+                  onClick={(e) => e.stopPropagation()}
                 >
                   <div className="flex items-center justify-end gap-3">
                     {/* Environment-gated plan override modal trigger */}

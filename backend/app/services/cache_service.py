@@ -6,6 +6,7 @@ Avoids repeated expensive external API calls.
 
 import json
 import logging
+import math
 from datetime import datetime, timedelta
 from typing import Optional, Any
 
@@ -17,6 +18,22 @@ logger = logging.getLogger(__name__)
 
 # Default TTL: 6 hours (USAC data doesn't change that frequently)
 DEFAULT_TTL_HOURS = 6
+
+
+def sanitize_non_compliant_floats(obj):
+    """
+    Recursively sanitize an object by replacing non-JSON-compliant float values
+    (NaN, Infinity, -Infinity) with 0.0.
+    """
+    if isinstance(obj, dict):
+        return {k: sanitize_non_compliant_floats(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [sanitize_non_compliant_floats(x) for x in obj]
+    elif isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return 0.0
+        return obj
+    return obj
 
 
 def get_cached(db: Session, cache_key: str) -> Optional[dict]:
@@ -36,7 +53,10 @@ def get_cached(db: Session, cache_key: str) -> Optional[dict]:
             return None
         
         logger.info(f"Cache HIT for key {cache_key[:16]}...")
-        return json.loads(entry.cache_data)
+        raw_data = json.loads(entry.cache_data)
+        if isinstance(raw_data, dict):
+            return sanitize_non_compliant_floats(raw_data)
+        return raw_data
     except Exception as e:
         logger.warning(f"Cache read error (non-fatal): {e}")
         return None
