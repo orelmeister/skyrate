@@ -159,6 +159,7 @@ function VendorPortalPage() {
   // FRN Status Monitoring state (Sprint 2)
   const [frnStatusData, setFrnStatusData] = useState<FRNStatusResponse | null>(null);
   const [frnStatusLoading, setFrnStatusLoading] = useState(false);
+  const [frnStatusGlobalView, setFrnStatusGlobalView] = useState<boolean>(false);
   const [frnStatusYear, setFrnStatusYear] = useState<number | undefined>(undefined);
   const [frnStatusFilter, setFrnStatusFilter] = useState<string>("");
   const [frnPendingReason, setFrnPendingReason] = useState<string>("");
@@ -424,7 +425,7 @@ function VendorPortalPage() {
       // target row exists. Without this, the email-link click lands on an
       // empty tab and the scroll target is never found.
       if (!frnStatusData && !frnStatusLoading) {
-        loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason);
+        loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason, undefined, undefined, undefined, frnStatusGlobalView);
       }
       // Scroll to the matching row after a brief delay for render.
       // Two attempts so it survives the async data load.
@@ -450,6 +451,10 @@ function VendorPortalPage() {
     if (activeTab === 'frn-status') {
       loadFRNWatches();
       loadReportHistory();
+    }
+    // Auto-enable Global View on FRN tab if vendor has no SPIN configured (Demo Mode)
+    if (activeTab === "frn-status" && !profile?.spin && !isLoading) {
+      setFrnStatusGlobalView(true);
     }
     // Perf (A4): fetch serviced entities (USAC roundtrip) lazily — only when
     // the dashboard or "my-entities" tab is open. The dashboard needs the
@@ -668,15 +673,15 @@ function VendorPortalPage() {
   };
 
   // FRN Status Monitoring functions (Sprint 2)
-  const loadFRNStatus = async (year?: number, status?: string, pendingReason?: string, ben?: string, spinSearch?: string, crn?: string) => {
-    // Allow loading even without SPIN when a BEN / SPIN search / CRN is provided
-    if (!profile?.spin && !ben && !spinSearch && !crn) {
+  const loadFRNStatus = async (year?: number, status?: string, pendingReason?: string, ben?: string, spinSearch?: string, crn?: string, globalView?: boolean) => {
+    // Allow loading even without SPIN when a BEN / SPIN search / CRN or globalView is provided
+    if (!profile?.spin && !ben && !spinSearch && !crn && !globalView) {
       return;
     }
     
     setFrnStatusLoading(true);
     try {
-      const response = await api.getFRNStatus(year, status || undefined, pendingReason || undefined, 500, ben, spinSearch, crn);
+      const response = await api.getFRNStatus(year, status || undefined, pendingReason || undefined, 500, ben, spinSearch, crn, globalView);
       if (response.success && response.data) {
         setFrnStatusData(response.data);
         // When a BEN / SPIN / CRN scoped lookup was performed, clear the
@@ -1734,8 +1739,8 @@ function VendorPortalPage() {
                       ) : "Not yet synced"}
                       {" — "}
                       <button
-                        onClick={() => loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason)}
-                        disabled={!profile?.spin}
+                        onClick={() => loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason, undefined, undefined, undefined, frnStatusGlobalView)}
+                        disabled={!frnStatusGlobalView && !profile?.spin}
                         className="underline hover:text-white transition-colors disabled:opacity-50 disabled:no-underline"
                       >
                         Resync now
@@ -1746,7 +1751,64 @@ function VendorPortalPage() {
               </div>
             </div>
 
-            {!profile?.spin && (
+            {/* View Mode Toggle Switchers (Phase 1 Global/Demo view) */}
+            <div className="flex bg-slate-100 p-1 rounded-xl w-fit border border-slate-200 shadow-sm">
+              <button
+                type="button"
+                onClick={() => {
+                  setFrnStatusGlobalView(false);
+                  setFrnStatusData(null);
+                  loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason, undefined, undefined, undefined, false);
+                }}
+                disabled={!profile?.spin}
+                className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all ${
+                  !frnStatusGlobalView
+                    ? "bg-white text-emerald-700 shadow-sm border border-slate-200/50"
+                    : "text-slate-600 hover:text-slate-900"
+                } ${!profile?.spin ? "opacity-50 cursor-not-allowed" : ""}`}
+                title={!profile?.spin ? "Configure your SPIN in Settings to view your own contracts" : "View your contracts"}
+              >
+                💼 My Contracts (SPIN Scoped)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setFrnStatusGlobalView(true);
+                  setFrnStatusData(null);
+                  loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason, undefined, undefined, undefined, true);
+                }}
+                className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all ${
+                  frnStatusGlobalView
+                    ? "bg-white text-indigo-700 shadow-sm border border-slate-200/50"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                🌐 Global USAC Market (Demo/All FRNs)
+              </button>
+            </div>
+
+            {frnStatusGlobalView && (
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-200 p-5 shadow-sm">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
+                    <span className="text-2xl">🌐</span>
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Global USAC Market View (Demo Mode)</h2>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      Showing all public E-Rate contracts globally. Search by BEN, SPIN, or Contract Number (CRN) across any entity or competitor!
+                      {!profile?.spin && (
+                        <span className="font-semibold text-slate-800 ml-1">
+                          (Configure your SPIN in Settings to unlock your own contract portfolio).
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!frnStatusGlobalView && !profile?.spin && (
               <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200 p-6">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
@@ -1778,7 +1840,7 @@ function VendorPortalPage() {
                         onChange={(e) => {
                           const year = e.target.value ? parseInt(e.target.value) : undefined;
                           setFrnStatusYear(year);
-                          loadFRNStatus(year, frnStatusFilter, frnPendingReason);
+                          loadFRNStatus(year, frnStatusFilter, frnPendingReason, undefined, undefined, undefined, frnStatusGlobalView);
                         }}
                         className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm"
                       >
@@ -1794,7 +1856,7 @@ function VendorPortalPage() {
                         value={frnStatusFilter}
                         onChange={(e) => {
                           setFrnStatusFilter(e.target.value);
-                          loadFRNStatus(frnStatusYear, e.target.value, frnPendingReason);
+                          loadFRNStatus(frnStatusYear, e.target.value, frnPendingReason, undefined, undefined, undefined, frnStatusGlobalView);
                         }}
                         className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm"
                       >
@@ -1854,9 +1916,9 @@ function VendorPortalPage() {
                         const looksLikeBen = /^\d{5,10}$/.test(searchTerm);
                         if (looksLikeBen) {
                           // Pass ben to backend for server-side lookup
-                          loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason, searchTerm, spinTerm || undefined, crnTerm || undefined);
+                          loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason, searchTerm, spinTerm || undefined, crnTerm || undefined, frnStatusGlobalView);
                         } else {
-                          loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason, undefined, spinTerm || undefined, crnTerm || undefined);
+                          loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason, undefined, spinTerm || undefined, crnTerm || undefined, frnStatusGlobalView);
                         }
                       }}
                       disabled={frnStatusLoading}
@@ -2068,18 +2130,20 @@ function VendorPortalPage() {
                     <div className="w-16 h-16 rounded-full bg-teal-100 flex items-center justify-center mx-auto mb-4">
                       <span className="text-3xl">📈</span>
                     </div>
-                    <h3 className="text-lg font-semibold text-slate-900">{profile?.spin ? 'Load FRN Status' : 'Search Any BEN'}</h3>
+                    <h3 className="text-lg font-semibold text-slate-900">{frnStatusGlobalView ? 'Load Global Market Data' : profile?.spin ? 'Load FRN Status' : 'Search Any BEN'}</h3>
                     <p className="text-sm text-slate-600 mt-2 mb-4">
-                      {profile?.spin
+                      {frnStatusGlobalView
+                        ? 'Click the button below to load public USAC FRN status data globally'
+                        : profile?.spin
                         ? 'Click the button below to load your FRN status data'
                         : 'Enter a BEN in the search box above and click Apply Filters to look up any entity\'s FRN status'}
                     </p>
-                    {profile?.spin && (
+                    {(profile?.spin || frnStatusGlobalView) && (
                       <button
-                        onClick={() => loadFRNStatus()}
+                        onClick={() => loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason, undefined, undefined, undefined, frnStatusGlobalView)}
                         className="px-6 py-2.5 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-colors font-medium"
                       >
-                        Load FRN Status
+                        {frnStatusGlobalView ? 'Load Global Market Data' : 'Load FRN Status'}
                       </button>
                     )}
                   </div>

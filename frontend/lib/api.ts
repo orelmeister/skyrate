@@ -2216,8 +2216,9 @@ class ApiClient {
   /**
    * Get FRN status for all your contracts (filtered by your SPIN),
    * or look up by BEN / SPIN / CRN (privileged users only for SPIN/CRN).
+   * Supports globalView option (demo mode).
    */
-  async getFRNStatus(year?: number, status?: string, pendingReason?: string, limit: number = 500, ben?: string, spinSearch?: string, crn?: string): Promise<ApiResponse<FRNStatusResponse>> {
+  async getFRNStatus(year?: number, status?: string, pendingReason?: string, limit: number = 500, ben?: string, spinSearch?: string, crn?: string, globalView?: boolean): Promise<ApiResponse<FRNStatusResponse>> {
     const params = new URLSearchParams();
     if (year) params.set('year', String(year));
     if (status) params.set('status', status);
@@ -2226,6 +2227,7 @@ class ApiClient {
     if (ben) params.set('ben', ben);
     if (spinSearch) params.set('spin_search', spinSearch);
     if (crn) params.set('crn', crn);
+    if (globalView) params.set('global_view', 'true');
     const queryString = params.toString() ? `?${params.toString()}` : '';
     return this.request(`/api/v1/vendor/frn-status${queryString}`);
   }

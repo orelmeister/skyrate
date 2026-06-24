@@ -469,6 +469,7 @@ async def get_frn_status(
     ben: Optional[str] = None,
     spin_search: Optional[str] = None,
     crn: Optional[str] = None,
+    global_view: Optional[bool] = False,
     profile: VendorProfile = Depends(get_vendor_profile),
     current_user: User = Depends(require_role("admin", "vendor", "super")),
     db: Session = Depends(get_db),
@@ -485,9 +486,10 @@ async def get_frn_status(
         limit: Maximum records (default 500)
         ben: Optional BEN to look up directly (bypasses SPIN filter)
         spin_search: Optional SPIN name/number to search across admin_frn_snapshots
-            (partial match on the `spin` column). Privileged-only.
+            (partial match on the `spin` column). Privileged-only unless global_view=True.
         crn: Optional contract number to search across admin_frn_snapshots
-            (partial match on `contract_number`). Privileged-only.
+            (partial match on `contract_number`). Privileged-only unless global_view=True.
+        global_view: If True, bypasses SPIN locks to view all public FRNs globally (demo mode).
     """
     is_privileged = current_user.role in ("super", "admin")
 
@@ -513,8 +515,8 @@ async def get_frn_status(
             )
 
     # SPIN-name/CRN search against local admin_frn_snapshots
-    # (mirrors consultant.py /frn-status spin/crn filters). Privileged-only.
-    if (spin_search or crn) and is_privileged:
+    # (mirrors consultant.py /frn-status spin/crn filters). Privileged or Global-view.
+    if (spin_search or crn) and (is_privileged or global_view):
         try:
             from ...models.admin_frn_snapshot import AdminFRNSnapshot
             from sqlalchemy import or_ as _or
@@ -651,7 +653,76 @@ async def get_frn_status(
                 detail=f"Failed to search by SPIN/CRN: {str(e)}"
             )
 
-    if not profile.spin:
+    if global_view:
+        # Regular global view: query all AdminFRNSnapshot rows in our DB!
+        try:
+            from ...models.admin_frn_snapshot import AdminFRNSnapshot
+            from datetime import datetime as _dt
+
+            q = db.query(AdminFRNSnapshot)
+            if year is not None:
+                q = q.filter(AdminFRNSnapshot.funding_year == str(year))
+            if status:
+                q = q.filter(AdminFRNSnapshot.status.ilike(f"%{status}%"))
+            if pending_reason:
+                q = q.filter(AdminFRNSnapshot.pending_reason.ilike(f"%{pending_reason}%"))
+            
+            rows = q.order_by(AdminFRNSnapshot.last_refreshed.desc()).limit(limit).all()
+            
+            # Aggregate and format rows in the identical shape expected by the frontend
+            funded_count = funded_amount = 0
+            denied_count = denied_amount = 0
+            pending_count = pending_amount = 0
+            frns_out = []
+            for r in rows:
+                amount = float(r.amount_requested or 0)
+                disbursed = float(r.amount_committed or 0)
+                status_text = (r.status or "").lower()
+                if "funded" in status_text or "committed" in status_text:
+                    funded_count += 1
+                    funded_amount += amount
+                elif "denied" in status_text:
+                    denied_count += 1
+                    denied_amount += amount
+                else:
+                    pending_count += 1
+                    pending_amount += amount
+                frns_out.append({
+                    "frn": r.frn,
+                    "ben": r.ben,
+                    "entity_name": r.organization_name or "",
+                    "funding_year": r.funding_year,
+                    "status": r.status,
+                    "pending_reason": r.pending_reason or "",
+                    "commitment_amount": amount,
+                    "disbursed_amount": disbursed,
+                    "service_type": r.service_type or "",
+                    "fcdl_date": r.fcdl_date or "",
+                    "spin_name": getattr(r, "spin", None) or "",
+                    "contract_number": getattr(r, "contract_number", None) or "",
+                })
+
+            return {
+                "success": True,
+                "from_cache": True,
+                "source": "local_db",
+                "global_view": True,
+                "total_frns": len(frns_out),
+                "frns": frns_out,
+                "summary": {
+                    "funded": {"count": funded_count, "amount": funded_amount},
+                    "denied": {"count": denied_count, "amount": denied_amount},
+                    "pending": {"count": pending_count, "amount": pending_amount},
+                },
+                "last_refreshed": _dt.utcnow().isoformat(),
+            }
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to fetch global FRN status: {str(e)}"
+            )
+
+    if not profile or not profile.spin:
         raise HTTPException(
             status_code=400,
             detail="No SPIN configured in your profile. Please add your SPIN in settings first."
