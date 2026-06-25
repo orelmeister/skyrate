@@ -877,20 +877,28 @@ async def invite_user_seat(
 
     email = data.email.lower().strip()
 
-    if db.query(User).filter(User.email == email).first():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="A user with this email already exists and cannot be added as a seat."
-        )
-
-    if db.query(AccountSeat).filter(
+    # A prior seat for this email under THIS account (any status). Lets an admin
+    # RE-ADD a previously-removed person instead of being permanently blocked by
+    # the "user already exists" guard below.
+    prior_seat = db.query(AccountSeat).filter(
         AccountSeat.consultant_profile_id == profile.id,
         AccountSeat.invited_email == email,
-        AccountSeat.status.in_(["invited", "active"])
-    ).first():
+    ).order_by(AccountSeat.created_at.desc()).first()
+    reactivatable = prior_seat is not None and prior_seat.status == "removed"
+
+    if prior_seat is not None and prior_seat.status in ("invited", "active"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="This email already has a pending or active seat on this account."
+        )
+
+    # A user who is ONLY a previously-removed seat of THIS account may be re-added
+    # (reactivated below); any other existing user is blocked.
+    existing_user = db.query(User).filter(User.email == email).first()
+    if existing_user is not None and not reactivatable:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A user with this email already exists and cannot be added as a seat."
         )
 
     used = db.query(AccountSeat).filter(
@@ -903,35 +911,57 @@ async def invite_user_seat(
             detail=f"Seat limit reached ({used}/{seat_limit}). Increase the seat limit first."
         )
 
-    seat = AccountSeat(
-        consultant_profile_id=profile.id,
-        invited_email=email,
-        seat_role="seat",
-        status="invited",
-        invite_token=secrets.token_urlsafe(32),
-        invite_expires_at=datetime.utcnow() + timedelta(days=7),
-        invited_by_admin_id=current_user.id
-    )
-    db.add(seat)
-    db.commit()
-    db.refresh(seat)
-
-    # Dispatch seat invitation email
-    try:
-        from ...services.email_service import EmailService
-        email_service = EmailService()
-        email_service.send_seat_invite_email(
-            to_email=email,
-            invite_token=seat.invite_token,
-            owner_name=owner.full_name or owner.email,
-            owner_company=profile.company_name
+    send_invite = True
+    if reactivatable:
+        seat = prior_seat
+        if seat.user_id is not None:
+            # Already registered & accepted before -> restore access immediately;
+            # no re-acceptance email (the accept flow would 400 on the existing user).
+            seat.status = "active"
+            seat.invite_token = None
+            seat.invite_expires_at = None
+            if seat.accepted_at is None:
+                seat.accepted_at = datetime.utcnow()
+            send_invite = False
+        else:
+            # Invite was never accepted -> re-open it and resend.
+            seat.status = "invited"
+            seat.invite_token = secrets.token_urlsafe(32)
+            seat.invite_expires_at = datetime.utcnow() + timedelta(days=7)
+        seat.invited_by_admin_id = current_user.id
+        db.commit()
+        db.refresh(seat)
+    else:
+        seat = AccountSeat(
+            consultant_profile_id=profile.id,
+            invited_email=email,
+            seat_role="seat",
+            status="invited",
+            invite_token=secrets.token_urlsafe(32),
+            invite_expires_at=datetime.utcnow() + timedelta(days=7),
+            invited_by_admin_id=current_user.id
         )
-    except Exception as e:
-        # Don't let email failures fail the HTTP response, but log it
-        import logging
-        logging.getLogger(__name__).error(f"Failed to send admin-created seat invitation email: {e}")
+        db.add(seat)
+        db.commit()
+        db.refresh(seat)
 
-    return {"success": True, "seat": seat.to_dict()}
+    # Dispatch seat invitation email only when there's a usable accept link
+    if send_invite:
+        try:
+            from ...services.email_service import EmailService
+            email_service = EmailService()
+            email_service.send_seat_invite_email(
+                to_email=email,
+                invite_token=seat.invite_token,
+                owner_name=owner.full_name or owner.email,
+                owner_company=profile.company_name
+            )
+        except Exception as e:
+            # Don't let email failures fail the HTTP response, but log it
+            import logging
+            logging.getLogger(__name__).error(f"Failed to send admin-created seat invitation email: {e}")
+
+    return {"success": True, "seat": seat.to_dict(), "reactivated": reactivatable}
 
 
 @router.post("/seats/{seat_id}/resend")
