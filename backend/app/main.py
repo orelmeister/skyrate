@@ -1067,6 +1067,23 @@ app.add_middleware(
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     import traceback
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+    from fastapi.exceptions import HTTPException as FastAPIHTTPException, RequestValidationError
+
+    # Prevent turning legitimate client-side exceptions (like 404 Ticket Not Found or 403 Forbidden)
+    # into internal 500 errors and Telegram alerts, which can also trigger Starlette's BaseHTTPMiddleware
+    # 'RuntimeError: No response returned' bug.
+    if isinstance(exc, (StarletteHTTPException, FastAPIHTTPException)):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"success": False, "error": exc.detail}
+        )
+    if isinstance(exc, RequestValidationError):
+        return JSONResponse(
+            status_code=422,
+            content={"success": False, "error": "Validation error", "detail": exc.errors()}
+        )
+
     error_detail = f"{type(exc).__name__}: {str(exc)}"
     tb = traceback.format_exc()
     logger.error(f"Unhandled exception on {request.url.path}: {error_detail}\n{tb}")

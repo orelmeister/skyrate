@@ -1566,6 +1566,56 @@ https://skyrate.ai | support@skyrate.ai
             email_type='noreply'
         )
 
+    def send_seat_invite_email(self, to_email: str, invite_token: str, owner_name: str, owner_company: Optional[str] = None) -> bool:
+        """Send team seat invitation email with a one-click acceptance link (7-day expiry)"""
+        accept_url = f"{settings.FRONTEND_URL}/accept-seat?token={invite_token}"
+        company_segment = f" at {owner_company}" if owner_company else ""
+
+        html_content = f'''
+        <!DOCTYPE html>
+        <html>
+        <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+          <div style="max-width: 500px; margin: 0 auto; padding: 40px 20px;">
+            <div style="text-align: center; margin-bottom: 24px;">
+              <div style="display: inline-block; background: linear-gradient(135deg, #7c3aed, #4f46e5); padding: 12px 24px; border-radius: 12px;">
+                <span style="color: white; font-size: 20px; font-weight: bold;">SkyRate<span style="color: #c4b5fd;">.AI</span></span>
+              </div>
+            </div>
+            <div style="background: white; border-radius: 16px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+              <h2 style="color: #1e293b; margin: 0 0 16px 0; text-align: center; font-size: 20px;">You are invited!</h2>
+              <p style="color: #475569; font-size: 14px; text-align: center; margin: 0 0 24px 0; line-height: 1.5;">
+                <strong>{owner_name}</strong> has invited you to join their E-Rate consulting team{company_segment} on SkyRate AI as a sub-account seat.
+              </p>
+              <div style="text-align: center; margin: 24px 0;">
+                <a href="{accept_url}"
+                   style="display: inline-block; background: linear-gradient(135deg, #7c3aed, #4f46e5); color: white; padding: 14px 32px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 15px;">
+                  Accept Team Invitation
+                </a>
+              </div>
+              <p style="color: #64748b; font-size: 13px; text-align: center; margin: 0 0 20px 0;">
+                By accepting this invitation, you will share access to the team's E-Rate portfolio and dashboard under their active subscription plan.
+              </p>
+              <p style="color: #94a3b8; font-size: 12px; text-align: center;">
+                Or copy this link: <br>
+                <a href="{accept_url}" style="color: #7c3aed; word-break: break-all;">{accept_url}</a>
+              </p>
+              <p style="color: #94a3b8; font-size: 11px; text-align: center; margin-top: 20px; border-top: 1px solid #f1f5f9; padding-top: 16px;">
+                This invitation link remains valid for 7 days. If you did not expect this, ignore this email.
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
+        '''
+
+        return self.send_email(
+            to_email=to_email,
+            subject=f"SkyRate AI - Team Invitation from {owner_name}",
+            html_content=html_content,
+            text_content=f"Hi, {owner_name} invited you to join their team{company_segment} on SkyRate AI. Click the link to register your sub-account seat: {accept_url}\n\nThis invite is single-use and expires in 7 days.",
+            email_type='support'
+        )
+
     def send_identifier_reminder_email(self, to_email: str, first_name: str, magic_token: str, role: str) -> bool:
         """Send a one-click magic-link reminder asking the user to add their CRN/SPIN/BEN.
 

@@ -5186,6 +5186,20 @@ async def invite_my_team(
     db.add(seat)
     db.commit()
     db.refresh(seat)
+
+    # Dispatched seat invitation email to the user
+    try:
+        from ....services.email_service import EmailService
+        email_service = EmailService()
+        email_service.send_seat_invite_email(
+            to_email=email,
+            invite_token=seat.invite_token,
+            owner_name=current_user.full_name or current_user.email,
+            owner_company=profile.company_name
+        )
+    except Exception as e:
+        logger.error(f"Failed to send seat invitation email to {email}: {e}")
+
     return {"success": True, "seat": seat.to_dict()}
 
 

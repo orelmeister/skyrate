@@ -916,6 +916,21 @@ async def invite_user_seat(
     db.commit()
     db.refresh(seat)
 
+    # Dispatch seat invitation email
+    try:
+        from ....services.email_service import EmailService
+        email_service = EmailService()
+        email_service.send_seat_invite_email(
+            to_email=email,
+            invite_token=seat.invite_token,
+            owner_name=owner.full_name or owner.email,
+            owner_company=profile.company_name
+        )
+    except Exception as e:
+        # Don't let email failures fail the HTTP response, but log it
+        import logging
+        logging.getLogger(__name__).error(f"Failed to send admin-created seat invitation email: {e}")
+
     return {"success": True, "seat": seat.to_dict()}
 
 
@@ -940,6 +955,26 @@ async def resend_seat_invite(
     seat.invite_expires_at = datetime.utcnow() + timedelta(days=7)
     db.commit()
     db.refresh(seat)
+
+    # Re-dispatch seat invitation email on resend
+    try:
+        from ....services.email_service import EmailService
+        
+        # Resolve owner profile and owner user
+        profile = db.query(ConsultantProfile).filter(ConsultantProfile.id == seat.consultant_profile_id).first()
+        owner = db.query(User).filter(User.id == profile.user_id).first() if profile else None
+        
+        if owner and profile:
+            email_service = EmailService()
+            email_service.send_seat_invite_email(
+                to_email=seat.invited_email,
+                invite_token=seat.invite_token,
+                owner_name=owner.full_name or owner.email,
+                owner_company=profile.company_name
+            )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to resend seat invitation email: {e}")
 
     return {"success": True, "seat": seat.to_dict()}
 
