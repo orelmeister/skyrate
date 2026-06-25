@@ -246,11 +246,33 @@ export default function ConsultantPortalWrapper() {
 
 function ConsultantPortalPage() {
   const router = useRouter();
-  const { user, isAuthenticated, logout, _hasHydrated } = useAuthStore();
+  const { user, isAuthenticated, logout, _hasHydrated, setUser } = useAuthStore();
   // Team seats inherit the owner's account: they cannot edit account-level
   // settings (profile / CRN). Used to hide the Settings tab and owner-only UI.
   const isSeat = Boolean((user as { is_seat?: boolean } | null)?.is_seat);
   const { verified: emailVerified, checking: checkingVerification } = useVerificationGuard();
+
+  // Refresh the persisted user from /me on mount so server-derived flags
+  // (notably is_seat) self-heal for sessions that logged in before the flag
+  // existed. Without this, a seat who logged in earlier keeps a stale user
+  // object and still sees the "add your CRN" banner / Settings tab.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.getProfile();
+        if (!cancelled && res.success && res.data?.user) {
+          setUser(res.data.user as any);
+        }
+      } catch {
+        /* non-fatal: keep the persisted user */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, setUser]);
   
   const [activeTab, setActiveTab] = useTabParam<ConsultantTab>("dashboard", CONSULTANT_TABS);
   const [profile, setProfile] = useState<ConsultantProfile | null>(null);
