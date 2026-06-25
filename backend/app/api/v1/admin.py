@@ -918,7 +918,7 @@ async def invite_user_seat(
 
     # Dispatch seat invitation email
     try:
-        from ....services.email_service import EmailService
+        from ...services.email_service import EmailService
         email_service = EmailService()
         email_service.send_seat_invite_email(
             to_email=email,
@@ -958,7 +958,7 @@ async def resend_seat_invite(
 
     # Re-dispatch seat invitation email on resend
     try:
-        from ....services.email_service import EmailService
+        from ...services.email_service import EmailService
         
         # Resolve owner profile and owner user
         profile = db.query(ConsultantProfile).filter(ConsultantProfile.id == seat.consultant_profile_id).first()

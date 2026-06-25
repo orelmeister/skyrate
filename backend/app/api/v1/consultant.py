@@ -5189,7 +5189,7 @@ async def invite_my_team(
 
     # Dispatched seat invitation email to the user
     try:
-        from ....services.email_service import EmailService
+        from ...services.email_service import EmailService
         email_service = EmailService()
         email_service.send_seat_invite_email(
             to_email=email,
