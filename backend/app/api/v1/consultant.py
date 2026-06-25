@@ -286,9 +286,15 @@ async def get_profile(profile: ConsultantProfile = Depends(get_consultant_profil
 async def update_profile(
     data: ProfileCreate,
     profile: ConsultantProfile = Depends(get_consultant_profile),
+    _owner: User = Depends(require_account_owner),
     db: Session = Depends(get_db)
 ):
-    """Update consultant profile"""
+    """Update consultant profile.
+
+    Owner-only: team seats inherit the owner's profile and must not be able to
+    edit account-level settings (OWASP A01 broken access control). require_account_owner
+    returns 403 for active seats; admin/super still pass through.
+    """
     if data.company_name is not None:
         profile.company_name = data.company_name
     if data.contact_name is not None:

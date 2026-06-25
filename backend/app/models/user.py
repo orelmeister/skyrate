@@ -99,6 +99,26 @@ class User(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_login": self.last_login.isoformat() if self.last_login else None,
         }
+        # Team-seats: expose whether this user is an ACTIVE seat inside another
+        # account (they inherit the owner's CRN/portfolio). The frontend uses
+        # this to suppress the "add your CRN" banner, skip the CRN onboarding
+        # step, and hide owner-only account settings.
+        try:
+            from sqlalchemy.orm import object_session
+            from .account_seat import AccountSeat
+            _session = object_session(self)
+            data["is_seat"] = bool(
+                _session
+                and _session.query(AccountSeat)
+                .filter(
+                    AccountSeat.user_id == self.id,
+                    AccountSeat.seat_role == "seat",
+                    AccountSeat.status == "active",
+                )
+                .first()
+            )
+        except Exception:
+            data["is_seat"] = False
         if include_profile:
             data["consultant_profile"] = (
                 self.consultant_profile.to_dict() if self.consultant_profile else None

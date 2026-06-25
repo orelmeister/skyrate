@@ -247,6 +247,9 @@ export default function ConsultantPortalWrapper() {
 function ConsultantPortalPage() {
   const router = useRouter();
   const { user, isAuthenticated, logout, _hasHydrated } = useAuthStore();
+  // Team seats inherit the owner's account: they cannot edit account-level
+  // settings (profile / CRN). Used to hide the Settings tab and owner-only UI.
+  const isSeat = Boolean((user as { is_seat?: boolean } | null)?.is_seat);
   const { verified: emailVerified, checking: checkingVerification } = useVerificationGuard();
   
   const [activeTab, setActiveTab] = useTabParam<ConsultantTab>("dashboard", CONSULTANT_TABS);
@@ -1995,7 +1998,8 @@ function ConsultantPortalPage() {
     { id: "appeals", label: "Appeals", icon: "📋" },
     { id: "pia", label: "PIA Assistant", icon: "🛡️" },
     { id: "service-search", label: "Service Search", icon: "🔍" },
-    { id: "settings", label: "Settings", icon: "⚙️" },
+    // Settings is account-level (profile + CRN) and owner-only. Hide for seats.
+    ...(isSeat ? [] : [{ id: "settings", label: "Settings", icon: "⚙️" }]),
   ];
 
   return (
@@ -4432,7 +4436,7 @@ function ConsultantPortalPage() {
             </div>
           )}
 
-          {activeTab === "settings" && (
+          {activeTab === "settings" && !isSeat && (
             <div className="max-w-2xl mx-auto space-y-6">
               <div className="bg-white rounded-2xl border border-slate-200 p-6">
                 <h2 className="text-lg font-semibold text-slate-900 mb-4">Profile Settings</h2>

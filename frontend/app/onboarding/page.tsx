@@ -235,10 +235,12 @@ function PhoneVerificationStep({
   onNext,
   onSkip,
   onBack,
+  requireVerification = false,
 }: {
   onNext: () => void;
   onSkip: () => void;
   onBack: () => void;
+  requireVerification?: boolean;
 }) {
   const { user } = useAuthStore();
   const [phoneNumber, setPhoneNumber] = useState(user?.phone || "");
@@ -455,7 +457,10 @@ function PhoneVerificationStep({
           <ChevronLeft className="w-4 h-4" /> Back
         </button>
         <div className="flex items-center gap-3">
-          {!verified && (
+          {/* Seats (requireVerification) must verify their phone — no skip.
+              The smsUnavailable auto-bypass below still applies so a genuine
+              SMS outage can't hard-lock them out. */}
+          {!verified && !requireVerification && (
             <button
               onClick={onSkip}
               className="text-sm text-slate-500 hover:text-slate-700"
@@ -1157,6 +1162,9 @@ export default function OnboardingPage() {
   const router = useRouter();
   const { isAuthenticated, user, isLoading, _hasHydrated, setUser } = useAuthStore();
   const [step, setStep] = useState(0);
+  // Seats are sub-accounts that inherit the owner's CRN/portfolio. They skip
+  // the FRN-discovery (CRN) step entirely and must verify their phone.
+  const isSeat = Boolean((user as any)?.is_seat);
 
   useEffect(() => {
     if (!_hasHydrated) return;
@@ -1196,7 +1204,8 @@ export default function OnboardingPage() {
       // Email verification just landed — emit funnel event once.
       trackEvent("email_verification_clicked", { role: user?.role });
       if (user?.phone_verified) {
-        setStep(3); // Skip to FRN discovery
+        // Seats skip FRN discovery (they inherit the owner's portfolio).
+        setStep((user as any)?.is_seat ? 4 : 3);
       } else {
         setStep(2); // Skip to phone verification
       }
@@ -1257,13 +1266,15 @@ export default function OnboardingPage() {
     router.push(dashboardUrl);
   };
 
-  const steps = [
-    { label: "Profile", icon: Shield },
-    { label: "Email", icon: Mail },
-    { label: "Phone", icon: Phone },
-    { label: "FRNs", icon: Search },
-    { label: "Alerts", icon: Bell },
+  const allSteps = [
+    { label: "Profile", icon: Shield, index: 0 },
+    { label: "Email", icon: Mail, index: 1 },
+    { label: "Phone", icon: Phone, index: 2 },
+    { label: "FRNs", icon: Search, index: 3 },
+    { label: "Alerts", icon: Bell, index: 4 },
   ];
+  // Seats don't have their own CRN, so the FRN-discovery step is hidden.
+  const steps = isSeat ? allSteps.filter((s) => s.index !== 3) : allSteps;
 
   if (isLoading) {
     return (
@@ -1296,17 +1307,17 @@ export default function OnboardingPage() {
         {/* Step Indicator */}
         <div className="flex items-center justify-center gap-1.5 mb-6">
           {steps.map((s, i) => (
-            <div key={i} className="flex items-center gap-1.5">
+            <div key={s.index} className="flex items-center gap-1.5">
               <div
                 className={`flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all ${
-                  i === step
+                  s.index === step
                     ? "bg-purple-600 text-white shadow-md shadow-purple-200"
-                    : i < step
+                    : s.index < step
                     ? "bg-purple-100 text-purple-700"
                     : "bg-slate-100 text-slate-400"
                 }`}
               >
-                {i < step ? (
+                {s.index < step ? (
                   <CheckCircle2 className="w-3.5 h-3.5" />
                 ) : (
                   <s.icon className="w-3.5 h-3.5" />
@@ -1314,7 +1325,7 @@ export default function OnboardingPage() {
                 <span className="hidden sm:inline">{s.label}</span>
               </div>
               {i < steps.length - 1 && (
-                <div className={`w-4 h-0.5 ${i < step ? "bg-purple-400" : "bg-slate-200"}`} />
+                <div className={`w-4 h-0.5 ${s.index < step ? "bg-purple-400" : "bg-slate-200"}`} />
               )}
             </div>
           ))}
@@ -1330,12 +1341,13 @@ export default function OnboardingPage() {
           )}
           {step === 2 && (
             <PhoneVerificationStep
-              onNext={() => setStep(3)}
-              onSkip={() => setStep(3)}
+              onNext={() => setStep(isSeat ? 4 : 3)}
+              onSkip={() => setStep(isSeat ? 4 : 3)}
               onBack={() => setStep(1)}
+              requireVerification={isSeat}
             />
           )}
-          {step === 3 && (
+          {step === 3 && !isSeat && (
             <FRNDiscoveryStep
               onNext={() => setStep(4)}
               onSkip={() => setStep(4)}
@@ -1345,7 +1357,7 @@ export default function OnboardingPage() {
           {step === 4 && (
             <AlertPreferencesStep
               onComplete={handleComplete}
-              onBack={() => setStep(3)}
+              onBack={() => setStep(isSeat ? 2 : 3)}
             />
           )}
         </div>

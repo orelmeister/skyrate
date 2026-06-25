@@ -68,6 +68,9 @@ export function MissingIdentifierBanner(): JSX.Element | null {
   const meta = role && META[role] ? META[role] : null;
   const shouldShow = useMemo(() => {
     if (!_hasHydrated || !user || !meta) return false;
+    // Team seats inherit the account owner's CRN/portfolio, so the
+    // "add your CRN" soft-gate never applies to them.
+    if ((user as { is_seat?: boolean }).is_seat) return false;
     return !hasIdentifier(user);
   }, [_hasHydrated, user, meta]);
 

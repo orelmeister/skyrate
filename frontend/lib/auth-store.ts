@@ -59,6 +59,9 @@ export interface User {
   email_verified?: boolean;
   sms_opt_in?: boolean;
   onboarding_completed?: boolean;
+  // True when this user is an ACTIVE team seat inside another account (they
+  // inherit the owner's CRN/portfolio). Set by the backend on login/me.
+  is_seat?: boolean;
   created_at: string;
   last_login?: string;
   subscription?: {
