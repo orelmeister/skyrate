@@ -77,19 +77,27 @@ export default function FRNMonitoringFeaturePage() {
       <section className="relative bg-slate-950 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-purple-900/20 via-transparent to-indigo-900/20" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 sm:py-32 text-center">
-          <span className="inline-block text-purple-400 text-sm font-semibold tracking-wide uppercase mb-4">
-            FRN Status Tracker
+          <Link
+            href="/tools/frn-tracker"
+            className="inline-flex items-center gap-2 mb-8 rounded-full border border-purple-400/40 bg-purple-500/15 px-5 py-2.5 text-sm font-medium text-purple-100 hover:bg-purple-500/25 transition-colors"
+          >
+            <Bell className="w-4 h-4 text-purple-300 shrink-0" />
+            <span>Need to check an FRN right now? Look up any E-Rate FRN&apos;s real-time status free — no signup</span>
+            <ArrowRight className="w-4 h-4 shrink-0" />
+          </Link>
+          <span className="block text-purple-400 text-sm font-semibold tracking-wide uppercase mb-4">
+            Automated FRN Monitoring & Alerts
           </span>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6">
-            Monitor Every FRN Status Change{" "}
+            Automated FRN Monitoring &amp; Alerts{" "}
             <span className="bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
-              in Real Time
+              for Your Entire Portfolio
             </span>
           </h1>
           <p className="text-lg sm:text-xl text-slate-300 max-w-3xl mx-auto mb-10 leading-relaxed">
-            Never miss a critical status update again. SkyRate AI continuously monitors your Funding
-            Request Numbers across USAC and alerts you the moment anything changes — approvals,
-            denials, disbursements, and every step in between.
+            Never miss a critical status update again. SkyRate AI continuously monitors every Funding
+            Request Number in your portfolio across USAC and sends real-time alerts the moment
+            anything changes — approvals, denials, disbursements, and every step in between.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link

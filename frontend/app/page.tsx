@@ -335,7 +335,7 @@ export default function HomePage() {
             <div className="light-card p-5 sm:p-6 rounded-2xl hover-lift border-l-4 border-l-purple-500">
               <Image src="/images/icons/dashboard.png" alt="" width={40} height={40} className="rounded-2xl mb-3" />
               <h3 className="text-base sm:text-lg font-semibold text-slate-900 mb-1 sm:mb-2">Portfolio Management</h3>
-              <p className="text-slate-600 text-xs sm:text-sm">Track schools, vendors, and <Link href="/features/frn-monitoring" className="text-indigo-600 hover:text-indigo-700 font-medium">FRN status</Link> across cycles in one view.</p>
+              <p className="text-slate-600 text-xs sm:text-sm">Track schools, vendors, and <Link href="/tools/frn-tracker" className="text-indigo-600 hover:text-indigo-700 font-medium">FRN status</Link> across cycles in one view.</p>
             </div>
             {/* Regular card */}
             <div className="light-card p-5 sm:p-6 rounded-2xl hover-lift border-l-4 border-l-emerald-500">
