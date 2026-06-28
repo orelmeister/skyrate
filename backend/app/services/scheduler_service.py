@@ -2128,17 +2128,19 @@ def init_scheduler():
         next_run_time=boot + timedelta(minutes=6),
     )
     
-    # Form 470 scanner - every 15 minutes (Vendor Parity Plan P2).
-    # First run is delayed 30s so the deploy gate clears before it fires.
+    # Form 470 scanner - once daily at 15:00 UTC (reduced 2026-06-27 from every
+    # 15 min). USAC refreshes open data weekly (Mon ~9 AM ET), so sub-daily
+    # polling re-pulled identical data ~96x/day. First run warms ~10 min after
+    # boot so a fresh deploy still populates vendor alerts.
     scheduler.add_job(
         run_form470_scanner_job,
-        trigger=IntervalTrigger(minutes=15),
+        trigger=CronTrigger(hour=15, minute=0, timezone='UTC'),
         id='form470_scanner',
-        name='Pull USAC Form 470 + match vendor alerts',
+        name='Pull USAC Form 470 + match vendor alerts (daily)',
         max_instances=1,
         coalesce=True,
         replace_existing=True,
-        next_run_time=datetime.utcnow() + timedelta(seconds=30),
+        next_run_time=boot + timedelta(minutes=10),
     )
 
     # Vendor Form 470 snapshot - daily at 04:00 UTC (first run 7 min after boot)

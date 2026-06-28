@@ -63,7 +63,11 @@ def _build_session() -> requests.Session:
     session.mount("https://", adapter)
     session.mount("http://", adapter)
     session.headers.update({"User-Agent": "SkyRate-VendorAlerts/1.0"})
-    token = os.getenv("USAC_APP_TOKEN")
+    # Use the same Socrata token the rest of the backend uses (set in DO as
+    # SOCRATA_APP_TOKEN). Fall back to USAC_APP_TOKEN for backward-compat.
+    # Without a token this scanner hit USAC anonymously (strict rate limit +
+    # not whitelistable).
+    token = os.getenv("SOCRATA_APP_TOKEN") or os.getenv("USAC_APP_TOKEN")
     if token:
         session.headers["X-App-Token"] = token
     return session
