@@ -94,6 +94,26 @@ def safe_float(val) -> float:
         return 0.0
 
 
+def safe_str(val, default: str = '') -> str:
+    """
+    Safely convert a value to a string, handling None and pandas/numpy NaN.
+    pandas returns NaN (a float) for missing cells, which is not JSON compliant,
+    so Series.get(key, default) does NOT fall back to the default in that case.
+    Returns the provided default for any None/NaN value.
+    """
+    try:
+        if val is None:
+            return default
+        if pd.isna(val):
+            return default
+    except (ValueError, TypeError):
+        return default
+    s = str(val)
+    if s.strip().lower() in ('nan', 'none', ''):
+        return default
+    return s
+
+
 class USACDataClient:
     """
     Client for fetching data from USAC Open Data Portal.
@@ -537,7 +557,7 @@ class USACDataClient:
             }
         
         # Get service provider name from first record
-        service_provider_name = df['service_provider_name'].iloc[0] if 'service_provider_name' in df.columns else None
+        service_provider_name = safe_str(df['service_provider_name'].iloc[0], default=None) if 'service_provider_name' in df.columns else None
         
         # Use approved_amount if available, otherwise requested_amount
         amount_col = 'approved_amount' if 'approved_amount' in df.columns else 'requested_amount'
@@ -552,11 +572,11 @@ class USACDataClient:
             if not ben or ben == 'nan':
                 continue
                 
-            name = record.get('organization_name', 'Unknown')
+            name = safe_str(record.get('organization_name'), default='Unknown')
             year_val = record.get('funding_year')
-            state = record.get('state', '')
-            service_type = record.get('service_type', '')
-            category = record.get('category', '')
+            state = safe_str(record.get('state'))
+            service_type = safe_str(record.get('service_type'))
+            category = safe_str(record.get('category'))
             amount = safe_float(record.get(amount_col))
             
             # Skip invalid year values
