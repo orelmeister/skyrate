@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, Suspense, useMemo, useRef } from "react";
+import { useState, useEffect, Suspense, useMemo, useRef, Fragment } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore, deriveRequiresPaymentSetup } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
 import { PERF_V2_ENABLED } from "@/lib/featureFlags";
 import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse, FRNStatusResponse, FRNStatusSummaryResponse, FRNStatusRecord, Form470Lead, Form470LeadsResponse, Form470DetailResponse, SavedLead, EnrichedContactData, FRNWatch, CreateWatchRequest, FRNReportHistory } from "@/lib/api";
+import { Form471LineItem } from "@/lib/api";
 import { useTabParam } from "@/hooks/useTabParam";
 import PredictedLeadsTab from "@/components/PredictedLeadsTab";
 import { TableExportBar } from "@/components/TableExportBar";
@@ -318,6 +319,11 @@ function VendorPortalPage() {
   
   // Form 471 Records selection for export
   const [selectedForm471Records, setSelectedForm471Records] = useState<Set<string>>(new Set());
+  
+  // Form 471 FRN line-item expansion (cached per FRN so re-clicking doesn't refetch)
+  const [expanded471Frn, setExpanded471Frn] = useState<string | null>(null);
+  const [form471LineItemsCache, setForm471LineItemsCache] = useState<Record<string, Form471LineItem[]>>({});
+  const [form471LineItemsLoadingFrn, setForm471LineItemsLoadingFrn] = useState<string | null>(null);
   
   // Payment guard - check if user needs to complete payment setup
   const [checkingPayment, setCheckingPayment] = useState(true);
@@ -651,6 +657,34 @@ function VendorPortalPage() {
       setForm471Error("Failed to look up Form 471 data. Please try again.");
     } finally {
       setForm471Loading(false);
+    }
+  };
+
+  // Toggle an FRN row's line-item sub-table. Caches results per FRN so
+  // re-clicking the same row never refetches.
+  const toggle471LineItems = async (frn: string) => {
+    if (!frn) return;
+    if (expanded471Frn === frn) {
+      setExpanded471Frn(null);
+      return;
+    }
+    setExpanded471Frn(frn);
+    if (form471LineItemsCache[frn]) {
+      return; // already cached
+    }
+    setForm471LineItemsLoadingFrn(frn);
+    try {
+      const response = await api.get471LineItemsByFrn(frn);
+      if (response.success && response.data && response.data.success) {
+        setForm471LineItemsCache(prev => ({ ...prev, [frn]: response.data!.line_items || [] }));
+      } else {
+        setForm471LineItemsCache(prev => ({ ...prev, [frn]: [] }));
+      }
+    } catch (error) {
+      console.error("471 line-item lookup failed:", error);
+      setForm471LineItemsCache(prev => ({ ...prev, [frn]: [] }));
+    } finally {
+      setForm471LineItemsLoadingFrn(null);
     }
   };
 
@@ -3049,9 +3083,17 @@ function VendorPortalPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {form471Data.records.slice(0, 50).map((record, idx) => (
-                            <tr key={idx} className={`hover:bg-slate-50 ${selectedForm471Records.has(record.frn) ? 'bg-purple-50' : ''}`}>
-                              <td className="px-4 py-3">
+                          {form471Data.records.slice(0, 50).map((record, idx) => {
+                            const isExpanded = expanded471Frn === record.frn;
+                            const lineItems = form471LineItemsCache[record.frn];
+                            const isLoadingItems = form471LineItemsLoadingFrn === record.frn;
+                            return (
+                            <Fragment key={idx}>
+                            <tr
+                              className={`hover:bg-slate-50 cursor-pointer ${selectedForm471Records.has(record.frn) ? 'bg-purple-50' : ''} ${isExpanded ? 'bg-slate-50' : ''}`}
+                              onClick={() => toggle471LineItems(record.frn)}
+                            >
+                              <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                                 <input
                                   type="checkbox"
                                   checked={selectedForm471Records.has(record.frn)}
@@ -3067,7 +3109,12 @@ function VendorPortalPage() {
                                 />
                               </td>
                               <td className="px-4 py-3 text-slate-900">{record.funding_year}</td>
-                              <td className="px-4 py-3 font-mono text-xs text-slate-600">{record.frn}</td>
+                              <td className="px-4 py-3 font-mono text-xs text-slate-600">
+                                <span className="inline-flex items-center gap-1">
+                                  <svg className={`w-3 h-3 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                  {record.frn}
+                                </span>
+                              </td>
                               <td className="px-4 py-3">
                                 <div className="font-medium text-slate-900">{record.service_provider_name}</div>
                                 <div className="text-xs text-slate-500">{record.service_provider_spin}</div>
@@ -3095,7 +3142,51 @@ function VendorPortalPage() {
                                 </span>
                               </td>
                             </tr>
-                          ))}
+                            {isExpanded && (
+                              <tr className="bg-slate-50">
+                                <td colSpan={8} className="px-4 py-3">
+                                  {isLoadingItems ? (
+                                    <div className="py-3 text-sm text-slate-500">Loading line items…</div>
+                                  ) : !lineItems || lineItems.length === 0 ? (
+                                    <div className="py-3 text-sm text-slate-500">No line items found for this FRN.</div>
+                                  ) : (
+                                    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                                      <table className="w-full text-xs">
+                                        <thead className="bg-slate-100">
+                                          <tr>
+                                            <th className="text-left px-3 py-2 font-medium text-slate-600">Line #</th>
+                                            <th className="text-left px-3 py-2 font-medium text-slate-600">Function</th>
+                                            <th className="text-left px-3 py-2 font-medium text-slate-600">Product</th>
+                                            <th className="text-left px-3 py-2 font-medium text-slate-600">Manufacturer</th>
+                                            <th className="text-left px-3 py-2 font-medium text-slate-600">Model</th>
+                                            <th className="text-right px-3 py-2 font-medium text-slate-600">Qty</th>
+                                            <th className="text-right px-3 py-2 font-medium text-slate-600">Unit Cost</th>
+                                            <th className="text-right px-3 py-2 font-medium text-slate-600">Extended Cost</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                          {lineItems.map((li, liIdx) => (
+                                            <tr key={liIdx} className="hover:bg-slate-50">
+                                              <td className="px-3 py-2 font-mono text-slate-600">{li.line_item_number || '—'}</td>
+                                              <td className="px-3 py-2 text-slate-700">{li.function || '—'}</td>
+                                              <td className="px-3 py-2 text-slate-700">{li.product || '—'}</td>
+                                              <td className="px-3 py-2 text-slate-700">{li.manufacturer || '—'}</td>
+                                              <td className="px-3 py-2 text-slate-700">{li.model || '—'}</td>
+                                              <td className="px-3 py-2 text-right text-slate-700">{li.quantity != null ? li.quantity.toLocaleString() : '—'}</td>
+                                              <td className="px-3 py-2 text-right text-slate-700">{li.unit_cost != null ? `$${li.unit_cost.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '—'}</td>
+                                              <td className="px-3 py-2 text-right font-medium text-green-600">{li.extended_cost != null ? `$${li.extended_cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            )}
+                            </Fragment>
+                            );
+                          })}
                         </tbody>
                       </table>
                       {form471Data.records.length > 50 && (

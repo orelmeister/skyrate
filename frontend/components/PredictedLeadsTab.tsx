@@ -167,6 +167,7 @@ export default function PredictedLeadsTab() {
   const [filterState, setFilterState] = useState<string>("");
   const [filterManufacturer, setFilterManufacturer] = useState<string>("");
   const [filterEntityType, setFilterEntityType] = useState<string>("");
+  const [filterServiceType, setFilterServiceType] = useState<string>("");
   const [filterMinAmount, setFilterMinAmount] = useState<string>("");
   const [filterMaxAmount, setFilterMaxAmount] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("confidence_score");
@@ -182,6 +183,7 @@ export default function PredictedLeadsTab() {
       if (filterState) params.append("state", filterState);
       if (filterManufacturer) params.append("manufacturer", filterManufacturer);
       if (filterEntityType) params.append("entity_type", filterEntityType);
+      if (filterServiceType) params.append("service_type", filterServiceType);
       if (filterMinAmount && !isNaN(Number(filterMinAmount))) {
         params.append("min_deal_value", filterMinAmount);
       }
@@ -207,7 +209,7 @@ export default function PredictedLeadsTab() {
     } finally {
       setIsLoading(false);
     }
-  }, [filterType, filterState, filterManufacturer, filterEntityType, filterMinAmount, filterMaxAmount, sortBy, sortOrder]);
+  }, [filterType, filterState, filterManufacturer, filterEntityType, filterServiceType, filterMinAmount, filterMaxAmount, sortBy, sortOrder]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -464,6 +466,19 @@ export default function PredictedLeadsTab() {
             <option value="Charter School">Charter School</option>
             <option value="Private School">Private School</option>
             <option value="State Agency">State Agency</option>
+          </select>
+
+          <select
+            value={filterServiceType}
+            onChange={(e) => { setFilterServiceType(e.target.value); setOffset(0); }}
+            className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          >
+            <option value="">All Service Types</option>
+            <option value="internet">Internet</option>
+            <option value="data-transmission">Data Transmission</option>
+            <option value="equipment">Equipment (Internal Connections)</option>
+            <option value="voice">Voice</option>
+            <option value="mibs">MIBS</option>
           </select>
 
           <select

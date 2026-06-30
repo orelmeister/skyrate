@@ -203,6 +203,31 @@ export interface Form471Vendor {
   entity_count?: number;
 }
 
+export interface Form471LineItem {
+  line_item_number: string;
+  funding_request_number: string;
+  funding_year: string;
+  ben: string;
+  organization_name: string;
+  state: string;
+  function: string;
+  product: string;
+  manufacturer: string;
+  model: string;
+  unit: string;
+  quantity: number;
+  unit_cost: number;
+  extended_cost: number;
+  months_of_service: number;
+}
+
+export interface Form471LineItemsResponse {
+  success: boolean;
+  count: number;
+  line_items: Form471LineItem[];
+  error?: string;
+}
+
 export interface Form471ByEntityResponse {
   success: boolean;
   ben: string;
@@ -2182,6 +2207,10 @@ class ApiClient {
   async get471ByEntity(ben: string, year?: number): Promise<ApiResponse<Form471ByEntityResponse>> {
     const params = year ? `?year=${year}` : '';
     return this.request(`/api/v1/vendor/471/entity/${ben}${params}`);
+  }
+
+  async get471LineItemsByFrn(frn: string): Promise<ApiResponse<Form471LineItemsResponse>> {
+    return this.request(`/api/v1/vendor/471/frn/${frn}/line-items`);
   }
 
   async get471ByState(state: string, year?: number, category?: string, limit: number = 500): Promise<ApiResponse<Form471ByStateResponse>> {

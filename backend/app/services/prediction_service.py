@@ -640,6 +640,7 @@ class PredictionService:
         min_confidence: float = 0.0,
         min_deal_value: float = 0.0,
         max_deal_value: Optional[float] = None,
+        service_type: Optional[str] = None,
         status_filter: Optional[List[PredictionStatus]] = None,
         sort_by: str = 'confidence_score',
         sort_order: str = 'desc',
@@ -709,6 +710,25 @@ class PredictionService:
             if max_deal_value is not None and max_deal_value > 0:
                 query = query.filter(PredictedLead.estimated_deal_value <= max_deal_value)
             
+            # Optional service-type filter. Maps UI tokens to USAC Form 471
+            # service_type_name keywords (stored on PredictedLead.service_type).
+            if service_type:
+                st = service_type.strip().lower()
+                service_type_keyword_map = {
+                    'internet': ['internet'],
+                    'data-transmission': ['data transmission'],
+                    'data_transmission': ['data transmission'],
+                    'equipment': ['internal connections'],
+                    'voice': ['voice'],
+                    'mibs': ['managed internal broadband', 'mibs'],
+                }
+                st_keywords = service_type_keyword_map.get(st, [st])
+                st_conditions = [
+                    func.lower(PredictedLead.service_type).contains(kw)
+                    for kw in st_keywords
+                ]
+                query = query.filter(or_(*st_conditions))
+            
             if status_filter:
                 query = query.filter(PredictedLead.status.in_(status_filter))
             else:
@@ -739,6 +759,9 @@ class PredictionService:
                 'created_at', 'organization_name', 'c2_budget_total',
                 'c2_budget_remaining', 'contract_expiration_date', 'state',
             }
+            # 'entity_name' is a UI-facing alias for the organization_name column.
+            if sort_by == 'entity_name':
+                sort_by = 'organization_name'
             if sort_by not in SORTABLE_COLUMNS:
                 sort_by = 'confidence_score'
             sort_column = getattr(PredictedLead, sort_by, PredictedLead.confidence_score)
