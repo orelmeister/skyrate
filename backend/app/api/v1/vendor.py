@@ -458,6 +458,68 @@ async def search_471(
         )
 
 
+@router.get("/471/frn/{frn}/line-items")
+async def get_471_line_items_by_frn(
+    frn: str,
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
+):
+    """
+    Itemized Form 471 line-item breakdown for a single FRN: equipment/service
+    function, product, manufacturer, model, quantity, unit cost and extended cost.
+    Lets vendors see exactly what a school bought and paid in a prior year for
+    competitive bidding.
+    """
+    try:
+        from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
+
+        client = USACDataClient()
+        result = get_or_cache(
+            namespace="471_line_items_frn",
+            params={"frn": frn},
+            ttl_hours=24,
+            fetch_fn=lambda: client.get_471_line_items(frn=frn),
+        )
+        return result
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch 471 line items: {str(e)}"
+        )
+
+
+@router.get("/471/ben/{ben}/line-items")
+async def get_471_line_items_by_ben(
+    ben: str,
+    year: Optional[int] = None,
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
+):
+    """
+    Itemized Form 471 line-item breakdown for every FRN at an entity (BEN),
+    optionally filtered by funding year. Mirrors the per-FRN drill-down across
+    a whole school's purchase history.
+    """
+    try:
+        from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
+
+        client = USACDataClient()
+        result = get_or_cache(
+            namespace="471_line_items_ben",
+            params={"ben": ben, "year": year},
+            ttl_hours=24,
+            fetch_fn=lambda: client.get_471_line_items(ben=ben, year=year),
+        )
+        return result
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch 471 line items: {str(e)}"
+        )
+
+
 # ==================== FRN STATUS MONITORING (Sprint 2) ====================
 
 @router.get("/frn-status")

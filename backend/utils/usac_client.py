@@ -2966,7 +2966,93 @@ class USACDataClient:
         except Exception as e:
             logger.error(f"Error fetching 471 equipment details: {e}")
             return {'success': False, 'error': str(e), 'data': []}
-    
+
+    def get_471_line_items(
+        self,
+        frn: Optional[str] = None,
+        ben: Optional[str] = None,
+        year: Optional[int] = None,
+        limit: int = 1000,
+    ) -> Dict[str, Any]:
+        """
+        Get itemized Form 471 FRN line-item detail from the 471_line_items dataset
+        (hbj5-2bpj): equipment/service function, product, manufacturer, model, unit,
+        quantity, unit cost and extended cost. Filter by FRN or BEN (+optional year).
+
+        Lets vendors/consultants see exactly what a school purchased and paid for a
+        given line in a prior year for competitive bidding.
+        """
+        try:
+            if not frn and not ben:
+                return {'success': False, 'error': 'frn or ben is required', 'line_items': []}
+
+            url = USAC_ENDPOINTS['471_line_items']
+            where_parts = []
+            if frn:
+                where_parts.append(f"funding_request_number = '{str(frn).strip()}'")
+            if ben:
+                where_parts.append(f"ben = '{str(ben).strip()}'")
+            if year:
+                where_parts.append(f"funding_year = '{year}'")
+
+            params = {
+                '$where': ' AND '.join(where_parts),
+                '$order': 'funding_year DESC, form_471_line_item_number ASC',
+                '$limit': limit,
+                '$select': (
+                    'funding_request_number, form_471_line_item_number, funding_year, ben, '
+                    'organization_name, state, form_471_function_name, form_471_product_name, '
+                    'form_471_manufacturer_name, model_of_equipment, form_471_unit_name, '
+                    'one_time_quantity, monthly_quantity, one_time_eligible_costs, '
+                    'monthly_recurring_unit_eligible_costs, total_eligible_one_time_costs, '
+                    'total_eligible_recurring_costs, pre_discount_extended_eligible_line_item_costs, '
+                    'months_of_service'
+                ),
+            }
+            if self.app_token:
+                params['$$app_token'] = self.app_token
+
+            response = self.session.get(url, params=params, timeout=60)
+            response.raise_for_status()
+            data = response.json()
+
+            items = []
+            for r in data:
+                qty = safe_float(r.get('one_time_quantity')) or safe_float(r.get('monthly_quantity'))
+                unit_cost = (
+                    safe_float(r.get('one_time_eligible_costs'))
+                    or safe_float(r.get('monthly_recurring_unit_eligible_costs'))
+                )
+                extended = (
+                    safe_float(r.get('total_eligible_one_time_costs'))
+                    + safe_float(r.get('total_eligible_recurring_costs'))
+                ) or safe_float(r.get('pre_discount_extended_eligible_line_item_costs'))
+                items.append({
+                    'line_item_number': r.get('form_471_line_item_number'),
+                    'funding_request_number': r.get('funding_request_number'),
+                    'funding_year': r.get('funding_year'),
+                    'ben': r.get('ben'),
+                    'organization_name': r.get('organization_name'),
+                    'state': r.get('state'),
+                    'function': r.get('form_471_function_name'),
+                    'product': r.get('form_471_product_name'),
+                    'manufacturer': r.get('form_471_manufacturer_name'),
+                    'model': r.get('model_of_equipment'),
+                    'unit': r.get('form_471_unit_name'),
+                    'quantity': qty,
+                    'unit_cost': unit_cost,
+                    'extended_cost': extended,
+                    'months_of_service': safe_float(r.get('months_of_service')),
+                })
+
+            # Sort line items within the response by FRN then line number for stable display
+            logger.info(f"471 line items query (frn={frn}, ben={ben}): {len(items)} rows")
+            return {'success': True, 'count': len(items), 'line_items': items}
+
+        except Exception as e:
+            logger.error(f"Error fetching 471 line items: {e}")
+            return {'success': False, 'error': str(e), 'line_items': []}
+
     def get_c2_budget_opportunities(
         self,
         min_remaining_budget: float = 5000,
