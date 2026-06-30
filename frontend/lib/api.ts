@@ -1258,6 +1258,23 @@ class ApiClient {
     return this.request(`/api/v1/consultant/dashboard-stats${qs}`);
   }
 
+  async getRecentActivity(limit: number = 10): Promise<ApiResponse<{
+    activities: Array<{
+      id: number;
+      frn: string;
+      ben: string | null;
+      entity_name: string | null;
+      old_status: string | null;
+      new_status: string | null;
+      old_amount: number | null;
+      new_amount: number | null;
+      created_at: string | null;
+    }>;
+    total: number;
+  }>> {
+    return this.request(`/api/v1/consultant/recent-activity?limit=${limit}`);
+  }
+
   async getDeniedApplications(year?: number): Promise<ApiResponse<{
     denied_applications: Array<{
       frn: string;

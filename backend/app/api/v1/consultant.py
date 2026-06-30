@@ -2031,6 +2031,8 @@ async def get_dashboard_stats(
         for app in form_471_data:
             # Get status from form_471_frn_status_name
             status = str(app.get("form_471_frn_status_name", "")).lower()
+            # Per-FRN BEN for denial attribution (srbr-2d59 exposes a `ben` field).
+            app_ben = str(app.get("ben") or "")
             
             # Get committed amount for C1 calculation
             committed = float(app.get("funding_commitment_request") or 0)
@@ -2052,8 +2054,8 @@ async def get_dashboard_stats(
             # Count by status
             if "denied" in status:
                 denied_count += 1
-                if ben:
-                    bens_with_denials.add(str(ben))
+                if app_ben:
+                    bens_with_denials.add(app_ben)
             elif status == "funded":
                 funded_count += 1
             elif status in ["pending", "wave ready", "certified", "submitted"]:
@@ -2082,6 +2084,54 @@ async def get_dashboard_stats(
     
     return result
 
+
+@router.get("/recent-activity")
+async def get_recent_activity(
+    limit: int = Query(10, ge=1, le=50),
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    db: Session = Depends(get_db)
+):
+    """
+    Recent activity feed for the consultant dashboard.
+
+    Surfaces FRN status changes already captured by the FRN monitor
+    (``frn_status_changes_queue``) for this account's tracked BENs/FRNs. This is
+    a pure read of data the scheduled refresh jobs have already collected — it
+    performs NO new external USAC polling.
+    """
+    from ...models.frn_status_change import FrnStatusChangeQueue
+
+    try:
+        rows = (
+            db.query(FrnStatusChangeQueue)
+            .filter(FrnStatusChangeQueue.user_id == profile.user_id)
+            .order_by(FrnStatusChangeQueue.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+    except Exception as e:
+        print(f"Error fetching recent activity: {e}")
+        rows = []
+
+    activities = []
+    for r in rows:
+        activities.append({
+            "id": r.id,
+            "frn": r.frn,
+            "ben": r.ben,
+            "entity_name": r.entity_name,
+            "old_status": r.old_status,
+            "new_status": r.new_status,
+            "old_amount": r.old_amount,
+            "new_amount": r.new_amount,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        })
+
+    return {
+        "success": True,
+        "activities": activities,
+        "total": len(activities),
+    }
 
 @router.get("/denied-applications")
 async def get_denied_applications(
