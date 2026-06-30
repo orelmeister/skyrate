@@ -2229,6 +2229,37 @@ class ApiClient {
     return this.request(`/api/v1/vendor/471/competitors${params}`);
   }
 
+  // ==================== CONSULTANT FORM 470 / 471 LOOKUP ====================
+
+  async consultantGet471ByEntity(ben: string, year?: number): Promise<ApiResponse<Form471ByEntityResponse>> {
+    const params = year ? `?year=${year}` : '';
+    return this.request(`/api/v1/consultant/471/entity/${ben}${params}`);
+  }
+
+  async consultantGet471LineItemsByFrn(frn: string): Promise<ApiResponse<Form471LineItemsResponse>> {
+    return this.request(`/api/v1/consultant/471/frn/${frn}/line-items`);
+  }
+
+  async consultantGet471LineItemsByBen(ben: string, year?: number): Promise<ApiResponse<Form471LineItemsResponse>> {
+    const params = year ? `?year=${year}` : '';
+    return this.request(`/api/v1/consultant/471/ben/${ben}/line-items${params}`);
+  }
+
+  async consultant470Lookup(filters: {
+    ben?: string;
+    state?: string;
+    year?: number;
+    service_function?: string;
+  }): Promise<ApiResponse<any>> {
+    const params = new URLSearchParams();
+    if (filters.ben) params.set('ben', filters.ben);
+    if (filters.state) params.set('state', filters.state);
+    if (filters.year) params.set('year', String(filters.year));
+    if (filters.service_function) params.set('service_function', filters.service_function);
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/api/v1/consultant/470/lookup${queryString}`);
+  }
+
   async search471(filters: {
     ben?: string;
     state?: string;

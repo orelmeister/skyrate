@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, Suspense } from "react";
+import { useState, useEffect, useMemo, useRef, Suspense, Fragment } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore, deriveRequiresPaymentSetup } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
-import { api, ConsultantSchool, ConsultantProfile, AppealRecord, PIAResponseRecord, PIAFRNRecord, PIAPreview, FRNWatch, FRNReportHistory } from "@/lib/api";
+import { api, ConsultantSchool, ConsultantProfile, AppealRecord, PIAResponseRecord, PIAFRNRecord, PIAPreview, FRNWatch, FRNReportHistory, Form471ByEntityResponse, Form471LineItem } from "@/lib/api";
 import { SearchResultsTable } from "@/components/SearchResultsTable";
 import { AppealChat } from "@/components/AppealChat";
 import { PIAChat } from "@/components/PIAChat";
@@ -422,6 +422,15 @@ function ConsultantPortalPage() {
   const [serviceSearchResults, setServiceSearchResults] = useState<any[]>([]);
   const [serviceSearchLoading, setServiceSearchLoading] = useState(false);
   const [serviceSearchBensSearched, setServiceSearchBensSearched] = useState(0);
+  // Form 470 / 471 Lookup state (mirrors the vendor portal's expandable 471 view)
+  const [form471BenInput, setForm471BenInput] = useState("");
+  const [form471Year, setForm471Year] = useState<number | undefined>(undefined);
+  const [form471Data, setForm471Data] = useState<Form471ByEntityResponse | null>(null);
+  const [form471Loading, setForm471Loading] = useState(false);
+  const [form471Error, setForm471Error] = useState<string | null>(null);
+  const [expanded471Frn, setExpanded471Frn] = useState<string | null>(null);
+  const [form471LineItemsCache, setForm471LineItemsCache] = useState<Record<string, Form471LineItem[]>>({});
+  const [form471LineItemsLoadingFrn, setForm471LineItemsLoadingFrn] = useState<string | null>(null);
   // Per-column filters for the results table (Excel-style)
   const [serviceColBen, setServiceColBen] = useState("");
   const [serviceColName, setServiceColName] = useState("");
@@ -1991,6 +2000,64 @@ function ConsultantPortalPage() {
       console.error("Service search error:", error);
     } finally {
       setServiceSearchLoading(false);
+    }
+  };
+
+  // Form 471 entity lookup (winning vendors + records) for a single BEN.
+  const lookupForm471ByBen = async () => {
+    if (!form471BenInput.trim()) {
+      setForm471Error("Please enter a BEN (Billed Entity Number)");
+      return;
+    }
+    setForm471Loading(true);
+    setForm471Error(null);
+    setForm471Data(null);
+    setExpanded471Frn(null);
+    setForm471LineItemsCache({});
+    try {
+      const response = await api.consultantGet471ByEntity(form471BenInput.trim(), form471Year);
+      if (response.success && response.data) {
+        if (response.data.success) {
+          setForm471Data(response.data);
+        } else {
+          setForm471Error(response.data.error || "Failed to fetch 471 data");
+        }
+      } else {
+        setForm471Error(response.error || "Failed to fetch 471 data");
+      }
+    } catch (error) {
+      console.error("471 lookup failed:", error);
+      setForm471Error("Failed to look up Form 471 data. Please try again.");
+    } finally {
+      setForm471Loading(false);
+    }
+  };
+
+  // Toggle an FRN row's line-item sub-table. Caches results per FRN so
+  // re-clicking the same row never refetches.
+  const toggleConsultant471LineItems = async (frn: string) => {
+    if (!frn) return;
+    if (expanded471Frn === frn) {
+      setExpanded471Frn(null);
+      return;
+    }
+    setExpanded471Frn(frn);
+    if (form471LineItemsCache[frn]) {
+      return; // already cached
+    }
+    setForm471LineItemsLoadingFrn(frn);
+    try {
+      const response = await api.consultantGet471LineItemsByFrn(frn);
+      if (response.success && response.data && response.data.success) {
+        setForm471LineItemsCache(prev => ({ ...prev, [frn]: response.data!.line_items || [] }));
+      } else {
+        setForm471LineItemsCache(prev => ({ ...prev, [frn]: [] }));
+      }
+    } catch (error) {
+      console.error("471 line-item lookup failed:", error);
+      setForm471LineItemsCache(prev => ({ ...prev, [frn]: [] }));
+    } finally {
+      setForm471LineItemsLoadingFrn(null);
     }
   };
 
@@ -5322,6 +5389,190 @@ function ConsultantPortalPage() {
 
           {activeTab === "service-search" && (
             <div className="space-y-6">
+              {/* Form 470 / 471 Lookup */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                <h2 className="text-lg font-semibold text-slate-900 mb-1">Form 470 / 471 Lookup</h2>
+                <p className="text-sm text-slate-500 mb-4">Enter any school&apos;s BEN to see its Form 471 award history — winning vendors and committed amounts. Click any FRN to expand its itemized line items (function, product, manufacturer, model, quantity, unit cost and extended cost).</p>
+                <div className="flex flex-col sm:flex-row sm:items-end gap-4">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Billed Entity Number (BEN)</label>
+                    <input
+                      type="text"
+                      value={form471BenInput}
+                      onChange={(e) => setForm471BenInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") lookupForm471ByBen(); }}
+                      placeholder="e.g. 125678"
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                    />
+                  </div>
+                  <div className="w-full sm:w-44">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Funding Year</label>
+                    <select
+                      value={form471Year ?? ""}
+                      onChange={(e) => setForm471Year(e.target.value ? parseInt(e.target.value) : undefined)}
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                    >
+                      <option value="">All Years</option>
+                      {(() => {
+                        const cy = new Date().getFullYear();
+                        const years: number[] = [];
+                        for (let y = cy + 1; y >= cy - 6; y--) years.push(y);
+                        return years.map(y => <option key={y} value={y}>{y}</option>);
+                      })()}
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={lookupForm471ByBen}
+                    disabled={form471Loading}
+                    className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg hover:shadow-indigo-200 transition-all disabled:opacity-50 font-medium whitespace-nowrap"
+                  >
+                    {form471Loading ? (
+                      <span className="flex items-center gap-2">
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Looking up...
+                      </span>
+                    ) : "Look Up 471"}
+                  </button>
+                </div>
+
+                {form471Error && (
+                  <div className="mt-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">
+                    {form471Error}
+                  </div>
+                )}
+
+                {form471Data && (
+                  <div className="mt-6">
+                    <div className="flex flex-wrap items-center gap-x-6 gap-y-1 mb-4">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">{form471Data.entity_name || "Entity"} <span className="font-mono text-xs text-slate-500">({form471Data.ben})</span></div>
+                        <div className="text-xs text-slate-500">{form471Data.entity_state} · {form471Data.total_records} record(s) · {form471Data.total_committed != null ? `$${form471Data.total_committed.toLocaleString(undefined, { maximumFractionDigits: 0 })} committed` : ""}</div>
+                      </div>
+                    </div>
+
+                    {(!form471Data.records || form471Data.records.length === 0) ? (
+                      <div className="px-4 py-6 text-sm text-slate-500 bg-slate-50 rounded-xl border border-slate-200 text-center">No Form 471 records found for this BEN{form471Year ? ` in ${form471Year}` : ""}.</div>
+                    ) : (
+                      <div className="overflow-x-auto rounded-xl border border-slate-200">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50 border-b border-slate-200">
+                            <tr>
+                              <th className="text-left px-4 py-3 font-medium text-slate-600">Year</th>
+                              <th className="text-left px-4 py-3 font-medium text-slate-600">FRN</th>
+                              <th className="text-left px-4 py-3 font-medium text-slate-600">Vendor</th>
+                              <th className="text-left px-4 py-3 font-medium text-slate-600">Service Type</th>
+                              <th className="text-left px-4 py-3 font-medium text-slate-600">Category</th>
+                              <th className="text-right px-4 py-3 font-medium text-slate-600">Committed</th>
+                              <th className="text-center px-4 py-3 font-medium text-slate-600">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {form471Data.records.slice(0, 50).map((record, idx) => {
+                              const isExpanded = expanded471Frn === record.frn;
+                              const lineItems = form471LineItemsCache[record.frn];
+                              const isLoadingItems = form471LineItemsLoadingFrn === record.frn;
+                              return (
+                              <Fragment key={idx}>
+                              <tr
+                                className={`hover:bg-slate-50 cursor-pointer ${isExpanded ? 'bg-slate-50' : ''}`}
+                                onClick={() => toggleConsultant471LineItems(record.frn)}
+                              >
+                                <td className="px-4 py-3 text-slate-900">{record.funding_year}</td>
+                                <td className="px-4 py-3 font-mono text-xs text-slate-600">
+                                  <span className="inline-flex items-center gap-1">
+                                    <svg className={`w-3 h-3 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                    {record.frn}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="font-medium text-slate-900">{record.service_provider_name}</div>
+                                  <div className="text-xs text-slate-500">{record.service_provider_spin}</div>
+                                </td>
+                                <td className="px-4 py-3 text-slate-600">{record.service_type}</td>
+                                <td className="px-4 py-3">
+                                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                    record.category?.includes('1') ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                                  }`}>
+                                    {record.category}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-right font-medium text-green-600">
+                                  ${record.committed_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                    record.frn_status?.toLowerCase().includes('funded') || record.frn_status?.toLowerCase().includes('committed')
+                                      ? 'bg-green-100 text-green-700'
+                                      : record.frn_status?.toLowerCase().includes('denied')
+                                      ? 'bg-red-100 text-red-700'
+                                      : 'bg-amber-100 text-amber-700'
+                                  }`}>
+                                    {record.frn_status || 'Unknown'}
+                                  </span>
+                                </td>
+                              </tr>
+                              {isExpanded && (
+                                <tr className="bg-slate-50">
+                                  <td colSpan={7} className="px-4 py-3">
+                                    {isLoadingItems ? (
+                                      <div className="py-3 text-sm text-slate-500">Loading line items…</div>
+                                    ) : !lineItems || lineItems.length === 0 ? (
+                                      <div className="py-3 text-sm text-slate-500">No line items found for this FRN.</div>
+                                    ) : (
+                                      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                                        <table className="w-full text-xs">
+                                          <thead className="bg-slate-100">
+                                            <tr>
+                                              <th className="text-left px-3 py-2 font-medium text-slate-600">Line #</th>
+                                              <th className="text-left px-3 py-2 font-medium text-slate-600">Function</th>
+                                              <th className="text-left px-3 py-2 font-medium text-slate-600">Product</th>
+                                              <th className="text-left px-3 py-2 font-medium text-slate-600">Manufacturer</th>
+                                              <th className="text-left px-3 py-2 font-medium text-slate-600">Model</th>
+                                              <th className="text-right px-3 py-2 font-medium text-slate-600">Qty</th>
+                                              <th className="text-right px-3 py-2 font-medium text-slate-600">Unit Cost</th>
+                                              <th className="text-right px-3 py-2 font-medium text-slate-600">Extended Cost</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-slate-100">
+                                            {lineItems.map((li, liIdx) => (
+                                              <tr key={liIdx} className="hover:bg-slate-50">
+                                                <td className="px-3 py-2 font-mono text-slate-600">{li.line_item_number || '—'}</td>
+                                                <td className="px-3 py-2 text-slate-700">{li.function || '—'}</td>
+                                                <td className="px-3 py-2 text-slate-700">{li.product || '—'}</td>
+                                                <td className="px-3 py-2 text-slate-700">{li.manufacturer || '—'}</td>
+                                                <td className="px-3 py-2 text-slate-700">{li.model || '—'}</td>
+                                                <td className="px-3 py-2 text-right text-slate-700">{li.quantity != null ? li.quantity.toLocaleString() : '—'}</td>
+                                                <td className="px-3 py-2 text-right text-slate-700">{li.unit_cost != null ? `$${li.unit_cost.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '—'}</td>
+                                                <td className="px-3 py-2 text-right font-medium text-green-600">{li.extended_cost != null ? `$${li.extended_cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
+                              )}
+                              </Fragment>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                        {form471Data.records.length > 50 && (
+                          <div className="p-4 text-center text-sm text-slate-500 bg-slate-50 border-t border-slate-200">
+                            Showing first 50 of {form471Data.records.length} records
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Service Search Filters */}
               <form onSubmit={handleServiceSearch} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
                 <h2 className="text-lg font-semibold text-slate-900 mb-4">Service Search Filters</h2>

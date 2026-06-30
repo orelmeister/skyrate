@@ -5257,3 +5257,161 @@ async def remove_my_team_seat(
     db.commit()
     return {"success": True}
 
+
+# ==================== FORM 470 / 471 LOOKUP ====================
+# Mirrors the vendor portal's 470/471 lookup so consultants can research a
+# school's Form 471 award history (winning vendors + itemized line items) and
+# open Form 470 postings. Reuses the same USAC data-layer client methods and
+# get_or_cache caching as vendor.py -- no duplicated data logic.
+
+
+@router.get("/471/entity/{ben}")
+async def consultant_get_471_by_entity(
+    ben: str,
+    year: Optional[int] = None,
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
+):
+    """
+    Get all Form 471 applications for a specific entity (BEN). Shows which
+    vendors have won contracts and what services a school is purchasing -
+    core research for consultants managing a portfolio.
+    """
+    try:
+        from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
+
+        client = USACDataClient()
+        result = get_or_cache(
+            namespace="471_by_ben",
+            params={"ben": ben, "year": year},
+            ttl_hours=24,
+            fetch_fn=lambda: client.get_471_by_ben(ben, year),
+        )
+
+        if not result.get('success'):
+            return {
+                "success": False,
+                "error": result.get('error', 'Failed to fetch 471 data')
+            }
+
+        return result
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch 471 data: {str(e)}"
+        )
+
+
+@router.get("/471/frn/{frn}/line-items")
+async def consultant_get_471_line_items_by_frn(
+    frn: str,
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
+):
+    """
+    Itemized Form 471 line-item breakdown for a single FRN: equipment/service
+    function, product, manufacturer, model, quantity, unit cost and extended
+    cost. Lets consultants see exactly what a school bought and paid.
+    """
+    try:
+        from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
+
+        client = USACDataClient()
+        result = get_or_cache(
+            namespace="471_line_items_frn",
+            params={"frn": frn},
+            ttl_hours=24,
+            fetch_fn=lambda: client.get_471_line_items(frn=frn),
+        )
+        return result
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch 471 line items: {str(e)}"
+        )
+
+
+@router.get("/471/ben/{ben}/line-items")
+async def consultant_get_471_line_items_by_ben(
+    ben: str,
+    year: Optional[int] = None,
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
+):
+    """
+    Itemized Form 471 line-item breakdown for every FRN at an entity (BEN),
+    optionally filtered by funding year.
+    """
+    try:
+        from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
+
+        client = USACDataClient()
+        result = get_or_cache(
+            namespace="471_line_items_ben",
+            params={"ben": ben, "year": year},
+            ttl_hours=24,
+            fetch_fn=lambda: client.get_471_line_items(ben=ben, year=year),
+        )
+        return result
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch 471 line items: {str(e)}"
+        )
+
+
+@router.get("/470/lookup")
+async def consultant_470_lookup(
+    ben: Optional[str] = None,
+    state: Optional[str] = None,
+    year: Optional[int] = None,
+    service_function: Optional[str] = None,
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
+):
+    """
+    Look up open Form 470 postings, reusing the same USAC client method the
+    vendor 470 leads endpoint calls (client.get_470_leads). Supports filtering
+    by state, funding year and service function. If a BEN is supplied the
+    results are narrowed to that entity (get_470_leads has no native BEN
+    filter, so we post-filter the returned leads).
+    """
+    try:
+        from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
+
+        client = USACDataClient()
+        result = get_or_cache(
+            namespace="470_lookup",
+            params={
+                "state": state, "year": year,
+                "service_function": service_function,
+            },
+            ttl_hours=6,
+            fetch_fn=lambda: client.get_470_leads(
+                year=year,
+                state=state,
+                service_function=service_function,
+                limit=500,
+            ),
+        )
+
+        # Narrow to a specific BEN when provided (client has no BEN filter).
+        if ben and isinstance(result, dict) and result.get('leads'):
+            ben_str = str(ben).strip()
+            filtered = [
+                lead for lead in result['leads']
+                if str(lead.get('ben') or '').strip() == ben_str
+            ]
+            result = {**result, "leads": filtered, "total_leads": len(filtered)}
+
+        return result
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch 470 data: {str(e)}"
+        )
+
