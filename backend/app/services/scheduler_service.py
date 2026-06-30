@@ -383,6 +383,7 @@ def _check_user_deadlines(db: Session, alert_service: AlertService, config: Aler
         _check_frn_deadlines_for_bens(
             db, alert_service, user, bens, warning_days,
             skip_invoice=bool(getattr(config, 'alert_on_invoice_deadline', False)),
+            service_delivery_enabled=bool(getattr(config, 'alert_on_service_delivery', True)),
         )
 
 
@@ -405,7 +406,7 @@ def _build_frn_detail_row(ben, ben_data, frn, deadline_type, deadline_date, days
     }
 
 
-def _check_frn_deadlines_for_bens(db: Session, alert_service: AlertService, user, bens: list, warning_days: int, skip_invoice: bool = False):
+def _check_frn_deadlines_for_bens(db: Session, alert_service: AlertService, user, bens: list, warning_days: int, skip_invoice: bool = False, service_delivery_enabled: bool = True):
     """
     Shared logic: check Form 486, Invoice, Service Delivery, and Contract Expiration
     deadlines for a list of BENs using USAC data. Used by applicants, consultants, and super users.
@@ -534,7 +535,7 @@ def _check_frn_deadlines_for_bens(db: Session, alert_service: AlertService, user
                                     })
                 
                 # === Service Delivery Deadline (check service_end date approaching) ===
-                if "funded" in status or "committed" in status:
+                if service_delivery_enabled and ("funded" in status or "committed" in status):
                     service_end_str = frn.get("service_end", "")
                     if service_end_str:
                         svc_end = _parse_date(service_end_str)
@@ -666,6 +667,7 @@ def _check_consultant_deadlines(db: Session, alert_service: AlertService, config
     _check_frn_deadlines_for_bens(
         db, alert_service, user, bens, warning_days,
         skip_invoice=bool(getattr(config, 'alert_on_invoice_deadline', False)),
+        service_delivery_enabled=bool(getattr(config, 'alert_on_service_delivery', True)),
     )
 
 
@@ -736,7 +738,9 @@ def _check_vendor_deadlines(db: Session, alert_service: AlertService, config: Al
                                 )
             
             # === Service Delivery Deadline ===
-            if "funded" in status or "committed" in status:
+            # Gated by alert_on_service_delivery, which defaults OFF for vendors
+            # (they reported these reminders as irrelevant noise).
+            if getattr(config, 'alert_on_service_delivery', False) and ("funded" in status or "committed" in status):
                 service_end_str = frn.get("service_end", "")
                 if service_end_str:
                     svc_end = _parse_date(service_end_str)

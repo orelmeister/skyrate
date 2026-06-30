@@ -715,6 +715,8 @@ def _run_schema_migrations(engine):
         # Alert config — approaching invoicing-deadline alerts (opt-in 30/7-day cards)
         ("alert_configs", "alert_on_invoice_deadline", "TINYINT(1) DEFAULT 0", None),
         ("alert_configs", "invoice_deadline_intervals", "JSON DEFAULT NULL", None),
+        # Alert config — service-delivery-deadline sub-toggle (off by default for vendors)
+        ("alert_configs", "alert_on_service_delivery", "TINYINT(1) NOT NULL DEFAULT 1", None),
         # Admin FRN snapshot — USAC PIA sub-status
         ("admin_frn_snapshots", "pending_reason", "VARCHAR(256) DEFAULT NULL", None),
         # Support chat voice notes / attachments + read tracking on ticket messages
@@ -728,6 +730,7 @@ def _run_schema_migrations(engine):
     
     try:
         inspector = inspect(engine)
+        _service_delivery_col_added = False
         
         # Ensure pia_responses table exists (may not exist if app ran on SQLite when table was first deployed)
         if not inspector.has_table("pia_responses"):
@@ -788,6 +791,8 @@ def _run_schema_migrations(engine):
                 with engine.begin() as conn:
                     conn.execute(text(f"ALTER TABLE `{table}` ADD COLUMN `{column}` {col_type}"))
                 logger.info(f"Migration: Added column {table}.{column}")
+                if table == "alert_configs" and column == "alert_on_service_delivery":
+                    _service_delivery_col_added = True
 
         # Make applicant_profiles.ben nullable so users can sign up without a BEN
         # (BEN is collected during onboarding, not at registration)
@@ -852,6 +857,21 @@ def _run_schema_migrations(engine):
                 """))
                 if result.rowcount > 0:
                     logger.info(f"Migration: Retro-enabled daily_digest for {result.rowcount} consultant/vendor users")
+
+        # One-time backfill: when alert_on_service_delivery was just added, default it
+        # OFF for existing vendor accounts (vendors reported service-delivery-deadline
+        # reminders as irrelevant noise). Runs only on first column creation so it never
+        # clobbers a vendor who later opts in via the notification settings UI.
+        if _service_delivery_col_added and inspector.has_table("alert_configs") and inspector.has_table("users"):
+            with engine.begin() as conn:
+                result = conn.execute(text("""
+                    UPDATE alert_configs ac
+                    INNER JOIN users u ON ac.user_id = u.id
+                    SET ac.alert_on_service_delivery = 0
+                    WHERE u.role = 'vendor'
+                """))
+                if result.rowcount > 0:
+                    logger.info(f"Migration: Disabled service-delivery alerts for {result.rowcount} vendor users")
     except Exception as e:
         logger.error(f"Schema migration error (non-fatal): {e}")
 

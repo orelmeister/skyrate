@@ -29,6 +29,7 @@ class AlertConfigUpdate(BaseModel):
     alert_on_form_470: Optional[bool] = None
     alert_on_competitor: Optional[bool] = None
     deadline_warning_days: Optional[int] = None
+    alert_on_service_delivery: Optional[bool] = None
     alert_on_invoice_deadline: Optional[bool] = None
     invoice_deadline_intervals: Optional[List[int]] = None
     min_alert_amount: Optional[float] = None
@@ -62,7 +63,13 @@ def get_or_create_alert_config(user_id: int, db: Session) -> AlertConfig:
         user = db.query(User).filter(User.id == user_id).first()
         role = user.role if user else None
         digest_default = role in (UserRole.CONSULTANT.value, UserRole.VENDOR.value)
-        config = AlertConfig(user_id=user_id, daily_digest=digest_default)
+        # Vendors find service-delivery-deadline reminders irrelevant -> off by default
+        is_vendor = role == UserRole.VENDOR.value
+        config = AlertConfig(
+            user_id=user_id,
+            daily_digest=digest_default,
+            alert_on_service_delivery=not is_vendor,
+        )
         db.add(config)
         db.commit()
         db.refresh(config)

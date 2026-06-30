@@ -21,6 +21,7 @@ interface AlertConfig {
   alert_on_form_470: boolean;
   alert_on_competitor: boolean;
   deadline_warning_days: number;
+  alert_on_service_delivery: boolean;
   alert_on_invoice_deadline: boolean;
   invoice_deadline_intervals: number[];
   min_alert_amount: number;
@@ -538,17 +539,54 @@ function NotificationSettingsContent() {
               </label>
             </div>
 
+            {/* ===== Approaching deadlines sub-group ===== */}
+            <div className="pt-3 mt-2 border-t border-gray-200 flex items-center justify-between">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Approaching Deadlines</h3>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <span className="text-xs text-gray-500">Select all</span>
+                <div className="relative inline-flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={config.alert_on_deadline && config.alert_on_service_delivery && config.alert_on_invoice_deadline}
+                    onChange={(e) => {
+                      const v = e.target.checked;
+                      setConfig({ ...config, alert_on_deadline: v, alert_on_service_delivery: v, alert_on_invoice_deadline: v });
+                    }}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </div>
+              </label>
+            </div>
+
             {/* Deadlines */}
             <div className="flex items-center justify-between py-2">
               <div>
                 <h3 className="font-medium text-gray-900">📅 Approaching Deadlines</h3>
-                <p className="text-sm text-gray-500">Alert X days before deadlines</p>
+                <p className="text-sm text-gray-500">Alert X days before form/application deadlines</p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
                   checked={config.alert_on_deadline}
                   onChange={(e) => updateConfig('alert_on_deadline', e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+
+            {/* Service Delivery Deadline */}
+            <div className="flex items-center justify-between py-2">
+              <div>
+                <h3 className="font-medium text-gray-900">🚚 Service Delivery Deadline</h3>
+                <p className="text-sm text-gray-500">Alert as the service-end date approaches for funded FRNs{(user?.role === 'vendor') ? ' (off by default for vendors)' : ''}</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={config.alert_on_service_delivery}
+                  onChange={(e) => updateConfig('alert_on_service_delivery', e.target.checked)}
                   className="sr-only peer"
                 />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>

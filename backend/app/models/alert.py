@@ -57,6 +57,13 @@ class AlertConfig(Base):
     # Deadline thresholds (days before deadline to alert)
     deadline_warning_days = Column(Integer, default=14)  # Alert 14 days before deadline
 
+    # Service-delivery-deadline sub-toggle. Gates only the "Service Delivery
+    # Deadline" reminder within the deadline sweep (service-end date approaching).
+    # Defaults ON for applicants/consultants (who care about service-end dates) but
+    # is forced OFF at config creation for vendors, who reported these reminders as
+    # irrelevant noise. Existing vendor rows are backfilled to OFF in main.py.
+    alert_on_service_delivery = Column(Boolean, default=True, nullable=False)
+
     # Approaching invoicing-deadline alerts (BEAR/SPI 120-day window).
     # Opt-in (default False) so the dedicated 30/7-day card alerts only fire for
     # users who explicitly enable them. When True, the legacy invoice branch in
@@ -112,6 +119,7 @@ class AlertConfig(Base):
             "alert_on_form_470": self.alert_on_form_470,
             "alert_on_competitor": self.alert_on_competitor,
             "deadline_warning_days": self.deadline_warning_days,
+            "alert_on_service_delivery": self.alert_on_service_delivery,
             "alert_on_invoice_deadline": self.alert_on_invoice_deadline,
             "invoice_deadline_intervals": self.invoice_deadline_intervals or [30, 7],
             "min_alert_amount": self.min_alert_amount,

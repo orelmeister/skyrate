@@ -520,6 +520,7 @@ class AlertService:
                 alert_on_funding_approved=True,
                 alert_on_form_470=user.role == UserRole.VENDOR.value if user else False,
                 alert_on_competitor=False,  # Off by default
+                alert_on_service_delivery=(user.role != UserRole.VENDOR.value) if user else True,
                 deadline_warning_days=14,
                 min_alert_amount=0,
                 email_notifications=True,
@@ -545,7 +546,8 @@ class AlertService:
         allowed_fields = [
             'alert_on_denial', 'alert_on_status_change', 'alert_on_deadline',
             'alert_on_disbursement', 'alert_on_funding_approved', 'alert_on_form_470',
-            'alert_on_competitor', 'deadline_warning_days', 'min_alert_amount',
+            'alert_on_competitor', 'alert_on_service_delivery', 'deadline_warning_days',
+            'min_alert_amount',
             'email_notifications', 'in_app_notifications', 'daily_digest',
             'notification_email', 'alert_filters'
         ]
