@@ -282,7 +282,9 @@ export interface FRNStatusRecord {
   entity_name?: string;
   state?: string;
   funding_year: string;
+  spin?: string;
   spin_name: string;
+  contract_number?: string;
   service_type: string;
   status: string;
   pending_reason: string;

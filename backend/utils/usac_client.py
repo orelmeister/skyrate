@@ -1312,6 +1312,9 @@ class USACDataClient:
                     'entity_name': record.get('organization_name', ''),
                     'state': record.get('state', ''),
                     'funding_year': record.get('funding_year', ''),
+                    'spin': spin,
+                    'spin_name': spin_name,
+                    'contract_number': record.get('contract_number', ''),
                     'service_type': record.get('form_471_service_type_name', ''),
                     'status': status,
                     'pending_reason': record.get('pending_reason', ''),
@@ -1356,7 +1359,136 @@ class USACDataClient:
                 'success': False,
                 'error': f'Failed to fetch FRN status: {str(e)}'
             }
-    
+
+    def get_frn_status_by_contract(
+        self,
+        contract_number: str,
+        year: Optional[int] = None,
+        status_filter: Optional[str] = None,
+        pending_reason_filter: Optional[str] = None,
+        limit: int = 2000
+    ) -> Dict[str, Any]:
+        """
+        Get FRN status details for all FRNs tied to a contract number (CRN).
+        CRN data is public USAC data, so any vendor/consultant can look up any
+        contract. Mirrors get_frn_status_by_spin() but filters on contract_number
+        (partial, case-insensitive match) instead of spin_name.
+
+        Args:
+            contract_number: USAC contract number (CRN) — partial match supported
+            year: Optional funding year filter
+            status_filter: Optional status filter ('Funded', 'Denied', 'Pending')
+            pending_reason_filter: Optional pending reason filter (partial match)
+            limit: Maximum records to return
+
+        Returns:
+            Dictionary with FRN status data + summary, in the same shape as
+            get_frn_status_by_spin().
+        """
+        try:
+            crn = (contract_number or "").strip()
+            if not crn:
+                return {'success': False, 'error': 'Empty contract number'}
+
+            url = USAC_ENDPOINTS['frn_status']
+            # Escape single quotes to keep the SoQL $where clause well-formed.
+            crn_safe = crn.replace("'", "''")
+            where_conditions = [f"UPPER(contract_number) LIKE UPPER('%{crn_safe}%')"]
+
+            if year:
+                where_conditions.append(f"funding_year = '{year}'")
+            if status_filter:
+                where_conditions.append(f"form_471_frn_status_name = '{status_filter}'")
+            if pending_reason_filter:
+                pr_safe = pending_reason_filter.replace("'", "''")
+                where_conditions.append(f"UPPER(pending_reason) LIKE UPPER('%{pr_safe}%')")
+
+            params = {
+                '$where': ' AND '.join(where_conditions),
+                '$limit': limit,
+                '$order': 'funding_year DESC, award_date DESC'
+            }
+
+            logger.info(f"Fetching FRN status for contract {crn}")
+            response = self.session.get(url, params=params, timeout=60)
+            response.raise_for_status()
+            data = response.json()
+
+            frns = []
+            funded_count = funded_amount = 0
+            denied_count = denied_amount = 0
+            pending_count = pending_amount = 0
+
+            for record in data:
+                status = record.get('form_471_frn_status_name', 'Unknown')
+                commitment_amount = float(record.get('funding_commitment_request', 0) or 0)
+                disbursed_amount = float(record.get('total_authorized_disbursement', 0) or 0)
+
+                status_lower = status.lower()
+                if 'funded' in status_lower or 'committed' in status_lower:
+                    funded_count += 1
+                    funded_amount += commitment_amount
+                elif 'denied' in status_lower:
+                    denied_count += 1
+                    denied_amount += commitment_amount
+                else:
+                    pending_count += 1
+                    pending_amount += commitment_amount
+
+                frns.append({
+                    'frn': record.get('funding_request_number', ''),
+                    'application_number': record.get('application_number', ''),
+                    'ben': record.get('ben', ''),
+                    'entity_name': record.get('organization_name', ''),
+                    'state': record.get('state', ''),
+                    'funding_year': record.get('funding_year', ''),
+                    'spin': record.get('spin', '') or record.get('spin_number', ''),
+                    'spin_name': record.get('spin_name', ''),
+                    'contract_number': record.get('contract_number', ''),
+                    'service_type': record.get('form_471_service_type_name', ''),
+                    'status': status,
+                    'pending_reason': record.get('pending_reason', ''),
+                    'commitment_amount': commitment_amount,
+                    'disbursed_amount': disbursed_amount,
+                    'discount_rate': float(record.get('dis_pct', 0) or 0) * 100,
+                    'award_date': record.get('award_date', ''),
+                    'fcdl_date': record.get('fcdl_letter_date', ''),
+                    'last_invoice_date': record.get('last_date_to_invoice', ''),
+                    'service_start': record.get('service_start_date', ''),
+                    'service_end': record.get('service_delivery_deadline', ''),
+                    'invoicing_mode': record.get('invoicing_mode', ''),
+                    'invoicing_ready': record.get('invoicing_ready', ''),
+                    'f486_status': record.get('f486_case_status', ''),
+                    'wave_number': record.get('wave_sequence_number', ''),
+                    'fcdl_comment': record.get('fcdl_comment_frn', '')
+                })
+
+            return {
+                'success': True,
+                'contract_number': crn,
+                'total_frns': len(frns),
+                'summary': {
+                    'funded': {'count': funded_count, 'amount': funded_amount},
+                    'denied': {'count': denied_count, 'amount': denied_amount},
+                    'pending': {'count': pending_count, 'amount': pending_amount}
+                },
+                'frns': frns
+            }
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching FRN status for contract {contract_number}: {e}")
+            return {
+                'success': False,
+                'error': f'Failed to fetch FRN status: {str(e)}'
+            }
+        except Exception as e:
+            import traceback
+            logger.error(f"Error in get_frn_status_by_contract: {type(e).__name__}: {str(e)}\n{traceback.format_exc()}")
+            return {
+                'success': False,
+                'error': f'Failed to fetch FRN status: {str(e)}'
+            }
+
     def get_frn_status_by_ben(
         self,
         ben: str,

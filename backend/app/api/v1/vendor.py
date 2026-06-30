@@ -577,8 +577,11 @@ async def get_frn_status(
             )
 
     # SPIN-name/CRN search against local admin_frn_snapshots
-    # (mirrors consultant.py /frn-status spin/crn filters). Privileged or Global-view.
-    if (spin_search or crn) and (is_privileged or global_view):
+    # (mirrors consultant.py /frn-status spin/crn filters). SPIN & CRN are public
+    # USAC data, so any authenticated vendor/admin may run this lookup — the search
+    # term itself is the scope. (Previously gated on is_privileged/global_view, which
+    # silently returned a normal vendor's own-SPIN data instead of the searched SPIN/CRN.)
+    if spin_search or crn:
         try:
             from ...models.admin_frn_snapshot import AdminFRNSnapshot
             from sqlalchemy import or_ as _or
@@ -660,6 +663,59 @@ async def get_frn_status(
                         f"[vendor.frn-status spin_search={spin_search}] live USAC fetch failed: {_live_err}"
                     )
 
+            # If no local hits and a CRN was searched, try live USAC fallback so
+            # un-cached contract numbers still return data (mirrors the SPIN flow above).
+            if not rows and crn:
+                try:
+                    from utils.usac_client import USACDataClient
+                    from ...services.frn_upsert import upsert_frn_snapshots, build_rec_from_usac_frn
+                    client = USACDataClient()
+                    live_result = client.get_frn_status_by_contract(
+                        crn.strip(), year, status, pending_reason, limit
+                    )
+                    if live_result and live_result.get("success"):
+                        live_frns = live_result.get("frns", []) or []
+                        if live_frns:
+                            try:
+                                records = [
+                                    build_rec_from_usac_frn(
+                                        f,
+                                        ben=f.get("ben", ""),
+                                        entity_name=f.get("entity_name", ""),
+                                        user_id=current_user.id,
+                                        user_email=current_user.email,
+                                        source="vendor",
+                                    )
+                                    for f in live_frns
+                                ]
+                                upsert_frn_snapshots(
+                                    db, records,
+                                    scope_type="crn", scope_value=crn.strip(),
+                                    queue_status_changes=False,
+                                )
+                                db.expire_all()
+                            except Exception as _upsert_err:
+                                import logging as _lg
+                                _lg.getLogger(__name__).warning(
+                                    f"[vendor.frn-status crn={crn}] cache writeback failed: {_upsert_err}"
+                                )
+                            # Re-run local query against the freshly upserted rows
+                            q3 = db.query(AdminFRNSnapshot).filter(
+                                AdminFRNSnapshot.contract_number.ilike(f"%{crn.strip()}%")
+                            )
+                            if year is not None:
+                                q3 = q3.filter(AdminFRNSnapshot.funding_year == str(year))
+                            if status:
+                                q3 = q3.filter(AdminFRNSnapshot.status.ilike(f"%{status}%"))
+                            if pending_reason:
+                                q3 = q3.filter(AdminFRNSnapshot.pending_reason.ilike(f"%{pending_reason}%"))
+                            rows = q3.order_by(AdminFRNSnapshot.last_refreshed.desc()).limit(limit).all()
+                except Exception as _live_err:
+                    import logging as _lg
+                    _lg.getLogger(__name__).warning(
+                        f"[vendor.frn-status crn={crn}] live USAC fetch failed: {_live_err}"
+                    )
+
             # Build response in the same shape the frontend expects (mirrors
             # USACDataClient.get_frn_status_by_spin output: success/frns/summary).
             funded_count = funded_amount = 0
@@ -690,7 +746,8 @@ async def get_frn_status(
                     "disbursed_amount": disbursed,
                     "service_type": r.service_type or "",
                     "fcdl_date": r.fcdl_date or "",
-                    "spin_name": getattr(r, "spin", None) or "",
+                    "spin": getattr(r, "spin", None) or "",
+                    "spin_name": getattr(r, "spin_name", None) or getattr(r, "spin", None) or "",
                     "contract_number": getattr(r, "contract_number", None) or "",
                 })
 
@@ -760,7 +817,8 @@ async def get_frn_status(
                     "disbursed_amount": disbursed,
                     "service_type": r.service_type or "",
                     "fcdl_date": r.fcdl_date or "",
-                    "spin_name": getattr(r, "spin", None) or "",
+                    "spin": getattr(r, "spin", None) or "",
+                    "spin_name": getattr(r, "spin_name", None) or getattr(r, "spin", None) or "",
                     "contract_number": getattr(r, "contract_number", None) or "",
                 })
 

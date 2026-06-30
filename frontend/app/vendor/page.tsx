@@ -4868,6 +4868,12 @@ function VendorPortalPage() {
                   <div>
                     <div className="text-xs text-purple-600">Service Provider</div>
                     <div className="font-medium text-purple-900">{selectedFRN.spin_name || 'N/A'}</div>
+                    {selectedFRN.spin && (
+                      <div className="text-xs text-purple-700 mt-0.5">SPIN: {selectedFRN.spin}</div>
+                    )}
+                    {selectedFRN.contract_number && (
+                      <div className="text-xs text-purple-700 mt-0.5">CRN: {selectedFRN.contract_number}</div>
+                    )}
                   </div>
                 </div>
               </div>
