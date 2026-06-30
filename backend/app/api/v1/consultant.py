@@ -5465,3 +5465,51 @@ async def consultant_470_lookup(
             detail=f"Failed to fetch 470 data: {str(e)}"
         )
 
+
+# ==================== DISBURSEMENT / INVOICING SCHEDULE ====================
+# Per-FRN invoice & disbursement history from the USAC Invoice Disbursements
+# dataset (jpiu-tj8h). Lets a consultant see, for a school (BEN) or a single
+# FRN, the dates money was invoiced/disbursed and the amount per line, plus a
+# per-FRN total disbursed. Reuses client.get_disbursement_schedule + get_or_cache.
+
+
+@router.get("/disbursement-schedule")
+async def consultant_disbursement_schedule(
+    ben: Optional[str] = None,
+    frn: Optional[str] = None,
+    spin: Optional[str] = None,
+    year: Optional[int] = None,
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
+):
+    """
+    Invoice/disbursement schedule for an entity (BEN) and/or a single FRN.
+    Returns invoice lines grouped by FRN, each line with its invoice date,
+    completion date, requested and disbursed amounts and status, plus a
+    per-FRN total disbursed and overall totals.
+    """
+    if not ben and not frn and not spin:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide at least one of: ben, frn, spin",
+        )
+    try:
+        from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
+
+        client = USACDataClient()
+        result = get_or_cache(
+            namespace="disbursement_schedule",
+            params={"ben": ben, "frn": frn, "spin": spin, "year": year},
+            ttl_hours=12,
+            fetch_fn=lambda: client.get_disbursement_schedule(
+                ben=ben, frn=frn, spin=spin, year=year
+            ),
+        )
+        return result
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch disbursement schedule: {str(e)}",
+        )
+

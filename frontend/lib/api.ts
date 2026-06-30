@@ -228,6 +228,51 @@ export interface Form471LineItemsResponse {
   error?: string;
 }
 
+// ==================== DISBURSEMENT / INVOICING SCHEDULE TYPES ====================
+
+export interface DisbursementLine {
+  invoice_id: string;
+  invoice_type: string;
+  inv_line_num: string;
+  status: string;
+  invoice_date: string | null;       // inv_received_date
+  completion_date: string | null;    // inv_line_completion_date
+  customer_billed_date: string | null;
+  delivery_deadline: string | null;
+  requested_amount: number;
+  disbursed_amount: number;          // approved_inv_line_amt
+  service_type: string;
+  category: string;
+}
+
+export interface DisbursementFrnGroup {
+  frn: string;
+  funding_year: string | null;
+  billed_entity_number: string;
+  billed_entity_name: string;
+  service_provider_name: string;
+  spin: string;
+  service_type: string;
+  category: string;
+  lines: DisbursementLine[];
+  line_count: number;
+  total_requested: number;
+  total_disbursed: number;
+}
+
+export interface DisbursementScheduleResponse {
+  success: boolean;
+  ben?: string | null;
+  frn?: string | null;
+  spin?: string | null;
+  frns: DisbursementFrnGroup[];
+  frn_count: number;
+  line_count: number;
+  total_requested: number;
+  total_disbursed: number;
+  error?: string;
+}
+
 export interface Form471ByEntityResponse {
   success: boolean;
   ben: string;
@@ -2275,6 +2320,21 @@ class ApiClient {
     if (filters.service_function) params.set('service_function', filters.service_function);
     const queryString = params.toString() ? `?${params.toString()}` : '';
     return this.request(`/api/v1/consultant/470/lookup${queryString}`);
+  }
+
+  async consultantDisbursementSchedule(filters: {
+    ben?: string;
+    frn?: string;
+    spin?: string;
+    year?: number;
+  }): Promise<ApiResponse<DisbursementScheduleResponse>> {
+    const params = new URLSearchParams();
+    if (filters.ben) params.set('ben', filters.ben);
+    if (filters.frn) params.set('frn', filters.frn);
+    if (filters.spin) params.set('spin', filters.spin);
+    if (filters.year) params.set('year', String(filters.year));
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/api/v1/consultant/disbursement-schedule${queryString}`);
   }
 
   async search471(filters: {

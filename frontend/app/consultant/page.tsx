@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore, deriveRequiresPaymentSetup } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
-import { api, ConsultantSchool, ConsultantProfile, AppealRecord, PIAResponseRecord, PIAFRNRecord, PIAPreview, FRNWatch, FRNReportHistory, Form471ByEntityResponse, Form471LineItem } from "@/lib/api";
+import { api, ConsultantSchool, ConsultantProfile, AppealRecord, PIAResponseRecord, PIAFRNRecord, PIAPreview, FRNWatch, FRNReportHistory, Form471ByEntityResponse, Form471LineItem, DisbursementScheduleResponse } from "@/lib/api";
 import { SearchResultsTable } from "@/components/SearchResultsTable";
 import { AppealChat } from "@/components/AppealChat";
 import { PIAChat } from "@/components/PIAChat";
@@ -564,6 +564,53 @@ function ConsultantPortalPage() {
     if (amount >= 1_000) return `$${Math.round(amount / 1_000).toLocaleString()}K`;
     return `$${amount.toLocaleString()}`;
   };
+
+  // Exact dollar formatting for invoice/disbursement line amounts.
+  const formatDollars = (amount: number) => {
+    const n = Number(amount) || 0;
+    return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  // Format a USAC ISO date (e.g. "2019-10-25T00:00:00.000") as a short date.
+  const formatUsacDate = (value: string | null | undefined) => {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return value;
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+
+  // ---- Disbursement / Invoicing schedule (Funding tab) ----
+  const [disbBen, setDisbBen] = useState("");
+  const [disbYear, setDisbYear] = useState<number | undefined>(undefined);
+  const [disbData, setDisbData] = useState<DisbursementScheduleResponse | null>(null);
+  const [disbLoading, setDisbLoading] = useState(false);
+  const [disbError, setDisbError] = useState<string | null>(null);
+
+  const loadDisbursementSchedule = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const ben = disbBen.trim();
+    if (!ben) {
+      setDisbError("Enter a BEN to look up its disbursement schedule.");
+      return;
+    }
+    setDisbLoading(true);
+    setDisbError(null);
+    try {
+      const res = await api.consultantDisbursementSchedule({ ben, year: disbYear });
+      if (res.data?.success) {
+        setDisbData(res.data);
+      } else {
+        setDisbData(null);
+        setDisbError(res.data?.error || res.error || "Failed to load disbursement schedule.");
+      }
+    } catch (err: any) {
+      setDisbData(null);
+      setDisbError(err?.message || "Failed to load disbursement schedule.");
+    } finally {
+      setDisbLoading(false);
+    }
+  };
+
 
   // Sorted portfolio schools
   const sortedPortfolioSchools = useMemo(() => {
@@ -3395,6 +3442,166 @@ function ConsultantPortalPage() {
                   </button>
                 </div>
               )}
+
+              {/* Disbursement / Invoicing Schedule */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-slate-200">
+                  <h3 className="font-semibold text-slate-900">Disbursement &amp; Invoicing Schedule</h3>
+                  <p className="text-sm text-slate-500 mt-1">
+                    Per-FRN invoice history from USAC — the dates money was invoiced/disbursed and the amount per line.
+                  </p>
+                  <form onSubmit={loadDisbursementSchedule} className="mt-4 flex flex-wrap items-end gap-3">
+                    <div className="flex-1 min-w-[200px]">
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Billed Entity Number (BEN)</label>
+                      <input
+                        type="text"
+                        value={disbBen}
+                        onChange={(e) => setDisbBen(e.target.value)}
+                        placeholder="e.g. 17001817"
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div className="w-32">
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Funding Year</label>
+                      <select
+                        value={disbYear || ""}
+                        onChange={(e) => setDisbYear(e.target.value ? parseInt(e.target.value) : undefined)}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="">All Years</option>
+                        {[2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019].map(y => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={disbLoading}
+                      className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {disbLoading ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          Loading...
+                        </>
+                      ) : "View Schedule"}
+                    </button>
+                    {schools.length > 0 && (
+                      <select
+                        value=""
+                        onChange={(e) => { if (e.target.value) setDisbBen(e.target.value); }}
+                        className="px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        title="Pick a school from your portfolio"
+                      >
+                        <option value="">Pick a school…</option>
+                        {schools.map((s: any) => (
+                          <option key={s.ben || s.id} value={s.ben || ''}>
+                            {(s.school_name || s.name || 'School')}{s.ben ? ` (${s.ben})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </form>
+                </div>
+
+                {disbError && (
+                  <div className="px-6 py-4 bg-red-50 border-b border-red-100 text-sm text-red-700">{disbError}</div>
+                )}
+
+                {disbData && (
+                  <div className="p-6">
+                    {disbData.frn_count === 0 ? (
+                      <div className="text-center py-8 text-slate-500 text-sm">
+                        No invoice or disbursement records found for this BEN{disbYear ? ` in ${disbYear}` : ''}.
+                      </div>
+                    ) : (
+                      <div className="space-y-6">
+                        {/* Overall totals */}
+                        <div className="flex flex-wrap gap-4">
+                          <div className="px-4 py-3 bg-slate-50 rounded-xl">
+                            <div className="text-xs text-slate-500">FRNs</div>
+                            <div className="text-lg font-bold text-slate-900">{disbData.frn_count}</div>
+                          </div>
+                          <div className="px-4 py-3 bg-slate-50 rounded-xl">
+                            <div className="text-xs text-slate-500">Invoice Lines</div>
+                            <div className="text-lg font-bold text-slate-900">{disbData.line_count}</div>
+                          </div>
+                          <div className="px-4 py-3 bg-green-50 rounded-xl">
+                            <div className="text-xs text-green-600">Total Disbursed</div>
+                            <div className="text-lg font-bold text-green-700">{formatDollars(disbData.total_disbursed)}</div>
+                          </div>
+                          <div className="px-4 py-3 bg-indigo-50 rounded-xl">
+                            <div className="text-xs text-indigo-600">Total Requested</div>
+                            <div className="text-lg font-bold text-indigo-700">{formatDollars(disbData.total_requested)}</div>
+                          </div>
+                        </div>
+
+                        {/* Per-FRN groups */}
+                        {disbData.frns.map((grp) => (
+                          <div key={grp.frn} className="border border-slate-200 rounded-xl overflow-hidden">
+                            <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <span className="font-semibold text-slate-900">FRN {grp.frn}</span>
+                                <span className="text-xs text-slate-500 ml-2">
+                                  FY{grp.funding_year || '—'} · {grp.service_type || '—'}
+                                  {grp.category ? ` · ${grp.category}` : ''}
+                                  {grp.service_provider_name ? ` · ${grp.service_provider_name}` : ''}
+                                </span>
+                              </div>
+                              <div className="text-sm">
+                                <span className="text-slate-500">Disbursed: </span>
+                                <span className="font-bold text-green-700">{formatDollars(grp.total_disbursed)}</span>
+                                <span className="text-slate-400 ml-2">/ Req {formatDollars(grp.total_requested)}</span>
+                              </div>
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-sm">
+                                <thead className="bg-white border-b border-slate-200">
+                                  <tr>
+                                    <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 uppercase">Invoice Date</th>
+                                    <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 uppercase">Completion Date</th>
+                                    <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
+                                    <th className="px-4 py-2.5 text-left text-xs font-medium text-slate-500 uppercase">Service Type</th>
+                                    <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-500 uppercase">Requested</th>
+                                    <th className="px-4 py-2.5 text-right text-xs font-medium text-slate-500 uppercase">Disbursed</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {grp.lines.map((line, idx) => (
+                                    <tr key={`${grp.frn}-${line.invoice_id}-${line.inv_line_num}-${idx}`} className="hover:bg-slate-50">
+                                      <td className="px-4 py-2.5 text-slate-900 whitespace-nowrap">{formatUsacDate(line.invoice_date)}</td>
+                                      <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">{formatUsacDate(line.completion_date)}</td>
+                                      <td className="px-4 py-2.5">
+                                        <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-full text-xs">{line.status || '—'}</span>
+                                      </td>
+                                      <td className="px-4 py-2.5 text-slate-600">{line.service_type || '—'}</td>
+                                      <td className="px-4 py-2.5 text-right text-slate-600 whitespace-nowrap">{formatDollars(line.requested_amount)}</td>
+                                      <td className="px-4 py-2.5 text-right font-medium text-green-700 whitespace-nowrap">{formatDollars(line.disbursed_amount)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                                <tfoot className="bg-slate-50 border-t border-slate-200">
+                                  <tr>
+                                    <td colSpan={4} className="px-4 py-2.5 text-right text-xs font-medium text-slate-500 uppercase">FRN Total</td>
+                                    <td className="px-4 py-2.5 text-right text-slate-700 font-medium whitespace-nowrap">{formatDollars(grp.total_requested)}</td>
+                                    <td className="px-4 py-2.5 text-right text-green-700 font-bold whitespace-nowrap">{formatDollars(grp.total_disbursed)}</td>
+                                  </tr>
+                                </tfoot>
+                              </table>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!disbData && !disbError && !disbLoading && (
+                  <div className="px-6 py-8 text-center text-sm text-slate-500">
+                    Enter a BEN above (or pick a school) to see its invoice and disbursement schedule.
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

@@ -529,7 +529,167 @@ class USACDataClient:
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching serviced entities for SPIN {spin}: {e}")
             return pd.DataFrame()
-    
+
+    def get_disbursement_schedule(
+        self,
+        ben: Optional[str] = None,
+        frn: Optional[str] = None,
+        spin: Optional[str] = None,
+        year: Optional[int] = None,
+        limit: int = 2000
+    ) -> Dict[str, Any]:
+        """
+        Get the invoice/disbursement schedule for an entity (BEN), a single
+        Funding Request Number (FRN), and/or a service provider (SPIN), from
+        the USAC Invoice Disbursements dataset (jpiu-tj8h).
+
+        Each row in the dataset is one invoice line item. Real USAC date fields
+        used (verified against the live dataset):
+          - inv_received_date          -> invoice_date (when USAC received the invoice)
+          - inv_line_completion_date   -> completion_date (line processed / disbursed)
+          - customer_billed_dt         -> customer_billed_date
+          - invoice_delivery_deadline_dt -> delivery_deadline
+        Amount fields:
+          - requested_inv_line_amt -> requested_amount
+          - approved_inv_line_amt  -> disbursed_amount (USAC-approved line amount)
+
+        Results are grouped by FRN, each FRN's lines sorted by invoice date,
+        with a per-FRN total disbursed/requested and overall totals.
+
+        Args:
+            ben: Billed Entity Number to filter by
+            frn: Funding Request Number to filter by
+            spin: Service Provider Identification Number to filter by
+            year: Optional funding year filter
+            limit: Maximum invoice line records to return
+
+        Returns:
+            Dict with success flag, grouped FRN list and overall totals.
+        """
+        if not ben and not frn and not spin:
+            return {
+                'success': False,
+                'error': 'Provide at least one of: ben, frn, spin'
+            }
+
+        try:
+            url = USAC_ENDPOINTS['invoice_disbursements']
+
+            # Direct field filtering (more reliable than $where), matching the
+            # pattern used by get_serviced_entities / get_entity_detail.
+            params: Dict[str, Any] = {
+                '$limit': limit,
+                '$order': 'funding_request_number, inv_received_date',
+            }
+            if ben:
+                params['billed_entity_number'] = str(ben).strip()
+            if frn:
+                params['funding_request_number'] = str(frn).strip()
+            if spin:
+                params['inv_service_provider_id_number_spin'] = str(spin).strip()
+            if year:
+                params['funding_year'] = str(year)
+
+            logger.info(
+                f"Fetching disbursement schedule ben={ben} frn={frn} spin={spin} year={year}"
+            )
+            response = self.session.get(url, params=params, timeout=60)
+            response.raise_for_status()
+            data = response.json()
+
+            if not data:
+                return {
+                    'success': True,
+                    'ben': ben,
+                    'frn': frn,
+                    'spin': spin,
+                    'frns': [],
+                    'frn_count': 0,
+                    'line_count': 0,
+                    'total_requested': 0.0,
+                    'total_disbursed': 0.0,
+                }
+
+            # Group invoice lines by FRN
+            groups: Dict[str, Dict[str, Any]] = {}
+            overall_requested = 0.0
+            overall_disbursed = 0.0
+            total_lines = 0
+
+            for rec in data:
+                frn_val = safe_str(rec.get('funding_request_number'), default='Unknown')
+                requested_amt = safe_float(rec.get('requested_inv_line_amt'))
+                disbursed_amt = safe_float(rec.get('approved_inv_line_amt'))
+
+                line = {
+                    'invoice_id': safe_str(rec.get('invoice_id')),
+                    'invoice_type': safe_str(rec.get('invoice_type')),
+                    'inv_line_num': safe_str(rec.get('inv_line_num')),
+                    'status': safe_str(rec.get('inv_line_item_status')),
+                    'invoice_date': safe_str(rec.get('inv_received_date'), default=None) or None,
+                    'completion_date': safe_str(rec.get('inv_line_completion_date'), default=None) or None,
+                    'customer_billed_date': safe_str(rec.get('customer_billed_dt'), default=None) or None,
+                    'delivery_deadline': safe_str(rec.get('invoice_delivery_deadline_dt'), default=None) or None,
+                    'requested_amount': requested_amt,
+                    'disbursed_amount': disbursed_amt,
+                    'service_type': safe_str(rec.get('service_type')),
+                    'category': safe_str(rec.get('chosen_category_of_service')),
+                }
+
+                if frn_val not in groups:
+                    groups[frn_val] = {
+                        'frn': frn_val,
+                        'funding_year': safe_str(rec.get('funding_year'), default=None) or None,
+                        'billed_entity_number': safe_str(rec.get('billed_entity_number')),
+                        'billed_entity_name': safe_str(rec.get('billed_entity_name'), default='Unknown'),
+                        'service_provider_name': safe_str(rec.get('inv_service_provider_name')),
+                        'spin': safe_str(rec.get('inv_service_provider_id_number_spin')),
+                        'service_type': safe_str(rec.get('service_type')),
+                        'category': safe_str(rec.get('chosen_category_of_service')),
+                        'lines': [],
+                        'total_requested': 0.0,
+                        'total_disbursed': 0.0,
+                    }
+
+                groups[frn_val]['lines'].append(line)
+                groups[frn_val]['total_requested'] += requested_amt
+                groups[frn_val]['total_disbursed'] += disbursed_amt
+                overall_requested += requested_amt
+                overall_disbursed += disbursed_amt
+                total_lines += 1
+
+            # Sort each FRN's lines by invoice date (None last), and the FRN
+            # list by funding year (newest first) then FRN.
+            frn_list = []
+            for grp in groups.values():
+                grp['lines'].sort(key=lambda l: (l.get('invoice_date') or ''))
+                grp['line_count'] = len(grp['lines'])
+                frn_list.append(grp)
+
+            frn_list.sort(
+                key=lambda g: (str(g.get('funding_year') or ''), str(g.get('frn') or '')),
+                reverse=True,
+            )
+
+            return {
+                'success': True,
+                'ben': ben,
+                'frn': frn,
+                'spin': spin,
+                'frns': frn_list,
+                'frn_count': len(frn_list),
+                'line_count': total_lines,
+                'total_requested': overall_requested,
+                'total_disbursed': overall_disbursed,
+            }
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching disbursement schedule: {e}")
+            return {'success': False, 'error': str(e)}
+        except Exception as e:
+            logger.error(f"Unexpected error in get_disbursement_schedule: {e}")
+            return {'success': False, 'error': str(e)}
+
     def get_serviced_entities_summary(
         self,
         spin: str,

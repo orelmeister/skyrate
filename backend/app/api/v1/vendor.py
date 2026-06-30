@@ -520,6 +520,48 @@ async def get_471_line_items_by_ben(
         )
 
 
+@router.get("/disbursement-schedule")
+async def vendor_disbursement_schedule(
+    ben: Optional[str] = None,
+    frn: Optional[str] = None,
+    spin: Optional[str] = None,
+    year: Optional[int] = None,
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
+):
+    """
+    Invoice/disbursement schedule from the USAC Invoice Disbursements dataset
+    (jpiu-tj8h). Filter by SPIN (the vendor's own), a school (BEN) and/or a
+    single FRN. Returns invoice lines grouped by FRN with per-line invoice and
+    completion dates, requested and disbursed amounts, plus per-FRN and overall
+    totals. Reuses client.get_disbursement_schedule + get_or_cache.
+    """
+    if not ben and not frn and not spin:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide at least one of: ben, frn, spin",
+        )
+    try:
+        from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
+
+        client = USACDataClient()
+        result = get_or_cache(
+            namespace="disbursement_schedule",
+            params={"ben": ben, "frn": frn, "spin": spin, "year": year},
+            ttl_hours=12,
+            fetch_fn=lambda: client.get_disbursement_schedule(
+                ben=ben, frn=frn, spin=spin, year=year
+            ),
+        )
+        return result
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch disbursement schedule: {str(e)}"
+        )
+
+
 # ==================== FRN STATUS MONITORING (Sprint 2) ====================
 
 @router.get("/frn-status")
