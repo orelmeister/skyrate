@@ -6,8 +6,9 @@ Includes audit history and re-analysis comparison.
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, status
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
+import json
 import logging
 
 from sqlalchemy.orm import Session
@@ -19,6 +20,7 @@ from ...models.user import User
 from ...models.compliance_analysis import ComplianceAnalysis
 from ...services.compliance.extractor import extract_text_from_pdf, extract_text_from_file
 from ...services.compliance.forms import dispatch_analysis, VALID_FORM_TYPES
+from ...services.compliance.bid_analysis import analyze_bids, DEFAULT_WEIGHTS, METRIC_LABELS
 
 logger = logging.getLogger(__name__)
 
@@ -363,6 +365,154 @@ async def analyze_form470_endpoint(
         engine_version=result.get("engine_version"),
         disclaimer=result.get("disclaimer", "Advisory only. Not legal or USAC official guidance."),
     )
+
+
+# ==================== BID ANALYSIS ====================
+
+class BidScoreBreakdown(BaseModel):
+    price: float
+    tco: float
+    technical: float
+    support: float
+    experience: float
+
+
+class BidEvaluation(BaseModel):
+    source_index: int
+    rank: int
+    filename: str
+    vendor_name: str
+    total_price: Optional[float] = None
+    monthly_cost: Optional[float] = None
+    one_time_cost: Optional[float] = None
+    contract_term: Optional[str] = None
+    products_services: List[str] = []
+    key_specs: List[str] = []
+    notable_terms: List[str] = []
+    scores: BidScoreBreakdown
+    weighted_total: float
+    rationale: str = ""
+
+
+class BidRankingItem(BaseModel):
+    rank: int
+    vendor_name: str
+    weighted_total: float
+    source_index: int
+
+
+class BidAnalysisResponse(BaseModel):
+    bids: List[BidEvaluation] = []
+    ranking: List[BidRankingItem] = []
+    winner: Optional[BidEvaluation] = None
+    weights: Dict[str, float]
+    metric_labels: Dict[str, str]
+    price_is_primary: bool
+    rationale: str = ""
+    compliance_note: str = ""
+    engine_version: Optional[str] = None
+    disclaimer: str = "Advisory only. Not legal or USAC official guidance."
+
+
+# Max bid files per request
+MAX_BID_FILES = 8
+
+
+@router.post(
+    "/bid-analysis",
+    response_model=BidAnalysisResponse,
+    summary="Score and rank competing vendor bids received for a Form 470",
+)
+async def bid_analysis_endpoint(
+    bids: List[UploadFile] = File(...),
+    weights: Optional[str] = Form(default=None),
+    form470_reference: Optional[str] = Form(default=None),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Upload the competing vendor bids received in response to a Form 470 and receive an
+    AI-scored, ranked comparison. Price is enforced as the primary (most heavily weighted)
+    evaluation factor per FCC Order 19-117.
+
+    - **bids**: 2-8 bid files (PDF, DOCX, DOC, TXT), max 10 MB each.
+    - **weights**: optional JSON string of metric weights, e.g.
+      `{"price": 60, "tco": 15, "technical": 15, "support": 5, "experience": 5}`.
+    - **form470_reference**: optional text describing the Form 470 scope/requirements.
+    """
+    real_bids = [b for b in bids if b and b.filename]
+    if len(real_bids) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Upload at least 2 bid files to compare.",
+        )
+    if len(real_bids) > MAX_BID_FILES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Maximum {MAX_BID_FILES} bid files allowed per analysis.",
+        )
+
+    parsed_weights: Optional[dict] = None
+    if weights:
+        try:
+            parsed_weights = json.loads(weights)
+            if not isinstance(parsed_weights, dict):
+                parsed_weights = None
+        except json.JSONDecodeError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="'weights' must be a valid JSON object.",
+            )
+
+    bid_docs: List[dict] = []
+    for bid_file in real_bids:
+        lower_name = (bid_file.filename or "").lower()
+        if not any(lower_name.endswith(ext) for ext in SUPPORTED_EXTENSIONS):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported file type for '{bid_file.filename}'. Accepted: PDF, DOCX, DOC, TXT.",
+            )
+        raw = await bid_file.read()
+        if len(raw) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"Bid file '{bid_file.filename}' exceeds 10 MB limit.",
+            )
+        if len(raw) == 0:
+            continue
+        text = extract_text_from_file(raw, bid_file.filename)
+        if not text:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Could not extract text from '{bid_file.filename}'. It may be image-based or corrupted.",
+            )
+        bid_docs.append({"filename": bid_file.filename, "text": text})
+
+    if len(bid_docs) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Could not extract readable text from at least 2 bids.",
+        )
+
+    result = await analyze_bids(
+        bids=bid_docs,
+        weights=parsed_weights,
+        form470_reference=form470_reference,
+    )
+
+    if not result or not result.get("bids"):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=result.get("rationale") if result else "AI bid analysis unavailable. Please try again later.",
+        )
+
+    logger.info(
+        "Bid analysis completed: user=%s, bids=%d, winner=%s",
+        current_user.id, len(result.get("bids", [])),
+        (result.get("winner") or {}).get("vendor_name"),
+    )
+
+    result["metric_labels"] = METRIC_LABELS
+    return BidAnalysisResponse(**result)
 
 
 # ==================== HISTORY ENDPOINTS ====================

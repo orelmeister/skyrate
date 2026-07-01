@@ -7,8 +7,9 @@ import { useAuthStore } from "@/lib/auth-store";
 import {
   Shield, Upload, AlertTriangle, CheckCircle, XCircle, FileText,
   ArrowLeft, ShieldCheck, Brain, ExternalLink, ChevronDown, ChevronRight,
-  Activity, Paperclip, X, Plus, History, RefreshCw, Check
+  Activity, Paperclip, X, Plus, History, RefreshCw, Check, Gavel
 } from "lucide-react";
+import BidAnalysis from "./bid-analysis";
 
 // ==================== TYPES ====================
 
@@ -98,6 +99,7 @@ export default function CompliancePage() {
   const searchParams = useSearchParams();
   const { user, isAuthenticated, token, _hasHydrated } = useAuthStore();
 
+  const [activeTab, setActiveTab] = useState<"review" | "bids">("review");
   const [formType, setFormType] = useState("470");
   const [formNumber, setFormNumber] = useState("");
   const [notes, setNotes] = useState("");
@@ -365,6 +367,36 @@ export default function CompliancePage() {
       </div>
 
       <div className="max-w-4xl mx-auto px-6 py-8">
+        {/* Tab Switcher */}
+        <div className="mb-6 flex items-center gap-1 bg-slate-100 p-1 rounded-xl w-fit">
+          <button
+            onClick={() => setActiveTab("review")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeTab === "review"
+                ? "bg-white text-indigo-700 shadow-sm"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <Shield className="w-4 h-4" />
+            Document Review
+          </button>
+          <button
+            onClick={() => setActiveTab("bids")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeTab === "bids"
+                ? "bg-white text-indigo-700 shadow-sm"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <Gavel className="w-4 h-4" />
+            Bid Analysis
+          </button>
+        </div>
+
+        {activeTab === "bids" && <BidAnalysis />}
+
+        {activeTab === "review" && (
+        <>
         {/* Reanalyze Banner */}
         {reanalyzeId && (
           <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-center gap-3">
@@ -901,6 +933,8 @@ export default function CompliancePage() {
               </p>
             </div>
           </div>
+        )}
+        </>
         )}
       </div>
     </div>
