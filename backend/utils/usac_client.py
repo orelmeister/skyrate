@@ -1960,6 +1960,7 @@ class USACDataClient:
                         'frn': record.get('funding_request_number', ''),
                         'application_number': record.get('application_number', ''),
                         'funding_year': year_val,
+                        'spin': record.get('service_provider_number', '') or record.get('spin', ''),
                         'spin_name': record.get('spin_name', ''),
                         'service_type': record.get('form_471_service_type_name', ''),
                         'status': frn_status,
