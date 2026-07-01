@@ -316,6 +316,21 @@ class AIModelManager:
         elif any(w in query_lower for w in ['cancelled', 'canceled']):
             result['filters']['frn_status'] = 'Cancelled'
 
+        # CRN extraction — "CRN 16024809", "crn: 16024809", "crn #16024809"
+        crn_match = re.search(r'\bcrn\b[:#\s]*([0-9]{5,})', query_lower)
+        if crn_match:
+            result['filters']['crn'] = crn_match.group(1)
+
+        # Entity type extraction (order matters: check compound terms first)
+        if 'school district' in query_lower:
+            result['filters']['entity_type'] = 'School District'
+        elif 'library system' in query_lower:
+            result['filters']['entity_type'] = 'Library System'
+        elif 'consortium' in query_lower or 'consortia' in query_lower:
+            result['filters']['entity_type'] = 'Consortium'
+        elif 'librar' in query_lower:  # library / libraries
+            result['filters']['entity_type'] = 'Library'
+
         # Build explanation
         parts = []
         if result['filters'].get('state'):
@@ -323,6 +338,10 @@ class AIModelManager:
             parts.append(f"states={s}" if isinstance(s, list) else f"state={s}")
         if result['filters'].get('frn_status'):
             parts.append(f"status={result['filters']['frn_status']}")
+        if result['filters'].get('crn'):
+            parts.append(f"crn={result['filters']['crn']}")
+        if result['filters'].get('entity_type'):
+            parts.append(f"entity_type={result['filters']['entity_type']}")
         if result.get('years'):
             parts.append(f"years={result['years']}")
         elif result.get('year'):
@@ -343,22 +362,41 @@ class AIModelManager:
         Returns:
             Dictionary with year, filters, and explanation
         """
-        prompt = f"""You are an E-Rate data assistant. Parse this natural language query into structured filters.
+        prompt = f"""You are an E-Rate data assistant. Parse this natural language query into structured filters for the USAC Form 471 dataset.
 
 Query: {query}
 
 Return a JSON object with:
 - year: single funding year as integer (use null only if absolutely no year context). If MULTIPLE years are mentioned, set year to null and use the "years" field instead.
 - years: array of funding year integers when multiple years are mentioned (e.g. [2025, 2026]). Omit this field (or set to null) when only one year or no year is specified.
-- filters: object with applicable filters. ALWAYS extract ALL filters mentioned in the query, even when multiple years are present. Valid keys and values:
+- filters: object with applicable filters. ALWAYS extract ALL filters mentioned in the query, even when multiple years are present. Use ONLY the keys below and NEVER invent any other field name. Values must EXACTLY match the allowed enums:
   * state: 2-letter US state abbreviation ONLY (e.g. "NJ", "NY", "CA"). Convert full state names: California→CA, Florida→FL, Texas→TX, New York→NY, etc.
-  * city: city name string
-  * ben: billed entity number string
-  * organization_name: school or district name string
-  * frn_status: one of "Funded", "Denied", "Pending", "Cancelled" (use this for any question about approval, denial, commitment, or funding status)
+  * ben: billed entity number (digits only)
+  * organization_name: school / district / library name string
+  * frn_status: EXACTLY one of "Funded", "Denied", "Pending", "Cancelled". Map synonyms: approved/committed/awarded/commitment→"Funded"; denied/denial/denials/rejected→"Denied"; in review/under review/awaiting→"Pending"; canceled/cancelled→"Cancelled".
+  * entity_type: EXACTLY one of "School District", "School", "Consortium", "Library System", "Library".
+  * service_type: EXACTLY one of "Data Transmission and/or Internet Access", "Voice", "Internal Connections", "Basic Maintenance of Internal Connections", "Managed Internal Broadband Services", "Wi-Fi Hotspots Services and Equipment", "Wireless School Bus Services and Equipment". For "Category 1" emit the ARRAY ["Data Transmission and/or Internet Access", "Voice"]. For "Category 2" emit the ARRAY ["Internal Connections", "Basic Maintenance of Internal Connections", "Managed Internal Broadband Services"].
+  * crn: the Consultant Registration Number (CRN) — the digits only. Use this for questions like "schools connected to CRN 16024809" or a consultant's CRN/contract number.
+  * spin: service provider name / SPIN (e.g. "AT&T Corp.").
+  * funding_request_number: FRN number (digits only), when a specific FRN is named.
+  * application_number: FCC Form 471 application number (digits only), when a specific 471 is named.
 - explanation: one sentence explaining what you understood
 
-CRITICAL: Always include the state filter if a state is mentioned, regardless of how many years are in the query.
+CRITICAL RULES:
+- Always include the state filter if a state is mentioned, regardless of how many years are in the query.
+- "denials" / "all denials" / "denied" -> frn_status = "Denied". "funded"/"approved"/"committed" -> "Funded".
+- "schools connected to CRN <number>" or "consultant CRN <number>" -> crn = "<number>" (digits only). Do NOT put a CRN in organization_name.
+- Only emit keys from the list above. If unsure, omit the filter rather than guessing a field name.
+
+Examples:
+Query: "tell me all the schools connected to CRN 16024809"
+{{"year": null, "filters": {{"crn": "16024809"}}, "explanation": "Applicants whose consultant CRN is 16024809"}}
+Query: "show all denials in Texas for 2025"
+{{"year": 2025, "filters": {{"state": "TX", "frn_status": "Denied"}}, "explanation": "Denied FRNs in TX for FY2025"}}
+Query: "which libraries got funded in NY"
+{{"year": null, "filters": {{"state": "NY", "entity_type": "Library", "frn_status": "Funded"}}, "explanation": "Funded libraries in NY"}}
+Query: "category 2 internal connections requests in Florida"
+{{"year": null, "filters": {{"state": "FL", "service_type": ["Internal Connections", "Basic Maintenance of Internal Connections", "Managed Internal Broadband Services"]}}, "explanation": "Category 2 service requests in FL"}}
 
 Return only valid JSON, no markdown, no code blocks."""
 

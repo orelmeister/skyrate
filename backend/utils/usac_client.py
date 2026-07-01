@@ -39,7 +39,10 @@ USAC_ENDPOINTS = {
     'entity_supplemental': 'https://opendata.usac.org/resource/7i5i-83qf.json',  # Supplemental Entity Info (contacts!)
 }
 
-# Field name mapping from common names to USAC API field names
+# Field name mapping from common names to USAC API field names.
+# Values on the right MUST be real, queryable columns on the Form 471 view
+# (srbr-2d59). Mapping to a non-existent column makes Socrata return HTTP 400,
+# which silently yields zero results.
 FIELD_NAME_MAPPING = {
     # Form 471 common fields
     'ben': 'ben',
@@ -48,19 +51,49 @@ FIELD_NAME_MAPPING = {
     'funding_year': 'funding_year',
     'application_number': 'application_number',
     'funding_request_number': 'funding_request_number',
+    'frn': 'funding_request_number',
     'application_status': 'form_471_frn_status_name',
     'frn_status': 'form_471_frn_status_name',
     'funding_status': 'form_471_frn_status_name',
     'original_total_pre_discount_costs': 'original_total_pre_discount_costs',
-    'fcdl_comment': 'fcdl_comment',
-    'service_type': 'service_type',
-    'applicant_type': 'applicant_type',
-    
-    # Additional mappings
-    'consultant_crn': 'cnslt_epc_organization_id',
-    'city': 'city',
-    'zip_code': 'zipcode',
+    'fcdl_comment': 'fcdl_comment_frn',
+
+    # Service type / category (real column is form_471_service_type_name)
+    'service_type': 'form_471_service_type_name',
+    'category': 'form_471_service_type_name',
+    'form_471_service_type_name': 'form_471_service_type_name',
+
+    # Entity / applicant type (real column is organization_entity_type_name)
+    'entity_type': 'organization_entity_type_name',
+    'applicant_type': 'organization_entity_type_name',
+    'organization_entity_type_name': 'organization_entity_type_name',
+
+    # CRN / contract — the consultant registration number lives inside the
+    # composite crn_data column: "{Consultant Name|CRN#|email}". Match with LIKE.
+    'crn': 'crn_data',
+    'crn_data': 'crn_data',
+    'contract_number': 'crn_data',
+    'consultant_crn': 'crn_data',
+    'usac_contract_id': 'usac_contract_id',
+    'contract_id': 'usac_contract_id',
+
+    # Service provider (SPIN) — real column is spin_name (provider name string)
+    'spin': 'spin_name',
+    'spin_name': 'spin_name',
+
+    # Review-stage / pending reason
+    'pending_reason': 'pending_reason',
+    'denial_reason': 'pending_reason',
 }
+
+# Columns whose stored value is a composite/name string, so filters must use a
+# case-insensitive substring (LIKE) match instead of exact equality. Example:
+# crn_data = "{Kellogg & Sovereign Consulting, LLC|16024809|...}" — a query for
+# CRN 16024809 must match the embedded number, not the whole string.
+LIKE_MATCH_FIELDS = {'crn_data', 'spin_name'}
+
+# Filter keys that target the FRN status column and need enum normalization.
+STATUS_FILTER_KEYS = ('application_status', 'frn_status', 'funding_status', 'form_471_frn_status_name')
 
 
 def map_field_name(field_name: str) -> str:
@@ -197,21 +230,31 @@ class USACDataClient:
             where_conditions.append(f"funding_year = '{year}'")
         
         if filters:
+            def esc(v):
+                # Escape single quotes for SoQL string literals (also prevents injection)
+                return str(v).replace("'", "''")
+
             for field, value in filters.items():
                 mapped_field = map_field_name(field)
                 if isinstance(value, str):
+                    val = value.strip()
+                    if not val:
+                        continue
                     # Handle special status values
-                    if field in ('application_status', 'frn_status', 'funding_status', 'form_471_frn_status_name'):
+                    if field in STATUS_FILTER_KEYS:
                         # Normalize capitalization to match USAC values
-                        normalized = value.strip().capitalize()
-                        where_conditions.append(f"{mapped_field} = '{normalized}'")
+                        normalized = val.capitalize()
+                        where_conditions.append(f"{mapped_field} = '{esc(normalized)}'")
+                    elif mapped_field in LIKE_MATCH_FIELDS:
+                        # Composite/name columns need a case-insensitive substring match
+                        where_conditions.append(f"upper({mapped_field}) LIKE upper('%{esc(val)}%')")
                     else:
-                        where_conditions.append(f"{mapped_field} = '{value}'")
+                        where_conditions.append(f"{mapped_field} = '{esc(val)}'")
                 elif isinstance(value, (int, float)):
                     where_conditions.append(f"{mapped_field} = {value}")
                 elif isinstance(value, list):
                     # Handle list of values (IN clause)
-                    quoted_values = [f"'{v}'" for v in value]
+                    quoted_values = [f"'{esc(v)}'" for v in value]
                     where_conditions.append(f"{mapped_field} IN ({', '.join(quoted_values)})")
         
         if where_conditions:
