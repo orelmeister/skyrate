@@ -3789,10 +3789,16 @@ async def get_portfolio_frn_status(
                         resolved_name = vs["service_provider_name"]
                 except Exception as _spin_err:
                     logger.warning(f"[frn-status] SPIN->name resolve failed for {spin_val}: {_spin_err}")
-            conds.append(
-                AdminFRNSnapshot.spin_name.ilike(f"%{resolved_name}%")
-                if resolved_name else AdminFRNSnapshot.spin_name.ilike(f"%{spin_val}%")
-            )
+            if resolved_name:
+                # The service-provider dataset (xcy2-bdid) and the FRN Status
+                # dataset (qdmp-ygft) format provider names slightly differently
+                # (e.g. "Verizon Online, LLC" vs "Verizon Online LLC"), so compare
+                # with commas/periods stripped on both sides.
+                norm_name = resolved_name.replace(",", "").replace(".", "").strip()
+                col_norm = _sqlfunc.replace(_sqlfunc.replace(AdminFRNSnapshot.spin_name, ",", ""), ".", "")
+                conds.append(col_norm.ilike(f"%{norm_name}%"))
+            else:
+                conds.append(AdminFRNSnapshot.spin_name.ilike(f"%{spin_val}%"))
             q = q.filter(_or(*conds))
         # CRN filter (contract record number)
         if crn:
