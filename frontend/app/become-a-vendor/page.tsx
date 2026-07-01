@@ -2,7 +2,6 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import {
   Shield,
-  Zap,
   CheckCircle2,
   ClipboardCheck,
   FileCheck2,
@@ -142,32 +141,59 @@ export default function BecomeAVendorPage() {
       />
 
       <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50">
-        {/* Header */}
-        <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        {/* Header — matches site-wide header */}
+        <header className="sticky top-0 z-50 border-b border-white/10 px-4 sm:px-6 py-3 bg-slate-950/80 backdrop-blur-xl">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2">
-              <span className="text-xl font-bold gradient-text">SkyRate</span>
+              <img src="/images/logos/logo-icon-transparent.png" alt="" width={32} height={32} className="rounded-lg" />
+              <span className="text-white font-bold text-xl">SkyRate<span className="text-purple-400">.AI</span></span>
             </Link>
-            <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-700">
-              <Link href="/features" className="hover:text-purple-700 transition">Features</Link>
-              <Link href="/case-studies" className="hover:text-purple-700 transition">Case Studies</Link>
-              <Link href="/pricing" className="hover:text-purple-700 transition">Pricing</Link>
-              <Link href="/blog" className="hover:text-purple-700 transition">Blog</Link>
+
+            <nav className="hidden md:flex items-center gap-6 lg:gap-8">
+              <Link href="/features/consultants" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">For Consultants</Link>
+              <Link href="/features/vendors" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">For Vendors</Link>
+              <Link href="/features/applicants" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">For Applicants</Link>
+              <Link href="/pricing" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">Pricing</Link>
+              <Link href="/blog" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">Blog</Link>
             </nav>
-            <div className="flex items-center gap-2 sm:gap-3">
-              <Link
-                href="/sign-in"
-                className="hidden sm:inline-block text-sm font-medium text-slate-700 hover:text-purple-700 px-3 py-2"
+
+            <div className="flex items-center gap-3">
+              <a href="tel:855-765-7291" className="hidden lg:flex items-center gap-1.5 text-slate-400 hover:text-white transition text-sm font-medium">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                (855) 765-7291
+              </a>
+              <a
+                href={process.env.NEXT_PUBLIC_LINKEDIN_URL || "https://www.linkedin.com/company/skyrate-llc"}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="SkyRate on LinkedIn"
+                className="hidden lg:flex items-center text-slate-400 hover:text-white transition"
               >
-                Sign in
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" /></svg>
+              </a>
+              <Link href="/sign-in" className="hidden sm:inline text-slate-400 hover:text-white transition font-medium text-sm">
+                Sign In
               </Link>
-              <Link
-                href="#eligibility"
-                className="text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 px-4 py-2 rounded-lg shadow-sm transition"
-              >
-                Check eligibility
+              <Link href="/sign-up?source=become-a-vendor-header" className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-500 hover:to-purple-500 transition shadow-lg shadow-indigo-500/25 font-medium text-sm">
+                Start Free Trial
               </Link>
+              <label htmlFor="mobile-menu-toggle" className="md:hidden cursor-pointer text-slate-300 hover:text-white p-2 -mr-2" aria-label="Toggle menu">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+              </label>
             </div>
+          </div>
+
+          {/* CSS-only mobile menu */}
+          <input type="checkbox" id="mobile-menu-toggle" className="hidden peer" />
+          <div className="hidden peer-checked:block md:!hidden border-t border-white/10 mt-3 pt-3 pb-1">
+            <nav className="flex flex-col gap-3">
+              <Link href="/features/consultants" className="text-slate-400 hover:text-white font-medium py-1">For Consultants</Link>
+              <Link href="/features/vendors" className="text-slate-400 hover:text-white font-medium py-1">For Vendors</Link>
+              <Link href="/features/applicants" className="text-slate-400 hover:text-white font-medium py-1">For Applicants</Link>
+              <Link href="/pricing" className="text-slate-400 hover:text-white font-medium py-1">Pricing</Link>
+              <Link href="/blog" className="text-slate-400 hover:text-white font-medium py-1">Blog</Link>
+              <Link href="/sign-in" className="text-indigo-400 font-medium py-1 sm:hidden">Sign In</Link>
+            </nav>
           </div>
         </header>
 
@@ -454,47 +480,88 @@ export default function BecomeAVendorPage() {
           </div>
         </section>
 
-        {/* Footer */}
-        <footer className="bg-slate-900 text-slate-300 px-4 sm:px-6 lg:px-8 py-10 sm:py-12">
-          <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8">
-            <div className="col-span-2 md:col-span-1">
-              <h4 className="text-white font-semibold mb-3 sm:mb-4 text-sm sm:text-base">SkyRate</h4>
-              <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-                AI-powered E-Rate management for consultants, vendors, and school applicants.
-              </p>
+        {/* Footer — matches site-wide footer */}
+        <footer className="bg-slate-900 text-slate-400 py-10 sm:py-12 px-4 sm:px-6">
+          <div className="max-w-7xl mx-auto">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-6 sm:gap-8 mb-8">
+              <div className="col-span-2 md:col-span-1">
+                <div className="flex items-center gap-2 mb-3 sm:mb-4">
+                  <img src="/images/logos/logo-icon-transparent.png" alt="" width={28} height={28} className="rounded-lg" />
+                  <span className="text-white font-bold text-lg">SkyRate<span className="text-purple-400">.AI</span></span>
+                </div>
+                <p className="text-xs sm:text-sm">
+                  AI-powered E-Rate intelligence for applicants, consultants, and vendors.
+                </p>
+                <div className="mt-3 space-y-1">
+                  <a href="tel:855-765-7291" className="flex items-center gap-1.5 text-xs sm:text-sm hover:text-white transition">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                    (855) 765-7291 <span className="text-green-400 text-[10px]">(Toll-Free)</span>
+                  </a>
+                  <a href="mailto:support@skyrate.ai" className="flex items-center gap-1.5 text-xs sm:text-sm hover:text-white transition">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                    support@skyrate.ai
+                  </a>
+                </div>
+                <div className="flex items-center gap-3 mt-3">
+                  <a
+                    href={process.env.NEXT_PUBLIC_LINKEDIN_URL || "https://www.linkedin.com/company/skyrate-llc"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="SkyRate on LinkedIn"
+                    className="text-slate-400 hover:text-white transition"
+                  >
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" /></svg>
+                  </a>
+                </div>
+              </div>
+              <div>
+                <h4 className="text-white font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Features</h4>
+                <ul className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
+                  <li><Link href="/features/consultants" className="hover:text-white transition">For Consultants</Link></li>
+                  <li><Link href="/features/vendors" className="hover:text-white transition">For Vendors</Link></li>
+                  <li><Link href="/features/applicants" className="hover:text-white transition">For Applicants</Link></li>
+                  <li><Link href="/features/appeal-generator" className="hover:text-white transition">Appeal Generator</Link></li>
+                  <li><Link href="/features/frn-monitoring" className="hover:text-white transition">FRN Monitoring</Link></li>
+                  <li><Link href="/features/form-470-tracking" className="hover:text-white transition">Form 470 Search</Link></li>
+                  <li><Link href="/features/denial-analysis" className="hover:text-white transition">Denial Analysis</Link></li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-white font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Product</h4>
+                <ul className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
+                  <li><Link href="/pricing" className="hover:text-white transition">Pricing</Link></li>
+                  <li><Link href="/become-a-vendor" className="hover:text-white transition">Become a Vendor</Link></li>
+                  <li><Link href="/sign-up" className="hover:text-white transition">Free Trial</Link></li>
+                  <li><Link href="/sign-in" className="hover:text-white transition">Sign In</Link></li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-white font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Resources</h4>
+                <ul className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
+                  <li><Link href="/blog" className="hover:text-white transition">Blog</Link></li>
+                  <li><a href="#faq" className="hover:text-white transition">FAQ</a></li>
+                  <li><a href="https://www.usac.org/e-rate/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">USAC E-Rate</a></li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="text-white font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Company</h4>
+                <ul className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
+                  <li><Link href="/about" className="hover:text-white transition">About</Link></li>
+                  <li><Link href="/contact" className="hover:text-white transition">Contact</Link></li>
+                  <li><Link href="/case-studies" className="hover:text-white transition">Case Studies</Link></li>
+                  <li><Link href="/security" className="hover:text-white transition">Security</Link></li>
+                  <li><Link href="/privacy" className="hover:text-white transition">Privacy Policy</Link></li>
+                  <li><Link href="/terms" className="hover:text-white transition">Terms of Service</Link></li>
+                </ul>
+              </div>
             </div>
-            <div>
-              <h4 className="text-white font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Product</h4>
-              <ul className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
-                <li><Link href="/features" className="hover:text-white transition">Features</Link></li>
-                <li><Link href="/pricing" className="hover:text-white transition">Pricing</Link></li>
-                <li><Link href="/become-a-vendor" className="hover:text-white transition">Become a Vendor</Link></li>
-                <li><Link href="/sign-up" className="hover:text-white transition">Start free</Link></li>
-              </ul>
+            <div className="border-t border-white/10 pt-6 sm:pt-8 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4">
+              <p className="text-xs sm:text-sm">&copy; {new Date().getFullYear()} SkyRate AI. All rights reserved.</p>
+              <div className="flex items-center gap-4 text-xs sm:text-sm">
+                <span className="flex items-center gap-1">SSL Secured</span>
+                <span className="flex items-center gap-1">FERPA Ready</span>
+              </div>
             </div>
-            <div>
-              <h4 className="text-white font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Company</h4>
-              <ul className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
-                <li><Link href="/case-studies" className="hover:text-white transition">Case Studies</Link></li>
-                <li><Link href="/blog" className="hover:text-white transition">Blog</Link></li>
-                <li><Link href="/about" className="hover:text-white transition">About</Link></li>
-                <li><Link href="/contact" className="hover:text-white transition">Contact</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="text-white font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Legal</h4>
-              <ul className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
-                <li><Link href="/privacy" className="hover:text-white transition">Privacy</Link></li>
-                <li><Link href="/terms" className="hover:text-white transition">Terms</Link></li>
-                <li><Link href="/security" className="hover:text-white transition">Security</Link></li>
-              </ul>
-            </div>
-          </div>
-          <div className="max-w-7xl mx-auto mt-8 sm:mt-10 pt-6 sm:pt-8 border-t border-slate-800 text-xs sm:text-sm text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <p>&copy; 2026 SkyRate LLC. All rights reserved.</p>
-            <p className="flex items-center gap-2">
-              <Zap className="w-3.5 h-3.5" aria-hidden /> Built for E-Rate teams.
-            </p>
           </div>
         </footer>
       </div>
