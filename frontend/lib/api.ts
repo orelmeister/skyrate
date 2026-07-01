@@ -950,6 +950,78 @@ export interface PIAPreview {
   document_checklist: Array<{ name: string; description: string; priority: string }>;
 }
 
+// ==================== INDUSTRY PULSE ====================
+
+export interface IndustryStatusBucket {
+  status: string;
+  frns: number;
+  committed: number;
+  pct_of_frns: number;
+}
+
+export interface IndustryServiceType {
+  service_type: string;
+  committed: number;
+  frns: number;
+  pct_of_committed: number;
+}
+
+export interface IndustryStateRow {
+  state: string;
+  committed: number;
+  frns: number;
+}
+
+export interface IndustryPulseResponse {
+  success: boolean;
+  year: number;
+  available_years: number[];
+  totals: {
+    total_committed: number;
+    funded_frns: number;
+    total_frns: number;
+    applicants: number;
+    funded_pct: number;
+  };
+  status_breakdown: {
+    funded: IndustryStatusBucket;
+    pending: IndustryStatusBucket;
+    denied: IndustryStatusBucket;
+    cancelled: IndustryStatusBucket;
+  };
+  by_service_type: IndustryServiceType[];
+  top_states: IndustryStateRow[];
+}
+
+export interface IndustryProvider {
+  rank: number;
+  spin_name: string;
+  committed: number;
+  frns: number;
+}
+
+export interface IndustryTopProvidersResponse {
+  success: boolean;
+  year: number;
+  count: number;
+  providers: IndustryProvider[];
+}
+
+export interface IndustryConsultant {
+  rank: number;
+  name: string;
+  crn: string;
+  committed: number;
+  frns: number;
+}
+
+export interface IndustryTopConsultantsResponse {
+  success: boolean;
+  year: number;
+  count: number;
+  consultants: IndustryConsultant[];
+}
+
 class ApiClient {
   private getAccessToken(): string | null {
     if (typeof window === 'undefined') return null;
@@ -3721,6 +3793,36 @@ class ApiClient {
    */
   async getFRNReport(reportId: number): Promise<ApiResponse<FRNReportDetailResponse>> {
     return this.request(`/api/v1/frn-reports/history/${reportId}`);
+  }
+
+  // ==================== INDUSTRY PULSE ====================
+
+  /**
+   * Industry-wide E-Rate overview for a funding year (USAC Open Data aggregates).
+   */
+  async getIndustryPulse(year?: number): Promise<ApiResponse<IndustryPulseResponse>> {
+    const qs = year ? `?year=${year}` : '';
+    return this.request(`/api/v1/industry/pulse${qs}`, { timeoutMs: 30000 });
+  }
+
+  /**
+   * Top service providers by committed dollars for a funding year.
+   */
+  async getIndustryTopProviders(year?: number, limit: number = 10): Promise<ApiResponse<IndustryTopProvidersResponse>> {
+    const params = new URLSearchParams();
+    if (year) params.set('year', String(year));
+    params.set('limit', String(limit));
+    return this.request(`/api/v1/industry/top-providers?${params.toString()}`, { timeoutMs: 30000 });
+  }
+
+  /**
+   * Top consultants by committed dollars for a funding year.
+   */
+  async getIndustryTopConsultants(year?: number, limit: number = 10): Promise<ApiResponse<IndustryTopConsultantsResponse>> {
+    const params = new URLSearchParams();
+    if (year) params.set('year', String(year));
+    params.set('limit', String(limit));
+    return this.request(`/api/v1/industry/top-consultants?${params.toString()}`, { timeoutMs: 30000 });
   }
 }
 

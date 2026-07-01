@@ -2228,6 +2228,15 @@ function ConsultantPortalPage() {
             <span>Compliance</span>
             <span className="ml-auto text-[10px] font-bold uppercase tracking-wide text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded">Beta</span>
           </Link>
+
+          {/* Industry Pulse link */}
+          <Link
+            href="/industry-pulse"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all text-slate-600 hover:bg-slate-50"
+          >
+            <span className="text-xl">📊</span>
+            <span>Industry Pulse</span>
+          </Link>
         </nav>
 
         {/* Portal Switcher (super/admin only) */}
