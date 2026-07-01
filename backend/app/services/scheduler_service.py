@@ -1530,7 +1530,8 @@ def refresh_admin_frn_snapshot():
                                     "source": user_info.get("source", "unknown"),
                                     "fcdl_date": frn.get("fcdl_date", ""),
                                     "pending_reason": frn.get("pending_reason", ""),
-                                    "spin": frn.get("spin_name") or frn.get("spin") or "",
+                                    "spin": frn.get("spin") or "",
+                                    "spin_name": frn.get("spin_name") or "",
                                     "contract_number": frn.get("contract_number", "") or "",
                                     "last_refreshed": now,
                                 })
@@ -1560,7 +1561,8 @@ def refresh_admin_frn_snapshot():
                                 "source": "vendor",
                                 "fcdl_date": frn.get("fcdl_date", ""),
                                 "pending_reason": frn.get("pending_reason", ""),
-                                "spin": frn.get("spin_name") or frn.get("spin") or vp.spin or "",
+                                "spin": frn.get("spin") or vp.spin or "",
+                                "spin_name": frn.get("spin_name") or vp.company_name or "",
                                 "contract_number": frn.get("contract_number", "") or "",
                                 "last_refreshed": now,
                             })

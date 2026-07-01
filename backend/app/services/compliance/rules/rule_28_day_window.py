@@ -68,17 +68,9 @@ def check(text: str, metadata: dict) -> Optional[RuleFinding]:
     """
     Check that the 28-day competitive bidding window is likely satisfied.
 
-    Returns a finding if:
-    - No mention of waiting period AND no dates found (medium risk)
-    - Dates found that suggest less than 28 days between posting and filing
+    Returns a finding only if dates are found that suggest less than
+    28 days between Form 470 posting and Form 471 filing.
     """
-    text_lower = text.lower()
-
-    # Check if 28-day window is explicitly mentioned
-    window_mentioned = any(
-        re.search(kw, text_lower) for kw in WINDOW_KEYWORDS
-    )
-
     # Extract dates
     dates = _extract_dates(text)
 
@@ -110,33 +102,10 @@ def check(text: str, metadata: dict) -> Optional[RuleFinding]:
                 evidence_snippet=f"{dates_sorted[0][0]} ... {dates_sorted[-1][0]}",
             )
 
-    # If no dates found and no window mention, flag as advisory
-    if not window_mentioned and len(dates) == 0:
-        # Check if this even looks like a Form 470 context
-        form_470_refs = re.findall(r"form\s*470", text_lower)
-        # Must mention Form 470 AND eligible E-Rate services to trigger
-        erate_context = re.search(
-            r"(?:e-?rate|usac|eligible\s+services|competitive\s+bidding|internet\s+access|broadband|fiber|category\s*[12])",
-            text_lower
-        )
-        if form_470_refs and erate_context:
-            return RuleFinding(
-                rule_id=RULE_ID,
-                rule_version=VERSION,
-                severity=Severity.MEDIUM,
-                area="Competitive Bidding",
-                description=(
-                    "No reference to the 28-day waiting period or "
-                    "posting/filing dates found in the document."
-                ),
-                suggestion=(
-                    "Confirm that at least 28 calendar days will elapse "
-                    "between USAC posting of your Form 470 and your "
-                    "Form 471 filing date."
-                ),
-                rule_reference=RULE_REFERENCE,
-                confidence=0.6,
-                evidence_snippet=None,
-            )
-
+    # NOTE: We intentionally do NOT flag documents that simply lack a
+    # reference to the 28-day waiting period. Neither Form 470 nor Form 471
+    # is required to explicitly reference the 28-day window, so a missing
+    # reference is not a compliance issue. We only surface a finding above
+    # when actual posting/filing dates indicate the window was not satisfied.
     return None
+
