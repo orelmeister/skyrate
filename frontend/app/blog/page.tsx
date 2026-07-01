@@ -43,6 +43,15 @@ const categoryColorMap: Record<string, string> = {
 
 const staticArticles = [
   {
+    title: "How to File FCC Form 498 & Get Your E-Rate SPIN (2026 Step-by-Step)",
+    teaser:
+      "Sell to schools? To get paid through E-Rate you need a SPIN — and to get a SPIN you file FCC Form 498. A plain-English, step-by-step guide to registering as an E-Rate service provider.",
+    icon: FileText,
+    color: "indigo",
+    link: "/blog/how-to-file-fcc-form-498-e-rate-spin",
+    category: "Guide",
+  },
+  {
     title: "E-Rate Compliance AI: We Tested It on 144 Real Form 470s [FY2026 Results]",
     teaser:
       "We scanned 144 real Certified Form 470 filings for FCC §54.503 violations in 5 minutes. See the methodology, rule-fire rates, and what every applicant should fix before PIA review.",
