@@ -2193,6 +2193,29 @@ def init_scheduler():
         next_run_time=boot + timedelta(seconds=90),
     )
 
+    # Industry Pulse cache pre-warm - every 6h + a boot-time warm at +2min so
+    # users never hit a cold ~10s USAC load. Populates the exact cache keys the
+    # /industry/pulse, /industry/top-providers, /industry/top-consultants
+    # endpoints read (latest 2 years x 3 namespaces x default limit=10).
+    # Runs ONLY on the dedicated scheduler worker.
+    def _prewarm_industry_pulse():
+        try:
+            from ..api.v1.industry import prewarm_industry_cache
+            prewarm_industry_cache()
+        except Exception as exc:
+            logger.exception("industry pulse prewarm failed: %s", exc)
+
+    scheduler.add_job(
+        _prewarm_industry_pulse,
+        trigger=IntervalTrigger(hours=6),
+        id='prewarm_industry_pulse',
+        name='Industry Pulse: pre-warm USAC aggregate caches (every 6h + boot)',
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+        next_run_time=boot + timedelta(minutes=2),
+    )
+
     scheduler.start()
     logger.info("Background scheduler started with jobs:")
     for job in scheduler.get_jobs():
