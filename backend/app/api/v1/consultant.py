@@ -3772,15 +3772,28 @@ async def get_portfolio_frn_status(
                     AdminFRNSnapshot.ben.ilike(search_term),
                 )
             )
-        # SPIN filter (matches either the numeric SPIN or the service provider NAME)
+        # SPIN filter. The USAC FRN Status dataset (qdmp-ygft) stores only the
+        # service-provider NAME (spin_name), not the numeric SPIN. So when a numeric
+        # SPIN is entered, resolve it to the provider name via the service-provider
+        # dataset and match on spin_name (still also matching the numeric spin column
+        # for rows that carry it, e.g. registered vendors).
         if spin:
-            spin_term = f"%{spin.strip()}%"
-            q = q.filter(
-                _or(
-                    AdminFRNSnapshot.spin.ilike(spin_term),
-                    AdminFRNSnapshot.spin_name.ilike(spin_term),
-                )
+            spin_val = spin.strip()
+            conds = [AdminFRNSnapshot.spin.ilike(f"%{spin_val}%")]
+            resolved_name = None
+            if spin_val.isdigit():
+                try:
+                    from utils.usac_client import USACDataClient
+                    vs = USACDataClient().validate_spin(spin_val)
+                    if vs.get("valid") and vs.get("service_provider_name"):
+                        resolved_name = vs["service_provider_name"]
+                except Exception as _spin_err:
+                    logger.warning(f"[frn-status] SPIN->name resolve failed for {spin_val}: {_spin_err}")
+            conds.append(
+                AdminFRNSnapshot.spin_name.ilike(f"%{resolved_name}%")
+                if resolved_name else AdminFRNSnapshot.spin_name.ilike(f"%{spin_val}%")
             )
+            q = q.filter(_or(*conds))
         # CRN filter (contract record number)
         if crn:
             q = q.filter(AdminFRNSnapshot.contract_number.ilike(f"%{crn.strip()}%"))
