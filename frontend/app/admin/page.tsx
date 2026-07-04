@@ -661,7 +661,7 @@ function AdminDashboard() {
                           alert(res.data.message || "Stripe invoice created!");
                           loadUsers();
                         } else {
-                          alert(res.data?.error || "Failed to create invoice");
+                          alert(res.error || res.data?.error || "Failed to create invoice");
                         }
                       } else {
                         if (!modalRef.trim()) {
@@ -680,7 +680,7 @@ function AdminDashboard() {
                           setModalRef("");
                           loadUsers();
                         } else {
-                          alert(res.data?.error || "Failed to assign manual plan");
+                          alert(res.error || res.data?.error || "Failed to assign manual plan");
                         }
                       }
                     } catch (e: any) {

@@ -625,6 +625,12 @@ async def create_stripe_subscription_ach_invoice(
     else:
         price_id = settings.STRIPE_PRICE_YEARLY if data.plan == "yearly" else settings.STRIPE_PRICE_MONTHLY
 
+    # Fallback to the default plan price when a role-specific Stripe price is not
+    # configured in the environment, so admins can still invoice consultants /
+    # vendors instead of hitting a hard "price configuration not found" error.
+    if not price_id:
+        price_id = settings.STRIPE_PRICE_YEARLY if data.plan == "yearly" else settings.STRIPE_PRICE_MONTHLY
+
     if not price_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -777,6 +783,19 @@ async def list_user_seats(
         ConsultantProfile.user_id == user.id
     ).first()
 
+    # A consultant account should always support team seats. If the profile row
+    # was never created (e.g. account provisioned before the seats feature),
+    # provision it now so seat management is available.
+    if profile is None and user.role == "consultant":
+        profile = ConsultantProfile(
+            user_id=user.id,
+            company_name=getattr(user, "company_name", None),
+            contact_name=getattr(user, "full_name", None),
+        )
+        db.add(profile)
+        db.commit()
+        db.refresh(profile)
+
     subscription = db.query(Subscription).filter(
         Subscription.user_id == user_id
     ).first()
@@ -864,6 +883,17 @@ async def invite_user_seat(
     profile = db.query(ConsultantProfile).filter(
         ConsultantProfile.user_id == owner.id
     ).first()
+    # Auto-provision the profile for a consultant account missing one, so an
+    # admin can invite seats without a pre-existing ConsultantProfile row.
+    if profile is None and owner.role == "consultant":
+        profile = ConsultantProfile(
+            user_id=owner.id,
+            company_name=getattr(owner, "company_name", None),
+            contact_name=getattr(owner, "full_name", None),
+        )
+        db.add(profile)
+        db.commit()
+        db.refresh(profile)
     if profile is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
