@@ -3,21 +3,21 @@ import Link from "next/link";
 import { Check, ArrowRight, Bell, Activity, Clock, Mail, BarChart3, Shield, Database, History } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate FRN Tracker 2026 [Free Real-Time Status Alerts] | SkyRate",
-  description: "Track every E-Rate FRN in real time. Free instant alerts the moment USAC commits, denies, or flags your funding. No credit card. Trusted by E-Rate consultants nationwide.",
+  title: "Check FRN Status Free 2026 — Real-Time E-Rate Funding Alerts | SkyRate",
+  description: "Check any E-Rate FRN status in real time — know the moment USAC commits, denies, or flags your funding. Free instant alerts on every FRN number. No credit card required.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/features/frn-monitoring" },
   openGraph: {
-    title: "E-Rate FRN Tracker 2026 [Free Real-Time Status Alerts] | SkyRate",
-    description: "Track every E-Rate FRN in real time. Free instant alerts the moment USAC commits, denies, or flags your funding. No credit card. Trusted by E-Rate consultants nationwide.",
+    title: "Check FRN Status Free 2026 — Real-Time E-Rate Funding Alerts | SkyRate",
+    description: "Check any E-Rate FRN status in real time — know the moment USAC commits, denies, or flags your funding. Free instant alerts on every FRN number. No credit card required.",
     url: "https://skyrate.ai/features/frn-monitoring",
     siteName: "SkyRate AI",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "E-Rate FRN Tracker 2026 [Free Real-Time Status Alerts] | SkyRate",
-    description: "Track every E-Rate FRN in real time. Free instant alerts when USAC commits, denies, or flags your funding.",
+    title: "Check FRN Status Free 2026 — Real-Time E-Rate Funding Alerts | SkyRate",
+    description: "Check any E-Rate FRN status in real time. Free instant alerts the moment USAC commits, denies, or flags your funding — on every FRN number.",
   },
 };
 
