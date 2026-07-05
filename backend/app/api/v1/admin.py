@@ -700,11 +700,20 @@ async def create_stripe_subscription_ach_invoice(
         local_sub.plan = data.plan
         db.commit()
 
-        # Retrieve the generated invoice's payment link if available
+        # Finalize and email the invoice so the customer actually receives a
+        # payable hosted link ("Dispatch Invoice"). Stripe would auto-finalize
+        # a send_invoice subscription eventually, but we do it now so the URL is
+        # returned immediately and the customer is emailed right away.
         hosted_invoice_url = None
         if sub.latest_invoice:
             try:
                 inv = stripe.Invoice.retrieve(sub.latest_invoice)
+                if getattr(inv, "status", None) == "draft":
+                    inv = stripe.Invoice.finalize_invoice(inv.id)
+                try:
+                    stripe.Invoice.send_invoice(inv.id)
+                except Exception:
+                    pass
                 hosted_invoice_url = inv.hosted_invoice_url
             except Exception:
                 pass
