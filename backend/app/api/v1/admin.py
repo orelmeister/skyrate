@@ -662,7 +662,16 @@ async def create_stripe_subscription_ach_invoice(
             # or OFFLINE_* that were written by offline/manual flows — passing
             # those to Stripe raises "No such customer".
             if user.subscription.stripe_customer_id.startswith("cus_"):
-                stripe_cust_id = user.subscription.stripe_customer_id
+                candidate = user.subscription.stripe_customer_id
+                # Verify the stored customer still exists in Stripe. It may have
+                # been deleted in the dashboard; if so, fall back to creating a
+                # fresh one instead of hard-failing with "No such customer".
+                try:
+                    cust = stripe.Customer.retrieve(candidate)
+                    if not getattr(cust, "deleted", False):
+                        stripe_cust_id = candidate
+                except stripe.error.InvalidRequestError:
+                    stripe_cust_id = None
 
         if not stripe_cust_id:
             customer = stripe.Customer.create(
