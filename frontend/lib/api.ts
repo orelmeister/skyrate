@@ -2593,6 +2593,7 @@ class ApiClient {
     mode?: string;
     states?: string[];
     service_categories?: string[];
+    applicant_types?: string[];
     channels?: { email?: boolean; sms?: boolean; push?: boolean; in_app?: boolean };
     email?: string;
   }): Promise<ApiResponse<{ success: boolean; subscription: VendorAlertSubscription }>> {

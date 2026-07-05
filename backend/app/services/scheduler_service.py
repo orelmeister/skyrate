@@ -1944,6 +1944,26 @@ def run_form470_scanner_job():
         logger.error(f"[form470_scanner] scheduled run failed: {e}")
 
 
+def run_opportunity_digest_job():
+    """Email each active vendor alert subscription a digest of the new Form
+    470 opportunities that matched it since the last dispatch. Runs weekly on
+    Monday afternoon UTC, after the daily Form 470 scan has ingested USAC's
+    fresh weekly data (USAC only refreshes open data weekly, Mon ~9 AM ET)."""
+    logger.info("[opportunity_digest] starting weekly run")
+    try:
+        from .opportunity_digest import send_opportunity_digests
+        result = send_opportunity_digests()
+        logger.info(
+            "[opportunity_digest] done subs=%s emails=%s matches=%s errors=%s",
+            result.get("subscriptions_checked"),
+            result.get("emails_sent"),
+            result.get("matches_delivered"),
+            result.get("errors"),
+        )
+    except Exception as e:
+        logger.error(f"[opportunity_digest] weekly run failed: {e}")
+
+
 def init_scheduler():
     """Initialize the background scheduler with all jobs.
 
@@ -2147,6 +2167,20 @@ def init_scheduler():
         coalesce=True,
         replace_existing=True,
         next_run_time=boot + timedelta(minutes=10),
+    )
+
+    # Vendor opportunity digest - weekly on Monday 16:00 UTC, one hour after
+    # the daily Form 470 scan (15:00 UTC) so the fresh weekly USAC data is
+    # ingested and matched before we email. USAC refreshes open data weekly
+    # (Mon ~9 AM ET), so a weekly digest is the tightest honest cadence.
+    scheduler.add_job(
+        run_opportunity_digest_job,
+        trigger=CronTrigger(day_of_week='mon', hour=16, minute=0, timezone='UTC'),
+        id='opportunity_digest',
+        name='Email vendor opportunity digests (weekly Monday)',
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
     )
 
     # Vendor Form 470 snapshot - daily at 04:00 UTC (first run 7 min after boot)

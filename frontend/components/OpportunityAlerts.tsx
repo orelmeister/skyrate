@@ -10,6 +10,17 @@ const US_STATES = [
   "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
 ];
 
+// Friendly labels for the normalized applicant-type keys the matcher uses.
+const APPLICANT_TYPE_LABELS: Record<string, string> = {
+  k12_public: "Schools",
+  library: "Libraries",
+  consortium: "Consortia",
+};
+
+function applicantTypeLabel(key: string): string {
+  return APPLICANT_TYPE_LABELS[key] || key;
+}
+
 interface OpportunityAlertsProps {
   defaultEmail?: string | null;
 }
@@ -23,8 +34,14 @@ export default function OpportunityAlerts({ defaultEmail }: OpportunityAlertsPro
 
   const [name, setName] = useState("New opportunity alert");
   const [selectedStates, setSelectedStates] = useState<string[]>([]);
-  const [cat1, setCat1] = useState(true);
-  const [cat2, setCat2] = useState(true);
+  // Applicant types the USAC Form 470 feed actually supports. Category 1/2
+  // is NOT filterable here: USAC's 470 dataset has no Category 2 field and
+  // does not tag 470s by funding category, so a category filter always
+  // returned 0. Applicant type (School / Library / Consortium) is populated
+  // on every posting and is matched end-to-end by the alert matcher.
+  const [wantSchools, setWantSchools] = useState(true);
+  const [wantLibraries, setWantLibraries] = useState(true);
+  const [wantConsortia, setWantConsortia] = useState(true);
   const [email, setEmail] = useState(defaultEmail || "");
 
   const load = async () => {
@@ -55,16 +72,20 @@ export default function OpportunityAlerts({ defaultEmail }: OpportunityAlertsPro
       setError("Select at least one state to get alerts for.");
       return;
     }
-    const cats: string[] = [];
-    if (cat1) cats.push("Category 1");
-    if (cat2) cats.push("Category 2");
+    const applicantTypes: string[] = [];
+    if (wantSchools) applicantTypes.push("k12_public");
+    if (wantLibraries) applicantTypes.push("library");
+    if (wantConsortia) applicantTypes.push("consortium");
     setSaving(true);
     setError(null);
     try {
       const res = await api.createVendorAlert({
         name: name.trim() || "Opportunity alert",
         states: selectedStates,
-        service_categories: cats.length ? cats : undefined,
+        // Only send applicant_types when the vendor has narrowed it; leaving
+        // all three checked means "any applicant" (send nothing = wildcard).
+        applicant_types:
+          applicantTypes.length > 0 && applicantTypes.length < 3 ? applicantTypes : undefined,
         channels: { email: true },
         email: email.trim() || undefined,
       });
@@ -100,7 +121,8 @@ export default function OpportunityAlerts({ defaultEmail }: OpportunityAlertsPro
             <span>🔔</span> Opportunity Alerts
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Get an email the moment a new Form 470 is posted in the states you sell to.
+            Get a weekly email digest of new Form 470 postings in the states you sell to — sent
+            Monday afternoons, right after USAC&apos;s weekly data refresh.
           </p>
         </div>
         <button
@@ -146,13 +168,19 @@ export default function OpportunityAlerts({ defaultEmail }: OpportunityAlertsPro
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
-              <input type="checkbox" checked={cat1} onChange={(e) => setCat1(e.target.checked)} /> Category 1
-            </label>
-            <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
-              <input type="checkbox" checked={cat2} onChange={(e) => setCat2(e.target.checked)} /> Category 2
-            </label>
+          <div>
+            <label className="text-xs font-semibold text-slate-600">Applicant type</label>
+            <div className="mt-1 flex items-center gap-4">
+              <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                <input type="checkbox" checked={wantSchools} onChange={(e) => setWantSchools(e.target.checked)} /> Schools
+              </label>
+              <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                <input type="checkbox" checked={wantLibraries} onChange={(e) => setWantLibraries(e.target.checked)} /> Libraries
+              </label>
+              <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                <input type="checkbox" checked={wantConsortia} onChange={(e) => setWantConsortia(e.target.checked)} /> Consortia
+              </label>
+            </div>
           </div>
 
           <div>
@@ -198,7 +226,8 @@ export default function OpportunityAlerts({ defaultEmail }: OpportunityAlertsPro
                 <div className="text-sm font-semibold text-slate-800">{s.name}</div>
                 <div className="text-xs text-slate-500">
                   {(s.states || []).length > 0 ? (s.states || []).join(", ") : "All states"}
-                  {(s.service_categories || []).length > 0 && ` · ${(s.service_categories || []).join(", ")}`}
+                  {(s.applicant_types || []).length > 0 &&
+                    ` · ${(s.applicant_types || []).map(applicantTypeLabel).join(", ")}`}
                   {s.email && ` · ${s.email}`}
                 </div>
               </div>
