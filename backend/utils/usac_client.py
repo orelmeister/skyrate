@@ -1057,25 +1057,35 @@ class USACDataClient:
         try:
             # Use the combined 471 dataset which has all relevant fields
             url = "https://opendata.usac.org/resource/avi8-svp9.json"
-            
-            # First, try searching by billed_entity_number (direct applicants)
+
+            # NOTE: funding_year is a TEXT column on avi8-svp9, so it MUST be
+            # quoted ('2026'); a numeric comparison raises a SoQL type-mismatch.
+            base_clause = f"(billed_entity_number='{ben}' OR ros_entity_number='{ben}')"
             year_filter = f" AND funding_year='{year}'" if year else ""
-            
-            # Use SoQL to search both billed_entity_number and ros_entity_number
-            where_clause = f"(billed_entity_number='{ben}' OR ros_entity_number='{ben}'){year_filter}"
-            
-            params = {
-                '$where': where_clause,
-                '$limit': limit,
-                '$order': 'funding_year DESC'
-            }
-            
-            logger.info(f"Fetching 471 data for BEN {ben}")
-            response = self.session.get(url, params=params, timeout=60)
-            response.raise_for_status()
-            
-            data = response.json()
-            
+
+            def _fetch(where_clause: str):
+                params = {
+                    '$where': where_clause,
+                    '$limit': limit,
+                    '$order': 'funding_year DESC'
+                }
+                resp = self.session.get(url, params=params, timeout=60)
+                resp.raise_for_status()
+                return resp.json()
+
+            logger.info(f"Fetching 471 data for BEN {ben} (year={year})")
+            data = _fetch(base_clause + year_filter)
+
+            # Fallback: if a year was requested but the entity has no 471 in that
+            # funding year (very common early in a cycle), retry across ALL years
+            # so competitive analysis still surfaces the entity's winning vendors
+            # instead of showing an empty "0 competitors" result.
+            year_fallback_used = False
+            if not data and year:
+                logger.info(f"No {year} 471 records for BEN {ben}; falling back to all years")
+                data = _fetch(base_clause)
+                year_fallback_used = bool(data)
+
             if not data:
                 logger.info(f"No 471 records found for BEN {ben}")
                 return {
@@ -1085,7 +1095,8 @@ class USACDataClient:
                     'records': [],
                     'vendors': [],
                     'funding_years': [],
-                    'total_committed': 0
+                    'total_committed': 0,
+                    'year_fallback_used': False
                 }
             
             logger.info(f"Found {len(data)} 471 records for BEN {ben}")
@@ -1181,7 +1192,8 @@ class USACDataClient:
                 'total_committed': total_committed,
                 'funding_years': sorted(list(years), reverse=True),
                 'vendors': vendor_list,
-                'records': records
+                'records': records,
+                'year_fallback_used': year_fallback_used
             }
             
             # Add consortium info if this is a ROS entity
