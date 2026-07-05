@@ -495,6 +495,28 @@ async def stripe_webhook(
             sub.canceled_at = datetime.utcnow()
             db.commit()
     
+    elif event["type"] in ("invoice.paid", "invoice.payment_succeeded"):
+        # Fires when a dispatched (send_invoice) ACH/card invoice is actually paid.
+        # Auto-promote the account to active. Match by subscription id first, then
+        # fall back to the customer id.
+        invoice = event["data"]["object"]
+        customer_id = invoice.get("customer")
+        stripe_sub_id = invoice.get("subscription")
+
+        sub = None
+        if stripe_sub_id:
+            sub = db.query(Subscription).filter(
+                Subscription.stripe_subscription_id == stripe_sub_id
+            ).first()
+        if not sub and customer_id:
+            sub = db.query(Subscription).filter(
+                Subscription.stripe_customer_id == customer_id
+            ).first()
+
+        if sub:
+            sub.status = SubscriptionStatus.ACTIVE.value
+            db.commit()
+
     elif event["type"] == "invoice.payment_failed":
         invoice = event["data"]["object"]
         customer_id = invoice["customer"]
