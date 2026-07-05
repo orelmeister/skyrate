@@ -324,6 +324,25 @@ function VendorPortalPage() {
   const [expanded471Frn, setExpanded471Frn] = useState<string | null>(null);
   const [form471LineItemsCache, setForm471LineItemsCache] = useState<Record<string, Form471LineItem[]>>({});
   const [form471LineItemsLoadingFrn, setForm471LineItemsLoadingFrn] = useState<string | null>(null);
+
+  // A4: the USAC 471 dataset returns one row per line item, so an FRN with N
+  // line items appears N times. Collapse to one row per FRN (summing the
+  // line-item committed amounts); the per-FRN line items are revealed by
+  // expanding the row.
+  const grouped471Records = useMemo(() => {
+    const byFrn = new Map<string, Form471Record>();
+    (form471Data?.records || []).forEach((r, i) => {
+      const key = r.frn || `__nofrn_${i}`;
+      const existing = byFrn.get(key);
+      if (existing) {
+        existing.committed_amount = (existing.committed_amount || 0) + (r.committed_amount || 0);
+        existing.pre_discount_amount = (existing.pre_discount_amount || 0) + (r.pre_discount_amount || 0);
+      } else {
+        byFrn.set(key, { ...r });
+      }
+    });
+    return Array.from(byFrn.values());
+  }, [form471Data]);
   
   // Payment guard - check if user needs to complete payment setup
   const [checkingPayment, setCheckingPayment] = useState(true);
@@ -1826,7 +1845,7 @@ function VendorPortalPage() {
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                🌐 Global USAC Market (Demo/All FRNs)
+                🌐 Global USAC Market (All FRNs)
               </button>
             </div>
 
@@ -1837,7 +1856,7 @@ function VendorPortalPage() {
                     <span className="text-2xl">🌐</span>
                   </div>
                   <div className="flex-1">
-                    <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Global USAC Market View (Demo Mode)</h2>
+                    <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Global USAC Market View</h2>
                     <p className="text-xs text-slate-600 mt-0.5">
                       Showing all public E-Rate contracts globally. Search by BEN, SPIN, or Contract Number (CRN) across any entity or competitor!
                       {!profile?.spin && (
@@ -3055,7 +3074,7 @@ function VendorPortalPage() {
                   <div className="space-y-2">
                   <TableExportBar
                     selectedCount={selectedForm471Records.size}
-                    totalCount={form471Data.records.length}
+                    totalCount={grouped471Records.length}
                     onExportCsv={exportForm471Records}
                     onClearSelection={() => setSelectedForm471Records(new Set())}
                   />
@@ -3071,10 +3090,10 @@ function VendorPortalPage() {
                             <th className="px-4 py-3 w-10">
                               <input
                                 type="checkbox"
-                                checked={selectedForm471Records.size === form471Data.records.length && form471Data.records.length > 0}
+                                checked={selectedForm471Records.size === grouped471Records.length && grouped471Records.length > 0}
                                 onChange={(e) => {
                                   if (e.target.checked) {
-                                    setSelectedForm471Records(new Set(form471Data!.records.map(r => r.frn)));
+                                    setSelectedForm471Records(new Set(grouped471Records.map(r => r.frn)));
                                   } else {
                                     setSelectedForm471Records(new Set());
                                   }
@@ -3092,7 +3111,7 @@ function VendorPortalPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {form471Data.records.slice(0, 50).map((record, idx) => {
+                          {grouped471Records.slice(0, 50).map((record, idx) => {
                             const isExpanded = expanded471Frn === record.frn;
                             const lineItems = form471LineItemsCache[record.frn];
                             const isLoadingItems = form471LineItemsLoadingFrn === record.frn;
@@ -3198,9 +3217,9 @@ function VendorPortalPage() {
                           })}
                         </tbody>
                       </table>
-                      {form471Data.records.length > 50 && (
+                      {grouped471Records.length > 50 && (
                         <div className="p-4 text-center text-sm text-slate-500 bg-slate-50 border-t border-slate-200">
-                          Showing first 50 of {form471Data.records.length} records
+                          Showing first 50 of {grouped471Records.length} FRNs
                         </div>
                       )}
                     </div>
