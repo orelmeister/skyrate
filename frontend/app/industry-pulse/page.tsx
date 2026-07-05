@@ -2,7 +2,6 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import Image from "next/image";
 import { useAuthStore } from "@/lib/auth-store";
 import {
@@ -52,6 +51,16 @@ const STATUS_STYLES: Record<string, { label: string; badge: string; bar: string 
 function IndustryPulseInner() {
   const router = useRouter();
   const { user, isAuthenticated, logout, _hasHydrated } = useAuthStore();
+
+  // Return to the page the user came from (preserving its ?tab=), falling back
+  // to the vendor portal for direct/deep-link entries. /dashboard does not exist.
+  const handleBack = useCallback(() => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/vendor");
+    }
+  }, [router]);
 
   const [year, setYear] = useState<number | undefined>(undefined);
   const [pulse, setPulse] = useState<IndustryPulseResponse | null>(null);
@@ -126,13 +135,14 @@ function IndustryPulseInner() {
       <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link
-              href="/dashboard"
+            <button
+              type="button"
+              onClick={handleBack}
               className="text-slate-400 hover:text-slate-600 transition-colors"
-              aria-label="Back to dashboard"
+              aria-label="Go back"
             >
               <ArrowLeft className="w-5 h-5" />
-            </Link>
+            </button>
             <div className="flex items-center gap-3">
               <Image
                 src="/images/logos/logo-icon-transparent.png"
