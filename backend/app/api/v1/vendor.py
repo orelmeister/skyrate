@@ -1092,6 +1092,87 @@ class Form470SearchRequest(BaseModel):
     limit: int = 500
 
 
+@router.get("/470/geo")
+async def get_470_geo(
+    request: Request,
+    state: Optional[str] = None,
+    funding_year: Optional[int] = None,
+    limit: int = 1000,
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
+):
+    """Lightweight geospatial feed for the Opportunity Map.
+
+    Pulls recent Form 470 postings that carry USAC-reported latitude/longitude
+    directly from the 470 Basic dataset (jp7a-89nd). Single Socrata query, no
+    services join and no snapshot table — so every returned row has real
+    coordinates ready to plot.
+    """
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+    try:
+        from utils.usac_client import USACDataClient, USAC_ENDPOINTS
+    except Exception:  # pragma: no cover - import path fallback
+        from ...utils.usac_client import USACDataClient, USAC_ENDPOINTS
+
+    if limit > 2000:
+        limit = 2000
+    if limit < 1:
+        limit = 1000
+
+    def _f(v):
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return None
+        return None if f == 0.0 else f
+
+    where = ["latitude IS NOT NULL", "longitude IS NOT NULL"]
+    if state:
+        where.append(f"billed_entity_state = '{state.upper().replace(chr(39), '')}'")
+    if funding_year:
+        where.append(f"funding_year = '{int(funding_year)}'")
+
+    params = {
+        "$where": " AND ".join(where),
+        "$order": "certified_datetime DESC",
+        "$limit": limit,
+    }
+
+    try:
+        client = USACDataClient()
+        resp = client.session.get(USAC_ENDPOINTS["470_basic"], params=params, timeout=45)
+        resp.raise_for_status()
+        rows = resp.json()
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("[470-geo] fetch failed: %s", exc)
+        return {"success": False, "error": "Failed to fetch map data", "total": 0, "leads": []}
+
+    leads = []
+    for r in rows:
+        lat = _f(r.get("latitude"))
+        lon = _f(r.get("longitude"))
+        if lat is None or lon is None:
+            continue
+        leads.append({
+            "application_number": r.get("application_number"),
+            "funding_year": r.get("funding_year"),
+            "ben": r.get("ben"),
+            "entity_name": r.get("billed_entity_name"),
+            "state": r.get("billed_entity_state"),
+            "city": r.get("billed_entity_city"),
+            "zip": r.get("billed_entity_zip"),
+            "latitude": lat,
+            "longitude": lon,
+            "applicant_type": r.get("applicant_type"),
+            "status": r.get("f470_status"),
+            "posting_date": r.get("certified_datetime"),
+            "contact_email": r.get("contact_email"),
+            "contact_name": r.get("contact_name"),
+        })
+
+    return {"success": True, "total": len(leads), "leads": leads}
+
+
 @router.get("/470/leads")
 async def get_470_leads(
     request: Request,

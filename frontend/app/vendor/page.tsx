@@ -479,12 +479,6 @@ function VendorPortalPage() {
       loadFRNWatches();
       loadReportHistory();
     }
-    // Opportunity Map: lazily load Form 470 postings the first time the map
-    // tab is opened so there is something to plot. Reuses the same cached
-    // 470-leads fetch as the Form 470 Leads tab.
-    if (activeTab === "map" && form470Leads.length === 0 && !form470Loading) {
-      load470Leads({});
-    }
     // Auto-enable Global View on FRN tab if vendor has no SPIN configured (Demo Mode)
     if (activeTab === "frn-status" && !profile?.spin && !isLoading) {
       setFrnStatusGlobalView(true);
@@ -2932,12 +2926,7 @@ function VendorPortalPage() {
         {/* Opportunity Map Tab (Phase D — geospatial) */}
         {activeTab === "map" && (
           <div className="space-y-6">
-            <OpportunityMap
-              leads={form470Leads}
-              loading={form470Loading}
-              error={form470Error}
-              onReload={() => load470Leads({})}
-            />
+            <OpportunityMap />
             <OpportunityAlerts />
           </div>
         )}

@@ -2566,6 +2566,19 @@ class ApiClient {
   // ==================== OPPORTUNITY ALERTS ====================
 
   /**
+   * Lightweight geospatial feed for the Opportunity Map — recent Form 470s that
+   * carry USAC latitude/longitude, ready to plot.
+   */
+  async get470Geo(params?: { state?: string; funding_year?: number; limit?: number }): Promise<ApiResponse<{ success: boolean; total: number; leads: Form470Lead[] }>> {
+    const qs = new URLSearchParams();
+    if (params?.state) qs.append('state', params.state);
+    if (params?.funding_year) qs.append('funding_year', params.funding_year.toString());
+    if (params?.limit) qs.append('limit', params.limit.toString());
+    const q = qs.toString();
+    return this.request(`/api/v1/vendor/470/geo${q ? '?' + q : ''}`);
+  }
+
+  /**
    * List the current vendor's Form 470 opportunity alert subscriptions.
    */
   async listVendorAlerts(): Promise<ApiResponse<{ success: boolean; subscriptions: VendorAlertSubscription[] }>> {

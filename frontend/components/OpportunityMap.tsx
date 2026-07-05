@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Form470Lead } from "@/lib/api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { api, Form470Lead } from "@/lib/api";
 
 // Leaflet is loaded from a CDN at runtime (no npm dependency, so nothing new
 // enters the build graph). We guard every access behind the loaded `window.L`.
@@ -88,14 +88,7 @@ function popupHtml(lead: Form470Lead): string {
     </div>`;
 }
 
-interface OpportunityMapProps {
-  leads: Form470Lead[];
-  loading: boolean;
-  error?: string | null;
-  onReload: () => void;
-}
-
-export default function OpportunityMap({ leads, loading, error, onReload }: OpportunityMapProps) {
+export default function OpportunityMap() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
@@ -103,6 +96,32 @@ export default function OpportunityMap({ leads, loading, error, onReload }: Oppo
   const [loadError, setLoadError] = useState<string | null>(null);
   const [stateFilter, setStateFilter] = useState<string>("");
   const [catFilter, setCatFilter] = useState<string>("");
+
+  // The map loads its own geo feed (recent Form 470s that carry USAC coords).
+  const [leads, setLeads] = useState<Form470Lead[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const onReload = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.get470Geo({ limit: 1500 });
+      if (res.success && res.data?.leads) {
+        setLeads(res.data.leads);
+      } else {
+        setError(res.error || "Failed to load map data");
+      }
+    } catch {
+      setError("Failed to load map data");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    onReload();
+  }, [onReload]);
 
   // Only leads that actually carry coordinates can be plotted.
   const geoLeads = useMemo(
