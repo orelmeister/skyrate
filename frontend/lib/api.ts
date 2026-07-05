@@ -584,6 +584,9 @@ export interface Form470Lead {
   entity_name: string;
   state: string;
   city: string;
+  zip?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   applicant_type: string;
   status: string;
   posting_date: string;
@@ -622,6 +625,19 @@ export interface Form470LeadsResponse {
     manufacturer?: string;
   };
   error?: string;
+}
+
+export interface VendorAlertSubscription {
+  id: number;
+  name: string;
+  mode: string;
+  states: string[];
+  service_categories: string[];
+  applicant_types?: string[];
+  channels: { email?: boolean; sms?: boolean; push?: boolean; in_app?: boolean };
+  email?: string | null;
+  active: boolean;
+  created_at?: string | null;
 }
 
 export interface Form470DetailEntity {
@@ -2545,6 +2561,39 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(filters),
     });
+  }
+
+  // ==================== OPPORTUNITY ALERTS ====================
+
+  /**
+   * List the current vendor's Form 470 opportunity alert subscriptions.
+   */
+  async listVendorAlerts(): Promise<ApiResponse<{ success: boolean; subscriptions: VendorAlertSubscription[] }>> {
+    return this.request('/api/v1/vendor/alerts');
+  }
+
+  /**
+   * Create a new opportunity alert subscription (email digest of new Form 470s).
+   */
+  async createVendorAlert(payload: {
+    name: string;
+    mode?: string;
+    states?: string[];
+    service_categories?: string[];
+    channels?: { email?: boolean; sms?: boolean; push?: boolean; in_app?: boolean };
+    email?: string;
+  }): Promise<ApiResponse<{ success: boolean; subscription: VendorAlertSubscription }>> {
+    return this.request('/api/v1/vendor/alerts', {
+      method: 'POST',
+      body: JSON.stringify({ mode: 'filter', ...payload }),
+    });
+  }
+
+  /**
+   * Delete an opportunity alert subscription.
+   */
+  async deleteVendorAlert(id: number): Promise<ApiResponse<{ success: boolean }>> {
+    return this.request(`/api/v1/vendor/alerts/${id}`, { method: 'DELETE' });
   }
 
   // ==================== SAVED LEADS ====================

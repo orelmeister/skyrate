@@ -10,6 +10,8 @@ import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailR
 import { Form471LineItem } from "@/lib/api";
 import { useTabParam } from "@/hooks/useTabParam";
 import PredictedLeadsTab from "@/components/PredictedLeadsTab";
+import OpportunityMap from "@/components/OpportunityMap";
+import OpportunityAlerts from "@/components/OpportunityAlerts";
 import { TableExportBar } from "@/components/TableExportBar";
 import MissingIdentifierBanner from "@/components/MissingIdentifierBanner";
 import { SkeletonRows, SkeletonTable, SkeletonStatCards } from "@/components/Skeleton";
@@ -17,7 +19,7 @@ import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { DisbursementPanel } from "@/components/FRNDetailModal";
 import { ChevronRight, ChevronDown } from "lucide-react";
 
-const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "470-leads", "predicted-leads", "competitive", "search", "leads", "settings"] as const;
+const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "470-leads", "map", "predicted-leads", "competitive", "search", "leads", "settings"] as const;
 type VendorTab = typeof VENDOR_TABS[number];
 
 interface SearchResult {
@@ -476,6 +478,12 @@ function VendorPortalPage() {
     if (activeTab === 'frn-status') {
       loadFRNWatches();
       loadReportHistory();
+    }
+    // Opportunity Map: lazily load Form 470 postings the first time the map
+    // tab is opened so there is something to plot. Reuses the same cached
+    // 470-leads fetch as the Form 470 Leads tab.
+    if (activeTab === "map" && form470Leads.length === 0 && !form470Loading) {
+      load470Leads({});
     }
     // Auto-enable Global View on FRN tab if vendor has no SPIN configured (Demo Mode)
     if (activeTab === "frn-status" && !profile?.spin && !isLoading) {
@@ -1363,6 +1371,7 @@ function VendorPortalPage() {
     { id: "my-entities", label: "My Entities", icon: "🏫" },
     { id: "frn-status", label: "FRN Status", icon: "📈" },
     { id: "470-leads", label: "Form 470 Leads", icon: "🎯" },
+    { id: "map", label: "Opportunity Map", icon: "🗺️" },
     { id: "predicted-leads", label: "Predicted Leads", icon: "🔮" },
     { id: "competitive", label: "471 Lookup", icon: "🔎" },
     { id: "search", label: "School Search", icon: "🔍" },
@@ -2917,6 +2926,19 @@ function VendorPortalPage() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Opportunity Map Tab (Phase D — geospatial) */}
+        {activeTab === "map" && (
+          <div className="space-y-6">
+            <OpportunityMap
+              leads={form470Leads}
+              loading={form470Loading}
+              error={form470Error}
+              onReload={() => load470Leads({})}
+            />
+            <OpportunityAlerts />
           </div>
         )}
 

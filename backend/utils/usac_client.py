@@ -2183,6 +2183,15 @@ class USACDataClient:
             # Sanitize text inputs to prevent SOQL injection (escape single quotes)
             def _sanitize(val: str) -> str:
                 return val.replace("'", "''")
+
+            # Parse USAC lat/long (strings) into floats for the opportunity map.
+            def _geofloat(val) -> Optional[float]:
+                try:
+                    f = float(val)
+                except (TypeError, ValueError):
+                    return None
+                # USAC occasionally has 0/blank placeholders; treat as missing.
+                return None if f == 0.0 else f
             
             if category:
                 cat_name = f"Category {category}" if category in ['1', '2'] else category
@@ -2313,6 +2322,11 @@ class USACDataClient:
                         'entity_name': basic_info.get('billed_entity_name'),
                         'state': basic_info.get('billed_entity_state'),
                         'city': basic_info.get('billed_entity_city'),
+                        'zip': basic_info.get('billed_entity_zip'),
+                        # Exact coordinates provided directly by USAC (470_basic)
+                        # — used to plot the opportunity on the vendor map.
+                        'latitude': _geofloat(basic_info.get('latitude')),
+                        'longitude': _geofloat(basic_info.get('longitude')),
                         'applicant_type': basic_info.get('applicant_type'),
                         'status': basic_info.get('f470_status'),
                         'posting_date': basic_info.get('certified_datetime'),
