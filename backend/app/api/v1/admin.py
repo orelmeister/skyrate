@@ -657,8 +657,11 @@ async def create_stripe_subscription_ach_invoice(
         # 3. Resolve or Create Stripe Customer
         stripe_cust_id = None
         if user.subscription and user.subscription.stripe_customer_id:
-            # Check if stripe_customer_id is valid (not local manual placeholder)
-            if not user.subscription.stripe_customer_id.startswith("MANUAL_OFFLINE_"):
+            # Only reuse a genuine Stripe customer id (always "cus_..."). Ignore
+            # local placeholders such as MANUAL_OFFLINE_*, FREE_TEST_ACCOUNT_*,
+            # or OFFLINE_* that were written by offline/manual flows — passing
+            # those to Stripe raises "No such customer".
+            if user.subscription.stripe_customer_id.startswith("cus_"):
                 stripe_cust_id = user.subscription.stripe_customer_id
 
         if not stripe_cust_id:
