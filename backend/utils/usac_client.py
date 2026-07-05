@@ -1444,21 +1444,28 @@ class USACDataClient:
         """
         try:
             url = USAC_ENDPOINTS['frn_status']
-            
-            # Build query - FRN Status dataset uses spin_name, not spin number
-            # We need to first get the spin_name from service provider dataset
-            provider_info = self.validate_spin(spin)
-            if not provider_info.get('valid'):
-                return {
-                    'success': False,
-                    'error': f'Invalid SPIN: {spin}'
-                }
-            
-            spin_name = provider_info.get('service_provider_name', '')
-            
-            # Query FRN status by spin_name
-            where_conditions = [f"spin_name = '{spin_name}'"]
-            
+
+            # The FRN Status dataset filters on spin_name, not the SPIN number.
+            # If a numeric SPIN is provided, resolve it to the exact provider
+            # name. If a provider NAME (or partial) is provided — which the UI
+            # explicitly invites ("SPIN # or provider name") — skip the exact
+            # validation (which only matches a full numeric SPIN) and do a
+            # case-insensitive partial match on spin_name. Previously any
+            # non-numeric term failed validation and returned nothing.
+            term = (spin or "").strip()
+            spin_name = ""
+            if term.isdigit():
+                provider_info = self.validate_spin(term)
+                if provider_info.get('valid'):
+                    spin_name = provider_info.get('service_provider_name', '')
+
+            term_safe = term.replace("'", "''")
+            if spin_name:
+                name_safe = spin_name.replace("'", "''")
+                where_conditions = [f"spin_name = '{name_safe}'"]
+            else:
+                where_conditions = [f"UPPER(spin_name) LIKE UPPER('%{term_safe}%')"]
+
             if year:
                 where_conditions.append(f"funding_year = '{year}'")
             
@@ -1484,7 +1491,7 @@ class USACDataClient:
                 return {
                     'success': True,
                     'spin': spin,
-                    'spin_name': spin_name,
+                    'spin_name': spin_name or term,
                     'total_frns': 0,
                     'frns': [],
                     'summary': {
@@ -1527,8 +1534,8 @@ class USACDataClient:
                     'entity_name': record.get('organization_name', ''),
                     'state': record.get('state', ''),
                     'funding_year': record.get('funding_year', ''),
-                    'spin': spin,
-                    'spin_name': spin_name,
+                    'spin': record.get('spin_number', '') or spin,
+                    'spin_name': record.get('spin_name', '') or spin_name,
                     'contract_number': record.get('contract_number', ''),
                     'service_type': record.get('form_471_service_type_name', ''),
                     'status': status,
@@ -1551,7 +1558,7 @@ class USACDataClient:
             return {
                 'success': True,
                 'spin': spin,
-                'spin_name': spin_name,
+                'spin_name': spin_name or term,
                 'total_frns': len(frns),
                 'summary': {
                     'funded': {'count': funded_count, 'amount': funded_amount},
@@ -1608,7 +1615,14 @@ class USACDataClient:
             url = USAC_ENDPOINTS['frn_status']
             # Escape single quotes to keep the SoQL $where clause well-formed.
             crn_safe = crn.replace("'", "''")
-            where_conditions = [f"UPPER(contract_number) LIKE UPPER('%{crn_safe}%')"]
+            # Match BOTH columns: contract_number holds contract IDs, while a
+            # Consultant Registration Number (CRN) lives in crn_data
+            # (format "{name|CRN|email},..."). The UI's "CRN" input can receive
+            # either, so search both to avoid empty results.
+            where_conditions = [
+                f"(UPPER(contract_number) LIKE UPPER('%{crn_safe}%') "
+                f"OR UPPER(crn_data) LIKE UPPER('%{crn_safe}%'))"
+            ]
 
             if year:
                 where_conditions.append(f"funding_year = '{year}'")

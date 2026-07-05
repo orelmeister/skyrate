@@ -170,13 +170,23 @@ export default function BidAnalysis() {
       if (form470Ref.trim()) formData.append("form470_reference", form470Ref.trim());
 
       const accessToken = token || localStorage.getItem("access_token");
-      const response = await fetch("/api/v1/compliance/bid-analysis", {
-        method: "POST",
-        headers: {
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
-        body: formData,
-      });
+      // Guard against a hung request (AI can be slow); abort after 120s so the
+      // button doesn't spin forever with no feedback.
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
+      let response: Response;
+      try {
+        response = await fetch("/api/v1/compliance/bid-analysis", {
+          method: "POST",
+          headers: {
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: formData,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!response.ok) {
         const errData = await response.json().catch(() => null);
@@ -186,7 +196,11 @@ export default function BidAnalysis() {
       const data: BidAnalysisResult = await response.json();
       setResult(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Bid analysis failed. Please try again.");
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setError("The analysis timed out after 2 minutes. Try fewer or smaller files.");
+      } else {
+        setError(err instanceof Error ? err.message : "Bid analysis failed. Please try again.");
+      }
     } finally {
       setIsAnalyzing(false);
     }

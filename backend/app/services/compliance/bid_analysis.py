@@ -260,10 +260,55 @@ async def analyze_bids(
             ),
         )
 
-        if not response.text:
-            return _empty_result("AI returned no response.", norm_weights, price_is_primary)
+        # Safely extract the model text. With google.generativeai, accessing
+        # response.text raises a ValueError when the candidate was safety-
+        # blocked or returned no content. Inspect feedback/candidates first so
+        # we can surface a SPECIFIC reason to the user instead of collapsing
+        # every failure into a generic "Bid analysis failed."
+        block_reason = None
+        try:
+            pf = getattr(response, "prompt_feedback", None)
+            block_reason = getattr(pf, "block_reason", None) if pf else None
+        except Exception:
+            block_reason = None
+        if block_reason:
+            return _empty_result(
+                f"The AI blocked this request (reason: {block_reason}). "
+                f"Try removing scanned images or sensitive content from the files.",
+                norm_weights, price_is_primary,
+            )
 
-        parsed = json.loads(response.text)
+        raw_text = ""
+        try:
+            raw_text = response.text or ""
+        except Exception:
+            # response.text raised — reconstruct from candidate parts and report
+            # the finish reason if there is genuinely nothing usable.
+            try:
+                cand = (getattr(response, "candidates", None) or [None])[0]
+                finish = getattr(cand, "finish_reason", None) if cand else None
+                content = getattr(cand, "content", None) if cand else None
+                parts = getattr(content, "parts", []) if content else []
+                raw_text = "".join(getattr(p, "text", "") for p in parts)
+                if not raw_text:
+                    return _empty_result(
+                        f"The AI returned no usable content (finish reason: {finish}). "
+                        f"Please try again or use fewer/smaller files.",
+                        norm_weights, price_is_primary,
+                    )
+            except Exception:
+                return _empty_result(
+                    "The AI returned no response. Please try again.",
+                    norm_weights, price_is_primary,
+                )
+
+        if not raw_text:
+            return _empty_result(
+                "The AI returned no response. Please try again.",
+                norm_weights, price_is_primary,
+            )
+
+        parsed = json.loads(raw_text)
         raw_bids = parsed.get("bids", []) if isinstance(parsed, dict) else []
         if not raw_bids:
             return _empty_result(
@@ -348,5 +393,10 @@ async def analyze_bids(
         logger.error("Bid analysis: failed to parse LLM JSON: %s", str(e))
         return _empty_result("AI response could not be parsed.", norm_weights, price_is_primary)
     except Exception as e:
-        logger.error("Bid analysis failed: %s", str(e))
-        return _empty_result("Bid analysis failed.", norm_weights, price_is_primary)
+        # Surface the actual error type/message so the UI shows WHY it failed
+        # instead of an opaque generic message.
+        logger.exception("Bid analysis failed")
+        return _empty_result(
+            f"Bid analysis failed: {type(e).__name__}: {e}",
+            norm_weights, price_is_primary,
+        )
