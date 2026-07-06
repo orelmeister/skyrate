@@ -5,11 +5,13 @@ Handles school search, equipment matching, and lead generation
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 from datetime import datetime
 from urllib.parse import urlparse, unquote
+import asyncio
 import sys
 import os
 import re
@@ -25,6 +27,14 @@ from ...models.user import User
 from ...models.vendor import VendorProfile, VendorSearch
 
 router = APIRouter(prefix="/vendor", tags=["Vendor Portal"])
+
+# Hard ceiling (seconds) for the live USAC fetch on the default SPIN-locked
+# /frn-status path. The blocking Socrata request can trickle in slowly for large
+# SPINs; without a total cap a single request could run for minutes, starve the
+# async event loop, drop the MySQL connection, and cause the client to disconnect
+# (surfacing as Starlette "No response returned." -> HTTP 500). When exceeded we
+# fall back to locally cached admin_frn_snapshots so the vendor still gets data.
+VENDOR_FRN_LIVE_TIMEOUT_SECONDS = 25
 
 
 # ==================== SCHEMAS ====================
@@ -890,11 +900,92 @@ async def get_frn_status(
             detail="No SPIN configured in your profile. Please add your SPIN in settings first."
         )
     
+    from datetime import datetime as _dt
+    from app.services.cache_service import get_cached, set_cached, make_cache_key
+
+    def _local_spin_snapshot_response():
+        """Fast fallback: build the frn-status response from local
+        admin_frn_snapshots filtered by this vendor's SPIN. The scheduler keeps
+        these rows hydrated, so this is an indexed DB read (milliseconds) rather
+        than a multi-minute live USAC fetch. Returns None if nothing is cached
+        locally yet."""
+        try:
+            from ...models.admin_frn_snapshot import AdminFRNSnapshot
+            from sqlalchemy import or_ as _or
+
+            _ss = f"%{(profile.spin or '').strip()}%"
+            q = db.query(AdminFRNSnapshot).filter(
+                _or(
+                    AdminFRNSnapshot.spin.ilike(_ss),
+                    AdminFRNSnapshot.spin_name.ilike(_ss),
+                )
+            )
+            if year is not None:
+                q = q.filter(AdminFRNSnapshot.funding_year == str(year))
+            if status:
+                q = q.filter(AdminFRNSnapshot.status.ilike(f"%{status}%"))
+            if pending_reason:
+                q = q.filter(AdminFRNSnapshot.pending_reason.ilike(f"%{pending_reason}%"))
+            rows = q.order_by(AdminFRNSnapshot.last_refreshed.desc()).limit(limit).all()
+            if not rows:
+                return None
+
+            funded_count = funded_amount = 0
+            denied_count = denied_amount = 0
+            pending_count = pending_amount = 0
+            frns_out = []
+            for r in rows:
+                amount = float(r.amount_requested or 0)
+                disbursed = float(r.amount_committed or 0)
+                status_text = (r.status or "").lower()
+                if "funded" in status_text or "committed" in status_text:
+                    funded_count += 1
+                    funded_amount += amount
+                elif "denied" in status_text:
+                    denied_count += 1
+                    denied_amount += amount
+                else:
+                    pending_count += 1
+                    pending_amount += amount
+                frns_out.append({
+                    "frn": r.frn,
+                    "ben": r.ben,
+                    "entity_name": r.organization_name or "",
+                    "funding_year": r.funding_year,
+                    "status": r.status,
+                    "pending_reason": r.pending_reason or "",
+                    "commitment_amount": amount,
+                    "disbursed_amount": disbursed,
+                    "service_type": r.service_type or "",
+                    "fcdl_date": r.fcdl_date or "",
+                    "spin": getattr(r, "spin", None) or profile.spin or "",
+                    "spin_name": getattr(r, "spin_name", None) or getattr(r, "spin", None) or "",
+                    "contract_number": getattr(r, "contract_number", None) or "",
+                })
+            return {
+                "success": True,
+                "from_cache": True,
+                "source": "local_db",
+                "spin": profile.spin,
+                "total_frns": len(frns_out),
+                "frns": frns_out,
+                "summary": {
+                    "funded": {"count": funded_count, "amount": funded_amount},
+                    "denied": {"count": denied_count, "amount": denied_amount},
+                    "pending": {"count": pending_count, "amount": pending_amount},
+                },
+                "last_refreshed": _dt.utcnow().isoformat(),
+            }
+        except Exception as _loc_err:
+            import logging as _lg
+            _lg.getLogger(__name__).warning(
+                f"[vendor.frn-status] local snapshot fallback failed: {_loc_err}"
+            )
+            return None
+
     try:
         from utils.usac_client import USACDataClient
-        from app.services.cache_service import get_cached, set_cached, make_cache_key
-        from datetime import datetime as _dt
-        
+
         # Check cache first
         cache_key = make_cache_key("vendor_frn", spin=profile.spin, year=year, status=status, pending_reason=pending_reason)
         cached = get_cached(db, cache_key)
@@ -903,10 +994,51 @@ async def get_frn_status(
             if isinstance(cached, dict) and "last_refreshed" not in cached:
                 cached["last_refreshed"] = _dt.utcnow().isoformat()
             return cached
-        
+
+        # Run the BLOCKING live USAC fetch off the event loop and bound it with a
+        # hard total timeout. Previously this ran synchronously on the async loop
+        # with no overall cap, so a slow SPIN could hang for minutes (observed
+        # 155s-925s in prod), starving the worker, dropping the MySQL connection,
+        # and triggering "No response returned." (HTTP 500) on client disconnect.
         client = USACDataClient()
-        result = client.get_frn_status_by_spin(profile.spin, year, status, pending_reason, limit)
-        
+        try:
+            result = await asyncio.wait_for(
+                run_in_threadpool(
+                    client.get_frn_status_by_spin,
+                    profile.spin, year, status, pending_reason, limit,
+                ),
+                timeout=VENDOR_FRN_LIVE_TIMEOUT_SECONDS,
+            )
+        except (asyncio.TimeoutError, TimeoutError):
+            import logging as _lg
+            _lg.getLogger(__name__).warning(
+                f"[vendor.frn-status] live USAC fetch for SPIN {profile.spin} exceeded "
+                f"{VENDOR_FRN_LIVE_TIMEOUT_SECONDS}s; serving local snapshot fallback"
+            )
+            fallback = _local_spin_snapshot_response()
+            if fallback is not None:
+                fallback["stale"] = True
+                fallback["note"] = "Live USAC lookup timed out; showing last cached data."
+                return fallback
+            # Nothing cached locally yet -> return an empty-but-valid payload
+            # instead of a 500 so the frontend renders gracefully.
+            return {
+                "success": True,
+                "from_cache": False,
+                "source": "timeout",
+                "spin": profile.spin,
+                "total_frns": 0,
+                "frns": [],
+                "summary": {
+                    "funded": {"count": 0, "amount": 0},
+                    "denied": {"count": 0, "amount": 0},
+                    "pending": {"count": 0, "amount": 0},
+                },
+                "stale": True,
+                "note": "Live USAC lookup timed out and no cached data is available yet. Please retry shortly.",
+                "last_refreshed": _dt.utcnow().isoformat(),
+            }
+
         # Tag with fetch timestamp
         if isinstance(result, dict):
             result["last_refreshed"] = _dt.utcnow().isoformat()
@@ -943,6 +1075,13 @@ async def get_frn_status(
         return result
         
     except Exception as e:
+        # Last-resort: serve locally cached data before surfacing a 500 so a
+        # transient USAC/DB error doesn't blank the vendor's dashboard.
+        fallback = _local_spin_snapshot_response()
+        if fallback is not None:
+            fallback["stale"] = True
+            fallback["note"] = f"Live lookup failed ({str(e)[:120]}); showing cached data."
+            return fallback
         raise HTTPException(
             status_code=500,
             detail=f"Failed to fetch FRN status: {str(e)}"
