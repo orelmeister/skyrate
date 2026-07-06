@@ -726,6 +726,9 @@ def _run_schema_migrations(engine):
         ("ticket_messages", "read_at", "DATETIME DEFAULT NULL", None),
         # Team seats (Phase 4) — admin-granted seat capacity on subscriptions
         ("subscriptions", "seat_limit", "INT NOT NULL DEFAULT 0", None),
+        # Team seats for VENDOR accounts — generalize account_seats to both types
+        ("account_seats", "account_type", "VARCHAR(20) NOT NULL DEFAULT 'consultant'", None),
+        ("account_seats", "vendor_profile_id", "INT DEFAULT NULL", None),
     ]
     
     try:
@@ -802,6 +805,16 @@ def _run_schema_migrations(engine):
                 with engine.begin() as conn:
                     conn.execute(text("ALTER TABLE `applicant_profiles` MODIFY COLUMN `ben` VARCHAR(20) NULL"))
                 logger.info("Migration: Made applicant_profiles.ben nullable")
+
+        # Team seats for vendors: account_seats.consultant_profile_id must be
+        # NULLABLE so a vendor seat (which uses vendor_profile_id instead) can be
+        # inserted. Idempotent MODIFY mirroring the applicant_profiles.ben pattern.
+        if inspector.has_table("account_seats"):
+            cp_col = next((c for c in inspector.get_columns("account_seats") if c["name"] == "consultant_profile_id"), None)
+            if cp_col and cp_col.get("nullable") is False:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE `account_seats` MODIFY COLUMN `consultant_profile_id` INT NULL"))
+                logger.info("Migration: Made account_seats.consultant_profile_id nullable (vendor seats)")
 
         # Drop UNIQUE constraint on vendor_profiles.spin — demo accounts need to
         # share the same SPIN (Replace Identity feature). Keep a regular index for speed.

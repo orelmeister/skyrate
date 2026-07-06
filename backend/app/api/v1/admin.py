@@ -789,33 +789,57 @@ async def manual_plan_override(
 
 # ==================== TEAM SEATS ====================
 
+def _admin_seat_account(user: User, db: Session, autocreate: bool = False):
+    """Resolve a user to their seat-owning account (consultant OR vendor).
+
+    Returns (account_type, profile) where account_type is 'consultant' | 'vendor'
+    | None and profile is the matching ConsultantProfile/VendorProfile (or None).
+    When autocreate is True, provisions the profile matching the user's role so an
+    admin can manage seats even if the profile row was never created."""
+    cp = db.query(ConsultantProfile).filter(ConsultantProfile.user_id == user.id).first()
+    if cp is not None:
+        return "consultant", cp
+    vp = db.query(VendorProfile).filter(VendorProfile.user_id == user.id).first()
+    if vp is not None:
+        return "vendor", vp
+    if autocreate and user.role == "consultant":
+        cp = ConsultantProfile(
+            user_id=user.id,
+            company_name=getattr(user, "company_name", None),
+            contact_name=getattr(user, "full_name", None),
+        )
+        db.add(cp); db.commit(); db.refresh(cp)
+        return "consultant", cp
+    if autocreate and user.role == "vendor":
+        vp = VendorProfile(
+            user_id=user.id,
+            company_name=getattr(user, "company_name", None),
+            contact_name=getattr(user, "full_name", None),
+        )
+        db.add(vp); db.commit(); db.refresh(vp)
+        return "vendor", vp
+    return None, None
+
+
+def _seat_account_filter(account_type: str, profile_id: int):
+    """SQLAlchemy filter selecting AccountSeat rows for a given owner account."""
+    if account_type == "vendor":
+        return AccountSeat.vendor_profile_id == profile_id
+    return AccountSeat.consultant_profile_id == profile_id
+
+
 @router.get("/users/{user_id}/seats")
 async def list_user_seats(
     user_id: int,
     current_user: User = AdminUser,
     db: Session = Depends(get_db)
 ):
-    """List the team seats for a user's account."""
+    """List the team seats for a user's account (consultant or vendor)."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    profile = db.query(ConsultantProfile).filter(
-        ConsultantProfile.user_id == user.id
-    ).first()
-
-    # A consultant account should always support team seats. If the profile row
-    # was never created (e.g. account provisioned before the seats feature),
-    # provision it now so seat management is available.
-    if profile is None and user.role == "consultant":
-        profile = ConsultantProfile(
-            user_id=user.id,
-            company_name=getattr(user, "company_name", None),
-            contact_name=getattr(user, "full_name", None),
-        )
-        db.add(profile)
-        db.commit()
-        db.refresh(profile)
+    account_type, profile = _admin_seat_account(user, db, autocreate=True)
 
     subscription = db.query(Subscription).filter(
         Subscription.user_id == user_id
@@ -826,7 +850,7 @@ async def list_user_seats(
         seats = []
     else:
         seats = db.query(AccountSeat).filter(
-            AccountSeat.consultant_profile_id == profile.id,
+            _seat_account_filter(account_type, profile.id),
             AccountSeat.status != "removed"
         ).order_by(AccountSeat.created_at.asc()).all()
 
@@ -834,12 +858,17 @@ async def list_user_seats(
 
     return {
         "success": True,
-        "is_consultant": profile is not None,
+        # has_account gates the UI (seats supported for consultant OR vendor).
+        # is_consultant kept for backward compatibility with older clients.
+        "has_account": profile is not None,
+        "account_type": account_type,
+        "is_consultant": account_type == "consultant",
         "has_subscription": subscription is not None,
         "seat_limit": seat_limit,
         "used": used,
         "seats": [s.to_dict() for s in seats]
     }
+
 
 
 @router.put("/users/{user_id}/seat-limit")
@@ -865,14 +894,12 @@ async def set_user_seat_limit(
 
     new_limit = max(0, int(data.seat_limit))
 
-    profile = db.query(ConsultantProfile).filter(
-        ConsultantProfile.user_id == user.id
-    ).first()
+    account_type, profile = _admin_seat_account(user, db, autocreate=False)
     if profile is None:
         active_or_invited = 0
     else:
         active_or_invited = db.query(AccountSeat).filter(
-            AccountSeat.consultant_profile_id == profile.id,
+            _seat_account_filter(account_type, profile.id),
             AccountSeat.status.in_(["invited", "active"])
         ).count()
 
@@ -896,29 +923,17 @@ async def invite_user_seat(
     current_user: User = AdminUser,
     db: Session = Depends(get_db)
 ):
-    """Invite a team member to a consultant account's seat."""
+    """Invite a team member to a consultant OR vendor account's seat."""
     owner = db.query(User).filter(User.id == user_id).first()
     if not owner:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    profile = db.query(ConsultantProfile).filter(
-        ConsultantProfile.user_id == owner.id
-    ).first()
-    # Auto-provision the profile for a consultant account missing one, so an
-    # admin can invite seats without a pre-existing ConsultantProfile row.
-    if profile is None and owner.role == "consultant":
-        profile = ConsultantProfile(
-            user_id=owner.id,
-            company_name=getattr(owner, "company_name", None),
-            contact_name=getattr(owner, "full_name", None),
-        )
-        db.add(profile)
-        db.commit()
-        db.refresh(profile)
+    # Resolve (and auto-provision) the owner's account, consultant or vendor.
+    account_type, profile = _admin_seat_account(owner, db, autocreate=True)
     if profile is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Seats are only available for consultant accounts."
+            detail="Seats are only available for consultant or vendor accounts."
         )
 
     subscription = db.query(Subscription).filter(
@@ -932,7 +947,7 @@ async def invite_user_seat(
     # RE-ADD a previously-removed person instead of being permanently blocked by
     # the "user already exists" guard below.
     prior_seat = db.query(AccountSeat).filter(
-        AccountSeat.consultant_profile_id == profile.id,
+        _seat_account_filter(account_type, profile.id),
         AccountSeat.invited_email == email,
     ).order_by(AccountSeat.created_at.desc()).first()
     reactivatable = prior_seat is not None and prior_seat.status == "removed"
@@ -953,7 +968,7 @@ async def invite_user_seat(
         )
 
     used = db.query(AccountSeat).filter(
-        AccountSeat.consultant_profile_id == profile.id,
+        _seat_account_filter(account_type, profile.id),
         AccountSeat.status.in_(["invited", "active"])
     ).count()
     if used >= seat_limit:
@@ -984,7 +999,9 @@ async def invite_user_seat(
         db.refresh(seat)
     else:
         seat = AccountSeat(
-            consultant_profile_id=profile.id,
+            account_type=account_type,
+            consultant_profile_id=(profile.id if account_type == "consultant" else None),
+            vendor_profile_id=(profile.id if account_type == "vendor" else None),
             invited_email=email,
             seat_role="seat",
             status="invited",
@@ -1040,11 +1057,14 @@ async def resend_seat_invite(
     # Re-dispatch seat invitation email on resend
     try:
         from ...services.email_service import EmailService
-        
-        # Resolve owner profile and owner user
-        profile = db.query(ConsultantProfile).filter(ConsultantProfile.id == seat.consultant_profile_id).first()
+
+        # Resolve owner profile and owner user (consultant or vendor seat).
+        if (seat.account_type or "consultant") == "vendor" and seat.vendor_profile_id:
+            profile = db.query(VendorProfile).filter(VendorProfile.id == seat.vendor_profile_id).first()
+        else:
+            profile = db.query(ConsultantProfile).filter(ConsultantProfile.id == seat.consultant_profile_id).first()
         owner = db.query(User).filter(User.id == profile.user_id).first() if profile else None
-        
+
         if owner and profile:
             email_service = EmailService()
             email_service.send_seat_invite_email(

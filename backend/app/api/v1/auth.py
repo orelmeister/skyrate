@@ -313,11 +313,16 @@ async def validate_seat_token(token: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="This invite has already been used or revoked")
     if seat.invite_expires_at and seat.invite_expires_at < datetime.utcnow():
         raise HTTPException(status_code=400, detail="This invite link has expired")
-    profile = db.query(ConsultantProfile).filter(ConsultantProfile.id == seat.consultant_profile_id).first()
+    account_type = seat.account_type or "consultant"
+    if account_type == "vendor" and seat.vendor_profile_id:
+        profile = db.query(VendorProfile).filter(VendorProfile.id == seat.vendor_profile_id).first()
+    else:
+        profile = db.query(ConsultantProfile).filter(ConsultantProfile.id == seat.consultant_profile_id).first()
     owner = db.query(User).filter(User.id == profile.user_id).first() if profile else None
     return {
         "valid": True,
         "email": seat.invited_email,
+        "account_type": account_type,
         "owner_company": (profile.company_name if profile else None),
         "owner_name": (owner.full_name or owner.email) if owner else None,
     }
@@ -331,8 +336,9 @@ async def accept_seat(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    """Accept a team-seat invite: create a consultant login that INHERITS the
-    owner's subscription/CRN via the account resolver. No own subscription/CRN."""
+    """Accept a team-seat invite: create a login (consultant or vendor, matching
+    the account type) that INHERITS the owner's subscription/data via the account
+    resolver. No own subscription/CRN."""
     seat = db.query(AccountSeat).filter(AccountSeat.invite_token == data.token).first()
     if not seat:
         raise HTTPException(status_code=404, detail="Invalid invite link")
@@ -341,18 +347,25 @@ async def accept_seat(
     if seat.invite_expires_at and seat.invite_expires_at < datetime.utcnow():
         raise HTTPException(status_code=400, detail="This invite link has expired")
 
-    profile = db.query(ConsultantProfile).filter(ConsultantProfile.id == seat.consultant_profile_id).first()
+    account_type = seat.account_type or "consultant"
+    if account_type == "vendor" and seat.vendor_profile_id:
+        profile = db.query(VendorProfile).filter(VendorProfile.id == seat.vendor_profile_id).first()
+    else:
+        profile = db.query(ConsultantProfile).filter(ConsultantProfile.id == seat.consultant_profile_id).first()
     if not profile:
         raise HTTPException(status_code=400, detail="This invite is no longer valid")
 
     if db.query(User).filter(User.email == seat.invited_email).first():
         raise HTTPException(status_code=400, detail="An account with this email already exists. Please sign in instead.")
 
+    # The seat logs in as the same role as the account it joins, so it lands on
+    # the correct portal (vendor seats -> /vendor, consultant seats -> /consultant).
+    seat_login_role = "vendor" if account_type == "vendor" else "consultant"
     email_local = seat.invited_email.split("@")[0]
     user = User(
         email=seat.invited_email,
         password_hash=hash_password(data.password),
-        role="consultant",
+        role=seat_login_role,
         first_name=data.first_name or email_local,
         last_name=data.last_name or "",
         is_active=True,

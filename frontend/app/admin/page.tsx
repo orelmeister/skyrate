@@ -708,9 +708,9 @@ function AdminDashboard() {
                 </p>
               </div>
 
-              {seatData && !seatData.is_consultant ? (
+              {seatData && !seatData.has_account ? (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                  Seats are only available for consultant accounts.
+                  Seats are only available for consultant or vendor accounts.
                 </div>
               ) : seatData && !seatData.has_subscription ? (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">

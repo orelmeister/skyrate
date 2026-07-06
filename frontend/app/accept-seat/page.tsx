@@ -70,7 +70,9 @@ function AcceptSeatInner() {
       last_name: lastName || undefined,
     });
     if (ok) {
-      router.push("/consultant");
+      // Land the new seat on the portal matching the account it joined.
+      const dest = invite?.account_type === "vendor" ? "/vendor" : "/consultant";
+      router.push(dest);
     } else {
       setFormError(useAuthStore.getState().error || "Could not accept invite.");
       setSubmitting(false);

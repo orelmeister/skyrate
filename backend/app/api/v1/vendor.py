@@ -7,11 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, 
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional, List, Dict
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlparse, unquote
 import asyncio
+import secrets
 import sys
 import os
 import re
@@ -23,8 +24,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..
 
 from ...core.database import get_db
 from ...core.security import get_current_user, require_role
+from ...core.accounts import require_account_owner
 from ...models.user import User
 from ...models.vendor import VendorProfile, VendorSearch
+from ...models.account_seat import AccountSeat
 
 router = APIRouter(prefix="/vendor", tags=["Vendor Portal"])
 
@@ -79,21 +82,13 @@ async def get_vendor_profile(
     current_user: User = Depends(require_role("admin", "vendor", "super")),
     db: Session = Depends(get_db)
 ) -> VendorProfile:
-    """Get or create vendor profile for current user"""
-    profile = db.query(VendorProfile).filter(
-        VendorProfile.user_id == current_user.id
-    ).first()
-    
-    if not profile:
-        profile = VendorProfile(
-            user_id=current_user.id,
-            company_name=current_user.company_name,
-            contact_name=current_user.full_name,
-        )
-        db.add(profile)
-        db.commit()
-        db.refresh(profile)
-    
+    """Get or create vendor profile for current user.
+
+    Routes through resolve_vendor_account so an active VENDOR team seat inherits
+    the account OWNER's VendorProfile (SPIN, serviced entities, portfolio) — the
+    seat sees/does everything the owner does, scoped to the owner's data."""
+    from ...core.accounts import resolve_vendor_account
+    _owner, profile = resolve_vendor_account(current_user, db)
     return profile
 
 
@@ -4184,3 +4179,156 @@ async def mark_vendor_notification_read(
         db.commit()
         db.refresh(notif)
     return {"success": True, "notification": notif.to_dict()}
+
+
+# ==================== TEAM SEATS (VENDOR OWNER) ====================
+
+class VendorTeamInviteRequest(BaseModel):
+    email: EmailStr
+
+
+def _vendor_owner_profile(current_user: User, db: Session) -> Optional[VendorProfile]:
+    """Owner's own VendorProfile (NOT seat-resolved). require_account_owner has
+    already 403'd active seats, so current_user is the owner/admin/super here."""
+    return db.query(VendorProfile).filter(VendorProfile.user_id == current_user.id).first()
+
+
+@router.get("/my-team")
+async def get_vendor_my_team(
+    current_user: User = Depends(require_account_owner),
+    db: Session = Depends(get_db),
+):
+    """Owner view of their vendor team seats. Seats themselves get 403 via the guard."""
+    profile = _vendor_owner_profile(current_user, db)
+    subscription = current_user.subscription
+    seat_limit = subscription.seat_limit if subscription else 0
+    if profile is None:
+        return {"success": True, "seat_limit": seat_limit, "used": 0, "seats": []}
+    seats = db.query(AccountSeat).filter(
+        AccountSeat.account_type == "vendor",
+        AccountSeat.vendor_profile_id == profile.id,
+        AccountSeat.status != "removed",
+    ).order_by(AccountSeat.created_at.asc()).all()
+    used = sum(1 for s in seats if s.status in ("invited", "active"))
+    return {"success": True, "seat_limit": seat_limit, "used": used, "seats": [s.to_dict() for s in seats]}
+
+
+@router.post("/my-team/invite")
+async def invite_vendor_my_team(
+    data: VendorTeamInviteRequest,
+    current_user: User = Depends(require_account_owner),
+    db: Session = Depends(get_db),
+):
+    """Owner invites a vendor seat within the admin-granted seat_limit. Owner can
+    NEVER exceed the limit (only an admin can raise it)."""
+    profile = _vendor_owner_profile(current_user, db)
+    # Auto-provision the owner's VendorProfile if missing so a vendor can invite
+    # seats without first visiting the portal.
+    if profile is None and current_user.role == "vendor":
+        profile = VendorProfile(
+            user_id=current_user.id,
+            company_name=getattr(current_user, "company_name", None),
+            contact_name=getattr(current_user, "full_name", None),
+        )
+        db.add(profile)
+        db.commit()
+        db.refresh(profile)
+    if profile is None:
+        raise HTTPException(status_code=400, detail="Complete your vendor profile before inviting team members.")
+
+    subscription = current_user.subscription
+    seat_limit = subscription.seat_limit if subscription else 0
+    email = data.email.lower().strip()
+
+    prior_seat = db.query(AccountSeat).filter(
+        AccountSeat.account_type == "vendor",
+        AccountSeat.vendor_profile_id == profile.id,
+        AccountSeat.invited_email == email,
+    ).order_by(AccountSeat.created_at.desc()).first()
+    reactivatable = prior_seat is not None and prior_seat.status == "removed"
+
+    if prior_seat is not None and prior_seat.status in ("invited", "active"):
+        raise HTTPException(status_code=409, detail="This email already has a pending or active seat.")
+
+    existing_user = db.query(User).filter(User.email == email).first()
+    if existing_user is not None and not reactivatable:
+        raise HTTPException(status_code=409, detail="A user with this email already exists and cannot be added as a seat.")
+
+    used = db.query(AccountSeat).filter(
+        AccountSeat.account_type == "vendor",
+        AccountSeat.vendor_profile_id == profile.id,
+        AccountSeat.status.in_(["invited", "active"]),
+    ).count()
+    if used >= seat_limit:
+        raise HTTPException(status_code=400, detail=f"Seat limit reached ({used}/{seat_limit}). Contact your administrator to add more seats.")
+
+    send_invite = True
+    if reactivatable:
+        seat = prior_seat
+        if seat.user_id is not None:
+            seat.status = "active"
+            seat.invite_token = None
+            seat.invite_expires_at = None
+            if seat.accepted_at is None:
+                seat.accepted_at = datetime.utcnow()
+            send_invite = False
+        else:
+            seat.status = "invited"
+            seat.invite_token = secrets.token_urlsafe(32)
+            seat.invite_expires_at = datetime.utcnow() + timedelta(days=7)
+        db.commit()
+        db.refresh(seat)
+    else:
+        seat = AccountSeat(
+            account_type="vendor",
+            vendor_profile_id=profile.id,
+            invited_email=email,
+            seat_role="seat",
+            status="invited",
+            invite_token=secrets.token_urlsafe(32),
+            invite_expires_at=datetime.utcnow() + timedelta(days=7),
+            invited_by_admin_id=None,
+        )
+        db.add(seat)
+        db.commit()
+        db.refresh(seat)
+
+    if send_invite:
+        try:
+            from ...services.email_service import EmailService
+            email_service = EmailService()
+            email_service.send_seat_invite_email(
+                to_email=email,
+                invite_token=seat.invite_token,
+                owner_name=current_user.full_name or current_user.email,
+                owner_company=profile.company_name,
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to send vendor seat invitation email to {email}: {e}")
+
+    return {"success": True, "seat": seat.to_dict(), "reactivated": reactivatable}
+
+
+@router.delete("/my-team/{seat_id}")
+async def remove_vendor_my_team_seat(
+    seat_id: int,
+    current_user: User = Depends(require_account_owner),
+    db: Session = Depends(get_db),
+):
+    """Owner removes/reassigns a vendor seat they own (soft remove)."""
+    profile = _vendor_owner_profile(current_user, db)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Seat not found")
+    seat = db.query(AccountSeat).filter(
+        AccountSeat.id == seat_id,
+        AccountSeat.account_type == "vendor",
+        AccountSeat.vendor_profile_id == profile.id,
+    ).first()
+    if not seat:
+        raise HTTPException(status_code=404, detail="Seat not found")
+    seat.status = "removed"
+    seat.invite_token = None
+    db.commit()
+    db.refresh(seat)
+    return {"success": True, "seat": seat.to_dict()}

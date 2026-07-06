@@ -3175,6 +3175,21 @@ class ApiClient {
   }
 
   /**
+   * Team seats (vendor owner) — list/invite/remove own vendor team
+   */
+  async getVendorTeam(): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/vendor/my-team');
+  }
+
+  async inviteVendorTeam(email: string): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/vendor/my-team/invite', { method: 'POST', body: JSON.stringify({ email }) });
+  }
+
+  async removeVendorTeamSeat(seatId: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/vendor/my-team/${seatId}`, { method: 'DELETE' });
+  }
+
+  /**
    * Get admin analytics
    */
   async getAdminAnalytics(): Promise<ApiResponse<any>> {

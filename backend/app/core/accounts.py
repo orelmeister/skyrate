@@ -18,6 +18,7 @@ from .database import get_db
 from .security import get_current_user
 from ..models.user import User
 from ..models.consultant import ConsultantProfile
+from ..models.vendor import VendorProfile
 from ..models.account_seat import AccountSeat
 
 
@@ -74,19 +75,63 @@ def resolve_account(user: User, db: Session) -> Tuple[User, ConsultantProfile]:
     return user, profile
 
 
+def resolve_vendor_account(user: User, db: Session) -> Tuple[User, VendorProfile]:
+    """Resolve any authenticated vendor-side user to (owner_user, owner_vendor_profile).
+
+    - If the user is an active VENDOR seat, return the OWNER's user and VendorProfile.
+    - Otherwise the user is an owner / standalone vendor: return their own profile,
+      auto-creating it if missing (preserves prior get_vendor_profile behavior).
+    """
+    seat = get_active_seat(user, db)
+    if seat is not None and (seat.account_type or "consultant") == "vendor" and seat.vendor_profile_id:
+        profile = (
+            db.query(VendorProfile)
+            .filter(VendorProfile.id == seat.vendor_profile_id)
+            .first()
+        )
+        if profile is not None:
+            owner = db.query(User).filter(User.id == profile.user_id).first() or user
+            return owner, profile
+        # Defensive: seat's account vanished -> fall through to self.
+
+    profile = (
+        db.query(VendorProfile)
+        .filter(VendorProfile.user_id == user.id)
+        .first()
+    )
+    if profile is None:
+        profile = VendorProfile(
+            user_id=user.id,
+            company_name=user.company_name,
+            contact_name=user.full_name,
+        )
+        db.add(profile)
+        db.commit()
+        db.refresh(profile)
+    return user, profile
+
+
 def resolve_billing_user(user: User, db: Session) -> User:
     """Return the user whose subscription governs this user's access.
 
-    For an active SEAT this is the account OWNER; otherwise the user themselves.
-    Unlike resolve_account this creates NOTHING, so it is safe to call for
-    vendor/applicant roles (which must never get a ConsultantProfile)."""
+    For an active SEAT this is the account OWNER (consultant or vendor); otherwise
+    the user themselves. Unlike resolve_account this creates NOTHING, so it is safe
+    to call for any role."""
     seat = get_active_seat(user, db)
     if seat is not None:
-        profile = (
-            db.query(ConsultantProfile)
-            .filter(ConsultantProfile.id == seat.consultant_profile_id)
-            .first()
-        )
+        account_type = seat.account_type or "consultant"
+        if account_type == "vendor" and seat.vendor_profile_id:
+            profile = (
+                db.query(VendorProfile)
+                .filter(VendorProfile.id == seat.vendor_profile_id)
+                .first()
+            )
+        else:
+            profile = (
+                db.query(ConsultantProfile)
+                .filter(ConsultantProfile.id == seat.consultant_profile_id)
+                .first()
+            )
         if profile is not None:
             owner = db.query(User).filter(User.id == profile.user_id).first()
             if owner is not None:
