@@ -131,6 +131,47 @@ function formatDate(dateStr: string | null): string {
   });
 }
 
+// Compute an ALWAYS-CURRENT expiry status from the contract date. The backend
+// bakes "expiring in N months" into prediction_reason at generation time and
+// never refreshes it, so a lead created in April still reads "in 3 months" in
+// July even though the contract already expired. Computing live here keeps the
+// label accurate for every lead, old or new.
+function expiryStatus(dateStr: string | null): { label: string; expired: boolean } | null {
+  if (!dateStr) return null;
+  const exp = new Date(dateStr);
+  if (isNaN(exp.getTime())) return null;
+  const days = Math.round((exp.getTime() - Date.now()) / 86400000);
+  const monthYear = exp.toLocaleDateString("en-US", { year: "numeric", month: "short" });
+  if (days < -31) {
+    const months = Math.max(1, Math.round(-days / 30));
+    return { label: `Expired ${months} month${months === 1 ? "" : "s"} ago (${monthYear})`, expired: true };
+  }
+  if (days < 0) {
+    const d = -days;
+    return { label: `Expired ${d} day${d === 1 ? "" : "s"} ago (${monthYear})`, expired: true };
+  }
+  if (days === 0) return { label: `Expires today (${monthYear})`, expired: false };
+  if (days < 31) return { label: `Expires in ${days} day${days === 1 ? "" : "s"} (${monthYear})`, expired: false };
+  const months = Math.round(days / 30);
+  return { label: `Expires in ${months} month${months === 1 ? "" : "s"} (${monthYear})`, expired: false };
+}
+
+// Return the prediction reason with the stale leading "Contract expiring in ..."
+// sentence replaced by the live-computed status (contract-expiry leads only).
+function displayReason(lead: PredictedLead): string {
+  if (lead.prediction_type === "contract_expiry" && lead.contract_expiration_date) {
+    const st = expiryStatus(lead.contract_expiration_date);
+    if (st) {
+      const rest = (lead.prediction_reason || "").replace(/^\s*Contract expiring in[^.]*\.\s*/i, "");
+      const opener = st.expired
+        ? `Contract ${st.label.toLowerCase()} \u2014 rebid opportunity now.`
+        : `Contract ${st.label.toLowerCase()}.`;
+      return `${opener} ${rest}`.trim();
+    }
+  }
+  return lead.prediction_reason;
+}
+
 function ConfidenceBadge({ score }: { score: number }) {
   const pct = Math.round(score * 100);
   let color = "bg-slate-100 text-slate-600";
@@ -145,7 +186,7 @@ function ConfidenceBadge({ score }: { score: number }) {
   );
 }
 
-export default function PredictedLeadsTab() {
+export default function PredictedLeadsTab({ onView471 }: { onView471?: (ben: string, year?: number) => void }) {
   const [leads, setLeads] = useState<PredictedLead[]>([]);
   const [stats, setStats] = useState<PredictionStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -619,8 +660,23 @@ export default function PredictedLeadsTab() {
                       )}
                     </div>
 
+                    {(() => {
+                      const st = lead.prediction_type === "contract_expiry"
+                        ? expiryStatus(lead.contract_expiration_date)
+                        : null;
+                      return st ? (
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 mb-2 rounded-full text-xs font-medium ${
+                            st.expired ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
+                          }`}
+                        >
+                          ⏰ {st.label}
+                        </span>
+                      ) : null;
+                    })()}
+
                     <p className="text-sm text-slate-600 line-clamp-2">
-                      {lead.prediction_reason}
+                      {displayReason(lead)}
                     </p>
                   </div>
                 );
@@ -706,7 +762,7 @@ export default function PredictedLeadsTab() {
                 <span className="text-xs font-medium text-purple-600 block mb-1">
                   🔮 AI Prediction
                 </span>
-                <p className="text-sm text-purple-900">{selectedLead.prediction_reason}</p>
+                <p className="text-sm text-purple-900">{displayReason(selectedLead)}</p>
               </div>
 
               {/* Details */}
@@ -719,14 +775,22 @@ export default function PredictedLeadsTab() {
                     </span>
                   </div>
                 )}
-                {selectedLead.contract_expiration_date && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">Contract Expires</span>
-                    <span className="font-medium text-red-600">
-                      {formatDate(selectedLead.contract_expiration_date)}
-                    </span>
-                  </div>
-                )}
+                {selectedLead.contract_expiration_date && (() => {
+                  const st = expiryStatus(selectedLead.contract_expiration_date);
+                  return (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-500">Contract Expires</span>
+                      <span className="font-medium text-red-600 text-right">
+                        {formatDate(selectedLead.contract_expiration_date)}
+                        {st && (
+                          <span className={`block text-xs font-normal ${st.expired ? "text-red-500" : "text-amber-600"}`}>
+                            {st.label}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })()}
                 {selectedLead.current_provider_name && (
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500">Current Provider</span>
@@ -835,6 +899,16 @@ export default function PredictedLeadsTab() {
                   ) : "🔍 Enrich Contact"}
                 </button>
               </div>
+
+              {/* View the actual Form 471 / contract behind this prediction */}
+              {onView471 && selectedLead.ben && (
+                <button
+                  onClick={() => onView471(selectedLead.ben, selectedLead.funding_year ?? undefined)}
+                  className="w-full px-3 py-2 mb-3 bg-white border border-purple-300 text-purple-700 rounded-xl text-sm font-medium hover:bg-purple-50 transition-all"
+                >
+                  🔎 View Form 471{selectedLead.funding_year ? ` (FY${selectedLead.funding_year})` : ""}
+                </button>
+              )}
 
               {/* Save Error */}
               {saveError && !savedLeadId && (

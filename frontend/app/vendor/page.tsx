@@ -788,19 +788,23 @@ function VendorPortalPage() {
     setEntityDetail(null);
   };
 
-  // Form 471 Competitive Analysis functions
-  const search471ByBen = async () => {
-    if (!form471BenInput.trim()) {
+  // Form 471 Competitive Analysis functions.
+  // Optional args let callers (e.g. "View 471" from a predicted lead) run a
+  // lookup immediately without waiting for the BEN/year input state to flush.
+  const search471ByBen = async (benArg?: string, yearArg?: number) => {
+    const ben = (benArg ?? form471BenInput).trim();
+    if (!ben) {
       setForm471Error("Please enter a BEN (Billed Entity Number)");
       return;
     }
+    const year = yearArg !== undefined ? yearArg : form471Year;
     
     setForm471Loading(true);
     setForm471Error(null);
     setForm471Data(null);
     
     try {
-      const response = await api.get471ByEntity(form471BenInput.trim(), form471Year);
+      const response = await api.get471ByEntity(ben, year);
       if (response.success && response.data) {
         if (response.data.success) {
           setForm471Data(response.data);
@@ -3070,7 +3074,17 @@ function VendorPortalPage() {
 
         {/* Predicted Leads Tab */}
         {activeTab === "predicted-leads" && (
-          <PredictedLeadsTab />
+          <PredictedLeadsTab
+            onView471={(ben, year) => {
+              // Jump to the 471 Lookup tab pre-filled with this lead's entity so
+              // the vendor can inspect the actual contract/Form 471 behind the
+              // prediction. Pass the contract's funding year when known.
+              setForm471BenInput(ben);
+              setForm471Year(year);
+              setActiveTab("competitive");
+              search471ByBen(ben, year);
+            }}
+          />
         )}
 
         {/* Form 471 Competitive Analysis Tab */}
@@ -3118,7 +3132,7 @@ function VendorPortalPage() {
                   ))}
                 </select>
                 <button
-                  onClick={search471ByBen}
+                  onClick={() => search471ByBen()}
                   disabled={form471Loading}
                   className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
                 >
