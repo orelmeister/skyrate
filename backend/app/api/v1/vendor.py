@@ -654,6 +654,12 @@ async def get_frn_status(
                 q = q.filter(AdminFRNSnapshot.pending_reason.ilike(f"%{pending_reason}%"))
             rows = q.order_by(AdminFRNSnapshot.last_refreshed.desc()).limit(limit).all()
 
+            # Holds a live USAC response when the local cache misses. Used as a
+            # direct return if the post-upsert DB re-query still yields nothing
+            # (e.g. a CRN matched via crn_data whose stored contract_number
+            # differs from the search term).
+            live_direct = None
+
             # If no local hits and a SPIN was searched, try live USAC fallback so
             # un-cached SPINs still return data (matches the BEN-direct flow).
             if not rows and spin_search:
@@ -667,6 +673,7 @@ async def get_frn_status(
                     if live_result and live_result.get("success"):
                         live_frns = live_result.get("frns", []) or []
                         if live_frns:
+                            live_direct = live_result
                             try:
                                 records = [
                                     build_rec_from_usac_frn(
@@ -724,6 +731,7 @@ async def get_frn_status(
                     if live_result and live_result.get("success"):
                         live_frns = live_result.get("frns", []) or []
                         if live_frns:
+                            live_direct = live_result
                             try:
                                 records = [
                                     build_rec_from_usac_frn(
@@ -763,6 +771,13 @@ async def get_frn_status(
                     _lg.getLogger(__name__).warning(
                         f"[vendor.frn-status crn={crn}] live USAC fetch failed: {_live_err}"
                     )
+
+            # If the DB re-query still returned nothing but the live USAC
+            # fallback produced FRNs, return the live result directly so the
+            # search isn't silently empty. The client method already emits the
+            # exact shape the frontend expects (success/total_frns/summary/frns).
+            if not rows and live_direct:
+                return live_direct
 
             # Build response in the same shape the frontend expects (mirrors
             # USACDataClient.get_frn_status_by_spin output: success/frns/summary).

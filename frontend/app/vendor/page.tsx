@@ -2164,9 +2164,15 @@ function VendorPortalPage() {
                         const searchTerm = frnSearch.trim();
                         const spinTerm = frnSpinSearch.trim();
                         const crnTerm = frnCrnSearch.trim();
-                        // Detect a BEN-like search (all digits, 5-10 chars)
-                        const looksLikeBen = /^\d{5,10}$/.test(searchTerm);
-                        if (looksLikeBen) {
+                        // BENs are <=9 digits; FRNs are exactly 10 digits. Only treat
+                        // a 5-9 digit numeric value as a BEN so 10-digit FRN searches
+                        // are NOT misrouted to the BEN lookup (which returns nothing
+                        // for an FRN). 10-digit FRNs fall through to the client-side
+                        // `frnSearch` filter over the loaded portfolio.
+                        const looksLikeBen = /^\d{5,9}$/.test(searchTerm);
+                        // Skip the server round-trip if that BEN is already loaded.
+                        const benAlreadyLoaded = looksLikeBen && (frnStatusData?.frns || []).some((f: any) => String(f.ben) === searchTerm);
+                        if (looksLikeBen && !benAlreadyLoaded) {
                           // Pass ben to backend for server-side lookup
                           loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason, searchTerm, spinTerm || undefined, crnTerm || undefined, frnStatusGlobalView);
                         } else {
