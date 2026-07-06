@@ -55,6 +55,9 @@ numpy==1.26.4
 # ==========================================
 requests==2.32.5
 httpx==0.28.1
+# Browser-TLS-impersonating HTTP client. Used to fetch FCC National Broadband Map
+# tiles, which sit behind Akamai bot protection that blocks plain requests.
+curl_cffi==0.13.0
 
 # ==========================================
 # AI Models

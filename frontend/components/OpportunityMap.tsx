@@ -7,12 +7,61 @@ import { api, Form470Lead } from "@/lib/api";
 // enters the build graph). We guard every access behind the loaded `window.L`.
 const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
 const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+// Leaflet.VectorGrid renders the FCC fiber MVT tiles. The "bundled" build ships
+// its own pbf + vector-tile parsers, so no extra script is needed.
+const VECTORGRID_JS =
+  "https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.js";
+
+// FCC fiber overlay: our backend proxies the FCC National Broadband Map hex
+// tiles (layer "fixeddetailhex"). t3_* = Fiber (technology code 50); s1 = the
+// widest speed tier; _r / _b = residential / business unit counts.
+const FCC_FIBER_TILES = "/api/v1/fcc/fiber-tile/{z}/{x}/{y}.pbf";
+const FCC_HEX_LAYER = "fixeddetailhex";
+const FCC_MIN_ZOOM = 5;
+const FCC_MAX_ZOOM = 15;
 
 // Continental-US default view.
 const US_CENTER: [number, number] = [39.5, -98.35];
 const US_ZOOM = 4;
 
 let leafletPromise: Promise<any> | null = null;
+let vectorGridPromise: Promise<any> | null = null;
+
+// Load the VectorGrid plugin once Leaflet itself is present.
+function ensureVectorGrid(): Promise<any> {
+  if (typeof window === "undefined") return Promise.reject("no window");
+  const w = window as any;
+  if (w.L && w.L.vectorGrid) return Promise.resolve(w.L);
+  if (vectorGridPromise) return vectorGridPromise;
+
+  vectorGridPromise = ensureLeaflet().then(
+    (L) =>
+      new Promise((resolve, reject) => {
+        if (L.vectorGrid) {
+          resolve(L);
+          return;
+        }
+        const existing = document.querySelector(
+          `script[src="${VECTORGRID_JS}"]`
+        ) as HTMLScriptElement | null;
+        if (existing && (window as any).L?.vectorGrid) {
+          resolve((window as any).L);
+          return;
+        }
+        const script = existing || document.createElement("script");
+        script.src = VECTORGRID_JS;
+        script.async = true;
+        script.onload = () => {
+          const LL = (window as any).L;
+          if (LL && LL.vectorGrid) resolve(LL);
+          else reject("VectorGrid failed to initialize");
+        };
+        script.onerror = () => reject("VectorGrid failed to load");
+        if (!existing) document.body.appendChild(script);
+      })
+  );
+  return vectorGridPromise;
+}
 
 function ensureLeaflet(): Promise<any> {
   if (typeof window === "undefined") return Promise.reject("no window");
@@ -89,10 +138,13 @@ export default function OpportunityMap() {
   const streetLayerRef = useRef<any>(null);
   const satelliteLayerRef = useRef<any>(null);
   const satLabelsRef = useRef<any>(null);
+  const fiberLayerRef = useRef<any>(null);
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [stateFilter, setStateFilter] = useState<string>("");
   const [basemap, setBasemap] = useState<"street" | "satellite">("street");
+  const [showFiber, setShowFiber] = useState(false);
+  const [fiberError, setFiberError] = useState<string | null>(null);
 
   // The map loads its own geo feed (recent Form 470s that carry USAC coords).
   const [leads, setLeads] = useState<Form470Lead[]>([]);
@@ -197,6 +249,67 @@ export default function OpportunityMap() {
     if (layerRef.current && layerRef.current.bringToFront) layerRef.current.bringToFront();
   }, [basemap, ready]);
 
+  // Toggle the FCC fiber-coverage overlay. Hexes are shaded green where the FCC
+  // National Broadband Map reports fiber (technology 50) service, with opacity
+  // scaled to how much of the hex is covered. Data is proxied by our backend.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+
+    if (!showFiber) {
+      if (fiberLayerRef.current) {
+        map.removeLayer(fiberLayerRef.current);
+        fiberLayerRef.current = null;
+      }
+      setFiberError(null);
+      return;
+    }
+
+    let cancelled = false;
+    ensureVectorGrid()
+      .then((L) => {
+        if (cancelled || !mapRef.current || fiberLayerRef.current) return;
+        const styleHex = (props: any) => {
+          const total = Number(props?.total_units) || 0;
+          const fiber = Math.max(
+            Number(props?.t3_s1_r) || 0,
+            Number(props?.t3_s1_b) || 0
+          );
+          if (fiber <= 0 || total <= 0) return []; // nothing to draw for this hex
+          const frac = Math.min(1, fiber / total);
+          return {
+            weight: 0,
+            fill: true,
+            fillColor: "#059669", // emerald — "fiber present"
+            fillOpacity: 0.2 + 0.55 * frac,
+          };
+        };
+        const grid = L.vectorGrid.protobuf(FCC_FIBER_TILES, {
+          rendererFactory: L.canvas.tile,
+          interactive: false,
+          minZoom: FCC_MIN_ZOOM,
+          maxZoom: FCC_MAX_ZOOM,
+          maxNativeZoom: FCC_MAX_ZOOM,
+          attribution: "Fiber data: FCC National Broadband Map",
+          vectorTileLayerStyles: { [FCC_HEX_LAYER]: styleHex },
+        });
+        grid.on("tileerror", () =>
+          setFiberError("Some fiber tiles could not be loaded.")
+        );
+        grid.addTo(mapRef.current);
+        fiberLayerRef.current = grid;
+        // Keep opportunity pins above the coverage shading.
+        if (layerRef.current && layerRef.current.bringToFront) layerRef.current.bringToFront();
+      })
+      .catch(() => {
+        if (!cancelled) setFiberError("Fiber overlay failed to load.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showFiber, ready]);
+
   // (Re)draw markers whenever the filtered set changes.
   useEffect(() => {
     const L = (window as any).L;
@@ -290,7 +403,34 @@ export default function OpportunityMap() {
             Satellite
           </button>
         </div>
+        <button
+          type="button"
+          onClick={() => setShowFiber((v) => !v)}
+          className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors flex items-center gap-1.5 ${
+            showFiber
+              ? "bg-emerald-600 text-white border-emerald-600"
+              : "bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50"
+          }`}
+          title="Overlay FCC National Broadband Map fiber coverage"
+        >
+          <span
+            className="inline-block w-2.5 h-2.5 rounded-sm"
+            style={{ background: showFiber ? "#ffffff" : "#059669" }}
+          />
+          Fiber coverage
+        </button>
       </div>
+
+      {showFiber && (
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <span className="flex items-center gap-1.5 text-slate-600">
+            <span className="inline-block w-3 h-3 rounded-sm" style={{ background: "#059669", opacity: 0.75 }} />
+            FCC-reported fiber (technology 50); darker = more of the area covered
+          </span>
+          <span className="text-slate-400">Zoom in to see hex-level coverage. Source: FCC National Broadband Map.</span>
+          {fiberError && <span className="text-amber-600">{fiberError}</span>}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-4 text-sm">
         <div className="px-4 py-2 bg-white rounded-lg border border-slate-200">

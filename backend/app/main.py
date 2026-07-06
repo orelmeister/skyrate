@@ -26,7 +26,7 @@ from app.core.database import engine, Base
 from app.core import perf_metrics
 
 # Import API routers - services are imported lazily within these
-from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals, alerts, applicant, notifications, support, onboarding, blog, frn_reports, usac, portfolio_analyzer, pia, mail_campaigns, leads, public_tools, denial_hunter, denial_hunter_tracking, admin_jobs, compliance, industry
+from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals, alerts, applicant, notifications, support, onboarding, blog, frn_reports, usac, portfolio_analyzer, pia, mail_campaigns, leads, public_tools, denial_hunter, denial_hunter_tracking, admin_jobs, compliance, industry, fcc
 
 # Configure logging
 logging.basicConfig(
@@ -1230,6 +1230,7 @@ app.include_router(denial_hunter.router, prefix="/v1")
 app.include_router(denial_hunter_tracking.router, prefix="/v1")
 app.include_router(compliance.router, prefix="/v1")
 app.include_router(industry.router, prefix="/v1")
+app.include_router(fcc.router, prefix="/v1")
 
 # ==================== MODELS ====================
 
