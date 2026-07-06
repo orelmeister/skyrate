@@ -186,7 +186,7 @@ function ConfidenceBadge({ score }: { score: number }) {
   );
 }
 
-export default function PredictedLeadsTab({ onView471 }: { onView471?: (ben: string, year?: number) => void }) {
+export default function PredictedLeadsTab({ onView471 }: { onView471?: (ben: string, year?: number, frn?: string) => void }) {
   const [leads, setLeads] = useState<PredictedLead[]>([]);
   const [stats, setStats] = useState<PredictionStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -903,7 +903,7 @@ export default function PredictedLeadsTab({ onView471 }: { onView471?: (ben: str
               {/* View the actual Form 471 / contract behind this prediction */}
               {onView471 && selectedLead.ben && (
                 <button
-                  onClick={() => onView471(selectedLead.ben, selectedLead.funding_year ?? undefined)}
+                  onClick={() => onView471(selectedLead.ben, selectedLead.funding_year ?? undefined, selectedLead.frn ?? undefined)}
                   className="w-full px-3 py-2 mb-3 bg-white border border-purple-300 text-purple-700 rounded-xl text-sm font-medium hover:bg-purple-50 transition-all"
                 >
                   🔎 View Form 471{selectedLead.funding_year ? ` (FY${selectedLead.funding_year})` : ""}

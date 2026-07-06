@@ -474,6 +474,11 @@ function VendorPortalPage() {
   const [form471LineItemsCache, setForm471LineItemsCache] = useState<Record<string, Form471LineItem[]>>({});
   const [form471LineItemsLoadingFrn, setForm471LineItemsLoadingFrn] = useState<string | null>(null);
 
+  // When the user opens the 471 for a SPECIFIC predicted-lead FRN, we focus the
+  // table on just that FRN (and auto-expand it) instead of dumping every FRN for
+  // the entity. null = show all FRNs (normal manual lookup).
+  const [focus471Frn, setFocus471Frn] = useState<string | null>(null);
+
   // A4: the USAC 471 dataset returns one row per line item, so an FRN with N
   // line items appears N times. Collapse to one row per FRN (summing the
   // line-item committed amounts); the per-FRN line items are revealed by
@@ -492,6 +497,16 @@ function VendorPortalPage() {
     });
     return Array.from(byFrn.values());
   }, [form471Data]);
+
+  // Records actually shown in the FRN table. When focused on a single FRN (opened
+  // from a predicted lead) show only that FRN so the vendor sees exactly the
+  // relevant contract; otherwise show them all.
+  const displayed471Records = useMemo(() => {
+    if (focus471Frn && grouped471Records.some(r => r.frn === focus471Frn)) {
+      return grouped471Records.filter(r => r.frn === focus471Frn);
+    }
+    return grouped471Records;
+  }, [grouped471Records, focus471Frn]);
   
   // Payment guard - check if user needs to complete payment setup
   const [checkingPayment, setCheckingPayment] = useState(true);
@@ -801,13 +816,16 @@ function VendorPortalPage() {
   // Form 471 Competitive Analysis functions.
   // Optional args let callers (e.g. "View 471" from a predicted lead) run a
   // lookup immediately without waiting for the BEN/year input state to flush.
+  // When benArg is provided the args are authoritative (an undefined yearArg
+  // therefore means "all years", not "fall back to the stale year input").
   const search471ByBen = async (benArg?: string, yearArg?: number) => {
-    const ben = (benArg ?? form471BenInput).trim();
+    const usingArgs = benArg !== undefined;
+    const ben = (usingArgs ? benArg : form471BenInput).trim();
     if (!ben) {
       setForm471Error("Please enter a BEN (Billed Entity Number)");
       return;
     }
-    const year = yearArg !== undefined ? yearArg : form471Year;
+    const year = usingArgs ? yearArg : form471Year;
     
     setForm471Loading(true);
     setForm471Error(null);
@@ -834,16 +852,8 @@ function VendorPortalPage() {
 
   // Toggle an FRN row's line-item sub-table. Caches results per FRN so
   // re-clicking the same row never refetches.
-  const toggle471LineItems = async (frn: string) => {
-    if (!frn) return;
-    if (expanded471Frn === frn) {
-      setExpanded471Frn(null);
-      return;
-    }
-    setExpanded471Frn(frn);
-    if (form471LineItemsCache[frn]) {
-      return; // already cached
-    }
+  const load471LineItems = async (frn: string) => {
+    if (!frn || form471LineItemsCache[frn]) return; // already cached / nothing to do
     setForm471LineItemsLoadingFrn(frn);
     try {
       const response = await api.get471LineItemsByFrn(frn);
@@ -859,6 +869,28 @@ function VendorPortalPage() {
       setForm471LineItemsLoadingFrn(null);
     }
   };
+
+  const toggle471LineItems = async (frn: string) => {
+    if (!frn) return;
+    if (expanded471Frn === frn) {
+      setExpanded471Frn(null);
+      return;
+    }
+    setExpanded471Frn(frn);
+    await load471LineItems(frn);
+  };
+
+  // After a focused lookup loads, auto-expand the target FRN so the contract's
+  // line items are visible immediately (no extra click).
+  useEffect(() => {
+    if (!focus471Frn || !form471Data) return;
+    const rec = (form471Data.records || []).find(r => r.frn === focus471Frn);
+    if (rec) {
+      setExpanded471Frn(focus471Frn);
+      load471LineItems(focus471Frn);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form471Data, focus471Frn]);
 
   const loadCompetitorAnalysis = async () => {
     if (!profile?.spin) {
@@ -3127,14 +3159,19 @@ function VendorPortalPage() {
         {/* Predicted Leads Tab */}
         {activeTab === "predicted-leads" && (
           <PredictedLeadsTab
-            onView471={(ben, year) => {
-              // Jump to the 471 Lookup tab pre-filled with this lead's entity so
-              // the vendor can inspect the actual contract/Form 471 behind the
-              // prediction. Pass the contract's funding year when known.
+            onView471={(ben, year, frn) => {
+              // Jump to the 471 Lookup tab focused on the SPECIFIC contract FRN
+              // behind this prediction so the vendor sees exactly that 471 (with
+              // line items), not every FRN for the entity. When an FRN is given we
+              // load ALL years (then filter to that FRN) so it is guaranteed to be
+              // present even if the prediction's funding year is off.
+              const lookupYear = frn ? undefined : year;
               setForm471BenInput(ben);
-              setForm471Year(year);
+              setForm471Year(lookupYear);
+              setFocus471Frn(frn ?? null);
+              setExpanded471Frn(frn ?? null);
               setActiveTab("competitive");
-              search471ByBen(ben, year);
+              search471ByBen(ben, lookupYear);
             }}
           />
         )}
@@ -3168,10 +3205,10 @@ function VendorPortalPage() {
                 <input
                   type="text"
                   value={form471BenInput}
-                  onChange={(e) => setForm471BenInput(e.target.value)}
+                  onChange={(e) => { setForm471BenInput(e.target.value); setFocus471Frn(null); }}
                   placeholder="Enter BEN (e.g., 232950)"
                   className="flex-1 min-w-[200px] px-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                  onKeyDown={(e) => e.key === 'Enter' && search471ByBen()}
+                  onKeyDown={(e) => e.key === 'Enter' && (setFocus471Frn(null), search471ByBen())}
                 />
                 <select
                   value={form471Year || ""}
@@ -3184,7 +3221,7 @@ function VendorPortalPage() {
                   ))}
                 </select>
                 <button
-                  onClick={() => search471ByBen()}
+                  onClick={() => { setFocus471Frn(null); search471ByBen(); }}
                   disabled={form471Loading}
                   className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
                 >
@@ -3288,14 +3325,28 @@ function VendorPortalPage() {
                   <div className="space-y-2">
                   <TableExportBar
                     selectedCount={selectedForm471Records.size}
-                    totalCount={grouped471Records.length}
+                    totalCount={displayed471Records.length}
                     onExportCsv={exportForm471Records}
                     onClearSelection={() => setSelectedForm471Records(new Set())}
                   />
                   <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="p-4 border-b border-slate-200">
-                      <h3 className="font-semibold text-slate-900">FRN Details</h3>
-                      <p className="text-sm text-slate-600">All Form 471 funding requests for this entity</p>
+                    <div className="p-4 border-b border-slate-200 flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="font-semibold text-slate-900">FRN Details</h3>
+                        <p className="text-sm text-slate-600">
+                          {focus471Frn && displayed471Records.length < grouped471Records.length
+                            ? `Showing the contract for FRN ${focus471Frn}`
+                            : "All Form 471 funding requests for this entity"}
+                        </p>
+                      </div>
+                      {focus471Frn && displayed471Records.length < grouped471Records.length && (
+                        <button
+                          onClick={() => setFocus471Frn(null)}
+                          className="shrink-0 px-3 py-1.5 text-xs font-medium text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-50 transition"
+                        >
+                          Show all {grouped471Records.length} FRNs
+                        </button>
+                      )}
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
@@ -3304,10 +3355,10 @@ function VendorPortalPage() {
                             <th className="px-4 py-3 w-10">
                               <input
                                 type="checkbox"
-                                checked={selectedForm471Records.size === grouped471Records.length && grouped471Records.length > 0}
+                                checked={selectedForm471Records.size === displayed471Records.length && displayed471Records.length > 0}
                                 onChange={(e) => {
                                   if (e.target.checked) {
-                                    setSelectedForm471Records(new Set(grouped471Records.map(r => r.frn)));
+                                    setSelectedForm471Records(new Set(displayed471Records.map(r => r.frn)));
                                   } else {
                                     setSelectedForm471Records(new Set());
                                   }
@@ -3325,7 +3376,7 @@ function VendorPortalPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {grouped471Records.slice(0, 50).map((record, idx) => {
+                          {displayed471Records.slice(0, 50).map((record, idx) => {
                             const isExpanded = expanded471Frn === record.frn;
                             const lineItems = form471LineItemsCache[record.frn];
                             const isLoadingItems = form471LineItemsLoadingFrn === record.frn;
@@ -3431,9 +3482,9 @@ function VendorPortalPage() {
                           })}
                         </tbody>
                       </table>
-                      {grouped471Records.length > 50 && (
+                      {displayed471Records.length > 50 && (
                         <div className="p-4 text-center text-sm text-slate-500 bg-slate-50 border-t border-slate-200">
-                          Showing first 50 of {grouped471Records.length} FRNs
+                          Showing first 50 of {displayed471Records.length} FRNs
                         </div>
                       )}
                     </div>
