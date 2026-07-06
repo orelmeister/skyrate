@@ -574,7 +574,7 @@ async def get_frn_status(
     year: Optional[int] = None,
     status: Optional[str] = None,
     pending_reason: Optional[str] = None,
-    limit: int = 500,
+    limit: int = 5000,
     ben: Optional[str] = None,
     spin_search: Optional[str] = None,
     crn: Optional[str] = None,
@@ -592,7 +592,8 @@ async def get_frn_status(
         year: Optional funding year filter
         status: Optional status filter ('Funded', 'Denied', 'Pending')
         pending_reason: Optional pending reason filter (partial match)
-        limit: Maximum records (default 500)
+        limit: Maximum records (default 5000, to cover large national vendors
+            whose single-year FRN counts can run into the thousands)
         ben: Optional BEN to look up directly (bypasses SPIN filter)
         spin_search: Optional SPIN name/number to search across admin_frn_snapshots
             (partial match on the `spin` column). Privileged-only unless global_view=True.

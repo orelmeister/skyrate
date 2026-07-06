@@ -311,6 +311,10 @@ function VendorPortalPage() {
   const [showFRNDetailModal, setShowFRNDetailModal] = useState(false);
   const [disbursementOpen, setDisbursementOpen] = useState(false);
   const [frnTableSort, setFrnTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
+  // Incremental "load more" count so users can page past the first 100 FRNs
+  // (mirrors the consultant portfolio FRN table). Reset whenever the underlying
+  // data or filters change so we never leave a stale large window mounted.
+  const [visibleFrnCount, setVisibleFrnCount] = useState<number>(100);
 
   // Sorted and filtered FRN data for table display
   const sortedFrnData = useMemo(() => {
@@ -357,6 +361,12 @@ function VendorPortalPage() {
     });
     return sorted;
   }, [frnStatusData?.frns, frnTableSort, frnStatusFilter, frnSearch, frnPendingReason]);
+
+  // Reset the visible window whenever the data set or filters change so a fresh
+  // load always starts at the first 100 rows.
+  useEffect(() => {
+    setVisibleFrnCount(100);
+  }, [frnStatusData?.frns, frnStatusFilter, frnSearch, frnPendingReason]);
 
   // Toggle FRN table sort
   const toggleFrnTableSort = (field: string) => {
@@ -877,7 +887,11 @@ function VendorPortalPage() {
     
     setFrnStatusLoading(true);
     try {
-      const response = await api.getFRNStatus(year, status || undefined, pendingReason || undefined, 500, ben, spinSearch, crn, globalView);
+      // Large national vendors (e.g. CDW Government LLC) can have several
+      // thousand FRNs in a single recent funding year. Request up to 5000 so the
+      // table reflects the true portfolio size instead of an arbitrary 500 cap;
+      // the table itself paginates client-side (load more) to stay responsive.
+      const response = await api.getFRNStatus(year, status || undefined, pendingReason || undefined, 5000, ben, spinSearch, crn, globalView);
       if (response.success && response.data) {
         setFrnStatusData(response.data);
         // When a BEN / SPIN / CRN scoped lookup was performed, clear the
@@ -2239,7 +2253,7 @@ function VendorPortalPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {sortedFrnData.slice(0, 100).map((frn, idx) => (
+                          {sortedFrnData.slice(0, visibleFrnCount).map((frn, idx) => (
                             <tr 
                               key={`${frn.frn}-${idx}`} 
                               className={`hover:bg-slate-50 cursor-pointer transition-colors ${selectedFrns.has(frn.frn) ? 'bg-teal-50' : ''}`}
@@ -2307,9 +2321,47 @@ function VendorPortalPage() {
                           ))}
                         </tbody>
                       </table>
-                      {sortedFrnData.length > 100 && (
-                        <div className="p-4 text-center text-sm text-slate-500 bg-slate-50 border-t border-slate-200">
-                          Showing first 100 of {sortedFrnData.length} FRNs{frnStatusFilter && ` (filtered from ${frnStatusData?.frns?.length || 0} total)`}
+                      {sortedFrnData.length > 0 && (
+                        <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div className="text-sm text-slate-600">
+                            Showing <span className="font-medium text-slate-900">{Math.min(visibleFrnCount, sortedFrnData.length)}</span> of <span className="font-medium text-slate-900">{sortedFrnData.length}</span> FRNs
+                            {frnStatusFilter && <span className="text-slate-500"> (filtered from {frnStatusData?.frns?.length || 0} total)</span>}
+                          </div>
+                          {visibleFrnCount < sortedFrnData.length && (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs text-slate-500 mr-1">Load more:</span>
+                              <button
+                                type="button"
+                                onClick={() => setVisibleFrnCount(c => Math.min(c + 100, sortedFrnData.length))}
+                                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 transition-colors"
+                              >
+                                +100
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setVisibleFrnCount(c => Math.min(c + 250, sortedFrnData.length))}
+                                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 transition-colors"
+                              >
+                                +250
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setVisibleFrnCount(sortedFrnData.length)}
+                                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-teal-600 text-white hover:bg-teal-700 transition-colors"
+                              >
+                                View all ({sortedFrnData.length})
+                              </button>
+                            </div>
+                          )}
+                          {visibleFrnCount >= sortedFrnData.length && sortedFrnData.length > 100 && (
+                            <button
+                              type="button"
+                              onClick={() => setVisibleFrnCount(100)}
+                              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 transition-colors self-start sm:self-auto"
+                            >
+                              Collapse to 100
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
