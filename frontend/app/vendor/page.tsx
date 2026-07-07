@@ -1007,7 +1007,7 @@ function VendorPortalPage() {
     }
   };
 
-  const load470Detail = async (applicationNumber: string) => {
+  const load470Detail = async (applicationNumber: string, version?: string) => {
     setForm470DetailLoading(true);
     setShowForm470Modal(true);
     setForm470Detail(null);
@@ -1016,7 +1016,7 @@ function VendorPortalPage() {
     setEnrichmentData(null);
     
     try {
-      const response = await api.get470Detail(applicationNumber);
+      const response = await api.get470Detail(applicationNumber, version);
       if (response.success && response.data) {
         setForm470Detail(response.data);
         
@@ -5254,6 +5254,36 @@ function VendorPortalPage() {
                 </div>
               ) : form470Detail ? (
                 <div className="space-y-6">
+                  {/* Version toggle — a revised 470 keeps both Original & Current on file */}
+                  {form470Detail.available_versions && form470Detail.available_versions.length > 1 && (
+                    <div className="flex flex-wrap items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                      <span className="text-sm text-amber-800 font-medium">
+                        📝 This Form 470 was revised. Viewing:
+                      </span>
+                      <div className="inline-flex rounded-lg border border-amber-300 overflow-hidden">
+                        {['Current', 'Original'].filter(v => form470Detail.available_versions?.includes(v)).map((v) => {
+                          const active = (form470Detail.form_version || '').toLowerCase() === v.toLowerCase();
+                          return (
+                            <button
+                              key={v}
+                              onClick={() => { if (!active) load470Detail(form470Detail.application_number, v); }}
+                              className={`px-4 py-1.5 text-sm font-medium transition-colors ${
+                                active ? 'bg-amber-600 text-white' : 'bg-white text-amber-700 hover:bg-amber-100'
+                              }`}
+                            >
+                              {v}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {form470Detail.last_modified_datetime && (
+                        <span className="text-xs text-amber-600">
+                          Last modified {new Date(form470Detail.last_modified_datetime).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   {/* Entity Info */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-slate-50 rounded-xl p-4">

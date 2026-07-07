@@ -672,6 +672,9 @@ export interface Form470DetailResponse {
   funding_year: string;
   status: string;
   form_nickname: string;
+  form_version?: string | null;
+  available_versions?: string[];
+  last_modified_datetime?: string | null;
   entity: Form470DetailEntity;
   contact: Form470Contact;
   technical_contact: Form470Contact;
@@ -2568,8 +2571,9 @@ class ApiClient {
   /**
    * Get detailed Form 470 application info
    */
-  async get470Detail(applicationNumber: string): Promise<ApiResponse<Form470DetailResponse>> {
-    return this.request(`/api/v1/vendor/470/${applicationNumber}`);
+  async get470Detail(applicationNumber: string, version?: string): Promise<ApiResponse<Form470DetailResponse>> {
+    const qs = version ? `?version=${encodeURIComponent(version)}` : '';
+    return this.request(`/api/v1/vendor/470/${applicationNumber}${qs}`);
   }
 
   /**

@@ -2535,24 +2535,31 @@ class USACDataClient:
     
     def get_470_detail(
         self,
-        application_number: str
+        application_number: str,
+        version: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Get detailed information about a specific Form 470 application.
         Includes all services requested, contacts, and descriptions.
-        
+
         Args:
             application_number: The 470 application number
-            
+            version: Optional "Current" or "Original". USAC keeps a revised
+                470 as two rows (form_version = Original + Current). Defaults
+                to "Current" when a revision exists, else "Original".
+
         Returns:
-            Dictionary with complete 470 details
+            Dictionary with complete 470 details. Includes ``form_version``
+            (the version shown) and ``available_versions`` (all versions on
+            file for this application) so the UI can offer a toggle.
         """
         try:
-            # Fetch basic info
+            # Fetch basic info — a revised 470 has multiple rows (one per
+            # form_version), so pull all of them and pick the right one.
             basic_url = USAC_ENDPOINTS['470_basic']
             basic_params = {
                 '$where': f"application_number = '{application_number}'",
-                '$limit': 1
+                '$limit': 10
             }
             
             basic_response = self.session.get(basic_url, params=basic_params, timeout=30)
@@ -2564,8 +2571,28 @@ class USACDataClient:
                     'success': False,
                     'error': f'Form 470 application {application_number} not found'
                 }
-            
-            basic_info = basic_data[0]
+
+            # Determine which versions are on file and select the one to show.
+            available_versions = []
+            for row in basic_data:
+                fv = row.get('form_version')
+                if fv and fv not in available_versions:
+                    available_versions.append(fv)
+
+            def _pick(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+                want = (version or '').strip().lower()
+                if want:
+                    for r in rows:
+                        if (r.get('form_version') or '').strip().lower() == want:
+                            return r
+                # Default preference: Current, then Original, then first row.
+                for pref in ('current', 'original'):
+                    for r in rows:
+                        if (r.get('form_version') or '').strip().lower() == pref:
+                            return r
+                return rows[0]
+
+            basic_info = _pick(basic_data)
             
             # Fetch all services for this application
             services_url = USAC_ENDPOINTS['470_services']
@@ -2585,6 +2612,9 @@ class USACDataClient:
                 'funding_year': basic_info.get('funding_year'),
                 'status': basic_info.get('f470_status'),
                 'form_nickname': basic_info.get('form_nickname'),
+                'form_version': basic_info.get('form_version'),
+                'available_versions': available_versions,
+                'last_modified_datetime': basic_info.get('last_modified_datetime'),
                 # Entity info
                 'entity': {
                     'ben': basic_info.get('ben'),

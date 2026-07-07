@@ -1722,6 +1722,7 @@ async def get_470_by_manufacturer(
 @router.get("/470/{application_number}")
 async def get_470_detail(
     application_number: str,
+    version: Optional[str] = None,
     current_user: User = Depends(require_role("admin", "vendor", "super")),
 ):
     """
@@ -1732,17 +1733,20 @@ async def get_470_detail(
     
     Args:
         application_number: The Form 470 application number
+        version: Optional "Current" or "Original". A revised 470 has both
+            versions on file; defaults to Current when a revision exists.
     """
     try:
         from utils.usac_client import USACDataClient
         from utils.usac_cache import get_or_cache
         
         client = USACDataClient()
+        ver = (version or "").strip() or None
         result = get_or_cache(
             namespace="470_detail",
-            params={"application_number": application_number},
+            params={"application_number": application_number, "version": ver or "default"},
             ttl_hours=24,
-            fetch_fn=lambda: client.get_470_detail(application_number),
+            fetch_fn=lambda: client.get_470_detail(application_number, version=ver),
         )
         
         if not result.get('success'):
