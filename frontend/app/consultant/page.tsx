@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore, deriveRequiresPaymentSetup } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
-import { api, ConsultantSchool, ConsultantProfile, AppealRecord, PIAResponseRecord, PIAFRNRecord, PIAPreview, FRNWatch, FRNReportHistory, Form471ByEntityResponse, Form471LineItem, DisbursementScheduleResponse } from "@/lib/api";
+import { api, ConsultantSchool, ConsultantProfile, AppealRecord, PIAResponseRecord, PIAFRNRecord, PIAPreview, FRNWatch, FRNReportHistory, Form471ByEntityResponse, Form471Record, Form471LineItem, DisbursementScheduleResponse } from "@/lib/api";
 import { SearchResultsTable } from "@/components/SearchResultsTable";
 import { AppealChat } from "@/components/AppealChat";
 import { PIAChat } from "@/components/PIAChat";
@@ -445,6 +445,25 @@ function ConsultantPortalPage() {
   const [expanded471Frn, setExpanded471Frn] = useState<string | null>(null);
   const [form471LineItemsCache, setForm471LineItemsCache] = useState<Record<string, Form471LineItem[]>>({});
   const [form471LineItemsLoadingFrn, setForm471LineItemsLoadingFrn] = useState<string | null>(null);
+
+  // A4: the USAC 471 dataset returns one row per line item, so an FRN with N
+  // line items appears N times. Collapse to one row per FRN (summing the
+  // line-item committed amounts); the per-FRN line items are revealed by
+  // expanding the row.
+  const grouped471Records = useMemo(() => {
+    const byFrn = new Map<string, Form471Record>();
+    (form471Data?.records || []).forEach((r, i) => {
+      const key = r.frn || `__nofrn_${i}`;
+      const existing = byFrn.get(key);
+      if (existing) {
+        existing.committed_amount = (existing.committed_amount || 0) + (r.committed_amount || 0);
+        existing.pre_discount_amount = (existing.pre_discount_amount || 0) + (r.pre_discount_amount || 0);
+      } else {
+        byFrn.set(key, { ...r });
+      }
+    });
+    return Array.from(byFrn.values());
+  }, [form471Data]);
   // Per-column filters for the results table (Excel-style)
   const [serviceColBen, setServiceColBen] = useState("");
   const [serviceColName, setServiceColName] = useState("");
@@ -5784,7 +5803,7 @@ function ConsultantPortalPage() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
-                            {form471Data.records.slice(0, 50).map((record, idx) => {
+                            {grouped471Records.slice(0, 50).map((record, idx) => {
                               const isExpanded = expanded471Frn === record.frn;
                               const lineItems = form471LineItemsCache[record.frn];
                               const isLoadingItems = form471LineItemsLoadingFrn === record.frn;
@@ -5875,9 +5894,9 @@ function ConsultantPortalPage() {
                             })}
                           </tbody>
                         </table>
-                        {form471Data.records.length > 50 && (
+                        {grouped471Records.length > 50 && (
                           <div className="p-4 text-center text-sm text-slate-500 bg-slate-50 border-t border-slate-200">
-                            Showing first 50 of {form471Data.records.length} records
+                            Showing first 50 of {grouped471Records.length} FRNs
                           </div>
                         )}
                       </div>
