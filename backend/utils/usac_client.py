@@ -2748,6 +2748,104 @@ class USACDataClient:
             logger.error(f"Error fetching FRN status for BEN {ben}: {e}")
             return {'success': False, 'error': str(e), 'frns': [], 'count': 0}
 
+    def get_consultants_for_ben(
+        self,
+        ben: Optional[str] = None,
+        frn: Optional[str] = None,
+        year: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Reverse lookup: given a BEN (or a specific FRN), find which
+        consultant(s) manage it, by reading the ``crn_data`` column on the
+        Form 471 FRN Status dataset (qdmp-ygft).
+
+        ``crn_data`` is a composite "{Name|CRN|email}" string. Returns a
+        de-duplicated list of consultants with the count of FRNs each is
+        attached to and the funding years they appear in.
+        """
+        try:
+            if not ben and not frn:
+                return {'success': False, 'error': 'Provide a BEN or an FRN', 'consultants': [], 'count': 0}
+
+            url = USAC_ENDPOINTS['frn_status']
+            where_parts = []
+            if frn:
+                where_parts.append(f"funding_request_number = '{frn}'")
+            if ben:
+                where_parts.append(f"ben = '{ben}'")
+            if year:
+                where_parts.append(f"funding_year = '{year}'")
+            # Only rows that actually carry consultant info
+            where_parts.append("crn_data IS NOT NULL")
+
+            params = {
+                '$where': ' AND '.join(where_parts),
+                '$select': 'ben, funding_request_number, funding_year, crn_data, organization_name',
+                '$limit': 2000,
+                '$order': 'funding_year DESC'
+            }
+
+            response = self.session.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            rows = response.json()
+
+            # Aggregate distinct consultants keyed by CRN (fall back to name).
+            agg: Dict[str, Dict[str, Any]] = {}
+            entity_name = None
+            for row in rows:
+                if entity_name is None:
+                    entity_name = row.get('organization_name')
+                raw = (row.get('crn_data') or '').strip().strip('{}').strip()
+                if not raw:
+                    continue
+                parts = [p.strip() for p in raw.split('|')]
+                name = parts[0] if parts and parts[0] else 'Unknown'
+                crn = parts[1] if len(parts) > 1 and parts[1] else ''
+                email = parts[2] if len(parts) > 2 and parts[2] else ''
+                key = crn or name
+                if key not in agg:
+                    agg[key] = {
+                        'name': name,
+                        'crn': crn,
+                        'email': email,
+                        'frn_count': 0,
+                        'years': set(),
+                        'frns': [],
+                    }
+                entry = agg[key]
+                entry['frn_count'] += 1
+                fy = row.get('funding_year')
+                if fy:
+                    entry['years'].add(str(fy))
+                frn_no = row.get('funding_request_number')
+                if frn_no and frn_no not in entry['frns']:
+                    entry['frns'].append(frn_no)
+
+            consultants = []
+            for entry in agg.values():
+                consultants.append({
+                    'name': entry['name'],
+                    'crn': entry['crn'],
+                    'email': entry['email'],
+                    'frn_count': entry['frn_count'],
+                    'years': sorted(entry['years'], reverse=True),
+                    'frns': entry['frns'][:50],
+                })
+            consultants.sort(key=lambda c: c['frn_count'], reverse=True)
+
+            return {
+                'success': True,
+                'ben': ben,
+                'frn': frn,
+                'entity_name': entity_name,
+                'consultants': consultants,
+                'count': len(consultants),
+            }
+
+        except Exception as e:
+            logger.error(f"Error in get_consultants_for_ben (ben={ben}, frn={frn}): {e}")
+            return {'success': False, 'error': str(e), 'consultants': [], 'count': 0}
+
     def get_entity_contacts(
         self,
         ben: str

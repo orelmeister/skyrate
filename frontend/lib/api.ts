@@ -1737,6 +1737,32 @@ class ApiClient {
   }
 
   /**
+   * Reverse CRN lookup: given a BEN or FRN, find which consultant(s) manage it.
+   */
+  async getConsultantReverseLookup(opts: { ben?: string; frn?: string; year?: number }): Promise<ApiResponse<{
+    success: boolean;
+    ben?: string | null;
+    frn?: string | null;
+    entity_name?: string | null;
+    count: number;
+    consultants: Array<{
+      name: string;
+      crn: string;
+      email: string;
+      frn_count: number;
+      years: string[];
+      frns: string[];
+    }>;
+  }>> {
+    const params = new URLSearchParams();
+    if (opts.ben) params.set('ben', opts.ben);
+    if (opts.frn) params.set('frn', opts.frn);
+    if (opts.year) params.set('year', String(opts.year));
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/api/v1/consultant/crn/reverse-lookup${queryString}`, { timeoutMs: 60000 });
+  }
+
+  /**
    * Get FRN status summary for consultant's portfolio
    */
   async getConsultantFRNStatusSummary(year?: number, refresh?: boolean): Promise<ApiResponse<{

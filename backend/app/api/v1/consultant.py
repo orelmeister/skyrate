@@ -353,6 +353,39 @@ async def get_schools_by_crn(
     }
 
 
+@router.get("/crn/reverse-lookup")
+async def reverse_lookup_consultants(
+    ben: Optional[str] = Query(None, description="Billed Entity Number to look up"),
+    frn: Optional[str] = Query(None, description="Funding Request Number to look up"),
+    year: Optional[int] = Query(None, description="Optional funding year filter"),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Reverse lookup: given a BEN or FRN, return which consultant(s) (CRN) are
+    attached to it on the Form 471 FRN Status dataset. Useful for vetting a
+    prospect ("who currently manages this school?") before outreach.
+    """
+    ben = (ben or "").strip() or None
+    frn = (frn or "").strip() or None
+    if not ben and not frn:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide a BEN or an FRN to look up."
+        )
+
+    from utils.usac_client import USACDataClient
+    client = USACDataClient()
+    result = client.get_consultants_for_ben(ben=ben, frn=frn, year=year)
+
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=result.get("error", "USAC lookup failed")
+        )
+
+    return result
+
+
 @router.post("/crn/import")
 async def import_schools_from_crn(
     profile: ConsultantProfile = Depends(get_consultant_profile),

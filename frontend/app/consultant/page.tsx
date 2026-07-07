@@ -405,6 +405,11 @@ function ConsultantPortalPage() {
   const [notFiledExpanded, setNotFiledExpanded] = useState(false);
   const [frnTableSort, setFrnTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
   const [visibleFrnCount, setVisibleFrnCount] = useState<number>(25);
+  // CRN reverse-lookup (who manages this BEN/FRN) — prospect vetting
+  const [reverseLookupInput, setReverseLookupInput] = useState<string>("");
+  const [reverseLookupLoading, setReverseLookupLoading] = useState<boolean>(false);
+  const [reverseLookupError, setReverseLookupError] = useState<string | null>(null);
+  const [reverseLookupResult, setReverseLookupResult] = useState<any>(null);
   const [schoolsTableSort, setSchoolsTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
   // In-column filters for the schools table (empty Set = no filter for that column)
   const [schoolColStateFilter, setSchoolColStateFilter] = useState<Set<string>>(new Set());
@@ -1250,6 +1255,39 @@ function ConsultantPortalPage() {
       }
     } catch (error) {
       console.error('Failed to load report history:', error);
+    }
+  };
+
+  // CRN reverse-lookup: given a BEN or FRN, find which consultant(s) manage it.
+  const runReverseLookup = async () => {
+    const raw = reverseLookupInput.trim();
+    if (!raw) {
+      setReverseLookupError("Enter a BEN or an FRN.");
+      return;
+    }
+    if (!/^\d+$/.test(raw)) {
+      setReverseLookupError("Enter digits only — a BEN (shorter) or a 10-digit FRN.");
+      return;
+    }
+    setReverseLookupLoading(true);
+    setReverseLookupError(null);
+    setReverseLookupResult(null);
+    try {
+      // FRNs are exactly 10 digits; anything shorter is treated as a BEN.
+      const isFrn = raw.length === 10;
+      const response = await api.getConsultantReverseLookup(isFrn ? { frn: raw } : { ben: raw });
+      if (response?.data?.success) {
+        setReverseLookupResult(response.data);
+        if ((response.data.count || 0) === 0) {
+          setReverseLookupError("No consultant (CRN) found on USAC for that " + (isFrn ? "FRN." : "BEN."));
+        }
+      } else {
+        setReverseLookupError(response?.error || "Lookup failed. Please try again.");
+      }
+    } catch (err: any) {
+      setReverseLookupError(err?.message || "Lookup failed. Please try again.");
+    } finally {
+      setReverseLookupLoading(false);
     }
   };
 
@@ -4001,6 +4039,75 @@ function ConsultantPortalPage() {
                     )}
                   </div>
                 </div>
+              </div>
+
+              {/* CRN reverse-lookup — who manages this BEN/FRN? */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                <div className="flex items-start gap-3 mb-3">
+                  <span className="text-2xl">🔎</span>
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-800">Who manages this school?</h2>
+                    <p className="text-sm text-slate-500">
+                      Enter a BEN or a 10-digit FRN to see which consultant (CRN) is attached to it on USAC Form 471. Handy for vetting a prospect before you reach out.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={reverseLookupInput}
+                    onChange={(e) => setReverseLookupInput(e.target.value.replace(/[^\d]/g, ''))}
+                    onKeyDown={(e) => { if (e.key === 'Enter') runReverseLookup(); }}
+                    placeholder="e.g. 9032 (BEN) or 2699024474 (FRN)"
+                    className="flex-1 min-w-[220px] rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <button
+                    onClick={runReverseLookup}
+                    disabled={reverseLookupLoading}
+                    className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {reverseLookupLoading ? "Looking up…" : "Look up"}
+                  </button>
+                </div>
+
+                {reverseLookupError && (
+                  <p className="mt-3 text-sm text-amber-600">{reverseLookupError}</p>
+                )}
+
+                {reverseLookupResult && (reverseLookupResult.count || 0) > 0 && (
+                  <div className="mt-4">
+                    {reverseLookupResult.entity_name && (
+                      <p className="text-sm text-slate-600 mb-2">
+                        Entity: <span className="font-semibold text-slate-800">{reverseLookupResult.entity_name}</span>
+                      </p>
+                    )}
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-slate-500 border-b border-slate-200">
+                            <th className="py-2 pr-4 font-medium">Consultant</th>
+                            <th className="py-2 pr-4 font-medium">CRN</th>
+                            <th className="py-2 pr-4 font-medium">Email</th>
+                            <th className="py-2 pr-4 font-medium text-right">FRNs</th>
+                            <th className="py-2 pr-4 font-medium">Years</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reverseLookupResult.consultants.map((c: any, i: number) => (
+                            <tr key={c.crn || c.name || i} className="border-b border-slate-100">
+                              <td className="py-2 pr-4 font-medium text-slate-800">{c.name || '—'}</td>
+                              <td className="py-2 pr-4 text-slate-600">{c.crn || '—'}</td>
+                              <td className="py-2 pr-4 text-slate-600">{c.email || '—'}</td>
+                              <td className="py-2 pr-4 text-right text-slate-800">{c.frn_count}</td>
+                              <td className="py-2 pr-4 text-slate-600">{(c.years || []).join(', ')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Filters */}
