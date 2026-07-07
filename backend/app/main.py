@@ -1117,6 +1117,30 @@ async def global_exception_handler(request: Request, exc: Exception):
             content={"success": False, "error": "Validation error", "detail": exc.errors()}
         )
 
+    # Starlette's BaseHTTPMiddleware raises RuntimeError("No response returned.")
+    # when the client disconnects mid-request. This is extremely common for
+    # /v1/auth/refresh: the browser fires several concurrent token refreshes when
+    # the access token expires and aborts the losing requests (or the user
+    # navigates away) before the response is sent. It is benign client-side noise,
+    # NOT a server fault, so do not fire a Telegram alert or log it as a 500.
+    try:
+        from starlette.requests import ClientDisconnect as _ClientDisconnect
+    except Exception:  # pragma: no cover - defensive import
+        _ClientDisconnect = ()  # type: ignore[assignment]
+    is_client_disconnect = (
+        isinstance(exc, _ClientDisconnect)
+        or (isinstance(exc, RuntimeError) and "No response returned" in str(exc))
+    )
+    if is_client_disconnect:
+        logger.info(
+            f"Client disconnected during {request.method} {request.url.path} "
+            f"(suppressed, no alert): {type(exc).__name__}: {exc}"
+        )
+        return JSONResponse(
+            status_code=499,
+            content={"success": False, "error": "Client closed request"},
+        )
+
     error_detail = f"{type(exc).__name__}: {str(exc)}"
     tb = traceback.format_exc()
     logger.error(f"Unhandled exception on {request.url.path}: {error_detail}\n{tb}")
