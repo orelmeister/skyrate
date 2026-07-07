@@ -2825,31 +2825,39 @@ class USACDataClient:
             for row in rows:
                 if entity_name is None:
                     entity_name = row.get('organization_name')
-                raw = (row.get('crn_data') or '').strip().strip('{}').strip()
+                raw = (row.get('crn_data') or '').strip()
                 if not raw:
                     continue
-                parts = [p.strip() for p in raw.split('|')]
-                name = parts[0] if parts and parts[0] else 'Unknown'
-                crn = parts[1] if len(parts) > 1 and parts[1] else ''
-                email = parts[2] if len(parts) > 2 and parts[2] else ''
-                key = crn or name
-                if key not in agg:
-                    agg[key] = {
-                        'name': name,
-                        'crn': crn,
-                        'email': email,
-                        'frn_count': 0,
-                        'years': set(),
-                        'frns': [],
-                    }
-                entry = agg[key]
-                entry['frn_count'] += 1
+                # A single cell may carry multiple consultants:
+                # "{name|crn|email},{name2|crn2|email2}". Split into blocks.
+                blocks = raw.strip('{}').split('},{')
                 fy = row.get('funding_year')
-                if fy:
-                    entry['years'].add(str(fy))
                 frn_no = row.get('funding_request_number')
-                if frn_no and frn_no not in entry['frns']:
-                    entry['frns'].append(frn_no)
+                for block in blocks:
+                    parts = [p.strip() for p in block.strip().strip('{}').split('|')]
+                    name = parts[0] if parts and parts[0] else 'Unknown'
+                    crn = parts[1] if len(parts) > 1 and parts[1] else ''
+                    email = parts[2] if len(parts) > 2 and parts[2] else ''
+                    if name == 'Unknown' and not crn:
+                        continue
+                    key = crn or name
+                    if key not in agg:
+                        agg[key] = {
+                            'name': name,
+                            'crn': crn,
+                            'email': email,
+                            'frn_count': 0,
+                            'years': set(),
+                            'frns': [],
+                        }
+                    entry = agg[key]
+                    if not entry.get('email') and email:
+                        entry['email'] = email
+                    entry['frn_count'] += 1
+                    if fy:
+                        entry['years'].add(str(fy))
+                    if frn_no and frn_no not in entry['frns']:
+                        entry['frns'].append(frn_no)
 
             consultants = []
             for entry in agg.values():
