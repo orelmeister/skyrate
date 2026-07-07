@@ -1665,8 +1665,13 @@ function ConsultantPortalPage() {
       status: f.status,
       commitment_amount: f.commitment_amount,
       disbursed_amount: f.disbursed_amount,
+      // Invoicing method (BEAR/SPI) + readiness + last date to invoice — requested
+      // by consultants for month-by-month disbursement reconciliation.
+      invoicing_method: f.invoicing_mode || '',
+      invoicing_ready: f.invoicing_ready || '',
+      last_invoice_date: f.last_invoice_date || '',
     }));
-    downloadCsv(csvFilename('portfolio_frns'), ['frn', 'entity', 'ben', 'state', 'year', 'service_type', 'status', 'commitment_amount', 'disbursed_amount'], rows);
+    downloadCsv(csvFilename('portfolio_frns'), ['frn', 'entity', 'ben', 'state', 'year', 'service_type', 'status', 'commitment_amount', 'disbursed_amount', 'invoicing_method', 'invoicing_ready', 'last_invoice_date'], rows);
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {

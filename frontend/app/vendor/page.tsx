@@ -2746,6 +2746,24 @@ function VendorPortalPage() {
               </div>
             </div>
 
+            {/* Compliance guardrails explainer — E-Rate pre-bid rules. Native
+                <details> disclosure so no extra React state is needed. */}
+            <details className="bg-blue-50 border border-blue-200 rounded-2xl p-5 group">
+              <summary className="flex items-center gap-2 cursor-pointer list-none font-semibold text-slate-900">
+                <span className="text-lg">🛡️</span>
+                E-Rate competitive-bidding rules — read before you reach out
+                <span className="ml-auto text-blue-600 text-sm group-open:hidden">Show</span>
+                <span className="ml-auto text-blue-600 text-sm hidden group-open:inline">Hide</span>
+              </summary>
+              <ul className="mt-3 space-y-2 text-sm text-slate-700 list-disc pl-5">
+                <li><span className="font-medium">Competitive bidding is mandatory.</span> Every E-Rate purchase of eligible services or equipment must be competitively bid through a Form 470.</li>
+                <li><span className="font-medium">Before the bidding window:</span> you may introduce your company and help a district understand its network needs, but you cannot solicit or accept a specific proposal until their Form 470 is posted.</li>
+                <li><span className="font-medium">Parity rule:</span> any information or clarification you give one bidder must be made available to all bidders.</li>
+                <li><span className="font-medium">Bid to the filing:</span> your response must match the exact services, quantities, and SKUs described in the applicant&apos;s Form 470 / RFP.</li>
+              </ul>
+              <p className="mt-3 text-xs text-slate-500">General guidance, not legal advice. Always confirm current FCC/USAC rules for each procurement.</p>
+            </details>
+
             {/* Search Filters */}
             <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-900 mb-4">Search Filters</h2>
