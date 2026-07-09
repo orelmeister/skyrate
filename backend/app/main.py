@@ -789,16 +789,45 @@ def _run_schema_migrations(engine):
                 """))
             logger.info("Migration: Created dispatched_deadline_alerts table")
 
+        is_mysql = engine.dialect.name == "mysql"
         for table, column, col_type, _ in migrations:
             if not inspector.has_table(table):
                 continue
             existing_cols = [c["name"] for c in inspector.get_columns(table)]
-            if column not in existing_cols:
-                with engine.begin() as conn:
-                    conn.execute(text(f"ALTER TABLE `{table}` ADD COLUMN `{column}` {col_type}"))
+            if column in existing_cols:
+                continue
+            # Per-column non-fatal: a single ADD COLUMN must never abort the whole
+            # migration pass or hang container startup past the health-check window
+            # (e.g. a large, constantly-written table like frn_status_changes_queue).
+            try:
+                if is_mysql:
+                    try:
+                        with engine.begin() as conn:
+                            # Bound any metadata-lock wait so a busy table can't stall.
+                            conn.execute(text("SET SESSION lock_wait_timeout = 10"))
+                            # ALGORITHM=INSTANT = metadata-only, sub-second regardless
+                            # of table size; avoids a slow full-table copy that would
+                            # exceed the deploy health-check timeout and crash startup.
+                            conn.execute(text(
+                                f"ALTER TABLE `{table}` ADD COLUMN `{column}` {col_type}, ALGORITHM=INSTANT"
+                            ))
+                    except Exception:
+                        # INSTANT unsupported for this column/server — fall back to a
+                        # plain add, still lock-bounded so it cannot hang startup.
+                        with engine.begin() as conn:
+                            conn.execute(text("SET SESSION lock_wait_timeout = 10"))
+                            conn.execute(text(
+                                f"ALTER TABLE `{table}` ADD COLUMN `{column}` {col_type}"
+                            ))
+                else:
+                    with engine.begin() as conn:
+                        conn.execute(text(f"ALTER TABLE `{table}` ADD COLUMN `{column}` {col_type}"))
                 logger.info(f"Migration: Added column {table}.{column}")
                 if table == "alert_configs" and column == "alert_on_service_delivery":
                     _service_delivery_col_added = True
+            except Exception as _col_err:
+                logger.error(f"Migration: could not add {table}.{column} (non-fatal): {_col_err}")
+                continue
 
         # Make applicant_profiles.ben nullable so users can sign up without a BEN
         # (BEN is collected during onboarding, not at registration)
