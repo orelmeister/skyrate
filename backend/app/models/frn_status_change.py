@@ -19,5 +19,8 @@ class FrnStatusChangeQueue(Base):
     new_amount = Column(Float, nullable=True)
     entity_name = Column(String(512), nullable=True)
     created_at = Column(DateTime, default=func.now(), nullable=False)
+    # The true date USAC issued this status change (FCDL date), when available.
+    # Distinct from created_at, which is when our monitor first detected/queued it.
+    status_change_date = Column(DateTime, nullable=True)
     processed = Column(Integer, default=0, nullable=False, index=True)  # 0=pending, 1=processed
     processed_at = Column(DateTime, nullable=True)

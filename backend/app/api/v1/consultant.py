@@ -2157,6 +2157,13 @@ async def get_recent_activity(
             "new_status": r.new_status,
             "old_amount": r.old_amount,
             "new_amount": r.new_amount,
+            # True USAC status-change date (FCDL) when known; falls back to the
+            # detection time. The frontend prefers status_change_date so a 2024
+            # commitment is not mislabeled as "2 days ago".
+            "status_change_date": (
+                r.status_change_date.isoformat()
+                if getattr(r, "status_change_date", None) else None
+            ),
             "created_at": r.created_at.isoformat() if r.created_at else None,
         })
 

@@ -36,6 +36,27 @@ logger = logging.getLogger(__name__)
 _DIFF_FIELDS = ("status", "amount_committed", "pending_reason", "fcdl_date")
 
 
+def _parse_fcdl_date(raw) -> "datetime | None":
+    """
+    Parse a USAC FCDL date (the true funding-decision date) into a datetime.
+    USAC returns ISO-ish strings ("2024-05-03T00:00:00.000" or "2024-05-03").
+    Returns None if unparseable/empty. Used as the true status-change date so
+    historical events don't render as "just now".
+    """
+    if not raw:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    datepart = s.split("T")[0]
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(datepart, fmt)
+        except (ValueError, TypeError):
+            continue
+    return None
+
+
 def _deduplicate_frn_records(frn_records: list) -> list:
     """
     Deduplicate incoming FRN records by (ben, frn) key.
@@ -155,6 +176,7 @@ def upsert_frn_snapshots(
                                 new_amount=rec_amt,
                                 entity_name=rec.get("organization_name"),
                                 created_at=now,
+                                status_change_date=_parse_fcdl_date(rec_fcdl),
                                 processed=0,
                             )
                         )

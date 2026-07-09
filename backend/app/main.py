@@ -674,6 +674,9 @@ def _run_schema_migrations(engine):
         ("saved_leads", "source_data", "JSON DEFAULT NULL", None),
         # Multi-CRN: track which CRN imported each school
         ("consultant_schools", "source_crn", "VARCHAR(50) DEFAULT NULL", None),
+        # FRN status change queue — true USAC status-change date (FCDL), distinct
+        # from created_at (detection time). Fixes old events showing as "2d ago".
+        ("frn_status_changes_queue", "status_change_date", "DATETIME DEFAULT NULL", None),
         # FRN watches — columns added after initial table creation
         ("frn_watches", "target_name", "VARCHAR(255) DEFAULT NULL", None),
         ("frn_watches", "cc_emails", "JSON DEFAULT NULL", None),

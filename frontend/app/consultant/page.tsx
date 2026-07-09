@@ -238,6 +238,7 @@ interface RecentActivityItem {
   new_status: string | null;
   old_amount: number | null;
   new_amount: number | null;
+  status_change_date: string | null;
   created_at: string | null;
 }
 
@@ -2702,7 +2703,7 @@ function ConsultantPortalPage() {
                               )}
                             </div>
                           </div>
-                          <span className="text-xs text-slate-400 flex-shrink-0 whitespace-nowrap">{formatActivityTime(a.created_at)}</span>
+                          <span className="text-xs text-slate-400 flex-shrink-0 whitespace-nowrap">{formatActivityTime(a.status_change_date || a.created_at)}</span>
                         </div>
                       );
                     })}
