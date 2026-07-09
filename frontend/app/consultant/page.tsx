@@ -238,7 +238,7 @@ interface RecentActivityItem {
   new_status: string | null;
   old_amount: number | null;
   new_amount: number | null;
-  status_change_date: string | null;
+  status_change_date?: string | null;
   created_at: string | null;
 }
 
