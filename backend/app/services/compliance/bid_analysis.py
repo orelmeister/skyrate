@@ -9,6 +9,7 @@ and ranking are computed deterministically in Python so the price-primary rule
 (FCC Order 19-117) is enforced transparently.
 """
 
+import asyncio
 import json
 import logging
 from typing import Optional
@@ -252,12 +253,21 @@ async def analyze_bids(
             f"keyed by source_index. Advisory only. Not legal or USAC official guidance."
         )
 
-        response = model.generate_content(
+        # The google.generativeai SDK call is synchronous and, without an explicit
+        # timeout, can block the asyncio event loop for the full life of the request.
+        # That starves uvicorn/health checks and lets a slow generation ride past the
+        # platform gateway limit -> the client sees a 504 Gateway Timeout (exactly the
+        # "server error" reported on Bid Analysis). Run it in a worker thread so the
+        # event loop stays responsive, and cap it with a request timeout so a hung
+        # upstream fails fast with a clean message instead of a 504.
+        response = await asyncio.to_thread(
+            model.generate_content,
             prompt,
             generation_config=genai.GenerationConfig(
                 temperature=0.2,
                 response_mime_type="application/json",
             ),
+            request_options={"timeout": 55},
         )
 
         # Safely extract the model text. With google.generativeai, accessing
