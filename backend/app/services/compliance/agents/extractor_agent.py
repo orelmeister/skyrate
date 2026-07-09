@@ -88,7 +88,7 @@ async def extract_document_data(document_text: str, metadata: dict) -> Extracted
 
     try:
         genai.configure(api_key=settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY)
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        model = genai.GenerativeModel("gemini-2.5-flash")
 
         prompt = EXTRACTION_PROMPT + truncated
         response = model.generate_content(

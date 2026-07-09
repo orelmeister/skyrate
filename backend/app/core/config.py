@@ -82,7 +82,7 @@ class Settings(BaseSettings):
     
     # AI Model Names
     DEEPSEEK_MODEL: str = "deepseek-chat"
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
     CLAUDE_MODEL: str = "claude-3-5-sonnet-latest"
     
     # Stripe

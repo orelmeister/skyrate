@@ -93,7 +93,7 @@ async def produce_final_assessment(
     settings = get_settings()
 
     # Select model based on config
-    model_name = "gemini-1.5-pro" if settings.COMPLIANCE_USE_PRO else "gemini-2.0-flash"
+    model_name = "gemini-2.5-pro" if settings.COMPLIANCE_USE_PRO else "gemini-2.5-flash"
 
     # Format inputs
     rule_str = json.dumps(rule_findings, indent=2, default=str)[:3000]

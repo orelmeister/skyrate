@@ -158,14 +158,14 @@ CATEGORY: [One of: Guide, Analysis, Strategy, Industry, News]
         try:
             import google.generativeai as genai
             genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel('gemini-2.0-flash')
+            model = genai.GenerativeModel('gemini-2.5-flash')
             
             def _call_gemini():
                 return model.generate_content(f"{BLOG_SYSTEM_PROMPT}\n\n{full_prompt}")
             
             response = await loop.run_in_executor(None, _call_gemini)
             content = response.text
-            model_used = "gemini-2.0-flash"
+            model_used = "gemini-2.5-flash"
         except Exception as e:
             logger.error(f"Gemini blog generation failed: {e}")
     
