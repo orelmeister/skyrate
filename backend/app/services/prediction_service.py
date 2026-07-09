@@ -518,16 +518,19 @@ class PredictionService:
         """
         count = 0
         current_year = datetime.utcnow().year
-        
-        # Determine which budget cycles are ending soon
-        ending_cycles = []
-        for cycle, end_year in C2_CYCLE_END_YEARS.items():
-            if current_year <= end_year <= current_year + 2:
-                ending_cycles.append(cycle)
-        
-        if not ending_cycles:
-            # Fallback: use most recent cycle
-            ending_cycles = [f"FY{current_year - 4}-{current_year}"]
+
+        # C2 budgets run in fixed 5-year cycles anchored at FY2021
+        # (FY2021-2025, FY2026-2030, FY2031-2035, ...). Compute the currently
+        # ACTIVE cycle dynamically so predictions keep working as cycles roll
+        # over. The active cycle is where schools have fresh budget to spend —
+        # the strongest "budget reset" sales signal. (The previous hard-coded
+        # fallback produced a non-existent label like FY2022-2026 -> 0 rows.)
+        cycle_anchor = 2021
+        cycle_len = 5
+        active_start = cycle_anchor + ((current_year - cycle_anchor) // cycle_len) * cycle_len
+        active_end = active_start + cycle_len - 1
+        active_cycle = f"FY{active_start}-{active_end}"
+        ending_cycles = [active_cycle]
         
         result = self.usac_client.get_c2_budget_opportunities(
             min_remaining_budget=5000,
@@ -570,27 +573,39 @@ class PredictionService:
                 if budget_pct_remaining > 0.5:
                     confidence += CONFIDENCE_WEIGHTS['c2_budget_reset']['high_remaining_bonus']
                 
-                # Check if cycle ending within 12 months
+                # Check where we are in the cycle. Fresh budget early in a cycle
+                # is a strong "spend it" signal; leftover budget late in a cycle
+                # is a "use it or lose it" signal. Either way a large remaining
+                # balance is a lead.
                 cycle_end_year = C2_CYCLE_END_YEARS.get(budget_cycle)
+                cycle_ending_soon = False
                 if cycle_end_year:
                     months_until_end = (datetime(cycle_end_year + 1, 7, 1) - datetime.utcnow()).days / 30
-                    if months_until_end < 12:
+                    if 0 < months_until_end < 12:
                         confidence += CONFIDENCE_WEIGHTS['c2_budget_reset']['cycle_ending_soon_bonus']
-                    predicted_action = datetime(cycle_end_year, 1, 1)  # They'll likely act early in last year
-                else:
-                    predicted_action = datetime.utcnow() + timedelta(days=180)
-                
+                        cycle_ending_soon = True
+                predicted_action = datetime.utcnow() + timedelta(days=180)
+
                 confidence = min(confidence, 1.0)
-                
+
                 budget_funded = float(record.get('funded_c2_budget_amount', 0) or 0)
-                
-                reason = (
-                    f"C2 budget cycle {budget_cycle} ending soon. "
-                    f"${budget_remaining:,.0f} of ${budget_total:,.0f} remaining "
-                    f"({budget_pct_remaining:.0%} unspent). "
-                    f"Already funded: ${budget_funded:,.0f}. "
-                    f"'Use it or lose it' opportunity for equipment sales."
-                )
+
+                if cycle_ending_soon:
+                    reason = (
+                        f"C2 budget cycle {budget_cycle} ending soon. "
+                        f"${budget_remaining:,.0f} of ${budget_total:,.0f} remaining "
+                        f"({budget_pct_remaining:.0%} unspent). "
+                        f"Already funded: ${budget_funded:,.0f}. "
+                        f"'Use it or lose it' opportunity for equipment sales."
+                    )
+                else:
+                    reason = (
+                        f"Fresh C2 budget cycle {budget_cycle}. "
+                        f"${budget_remaining:,.0f} of ${budget_total:,.0f} available "
+                        f"({budget_pct_remaining:.0%} unspent). "
+                        f"Already funded: ${budget_funded:,.0f}. "
+                        f"Strong Category 2 equipment sales opportunity."
+                    )
                 
                 lead = PredictedLead(
                     prediction_type=PredictionType.C2_BUDGET_RESET.value,

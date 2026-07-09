@@ -593,20 +593,42 @@ export default function PredictedLeadsTab({ onView471 }: { onView471?: (ben: str
           {isLoading ? (
             <SkeletonRows rows={6} height="h-28" />
           ) : leads.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
-              <span className="text-5xl mb-4 block">🔮</span>
-              <h3 className="text-lg font-semibold text-slate-700 mb-2">No Predictions Yet</h3>
-              <p className="text-slate-500 mb-4">
-                Click &quot;Refresh Predictions&quot; to analyze USAC data and generate predictive leads.
-              </p>
-              <button
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-                className="px-6 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50"
-              >
-                {isRefreshing ? "Analyzing..." : "Generate Predictions"}
-              </button>
-            </div>
+            (filterType || filterState || filterManufacturer || filterEntityType || filterServiceType || filterMinAmount || filterMaxAmount) ? (
+              <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
+                <span className="text-5xl mb-4 block">🔍</span>
+                <h3 className="text-lg font-semibold text-slate-700 mb-2">No leads match these filters</h3>
+                <p className="text-slate-500 mb-4">
+                  No predicted leads match your current filters
+                  {filterType ? ` for “${PREDICTION_TYPE_CONFIG[filterType]?.label || filterType}”` : ""}.
+                  Try clearing or widening the filters.
+                </p>
+                <button
+                  onClick={() => {
+                    setFilterType(""); setFilterState(""); setFilterManufacturer("");
+                    setFilterEntityType(""); setFilterServiceType("");
+                    setFilterMinAmount(""); setFilterMaxAmount(""); setOffset(0);
+                  }}
+                  className="px-6 py-2 bg-slate-600 text-white rounded-xl hover:bg-slate-700 transition-colors"
+                >
+                  Clear filters
+                </button>
+              </div>
+            ) : (
+              <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
+                <span className="text-5xl mb-4 block">🔮</span>
+                <h3 className="text-lg font-semibold text-slate-700 mb-2">No Predictions Yet</h3>
+                <p className="text-slate-500 mb-4">
+                  Click &quot;Refresh Predictions&quot; to analyze USAC data and generate predictive leads.
+                </p>
+                <button
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                  className="px-6 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50"
+                >
+                  {isRefreshing ? "Analyzing..." : "Generate Predictions"}
+                </button>
+              </div>
+            )
           ) : (
             <>
               {leads.map((lead) => {
