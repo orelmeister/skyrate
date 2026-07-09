@@ -423,11 +423,18 @@ export default function OpportunityMap() {
 
       {showFiber && (
         <div className="flex flex-wrap items-center gap-3 text-xs">
-          <span className="flex items-center gap-1.5 text-slate-600">
-            <span className="inline-block w-3 h-3 rounded-sm" style={{ background: "#059669", opacity: 0.75 }} />
-            FCC-reported fiber (technology 50); darker = more of the area covered
+          <span className="flex items-center gap-2 text-slate-600">
+            <span className="font-medium text-slate-700">FCC fiber coverage:</span>
+            <span className="text-slate-500">less</span>
+            <span className="inline-flex rounded-sm overflow-hidden border border-slate-200" aria-hidden="true">
+              <span className="inline-block w-5 h-3" style={{ background: "#059669", opacity: 0.25 }} />
+              <span className="inline-block w-5 h-3" style={{ background: "#059669", opacity: 0.45 }} />
+              <span className="inline-block w-5 h-3" style={{ background: "#059669", opacity: 0.65 }} />
+              <span className="inline-block w-5 h-3" style={{ background: "#059669", opacity: 0.85 }} />
+            </span>
+            <span className="text-slate-500">more of the area covered</span>
           </span>
-          <span className="text-slate-400">Zoom in to see hex-level coverage. Source: FCC National Broadband Map.</span>
+          <span className="text-slate-400">Zoom in to see hex-level coverage. Source: FCC National Broadband Map (technology 50 = fiber).</span>
           {fiberError && <span className="text-amber-600">{fiberError}</span>}
         </div>
       )}
