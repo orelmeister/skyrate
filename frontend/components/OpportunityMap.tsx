@@ -20,6 +20,16 @@ const FCC_HEX_LAYER = "fixeddetailhex";
 const FCC_MIN_ZOOM = 5;
 const FCC_MAX_ZOOM = 15;
 
+// FCC single-provider footprint: our backend proxies the FCC "Provider Detail"
+// hex tiles (layer "fixedproviderhex") for one chosen provider + technology
+// (fiber = code 50). Each hex carries location_count / total_locations /
+// unit_pct. `br` is the customer class (r = residential, b = business); we draw
+// both so a provider's full footprint shows regardless of who they sell to.
+const FCC_PROVIDER_LAYER = "fixedproviderhex";
+const FCC_PROVIDER_MIN_ZOOM = 4;
+const fccProviderTiles = (providerId: string, br: "r" | "b") =>
+  `/api/v1/fcc/provider-tile/${encodeURIComponent(providerId)}/${br}/{z}/{x}/{y}.pbf`;
+
 // Continental-US default view.
 const US_CENTER: [number, number] = [39.5, -98.35];
 const US_ZOOM = 4;
@@ -131,6 +141,8 @@ function popupHtml(lead: Form470Lead): string {
     </div>`;
 }
 
+type ProviderHit = { provider_id: string; name: string; holding_company?: string | null };
+
 export default function OpportunityMap() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -145,6 +157,16 @@ export default function OpportunityMap() {
   const [basemap, setBasemap] = useState<"street" | "satellite">("street");
   const [showFiber, setShowFiber] = useState(false);
   const [fiberError, setFiberError] = useState<string | null>(null);
+
+  // FCC single-provider footprint overlay.
+  const providerLayerRRef = useRef<any>(null);
+  const providerLayerBRef = useRef<any>(null);
+  const [providerQuery, setProviderQuery] = useState("");
+  const [providerResults, setProviderResults] = useState<ProviderHit[]>([]);
+  const [providerSearching, setProviderSearching] = useState(false);
+  const [providerOpen, setProviderOpen] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<ProviderHit | null>(null);
+  const [providerError, setProviderError] = useState<string | null>(null);
 
   // The map loads its own geo feed (recent Form 470s that carry USAC coords).
   const [leads, setLeads] = useState<Form470Lead[]>([]);
@@ -310,6 +332,120 @@ export default function OpportunityMap() {
     };
   }, [showFiber, ready]);
 
+  // Debounced provider name search -> /api/v1/fcc/providers.
+  useEffect(() => {
+    const q = providerQuery.trim();
+    // If the box exactly matches the current selection, don't re-search.
+    if (q.length < 2 || (selectedProvider && q === selectedProvider.name)) {
+      setProviderResults([]);
+      setProviderSearching(false);
+      return;
+    }
+    let cancelled = false;
+    setProviderSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/v1/fcc/providers?q=${encodeURIComponent(q)}`);
+        const json = await res.json();
+        if (!cancelled) {
+          setProviderResults(Array.isArray(json?.providers) ? json.providers : []);
+          setProviderOpen(true);
+        }
+      } catch {
+        if (!cancelled) setProviderResults([]);
+      } finally {
+        if (!cancelled) setProviderSearching(false);
+      }
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [providerQuery, selectedProvider]);
+
+  // Render a single provider's fiber footprint (two layers: residential +
+  // business) and zoom the map to that provider's extent. Violet distinguishes
+  // it from the all-provider emerald "Fiber coverage" overlay.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+
+    const clearProviderLayers = () => {
+      [providerLayerRRef, providerLayerBRef].forEach((r) => {
+        if (r.current) {
+          map.removeLayer(r.current);
+          r.current = null;
+        }
+      });
+    };
+
+    if (!selectedProvider) {
+      clearProviderLayers();
+      setProviderError(null);
+      return;
+    }
+
+    let cancelled = false;
+    clearProviderLayers();
+    setProviderError(null);
+    const pid = selectedProvider.provider_id;
+
+    ensureVectorGrid()
+      .then((L) => {
+        if (cancelled || !mapRef.current) return;
+        const styleProvider = (props: any) => {
+          const loc = Number(props?.location_count) || 0;
+          const units = Number(props?.unit_count) || 0;
+          if (loc <= 0 && units <= 0) return []; // provider not present in this hex
+          const pct = Number(props?.unit_pct);
+          const frac = Math.min(1, Math.max(0, Number.isNaN(pct) ? 0.5 : pct));
+          return {
+            weight: 0,
+            fill: true,
+            fillColor: "#7c3aed", // violet — a specific provider's fiber
+            fillOpacity: 0.3 + 0.55 * frac,
+          };
+        };
+        const makeLayer = (br: "r" | "b") =>
+          L.vectorGrid.protobuf(fccProviderTiles(pid, br), {
+            rendererFactory: L.canvas.tile,
+            interactive: false,
+            minZoom: FCC_PROVIDER_MIN_ZOOM,
+            maxZoom: FCC_MAX_ZOOM,
+            maxNativeZoom: FCC_MAX_ZOOM,
+            attribution: "Provider data: FCC National Broadband Map",
+            vectorTileLayerStyles: { [FCC_PROVIDER_LAYER]: styleProvider },
+          });
+        const rLayer = makeLayer("r");
+        const bLayer = makeLayer("b");
+        rLayer.addTo(mapRef.current);
+        bLayer.addTo(mapRef.current);
+        providerLayerRRef.current = rLayer;
+        providerLayerBRef.current = bLayer;
+        if (layerRef.current && layerRef.current.bringToFront) layerRef.current.bringToFront();
+      })
+      .catch(() => {
+        if (!cancelled) setProviderError("Provider overlay failed to load.");
+      });
+
+    // Zoom to the provider's reported footprint.
+    (async () => {
+      try {
+        const res = await fetch(`/api/v1/fcc/provider-extent/${encodeURIComponent(pid)}`);
+        const json = await res.json();
+        if (!cancelled && json?.bounds && mapRef.current) {
+          mapRef.current.fitBounds(json.bounds, { padding: [30, 30], maxZoom: 9 });
+        }
+      } catch {
+        /* extent is best-effort; overlay still works without a zoom */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProvider, ready]);
+
   // (Re)draw markers whenever the filtered set changes.
   useEffect(() => {
     const L = (window as any).L;
@@ -438,6 +574,78 @@ export default function OpportunityMap() {
           {fiberError && <span className="text-amber-600">{fiberError}</span>}
         </div>
       )}
+
+      {/* Show a single named provider's fiber footprint */}
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="text-xs font-semibold text-slate-600">Provider fiber</label>
+        <div className="relative">
+          <input
+            type="text"
+            value={providerQuery}
+            onChange={(e) => setProviderQuery(e.target.value)}
+            onFocus={() => providerResults.length > 0 && setProviderOpen(true)}
+            placeholder="Search a fiber provider (e.g. Everstream, AT&T)…"
+            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white w-72"
+          />
+          {providerOpen && (providerSearching || providerResults.length > 0) && (
+            <div className="absolute z-[1000] mt-1 w-full max-h-60 overflow-auto bg-white border border-slate-200 rounded-lg shadow-lg">
+              {providerSearching && (
+                <div className="px-3 py-2 text-xs text-slate-400">Searching…</div>
+              )}
+              {!providerSearching &&
+                providerResults.map((p) => (
+                  <button
+                    key={`${p.provider_id}-${p.name}`}
+                    type="button"
+                    onClick={() => {
+                      setSelectedProvider(p);
+                      setProviderQuery(p.name);
+                      setProviderResults([]);
+                      setProviderOpen(false);
+                    }}
+                    className="block w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-violet-50"
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              {!providerSearching &&
+                providerResults.length === 0 &&
+                providerQuery.trim().length >= 2 && (
+                  <div className="px-3 py-2 text-xs text-slate-400">No providers found.</div>
+                )}
+            </div>
+          )}
+        </div>
+        {selectedProvider && (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-violet-100 text-violet-800 text-xs font-semibold">
+            <span className="inline-block w-2 h-2 rounded-sm" style={{ background: "#7c3aed" }} />
+            {selectedProvider.name}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedProvider(null);
+                setProviderQuery("");
+                setProviderResults([]);
+                setProviderOpen(false);
+              }}
+              className="ml-1 text-violet-500 hover:text-violet-800"
+              aria-label="Clear selected provider"
+            >
+              ×
+            </button>
+          </span>
+        )}
+        {selectedProvider ? (
+          <span className="text-xs text-slate-400">
+            Violet hexes = this provider&apos;s FCC-reported fiber. Zoom in for detail.
+          </span>
+        ) : (
+          <span className="text-xs text-slate-400">
+            See exactly where one carrier reports fiber (FCC National Broadband Map).
+          </span>
+        )}
+        {providerError && <span className="text-xs text-amber-600">{providerError}</span>}
+      </div>
 
       <div className="flex flex-wrap gap-4 text-sm">
         <div className="px-4 py-2 bg-white rounded-lg border border-slate-200">
