@@ -134,7 +134,13 @@ class ConsultantSchool(Base):
     # Notes
     notes = Column(Text)
     tags = Column(JSON, default=[])  # Custom tags for organization
-    
+
+    # Letter of Agency (LOA) tracking — consultant marks whether a signed LOA is
+    # on file for this school (E-Rate requires an LOA authorizing the consultant).
+    loa_on_file = Column(Boolean, default=False, nullable=False)
+    loa_reference = Column(String(255), nullable=True)  # optional filename / note
+    loa_marked_at = Column(DateTime, nullable=True)
+
     # Timestamps
     added_at = Column(DateTime, default=datetime.utcnow)
     last_synced = Column(DateTime)
@@ -162,6 +168,9 @@ class ConsultantSchool(Base):
             "applications_count": self.applications_count or 0,
             "notes": self.notes,
             "tags": self.tags or [],
+            "loa_on_file": bool(self.loa_on_file),
+            "loa_reference": self.loa_reference,
+            "loa_marked_at": self.loa_marked_at.isoformat() if self.loa_marked_at else None,
             "added_at": self.added_at.isoformat() if self.added_at else None,
             "last_synced": self.last_synced.isoformat() if self.last_synced else None,
         }

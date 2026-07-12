@@ -1490,6 +1490,20 @@ class ApiClient {
     });
   }
 
+  /**
+   * Update a school in the consultant's portfolio (notes, tags, and LOA-on-file
+   * marking). Only provided fields are changed.
+   */
+  async updateConsultantSchool(
+    ben: string,
+    data: { notes?: string; tags?: string[]; loa_on_file?: boolean; loa_reference?: string }
+  ): Promise<ApiResponse<{ success: boolean; school: Record<string, unknown> }>> {
+    return this.request(`/api/v1/consultant/schools/${ben}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
   async validateBens(bens: string[]): Promise<ApiResponse<{
     total: number;
     valid_count: number;

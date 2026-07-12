@@ -173,6 +173,10 @@ interface EnhancedSchool {
   latest_year?: string;
   applications_count?: number;
   notes?: string | null;
+  // Letter of Agency (LOA) tracking
+  loa_on_file?: boolean;
+  loa_reference?: string | null;
+  loa_marked_at?: string | null;
   // Enriched fields from USAC
   entity_type?: string | null;
   address?: string | null;
@@ -2059,6 +2063,31 @@ function ConsultantPortalPage() {
     }
   };
 
+  // #10 — mark/unmark a signed Letter of Agency (LOA) on file for a school.
+  const [loaSavingBen, setLoaSavingBen] = useState<string | null>(null);
+  const handleToggleSchoolLoa = async (school: EnhancedSchool) => {
+    const next = !school.loa_on_file;
+    setLoaSavingBen(school.ben);
+    // Optimistic update.
+    setSchools(prev => prev.map(s =>
+      s.ben === school.ben
+        ? { ...s, loa_on_file: next, loa_marked_at: next ? new Date().toISOString() : null }
+        : s
+    ));
+    try {
+      const resp = await api.updateConsultantSchool(school.ben, { loa_on_file: next });
+      if (!resp.success) throw new Error(resp.error || 'update failed');
+    } catch (error) {
+      console.error("Failed to update LOA:", error);
+      // Revert on failure.
+      setSchools(prev => prev.map(s =>
+        s.ben === school.ben ? { ...s, loa_on_file: !next } : s
+      ));
+    } finally {
+      setLoaSavingBen(null);
+    }
+  };
+
   const handleLogout = () => {
     logout();
     router.push("/");
@@ -3064,6 +3093,7 @@ function ConsultantPortalPage() {
                           </>
                         )}
                       </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase w-28">LOA</th>
                       <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase w-24">Actions</th>
                     </tr>
                   </thead>
@@ -3113,6 +3143,30 @@ function ConsultantPortalPage() {
                             <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${statusColor}`}>
                               {school.status || 'Unknown'}
                             </span>
+                          </td>
+                          <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSchoolLoa(school)}
+                              disabled={loaSavingBen === school.ben}
+                              title={school.loa_on_file
+                                ? `Signed LOA on file${school.loa_marked_at ? ` (marked ${String(school.loa_marked_at).slice(0, 10)})` : ''}. Click to unmark.`
+                                : 'No Letter of Agency on file. Click to mark as on file.'}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-colors disabled:opacity-50 ${
+                                school.loa_on_file
+                                  ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200 border border-dashed border-slate-300'
+                              }`}
+                            >
+                              {school.loa_on_file ? (
+                                <>
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                  LOA on file
+                                </>
+                              ) : (
+                                <>Mark LOA</>
+                              )}
+                            </button>
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">

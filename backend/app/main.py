@@ -674,6 +674,11 @@ def _run_schema_migrations(engine):
         ("saved_leads", "source_data", "JSON DEFAULT NULL", None),
         # Multi-CRN: track which CRN imported each school
         ("consultant_schools", "source_crn", "VARCHAR(50) DEFAULT NULL", None),
+        # LOA (Letter of Agency) tracking — consultant marks whether a signed LOA
+        # is on file per school.
+        ("consultant_schools", "loa_on_file", "TINYINT(1) NOT NULL DEFAULT 0", None),
+        ("consultant_schools", "loa_reference", "VARCHAR(255) DEFAULT NULL", None),
+        ("consultant_schools", "loa_marked_at", "DATETIME DEFAULT NULL", None),
         # FRN status change queue — true USAC status-change date (FCDL), distinct
         # from created_at (detection time). Fixes old events showing as "2d ago".
         ("frn_status_changes_queue", "status_change_date", "DATETIME DEFAULT NULL", None),

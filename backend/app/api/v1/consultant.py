@@ -165,6 +165,8 @@ class SchoolAdd(BaseModel):
 class SchoolUpdate(BaseModel):
     notes: Optional[str] = None
     tags: Optional[List[str]] = None
+    loa_on_file: Optional[bool] = None
+    loa_reference: Optional[str] = None
 
 
 class SelectiveResyncRequest(BaseModel):
@@ -3021,10 +3023,17 @@ async def update_school(
         school.notes = data.notes
     if data.tags is not None:
         school.tags = data.tags
-    
+    if data.loa_on_file is not None:
+        school.loa_on_file = bool(data.loa_on_file)
+        school.loa_marked_at = datetime.utcnow() if data.loa_on_file else None
+        if not data.loa_on_file:
+            school.loa_reference = None
+    if data.loa_reference is not None:
+        school.loa_reference = data.loa_reference.strip() or None
+
     db.commit()
     db.refresh(school)
-    
+
     return {"success": True, "school": school.to_dict()}
 
 
