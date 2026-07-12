@@ -3,21 +3,21 @@ import Link from "next/link";
 import { Check, ArrowRight, Bell, Activity, Clock, Mail, BarChart3, Shield, Database, History } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Check FRN Status Free 2026 — Real-Time E-Rate Funding Alerts | SkyRate",
-  description: "Check any E-Rate FRN status in real time — know the moment USAC commits, denies, or flags your funding. Free instant alerts on every FRN number. No credit card required.",
+  title: "FRN Status Tracker 2026 — Free Real-Time E-Rate Alerts | SkyRate",
+  description: "Track any E-Rate FRN status in real time. Get instant USAC alerts when your funding is committed, denied, or flagged. Free — no account needed. Updated July 2026.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/features/frn-monitoring" },
   openGraph: {
-    title: "Check FRN Status Free 2026 — Real-Time E-Rate Funding Alerts | SkyRate",
-    description: "Check any E-Rate FRN status in real time — know the moment USAC commits, denies, or flags your funding. Free instant alerts on every FRN number. No credit card required.",
+    title: "FRN Status Tracker 2026 — Free Real-Time E-Rate Alerts | SkyRate",
+    description: "Track any E-Rate FRN status in real time. Get instant USAC alerts when your funding is committed, denied, or flagged. Free — no account needed. Updated July 2026.",
     url: "https://skyrate.ai/features/frn-monitoring",
     siteName: "SkyRate AI",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Check FRN Status Free 2026 — Real-Time E-Rate Funding Alerts | SkyRate",
-    description: "Check any E-Rate FRN status in real time. Free instant alerts the moment USAC commits, denies, or flags your funding — on every FRN number.",
+    title: "FRN Status Tracker 2026 — Free Real-Time E-Rate Alerts | SkyRate",
+    description: "Track any E-Rate FRN status in real time. Instant USAC alerts when funding is committed, denied, or flagged. Free — no account needed. Updated July 2026.",
   },
 };
 
