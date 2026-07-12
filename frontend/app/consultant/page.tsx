@@ -622,18 +622,19 @@ function ConsultantPortalPage() {
   const [disbData, setDisbData] = useState<DisbursementScheduleResponse | null>(null);
   const [disbLoading, setDisbLoading] = useState(false);
   const [disbError, setDisbError] = useState<string | null>(null);
+  const disbSectionRef = useRef<HTMLDivElement | null>(null);
 
-  const loadDisbursementSchedule = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    const ben = disbBen.trim();
-    if (!ben) {
+  // Shared fetch used both by the manual form and the click-a-school shortcut.
+  const fetchDisbursementSchedule = async (ben: string, year?: number) => {
+    const b = String(ben || "").trim();
+    if (!b) {
       setDisbError("Enter a BEN to look up its disbursement schedule.");
       return;
     }
     setDisbLoading(true);
     setDisbError(null);
     try {
-      const res = await api.consultantDisbursementSchedule({ ben, year: disbYear });
+      const res = await api.consultantDisbursementSchedule({ ben: b, year });
       if (res.data?.success) {
         setDisbData(res.data);
       } else {
@@ -646,6 +647,22 @@ function ConsultantPortalPage() {
     } finally {
       setDisbLoading(false);
     }
+  };
+
+  const loadDisbursementSchedule = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    await fetchDisbursementSchedule(disbBen, disbYear);
+  };
+
+  // Click a school in the Funding table -> fill the BEN, scroll down to the
+  // Disbursement & Invoicing Schedule, and load it automatically.
+  const openDisbursementForBen = (ben: string, year?: number) => {
+    const b = String(ben || "").trim();
+    if (!b) return;
+    setDisbBen(b);
+    if (year !== undefined) setDisbYear(year);
+    disbSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    fetchDisbursementSchedule(b, year !== undefined ? year : disbYear);
   };
 
 
@@ -3426,12 +3443,28 @@ function ConsultantPortalPage() {
                         {sortedFundingSchools.map((school: any) => (
                           <tr key={school.ben} className="hover:bg-slate-50 transition-colors">
                             <td className="px-4 py-3">
-                              <div className="font-medium text-slate-900">{school.school_name || school.name || 'Unknown'}</div>
+                              <button
+                                type="button"
+                                onClick={() => openDisbursementForBen(school.ben)}
+                                title="View disbursement & invoicing schedule"
+                                className="font-medium text-slate-900 text-left hover:text-indigo-600 hover:underline"
+                              >
+                                {school.school_name || school.name || 'Unknown'}
+                              </button>
                               {school.entity_type && (
-                                <span className="text-xs text-slate-400">{school.entity_type}</span>
+                                <span className="block text-xs text-slate-400">{school.entity_type}</span>
                               )}
                             </td>
-                            <td className="px-4 py-3 font-mono text-xs text-slate-600">{school.ben}</td>
+                            <td className="px-4 py-3">
+                              <button
+                                type="button"
+                                onClick={() => openDisbursementForBen(school.ben)}
+                                title="View disbursement & invoicing schedule"
+                                className="font-mono text-xs text-indigo-600 hover:text-indigo-800 hover:underline"
+                              >
+                                {school.ben}
+                              </button>
+                            </td>
                             <td className="px-4 py-3 text-slate-600">{school.state || '-'}</td>
                             <td className="px-4 py-3 text-right font-medium text-green-700">
                               {school.total_funding_committed ? formatAmount(school.total_funding_committed) : '-'}
@@ -3608,7 +3641,7 @@ function ConsultantPortalPage() {
               )}
 
               {/* Disbursement / Invoicing Schedule */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div ref={disbSectionRef} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden scroll-mt-24">
                 <div className="p-6 border-b border-slate-200">
                   <h3 className="font-semibold text-slate-900">Disbursement &amp; Invoicing Schedule</h3>
                   <p className="text-sm text-slate-500 mt-1">
