@@ -16,6 +16,7 @@ import {
   Search,
   Calendar,
   Loader2,
+  Shield,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { BreadcrumbJsonLd } from "@/components/seo/BreadcrumbJsonLd";
@@ -42,6 +43,15 @@ const categoryColorMap: Record<string, string> = {
 };
 
 const staticArticles = [
+  {
+    title: "FCC Cybersecurity Pilot Program: The Schools & Libraries Form 471 Guide",
+    teaser:
+      "The FCC's $200M Schools and Libraries Cybersecurity Pilot funds firewalls, endpoint protection, and identity security. See who's eligible, what the Cybersecurity Pilot Form 471 covers, and how to track your FRNs in real time.",
+    icon: Shield,
+    color: "purple",
+    link: "/blog/fcc-cybersecurity-pilot-program",
+    category: "Guide",
+  },
   {
     title: "How to File FCC Form 498 & Get Your E-Rate SPIN (2026 Step-by-Step)",
     teaser:
