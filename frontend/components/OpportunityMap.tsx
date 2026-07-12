@@ -138,10 +138,29 @@ function popupHtml(lead: Form470Lead): string {
       ${services ? `<div style="font-size:11px;color:#334155;margin-top:2px"><b>Manufacturers:</b> ${escapeHtml(services)}</div>` : ""}
       ${email ? `<div style="font-size:11px;margin-top:6px">${email}</div>` : ""}
       ${lead.application_number ? `<div style="font-size:10px;color:#94a3b8;margin-top:6px">App #${escapeHtml(lead.application_number)}</div>` : ""}
+      ${
+        typeof lead.latitude === "number" && typeof lead.longitude === "number"
+          ? `<button type="button" data-area-lat="${lead.latitude}" data-area-lon="${lead.longitude}" class="js-area-providers" style="margin-top:8px;width:100%;cursor:pointer;border:1px solid #c7d2fe;background:#eef2ff;color:#4338ca;font-weight:600;font-size:11px;border-radius:6px;padding:5px 8px">See providers serving this area</button>`
+          : ""
+      }
     </div>`;
 }
 
 type ProviderHit = { provider_id: string; name: string; holding_company?: string | null };
+
+// "Which providers serve here?" reverse-lookup result (FCC area availability).
+type AreaProvider = {
+  provider_id: string;
+  name: string;
+  residential_pct: number | null;
+  business_pct: number | null;
+  is_satellite: boolean;
+};
+type AreaResult = {
+  location: { lat: number; lon: number; matched_address: string | null };
+  area: { type: string; name: string; geoid: string } | null;
+  providers: AreaProvider[];
+};
 
 export default function OpportunityMap() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -168,6 +187,13 @@ export default function OpportunityMap() {
   const [selectedProvider, setSelectedProvider] = useState<ProviderHit | null>(null);
   const [providerError, setProviderError] = useState<string | null>(null);
 
+  // "Providers near a location" reverse lookup (address search or pin click).
+  const areaMarkerRef = useRef<any>(null);
+  const [areaQuery, setAreaQuery] = useState("");
+  const [areaLoading, setAreaLoading] = useState(false);
+  const [areaResult, setAreaResult] = useState<AreaResult | null>(null);
+  const [areaError, setAreaError] = useState<string | null>(null);
+
   // The map loads its own geo feed (recent Form 470s that carry USAC coords).
   const [leads, setLeads] = useState<Form470Lead[]>([]);
   const [loading, setLoading] = useState(false);
@@ -193,6 +219,60 @@ export default function OpportunityMap() {
   useEffect(() => {
     onReload();
   }, [onReload]);
+
+  // Reverse lookup: given an address or a pin's coordinates, ask the backend
+  // which broadband providers serve that area (FCC public area availability),
+  // drop a marker, and show the results panel.
+  const lookupArea = useCallback(
+    async (params: { address?: string; lat?: number; lon?: number }) => {
+      setAreaLoading(true);
+      setAreaError(null);
+      setAreaResult(null);
+      try {
+        const qs =
+          params.address !== undefined
+            ? `address=${encodeURIComponent(params.address)}`
+            : `lat=${params.lat}&lon=${params.lon}`;
+        const res = await fetch(`/api/v1/fcc/area-providers?${qs}`);
+        const json = await res.json();
+        if (!json?.success) {
+          setAreaError(json?.error || "Could not look up providers for that location.");
+          return;
+        }
+        setAreaResult(json as AreaResult);
+        const L = (window as any).L;
+        const map = mapRef.current;
+        if (L && map && json.location) {
+          const ll: [number, number] = [json.location.lat, json.location.lon];
+          if (areaMarkerRef.current) map.removeLayer(areaMarkerRef.current);
+          areaMarkerRef.current = L.circleMarker(ll, {
+            radius: 10,
+            color: "#b45309", // amber ring marks the queried location
+            weight: 3,
+            fillColor: "#f59e0b",
+            fillOpacity: 0.9,
+          }).addTo(map);
+          map.setView(ll, Math.max(map.getZoom(), 11));
+        }
+      } catch {
+        setAreaError("Could not look up providers for that location.");
+      } finally {
+        setAreaLoading(false);
+      }
+    },
+    []
+  );
+
+  const clearArea = useCallback(() => {
+    setAreaResult(null);
+    setAreaError(null);
+    setAreaQuery("");
+    const map = mapRef.current;
+    if (map && areaMarkerRef.current) {
+      map.removeLayer(areaMarkerRef.current);
+      areaMarkerRef.current = null;
+    }
+  }, []);
 
   // Only leads that actually carry coordinates can be plotted.
   const geoLeads = useMemo(
@@ -466,6 +546,17 @@ export default function OpportunityMap() {
         fillOpacity: 0.85,
       });
       marker.bindPopup(popupHtml(lead));
+      marker.on("popupopen", (e: any) => {
+        const el = e?.popup?.getElement?.();
+        const btn = el?.querySelector?.(".js-area-providers") as HTMLElement | null;
+        if (btn) {
+          const onClick = () => {
+            marker.closePopup();
+            lookupArea({ lat, lon });
+          };
+          btn.addEventListener("click", onClick, { once: true });
+        }
+      });
       marker.addTo(layer);
     });
 
@@ -645,6 +736,120 @@ export default function OpportunityMap() {
           </span>
         )}
         {providerError && <span className="text-xs text-amber-600">{providerError}</span>}
+      </div>
+
+      {/* Reverse lookup: which providers serve a given address / opportunity? */}
+      <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-xs font-semibold text-slate-700">
+            Providers near a location
+          </label>
+          <form
+            className="flex items-center gap-2 flex-1 min-w-[260px]"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const q = areaQuery.trim();
+              if (q.length >= 3) lookupArea({ address: q });
+            }}
+          >
+            <input
+              type="text"
+              value={areaQuery}
+              onChange={(e) => setAreaQuery(e.target.value)}
+              placeholder="Enter an address (e.g. 600 Congress Ave, Austin, TX)…"
+              className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white flex-1 min-w-[220px]"
+            />
+            <button
+              type="submit"
+              disabled={areaLoading || areaQuery.trim().length < 3}
+              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {areaLoading ? "Searching…" : "Find providers"}
+            </button>
+          </form>
+          {(areaResult || areaError) && (
+            <button
+              type="button"
+              onClick={clearArea}
+              className="text-xs text-slate-500 hover:text-slate-800"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-slate-500">
+          Search an address or click any opportunity pin and choose{" "}
+          <span className="font-medium text-slate-600">“See providers serving this area”</span> to
+          list the carriers the FCC reports serving that community.
+        </p>
+
+        {areaError && <div className="text-xs text-amber-700">{areaError}</div>}
+
+        {areaResult && (
+          <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <div className="flex items-baseline justify-between gap-2 mb-2">
+              <div className="text-sm font-semibold text-slate-900">
+                {areaResult.area?.name || "This area"}
+                {areaResult.area?.type && (
+                  <span className="ml-1 text-xs font-normal text-slate-400">
+                    ({areaResult.area.type})
+                  </span>
+                )}
+              </div>
+              <span className="text-xs text-slate-400">
+                {areaResult.providers.length} provider
+                {areaResult.providers.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            {areaResult.location.matched_address && (
+              <div className="text-xs text-slate-500 mb-2">
+                Matched: {areaResult.location.matched_address}
+              </div>
+            )}
+            {areaResult.providers.length === 0 ? (
+              <div className="text-xs text-slate-500">
+                No fixed broadband providers reported for this area.
+              </div>
+            ) : (
+              <div className="space-y-1.5 max-h-72 overflow-auto">
+                {areaResult.providers.map((p) => {
+                  const res = Math.round((p.residential_pct || 0) * 100);
+                  const bus = Math.round((p.business_pct || 0) * 100);
+                  return (
+                    <div
+                      key={p.provider_id}
+                      className="flex items-center gap-3 py-1 border-b border-slate-100 last:border-0"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-semibold text-slate-800 truncate">
+                          {p.name}
+                          {p.is_satellite && (
+                            <span className="ml-1.5 px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-medium">
+                              Satellite
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                          <div
+                            className={`h-full ${p.is_satellite ? "bg-slate-300" : "bg-emerald-500"}`}
+                            style={{ width: `${Math.max(3, res)}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-slate-500 whitespace-nowrap text-right w-24">
+                        {res}% res · {bus}% bus
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div className="mt-2 text-[10px] text-slate-400">
+              % = share of the area&apos;s locations the provider reports serving. Source: FCC
+              National Broadband Map (area availability). Not a per-address guarantee.
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-4 text-sm">

@@ -76,6 +76,45 @@ _PROVIDER_MIN_ZOOM = 4
 _PROVIDER_MAX_ZOOM = 15
 _ALLOWED_BR = {"r", "b", "rb"}
 
+# --- "Which providers serve this area?" (reverse lookup) -------------------
+# Answers the rep question "I'm looking at this opportunity / address — who can
+# actually deliver service around here?". We deliberately use the FCC *area*
+# provider-summary (aggregate, public Broadband Data Collection data) rather than
+# the per-location "Location Summary" fabric endpoint: that per-address endpoint
+# is CostQuest-licensed and its payload explicitly prohibits programmatic access
+# (and it is Akamai-hard-blocked to non-browser clients). The area summary is
+# public aggregate data and is reachable server-side, so it is the correct,
+# license-clean source for "providers around this point".
+#
+#   provider/summary/{uuid}/{geoType}/{geoId}/1/1
+#     -> [{ provider_id, holding_company_name, res_st_pct, bus_iv_pct,
+#           total_units, geography_desc }]  (one row per provider in the area)
+#
+# geoType is "place" (incorporated city/town — the finest granularity the FCC
+# exposes here; census "tract" returns HTTP 422) or "county" as a fallback for
+# rural points that fall outside any incorporated place.
+_AREA_PROVIDERS_TMPL = _FCC_BASE + "/provider/summary/{uuid}/{gtype}/{geoid}/1/1"
+
+# Free, public U.S. Census geocoder — turns an address into lat/lon and a point
+# into its census Place / County GEOIDs. No API key, license-clean.
+_CENSUS_COORD_URL = "https://geocoding.geo.census.gov/geocoder/geographies/coordinates"
+_CENSUS_ADDR_URL = "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
+_CENSUS_BENCHMARK = "Public_AR_Current"
+_CENSUS_VINTAGE = "Current_Current"
+
+# The three national providers that are unambiguously satellite everywhere, so a
+# rep can visually de-prioritise them for E-Rate (schools want terrestrial fiber,
+# not GSO/NGSO satellite). We only flag these three — we never guess terrestrial
+# providers' technology from the area summary, which does not carry a per-area
+# technology field.
+_SATELLITE_HINTS = ("viasat", "echostar", "hughes", "space exploration")
+
+# Area provider lists are static per data vintage — cache to keep repeat clicks
+# instant and to be gentle on the upstream.
+_AREA_TTL_SECONDS = 6 * 3600
+_area_cache: Dict[str, Any] = {}
+_area_lock = threading.Lock()
+
 # The FCC map only renders hexes between these zooms; outside this range the
 # upstream returns nothing useful, so we short-circuit with an empty tile.
 _MIN_ZOOM = 5
@@ -352,3 +391,251 @@ def provider_tile(provider_id: str, br: str, z: int, x: int, y: int) -> Response
             "X-FCC-Filing": str(filing.get("subtype") or ""),
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# "Which providers serve this area?" (reverse lookup by point or address)
+# ---------------------------------------------------------------------------
+
+
+def _fcc_get_json(url: str, retries: int = 3) -> Optional[Dict[str, Any]]:
+    """GET an FCC JSON endpoint through Chrome impersonation, with a short retry.
+
+    The FCC map API occasionally resets an HTTP/2 stream mid-flight; a couple of
+    quick retries turns those transient failures into successes.
+    """
+    headers = {
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://broadbandmap.fcc.gov/area-summary/fixed",
+        "Origin": "https://broadbandmap.fcc.gov",
+    }
+    last: Optional[Exception] = None
+    for _ in range(max(1, retries)):
+        try:
+            resp = cffi_requests.get(
+                url, headers=headers, impersonate=_IMPERSONATE, timeout=20
+            )
+            if resp.status_code == 200:
+                return resp.json()
+            # 4xx (e.g. 422 unsupported geo type) is a definitive answer, not a blip.
+            if 400 <= resp.status_code < 500:
+                return None
+        except Exception as exc:  # noqa: BLE001
+            last = exc
+            time.sleep(0.4)
+    if last:
+        logger.debug(f"[fcc] area GET failed for {url}: {last}")
+    return None
+
+
+def _census_geographies(lat: float, lon: float) -> Dict[str, Optional[Dict[str, str]]]:
+    """Resolve a point to its census Incorporated Place and County via the free
+    U.S. Census geocoder. Returns {"place": {geoid,name}|None, "county": {...}|None}."""
+    out: Dict[str, Optional[Dict[str, str]]] = {"place": None, "county": None}
+    for attempt in range(3):
+        try:
+            resp = cffi_requests.get(
+                _CENSUS_COORD_URL,
+                params={
+                    "x": lon,
+                    "y": lat,
+                    "benchmark": _CENSUS_BENCHMARK,
+                    "vintage": _CENSUS_VINTAGE,
+                    "format": "json",
+                    "layers": "Incorporated Places,Counties",
+                },
+                impersonate=_IMPERSONATE,
+                timeout=15,
+            )
+            resp.raise_for_status()
+            geos = (resp.json().get("result") or {}).get("geographies") or {}
+            places = geos.get("Incorporated Places") or []
+            counties = geos.get("Counties") or []
+            if places:
+                out["place"] = {
+                    "geoid": str(places[0].get("GEOID") or ""),
+                    "name": places[0].get("NAME") or places[0].get("BASENAME") or "",
+                }
+            if counties:
+                out["county"] = {
+                    "geoid": str(counties[0].get("GEOID") or ""),
+                    "name": counties[0].get("NAME") or counties[0].get("BASENAME") or "",
+                }
+            return out
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"[fcc] census geographies attempt {attempt} failed: {exc}")
+            time.sleep(0.5)
+    return out
+
+
+def _census_geocode_address(q: str) -> Optional[Dict[str, Any]]:
+    """Geocode a free-text address to lat/lon + a matched address string."""
+    for attempt in range(3):
+        try:
+            resp = cffi_requests.get(
+                _CENSUS_ADDR_URL,
+                params={
+                    "address": q,
+                    "benchmark": _CENSUS_BENCHMARK,
+                    "format": "json",
+                },
+                impersonate=_IMPERSONATE,
+                timeout=15,
+            )
+            resp.raise_for_status()
+            matches = (resp.json().get("result") or {}).get("addressMatches") or []
+            if not matches:
+                return None
+            c = matches[0].get("coordinates") or {}
+            lat, lon = c.get("y"), c.get("x")
+            if lat is None or lon is None:
+                return None
+            return {
+                "lat": float(lat),
+                "lon": float(lon),
+                "matched_address": matches[0].get("matchedAddress"),
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"[fcc] census geocode attempt {attempt} failed: {exc}")
+            time.sleep(0.5)
+    return None
+
+
+def _fetch_area_providers(uuid: str, gtype: str, geoid: str) -> Optional[List[Dict[str, Any]]]:
+    """Fetch + normalise the provider list for one geography, with a TTL cache."""
+    key = f"{uuid}:{gtype}:{geoid}"
+    now = time.time()
+    with _area_lock:
+        hit = _area_cache.get(key)
+        if hit and (now - hit["at"]) < _AREA_TTL_SECONDS:
+            return hit["rows"]
+
+    data = _fcc_get_json(_AREA_PROVIDERS_TMPL.format(uuid=uuid, gtype=gtype, geoid=geoid))
+    if data is None:
+        return None
+    rows = data.get("data") or []
+    if not rows:
+        # Cache the empty result too — an unincorporated point genuinely has no
+        # place-level row and we don't want to hammer the upstream on every click.
+        with _area_lock:
+            _area_cache[key] = {"at": now, "rows": []}
+        return []
+
+    def _pct(v: Any) -> Optional[float]:
+        try:
+            return round(float(v), 4)
+        except (TypeError, ValueError):
+            return None
+
+    seen: set[str] = set()
+    providers: List[Dict[str, Any]] = []
+    for r in rows:
+        pid = str(r.get("provider_id") or "").strip()
+        if not pid or pid in seen:
+            continue
+        seen.add(pid)
+        name = (r.get("holding_company_name") or "").strip()
+        low = name.lower()
+        providers.append(
+            {
+                "provider_id": pid,
+                "name": name or pid,
+                "residential_pct": _pct(r.get("res_st_pct")),
+                "business_pct": _pct(r.get("bus_iv_pct")),
+                "is_satellite": any(h in low for h in _SATELLITE_HINTS),
+            }
+        )
+
+    # Terrestrial first (satellite de-prioritised for E-Rate), then by how much of
+    # the area the provider covers for residential units.
+    providers.sort(
+        key=lambda p: (
+            p["is_satellite"],
+            -(p["residential_pct"] or 0.0),
+            -(p["business_pct"] or 0.0),
+        )
+    )
+    with _area_lock:
+        _area_cache[key] = {"at": now, "rows": providers}
+    return providers
+
+
+@router.get("/area-providers")
+def area_providers(
+    lat: Optional[float] = Query(None, ge=-90, le=90),
+    lon: Optional[float] = Query(None, ge=-180, le=180),
+    address: Optional[str] = Query(None, min_length=3, max_length=200),
+) -> Dict[str, Any]:
+    """List the broadband providers that serve the area around a point or address.
+
+    Give either ``lat`` + ``lon`` (e.g. an Opportunity Map pin) or a free-text
+    ``address``. We resolve the point to its census Place (city/town) — falling
+    back to County for rural points outside any incorporated place — and return
+    the FCC's public area provider-availability summary: each provider's holding
+    company and the share of the area it covers for residential and business.
+
+    This is aggregate FCC Broadband Data Collection data (public domain). It is
+    intentionally NOT the per-address "Location Summary" (that endpoint is
+    CostQuest-licensed and prohibits programmatic access).
+    """
+    filing = _refresh_filing()
+    if not filing:
+        return {"success": False, "error": "FCC data temporarily unavailable", "providers": []}
+
+    matched_address: Optional[str] = None
+    if lat is None or lon is None:
+        if not address:
+            return {"success": False, "error": "Provide lat+lon or an address", "providers": []}
+        geo = _census_geocode_address(address)
+        if not geo:
+            return {"success": False, "error": "Address not found", "providers": []}
+        lat, lon, matched_address = geo["lat"], geo["lon"], geo.get("matched_address")
+
+    areas = _census_geographies(lat, lon)
+    # Prefer the finest granularity the FCC supports here (place), then county.
+    candidates = [("place", areas.get("place")), ("county", areas.get("county"))]
+
+    for gtype, area in candidates:
+        if not area or not area.get("geoid"):
+            continue
+        providers = _fetch_area_providers(filing["uuid"], gtype, area["geoid"])
+        if providers:
+            return {
+                "success": True,
+                "location": {
+                    "lat": lat,
+                    "lon": lon,
+                    "matched_address": matched_address,
+                },
+                "area": {
+                    "type": gtype,
+                    "name": area.get("name"),
+                    "geoid": area.get("geoid"),
+                },
+                "providers": providers,
+                "attribution": "Area provider availability: FCC National Broadband Map",
+            }
+
+    # Every U.S. point falls in a county, so an empty geography set means the
+    # census geocoder itself failed (e.g. throttled) rather than "no providers".
+    if not areas.get("place") and not areas.get("county"):
+        return {
+            "success": False,
+            "error": "Could not resolve that location. Please try again.",
+            "providers": [],
+        }
+
+    # We resolved an area but the FCC reports no fixed providers there (rare).
+    resolved = areas.get("place") or areas.get("county") or {}
+    return {
+        "success": True,
+        "location": {"lat": lat, "lon": lon, "matched_address": matched_address},
+        "area": {
+            "type": "place" if areas.get("place") else "county",
+            "name": resolved.get("name"),
+            "geoid": resolved.get("geoid"),
+        },
+        "providers": [],
+        "attribution": "Area provider availability: FCC National Broadband Map",
+    }
