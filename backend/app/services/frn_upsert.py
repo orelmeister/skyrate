@@ -273,7 +273,10 @@ def build_rec_from_usac_frn(
         "frn": frn.get("frn", ""),
         "status": frn.get("status", "Unknown"),
         "funding_year": str(frn.get("funding_year", "")),
-        "amount_requested": float(frn.get("commitment_amount") or frn.get("amount") or 0),
+        # Prefer the reconstructed post-discount requested amount (non-zero even
+        # for Denied/Cancelled FRNs); fall back to the committed amount for
+        # older callers that don't emit requested_amount.
+        "amount_requested": float(frn.get("requested_amount") or frn.get("commitment_amount") or frn.get("amount") or 0),
         "amount_committed": float(frn.get("disbursed_amount") or 0),
         "service_type": frn.get("service_type", ""),
         "organization_name": entity_name,

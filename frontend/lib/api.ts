@@ -335,6 +335,7 @@ export interface FRNStatusRecord {
   status: string;
   pending_reason: string;
   commitment_amount: number;
+  requested_amount?: number;
   disbursed_amount: number;
   discount_rate: number;
   award_date: string;

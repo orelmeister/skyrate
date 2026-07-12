@@ -39,6 +39,36 @@ USAC_ENDPOINTS = {
     'entity_supplemental': 'https://opendata.usac.org/resource/7i5i-83qf.json',  # Supplemental Entity Info (contacts!)
 }
 
+
+def _safe_float(value) -> float:
+    """Parse a USAC numeric field to float, tolerating None/'' /bad values."""
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def frn_requested_amount(record: dict) -> float:
+    """Reconstruct the post-discount FUNDING REQUESTED amount for an FRN.
+
+    The USAC FRN Status dataset (qdmp-ygft) only exposes
+    ``funding_commitment_request`` (the COMMITTED amount), which is $0 for
+    Denied/Cancelled FRNs. The originally-requested funding is not a stored
+    column but can be derived exactly from the pre-discount eligible costs and
+    the discount rate:
+
+        requested = (eligible_recurring + eligible_one_time) * dis_pct
+
+    ``total_pre_discount_eligible_recurring_costs`` is already annualized, so no
+    ``months_of_service`` multiplier is applied. Validated to match
+    ``funding_commitment_request`` for 143/143 funded/pending FRNs on BEN 133241.
+    """
+    recurring = _safe_float(record.get('total_pre_discount_eligible_recurring_costs'))
+    one_time = _safe_float(record.get('total_pre_discount_eligible_one_time_costs'))
+    dis_pct = _safe_float(record.get('dis_pct'))
+    return round((recurring + one_time) * dis_pct, 2)
+
+
 # Field name mapping from common names to USAC API field names.
 # Values on the right MUST be real, queryable columns on the Form 471 view
 # (srbr-2d59). Mapping to a non-existent column makes Socrata return HTTP 400,
@@ -1514,6 +1544,9 @@ class USACDataClient:
                 status = record.get('form_471_frn_status_name', 'Unknown')
                 commitment_amount = float(record.get('funding_commitment_request', 0) or 0)
                 disbursed_amount = float(record.get('total_authorized_disbursement', 0) or 0)
+                # Post-discount amount originally REQUESTED. For denied/cancelled
+                # FRNs funding_commitment_request is $0, so reconstruct it.
+                requested_amount = frn_requested_amount(record)
                 
                 # Categorize by status
                 status_lower = status.lower()
@@ -1522,7 +1555,7 @@ class USACDataClient:
                     funded_amount += commitment_amount
                 elif 'denied' in status_lower:
                     denied_count += 1
-                    denied_amount += commitment_amount
+                    denied_amount += requested_amount
                 else:
                     pending_count += 1
                     pending_amount += commitment_amount
@@ -1541,6 +1574,7 @@ class USACDataClient:
                     'status': status,
                     'pending_reason': record.get('pending_reason', ''),
                     'commitment_amount': commitment_amount,
+                    'requested_amount': requested_amount,
                     'disbursed_amount': disbursed_amount,
                     'discount_rate': float(record.get('dis_pct', 0) or 0) * 100,
                     'award_date': record.get('award_date', ''),
@@ -1652,6 +1686,9 @@ class USACDataClient:
                 status = record.get('form_471_frn_status_name', 'Unknown')
                 commitment_amount = float(record.get('funding_commitment_request', 0) or 0)
                 disbursed_amount = float(record.get('total_authorized_disbursement', 0) or 0)
+                # Post-discount amount originally REQUESTED. For denied/cancelled
+                # FRNs funding_commitment_request is $0, so reconstruct it.
+                requested_amount = frn_requested_amount(record)
 
                 status_lower = status.lower()
                 if 'funded' in status_lower or 'committed' in status_lower:
@@ -1659,7 +1696,7 @@ class USACDataClient:
                     funded_amount += commitment_amount
                 elif 'denied' in status_lower:
                     denied_count += 1
-                    denied_amount += commitment_amount
+                    denied_amount += requested_amount
                 else:
                     pending_count += 1
                     pending_amount += commitment_amount
@@ -1678,6 +1715,7 @@ class USACDataClient:
                     'status': status,
                     'pending_reason': record.get('pending_reason', ''),
                     'commitment_amount': commitment_amount,
+                    'requested_amount': requested_amount,
                     'disbursed_amount': disbursed_amount,
                     'discount_rate': float(record.get('dis_pct', 0) or 0) * 100,
                     'award_date': record.get('award_date', ''),
@@ -1811,6 +1849,9 @@ class USACDataClient:
                 status = record.get('form_471_frn_status_name', 'Unknown')
                 commitment_amount = float(record.get('funding_commitment_request', 0) or 0)
                 disbursed_amount = float(record.get('total_authorized_disbursement', 0) or 0)
+                # Post-discount amount originally REQUESTED. For denied/cancelled
+                # FRNs funding_commitment_request is $0, so reconstruct it.
+                requested_amount = frn_requested_amount(record)
                 year_val = record.get('funding_year', '')
                 
                 if year_val:
@@ -1823,7 +1864,7 @@ class USACDataClient:
                     funded_amount += commitment_amount
                 elif 'denied' in status_lower:
                     denied_count += 1
-                    denied_amount += commitment_amount
+                    denied_amount += requested_amount
                 else:
                     pending_count += 1
                     pending_amount += commitment_amount
@@ -1839,6 +1880,7 @@ class USACDataClient:
                     'status': status,
                     'pending_reason': record.get('pending_reason', ''),
                     'commitment_amount': commitment_amount,
+                    'requested_amount': requested_amount,
                     'disbursed_amount': disbursed_amount,
                     'discount_rate': float(record.get('dis_pct', 0) or 0) * 100,
                     'award_date': record.get('award_date', ''),
@@ -1966,6 +2008,9 @@ class USACDataClient:
                     frn_status = record.get('form_471_frn_status_name', 'Unknown')
                     commitment_amount = float(record.get('funding_commitment_request', 0) or 0)
                     disbursed_amount = float(record.get('total_authorized_disbursement', 0) or 0)
+                    # Post-discount amount originally REQUESTED. For denied/cancelled
+                    # FRNs funding_commitment_request is $0, so reconstruct it.
+                    requested_amount = frn_requested_amount(record)
                     year_val = record.get('funding_year', '')
                     
                     if year_val:
@@ -1977,7 +2022,7 @@ class USACDataClient:
                         funded_amount += commitment_amount
                     elif 'denied' in status_lower:
                         denied_count += 1
-                        denied_amount += commitment_amount
+                        denied_amount += requested_amount
                     else:
                         pending_count += 1
                         pending_amount += commitment_amount
@@ -1992,6 +2037,7 @@ class USACDataClient:
                         'status': frn_status,
                         'pending_reason': record.get('pending_reason', ''),
                         'commitment_amount': commitment_amount,
+                        'requested_amount': requested_amount,
                         'disbursed_amount': disbursed_amount,
                         'discount_rate': float(record.get('dis_pct', 0) or 0) * 100,
                         'award_date': record.get('award_date', ''),

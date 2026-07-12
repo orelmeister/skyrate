@@ -2349,7 +2349,22 @@ function VendorPortalPage() {
                                 )}
                               </td>
                               <td className="px-4 py-3 text-right font-medium text-slate-900">
-                                ${frn.commitment_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                {(() => {
+                                  const s = frn.status?.toLowerCase() || '';
+                                  const isDeniedish = s.includes('denied') || s.includes('cancel');
+                                  const committed = frn.commitment_amount || 0;
+                                  const requested = frn.requested_amount || 0;
+                                  const showRequested = isDeniedish || (committed === 0 && requested > 0);
+                                  const value = showRequested ? requested : committed;
+                                  return (
+                                    <>
+                                      <div>${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                                      {showRequested && requested > 0 && (
+                                        <div className="text-[10px] text-slate-400 font-normal">requested</div>
+                                      )}
+                                    </>
+                                  );
+                                })()}
                               </td>
                               <td className="px-4 py-3 text-right">
                                 <span className={frn.disbursed_amount > 0 ? 'text-green-600 font-medium' : 'text-slate-400'}>
@@ -5062,10 +5077,22 @@ function VendorPortalPage() {
                   </h3>
                   <div className="grid grid-cols-3 gap-4">
                     <div>
-                      <div className="text-xs text-green-600">Commitment Amount</div>
-                      <div className="text-2xl font-bold text-green-700">
-                        ${selectedFRN.commitment_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || '0'}
-                      </div>
+                      {(() => {
+                        const s = selectedFRN.status?.toLowerCase() || '';
+                        const isDeniedish = s.includes('denied') || s.includes('cancel');
+                        const committed = selectedFRN.commitment_amount || 0;
+                        const requested = selectedFRN.requested_amount || 0;
+                        const showRequested = isDeniedish || (committed === 0 && requested > 0);
+                        const value = showRequested ? requested : committed;
+                        return (
+                          <>
+                            <div className="text-xs text-green-600">{showRequested ? 'Requested Amount' : 'Commitment Amount'}</div>
+                            <div className="text-2xl font-bold text-green-700">
+                              ${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                     <div 
                       className="cursor-pointer hover:bg-green-100/70 p-1.5 rounded-lg transition-all select-none border border-transparent hover:border-green-200 relative group"
