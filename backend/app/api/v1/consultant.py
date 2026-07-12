@@ -4093,7 +4093,12 @@ async def get_portfolio_frn_status(
 
     def _query_local(bens, yr, st_filter):
         from sqlalchemy import or_ as _or
-        q = db.query(AdminFRNSnapshot).filter(AdminFRNSnapshot.ben.in_(bens))
+        q = db.query(AdminFRNSnapshot)
+        # bens=None means a global (un-scoped) lookup — used by the SPIN/CRN
+        # search path where the public identifier itself is the scope. Any
+        # concrete list still restricts results to the consultant's portfolio.
+        if bens is not None:
+            q = q.filter(AdminFRNSnapshot.ben.in_(bens))
         if yr is not None:
             q = q.filter(AdminFRNSnapshot.funding_year == str(yr))
         if st_filter:
@@ -4229,6 +4234,117 @@ async def get_portfolio_frn_status(
             )
         )
         return not_filed_schools, {"lapsed": lapsed_count, "inactive": inactive_count}
+
+    # ----------------------------------------------------------------
+    # SPIN / CRN GLOBAL LOOKUP (mirrors vendor /frn-status spin/crn).
+    # ----------------------------------------------------------------
+    # SPIN and CRN (contract number) are public USAC identifiers, so this
+    # search is intentionally NOT scoped to the consultant's portfolio BENs —
+    # the search term itself is the scope. This matches the vendor FRN Status
+    # tab, where searching by SPIN/CRN returns matching contracts regardless of
+    # whether the entity is in the vendor's own portfolio. Includes a live USAC
+    # fallback so un-cached SPINs/contracts still return data.
+    _spin_q = (spin or "").strip()
+    _crn_q = (crn or "").strip()
+    if _spin_q or _crn_q:
+        rows = _query_local(None, year, status_filter)
+
+        # Live USAC fallback for CRN (contract number) when the cache misses.
+        if not rows and _crn_q:
+            try:
+                from utils.usac_client import USACDataClient
+                from ...services.frn_upsert import upsert_frn_snapshots, build_rec_from_usac_frn
+                client = USACDataClient()
+                live_result = client.get_frn_status_by_contract(
+                    _crn_q, year, status_filter, pending_reason, limit
+                )
+                if live_result and live_result.get("success"):
+                    live_frns = live_result.get("frns", []) or []
+                    if live_frns:
+                        try:
+                            records = [
+                                build_rec_from_usac_frn(
+                                    f,
+                                    ben=f.get("ben", ""),
+                                    entity_name=f.get("entity_name", ""),
+                                    user_id=current_user.id,
+                                    user_email=current_user.email,
+                                    source="consultant",
+                                )
+                                for f in live_frns
+                            ]
+                            upsert_frn_snapshots(
+                                db, records,
+                                scope_type="crn", scope_value=_crn_q,
+                                queue_status_changes=False,
+                            )
+                            db.expire_all()
+                        except Exception as _upsert_err:
+                            logger.warning(f"[frn-status crn={_crn_q}] cache writeback failed: {_upsert_err}")
+                        rows = _query_local(None, year, status_filter)
+            except Exception as _live_err:
+                logger.warning(f"[frn-status crn={_crn_q}] live USAC fetch failed: {_live_err}")
+
+        # Live USAC fallback for SPIN when the cache misses.
+        if not rows and _spin_q:
+            try:
+                from utils.usac_client import USACDataClient
+                from ...services.frn_upsert import upsert_frn_snapshots, build_rec_from_usac_frn
+                client = USACDataClient()
+                live_result = client.get_frn_status_by_spin(
+                    _spin_q, year, status_filter, pending_reason, limit
+                )
+                if live_result and live_result.get("success"):
+                    live_frns = live_result.get("frns", []) or []
+                    if live_frns:
+                        try:
+                            records = [
+                                build_rec_from_usac_frn(
+                                    f,
+                                    ben=f.get("ben", ""),
+                                    entity_name=f.get("entity_name", ""),
+                                    user_id=current_user.id,
+                                    user_email=current_user.email,
+                                    source="consultant",
+                                )
+                                for f in live_frns
+                            ]
+                            upsert_frn_snapshots(
+                                db, records,
+                                scope_type="spin", scope_value=_spin_q,
+                                queue_status_changes=False,
+                            )
+                            db.expire_all()
+                        except Exception as _upsert_err:
+                            logger.warning(f"[frn-status spin={_spin_q}] cache writeback failed: {_upsert_err}")
+                        rows = _query_local(None, year, status_filter)
+            except Exception as _live_err:
+                logger.warning(f"[frn-status spin={_spin_q}] live USAC fetch failed: {_live_err}")
+
+        disb_map = _get_disb_map([r.frn for r in rows]) if rows else {}
+        all_frns, schools_data, status_counts = _aggregate_rows(rows, disb_map)
+        last_refreshed = max(
+            (r.last_refreshed for r in rows if r.last_refreshed),
+            default=None,
+        )
+        from ...utils.source_tag import tag_source
+        tag_source(request, "spin_crn_lookup", rows=len(all_frns), partial=False, user_id=current_user.id)
+        return {
+            "success": True,
+            "from_cache": not bool(_crn_q or _spin_q) or bool(rows and last_refreshed),
+            "source": "spin_crn_lookup",
+            "last_refreshed": last_refreshed.isoformat() if last_refreshed else None,
+            "total_frns": len(all_frns),
+            "total_schools": len(schools_data),
+            "portfolio_total_schools": len(profile.schools),
+            "schools_filed": len(schools_data),
+            "summary": status_counts,
+            "year_filter": year,
+            "schools": schools_data,
+            "not_filed_schools": [],
+            "not_filed_summary": {"lapsed": 0, "inactive": 0},
+            "message": None if all_frns else "No FRNs found for that SPIN/CRN.",
+        }
 
     # Step 1: query local denormalized table.
     if not refresh:
