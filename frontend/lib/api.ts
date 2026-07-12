@@ -707,6 +707,20 @@ export interface Form470WindowResponse {
   message: string;
 }
 
+// Annual Form 471 filing window guardrail (dynamic / forward-looking).
+export interface Form471WindowResponse {
+  success: boolean;
+  funding_year: number;
+  window_open: boolean;
+  opens_on: string;
+  closes_on: string;
+  expected: boolean;
+  days_until_open: number;
+  days_remaining: number;
+  today: string;
+  message: string;
+}
+
 // ==================== SAVED LEADS TYPES ====================
 
 export interface EnrichedContactData {
@@ -2613,6 +2627,15 @@ class ApiClient {
    */
   async getForm470Window(applicationNumber: string): Promise<ApiResponse<Form470WindowResponse>> {
     return this.request(`/api/v1/compliance/form470-window/${encodeURIComponent(applicationNumber)}`);
+  }
+
+  /**
+   * Check whether the annual Form 471 filing window is open. Forward-looking:
+   * derives the next window from today's date. Used to guard 471 filing and
+   * Category 2 vendor selection until the January window opens.
+   */
+  async getForm471Window(): Promise<ApiResponse<Form471WindowResponse>> {
+    return this.request(`/api/v1/compliance/form471-window`);
   }
 
   /**

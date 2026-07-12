@@ -7,9 +7,10 @@ import { useAuthStore } from "@/lib/auth-store";
 import {
   Shield, Upload, AlertTriangle, CheckCircle, XCircle, FileText,
   ArrowLeft, ShieldCheck, Brain, ExternalLink, ChevronDown, ChevronRight,
-  Activity, Paperclip, X, Plus, History, RefreshCw, Check, Gavel
+  Activity, Paperclip, X, Plus, History, RefreshCw, Check, Gavel, Clock
 } from "lucide-react";
 import BidAnalysis from "./bid-analysis";
+import { api, type Form471WindowResponse } from "@/lib/api";
 
 // ==================== TYPES ====================
 
@@ -112,6 +113,9 @@ export default function CompliancePage() {
   const [error, setError] = useState<string | null>(null);
   const [traceOpen, setTraceOpen] = useState(false);
 
+  // #3 — Form 471 filing window guardrail (dynamic / forward-looking).
+  const [form471Window, setForm471Window] = useState<Form471WindowResponse | null>(null);
+
   const supportingInputRef = useRef<HTMLInputElement>(null);
   const reanalyzeId = searchParams.get("reanalyze");
 
@@ -130,6 +134,17 @@ export default function CompliancePage() {
         .catch(() => {});
     }
   }, [reanalyzeId, token]);
+
+  // #3 — Load the Form 471 filing window guardrail once on mount.
+  useEffect(() => {
+    let active = true;
+    api.getForm471Window().then((resp) => {
+      if (active && resp.success && resp.data) setForm471Window(resp.data);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const MAX_SUPPORTING_FILES = 5;
   const MAX_FILE_SIZE_MB = 10;
@@ -438,6 +453,37 @@ export default function CompliancePage() {
             ))}
           </select>
         </div>
+
+        {/* #3 — Form 471 filing window guardrail */}
+        {formType === "471" && form471Window && (
+          form471Window.window_open ? (
+            <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-3">
+              <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-emerald-800">
+                  FY{form471Window.funding_year} Form 471 filing window is open
+                </p>
+                <p className="text-xs text-emerald-700 mt-0.5">{form471Window.message}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+              <Clock className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-amber-800">
+                  Form 471 filing window is not open yet
+                </p>
+                <p className="text-xs text-amber-700 mt-0.5">{form471Window.message}</p>
+                <p className="text-xs text-amber-600 mt-1">
+                  Expected FY{form471Window.funding_year} window:{" "}
+                  {form471Window.opens_on} &ndash; {form471Window.closes_on}
+                  {form471Window.expected ? " (estimated \u2014 pending USAC confirmation)" : ""}.
+                  You can still prepare and pre-review your draft now.
+                </p>
+              </div>
+            </div>
+          )
+        )}
 
         {/* Optional fields */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">

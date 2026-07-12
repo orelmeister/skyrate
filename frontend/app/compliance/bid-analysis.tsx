@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useAuthStore } from "@/lib/auth-store";
-import { api, type Form470WindowResponse } from "@/lib/api";
+import { api, type Form470WindowResponse, type Form471WindowResponse } from "@/lib/api";
 import {
   Upload, FileText, X, Plus, Scale, Trophy, AlertTriangle,
   XCircle, RotateCcw, Gavel, Lock, CheckCircle2, Clock,
@@ -90,6 +90,18 @@ export default function BidAnalysis() {
   const [form470Number, setForm470Number] = useState("");
   const [windowState, setWindowState] = useState<Form470WindowResponse | null>(null);
   const [checkingWindow, setCheckingWindow] = useState(false);
+
+  // #3 — Form 471 filing window context for Category 2 vendor selection.
+  const [form471Window, setForm471Window] = useState<Form471WindowResponse | null>(null);
+  useEffect(() => {
+    let active = true;
+    api.getForm471Window().then((resp) => {
+      if (active && resp.success && resp.data) setForm471Window(resp.data);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const bidWindowLocked = windowState?.found === true && windowState?.locked === true;
 
@@ -272,6 +284,24 @@ export default function BidAnalysis() {
           primary evaluation factor.
         </p>
       </div>
+
+      {/* #3 — Form 471 window guardrail for Category 2 vendor selection */}
+      {form471Window && !form471Window.window_open && (
+        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+          <Clock className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-amber-800">
+              Heads up: the FY{form471Window.funding_year} Form 471 window is not open yet
+            </p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              You can analyze bids now, but hold off on finalizing your Category 2 vendor
+              selection for FY{form471Window.funding_year} until the Form 471 filing window
+              opens (expected {form471Window.opens_on} &ndash; {form471Window.closes_on}
+              {form471Window.expected ? ", estimated" : ""}).
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Upload Zone */}
       <div className="mb-6">

@@ -616,6 +616,75 @@ async def form470_bid_window(
     }
 
 
+# ==================== FORM 471 FILING WINDOW GUARDRAIL ====================
+
+@router.get(
+    "/form471-window",
+    summary="Check whether the annual Form 471 filing window is open",
+)
+async def form471_filing_window(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Compute the current/next USAC Form 471 application filing window.
+
+    USAC opens the Form 471 window once a year (historically mid-January) and
+    closes it in late March. Applicants cannot file a Form 471 — or finalize
+    Category 2 vendor selections tied to that funding year — until the window
+    opens. This guardrail is *forward-looking*: it derives the next window from
+    today's date rather than a hard-coded past year.
+
+    Exact USAC dates for future funding years are not published far in advance,
+    so ``expected`` is True and the returned dates are estimates until USAC
+    confirms the official window.
+    """
+    from datetime import date, timedelta
+
+    def _window(year: int):
+        # USAC historically opens mid-January and closes late March.
+        return date(year, 1, 15), date(year, 3, 28)
+
+    today = datetime.utcnow().date()
+    year = today.year
+    opens_on, closes_on = _window(year)
+    if today > closes_on:
+        # This year's window has already closed; the next one is next January.
+        year += 1
+        opens_on, closes_on = _window(year)
+
+    window_open = opens_on <= today <= closes_on
+    days_until_open = (opens_on - today).days if today < opens_on else 0
+    days_remaining = (closes_on - today).days if window_open else 0
+
+    if window_open:
+        message = (
+            f"The FY{year} Form 471 filing window is open "
+            f"(estimated {opens_on.isoformat()} - {closes_on.isoformat()}). "
+            f"You may file Form 471 and finalize Category 2 vendor selections."
+        )
+    else:
+        message = (
+            f"The FY{year} Form 471 filing window has not opened yet. USAC "
+            f"typically opens the window in mid-January; the expected window is "
+            f"{opens_on.isoformat()} - {closes_on.isoformat()} "
+            f"(about {days_until_open} days away). Hold off on filing Form 471 or "
+            f"finalizing Category 2 vendor selection until the window opens."
+        )
+
+    return {
+        "success": True,
+        "funding_year": year,
+        "window_open": window_open,
+        "opens_on": opens_on.isoformat(),
+        "closes_on": closes_on.isoformat(),
+        "expected": True,
+        "days_until_open": days_until_open,
+        "days_remaining": days_remaining,
+        "today": today.isoformat(),
+        "message": message,
+    }
+
+
 # ==================== HISTORY ENDPOINTS ====================
 
 @router.get(
