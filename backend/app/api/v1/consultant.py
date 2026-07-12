@@ -29,7 +29,7 @@ from ...core.database import get_db
 from ...core.security import get_current_user, require_role
 from ...core.accounts import resolve_account, require_account_owner
 from ...models.user import User
-from ...models.consultant import ConsultantProfile, ConsultantSchool, ConsultantCRN
+from ...models.consultant import ConsultantProfile, ConsultantSchool, ConsultantCRN, ConsultantEquipmentItem, ConsultantDocument
 from ...models.account_seat import AccountSeat
 from ...models.application import SchoolSnapshot, Application, AppealRecord
 from ...models.user_usac_cache import UserUsacCache, UsacSyncJob
@@ -167,6 +167,24 @@ class SchoolUpdate(BaseModel):
     tags: Optional[List[str]] = None
     loa_on_file: Optional[bool] = None
     loa_reference: Optional[str] = None
+    happy_with_current: Optional[bool] = None
+
+
+class EquipmentItemPayload(BaseModel):
+    kind: Optional[str] = None            # "inventory" | "wishlist"
+    category: Optional[str] = None        # "C1" | "C2"
+    name: Optional[str] = None
+    description: Optional[str] = None
+    quantity: Optional[int] = None
+    maintenance_type: Optional[str] = None  # None | "break_fix" | "mibs"
+    term_start: Optional[str] = None      # ISO date string
+    term_end: Optional[str] = None
+
+
+class DocumentPayload(BaseModel):
+    doc_type: Optional[str] = None        # "bid" | "form470"
+    name: Optional[str] = None
+    note: Optional[str] = None
 
 
 class SelectiveResyncRequest(BaseModel):
@@ -3030,6 +3048,8 @@ async def update_school(
             school.loa_reference = None
     if data.loa_reference is not None:
         school.loa_reference = data.loa_reference.strip() or None
+    if data.happy_with_current is not None:
+        school.happy_with_current = bool(data.happy_with_current)
 
     db.commit()
     db.refresh(school)
@@ -3059,6 +3079,226 @@ async def remove_school(
     db.commit()
     
     return {"success": True, "message": f"School {ben} removed from portfolio"}
+
+
+# ==================== EQUIPMENT & WISHLIST ENDPOINTS ====================
+
+def _parse_equip_date(value: Optional[str]) -> Optional[datetime]:
+    """Parse an ISO date/datetime string to a datetime, else None."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00").split("T")[0])
+    except Exception:
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+
+def _require_portfolio_school(db: Session, profile: ConsultantProfile, ben: str) -> ConsultantSchool:
+    school = db.query(ConsultantSchool).filter(
+        ConsultantSchool.consultant_profile_id == profile.id,
+        ConsultantSchool.ben == ben
+    ).first()
+    if not school:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"School with BEN {ben} not found in portfolio"
+        )
+    return school
+
+
+@router.get("/schools/{ben}/equipment")
+async def get_school_equipment(
+    ben: str,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    db: Session = Depends(get_db)
+):
+    """Return the Equipment & Wishlist area for a school: current inventory,
+    wishlist items (grouped client-side by C1/C2), document records, and the
+    'happy with current' flag."""
+    school = _require_portfolio_school(db, profile, ben)
+
+    items = db.query(ConsultantEquipmentItem).filter(
+        ConsultantEquipmentItem.consultant_profile_id == profile.id,
+        ConsultantEquipmentItem.ben == ben
+    ).order_by(ConsultantEquipmentItem.created_at.asc()).all()
+
+    docs = db.query(ConsultantDocument).filter(
+        ConsultantDocument.consultant_profile_id == profile.id,
+        ConsultantDocument.ben == ben
+    ).order_by(ConsultantDocument.created_at.desc()).all()
+
+    return {
+        "success": True,
+        "ben": ben,
+        "happy_with_current": bool(school.happy_with_current),
+        "items": [i.to_dict() for i in items],
+        "documents": [d.to_dict() for d in docs],
+    }
+
+
+@router.post("/schools/{ben}/equipment")
+async def add_school_equipment(
+    ben: str,
+    data: EquipmentItemPayload,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    db: Session = Depends(get_db)
+):
+    """Add an equipment inventory or wishlist item to a school."""
+    _require_portfolio_school(db, profile, ben)
+
+    name = (data.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Item name is required")
+
+    kind = (data.kind or "inventory").strip().lower()
+    if kind not in ("inventory", "wishlist"):
+        kind = "inventory"
+    category = (data.category or "C2").strip().upper()
+    if category not in ("C1", "C2"):
+        category = "C2"
+    maintenance_type = (data.maintenance_type or "").strip().lower() or None
+    if maintenance_type not in (None, "break_fix", "mibs"):
+        maintenance_type = None
+    # Maintenance terms only apply to Category 2
+    if category != "C2":
+        maintenance_type = None
+
+    item = ConsultantEquipmentItem(
+        consultant_profile_id=profile.id,
+        ben=ben,
+        kind=kind,
+        category=category,
+        name=name,
+        description=(data.description or "").strip() or None,
+        quantity=int(data.quantity) if data.quantity is not None else 1,
+        maintenance_type=maintenance_type,
+        term_start=_parse_equip_date(data.term_start) if category == "C2" else None,
+        term_end=_parse_equip_date(data.term_end) if category == "C2" else None,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+
+    return {"success": True, "item": item.to_dict()}
+
+
+@router.put("/equipment/{item_id}")
+async def update_school_equipment(
+    item_id: int,
+    data: EquipmentItemPayload,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    db: Session = Depends(get_db)
+):
+    """Update an equipment/wishlist item (ownership-scoped to the account)."""
+    item = db.query(ConsultantEquipmentItem).filter(
+        ConsultantEquipmentItem.id == item_id,
+        ConsultantEquipmentItem.consultant_profile_id == profile.id
+    ).first()
+    if not item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipment item not found")
+
+    if data.kind is not None:
+        k = data.kind.strip().lower()
+        if k in ("inventory", "wishlist"):
+            item.kind = k
+    if data.category is not None:
+        c = data.category.strip().upper()
+        if c in ("C1", "C2"):
+            item.category = c
+    if data.name is not None:
+        nm = data.name.strip()
+        if nm:
+            item.name = nm
+    if data.description is not None:
+        item.description = data.description.strip() or None
+    if data.quantity is not None:
+        item.quantity = int(data.quantity)
+    if data.maintenance_type is not None:
+        mt = data.maintenance_type.strip().lower() or None
+        item.maintenance_type = mt if mt in ("break_fix", "mibs") else None
+    if data.term_start is not None:
+        item.term_start = _parse_equip_date(data.term_start)
+    if data.term_end is not None:
+        item.term_end = _parse_equip_date(data.term_end)
+    # Maintenance terms only apply to Category 2
+    if item.category != "C2":
+        item.maintenance_type = None
+        item.term_start = None
+        item.term_end = None
+
+    db.commit()
+    db.refresh(item)
+    return {"success": True, "item": item.to_dict()}
+
+
+@router.delete("/equipment/{item_id}")
+async def delete_school_equipment(
+    item_id: int,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    db: Session = Depends(get_db)
+):
+    """Delete an equipment/wishlist item."""
+    item = db.query(ConsultantEquipmentItem).filter(
+        ConsultantEquipmentItem.id == item_id,
+        ConsultantEquipmentItem.consultant_profile_id == profile.id
+    ).first()
+    if not item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipment item not found")
+    db.delete(item)
+    db.commit()
+    return {"success": True, "message": "Equipment item removed"}
+
+
+@router.post("/schools/{ben}/documents")
+async def add_school_document(
+    ben: str,
+    data: DocumentPayload,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    db: Session = Depends(get_db)
+):
+    """Record a document in one of the two separate zones: vendor bid ('bid')
+    or Form 470 posting ('form470'). Metadata only (name/note/type)."""
+    _require_portfolio_school(db, profile, ben)
+
+    name = (data.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Document name is required")
+    doc_type = (data.doc_type or "bid").strip().lower()
+    if doc_type not in ("bid", "form470"):
+        doc_type = "bid"
+
+    doc = ConsultantDocument(
+        consultant_profile_id=profile.id,
+        ben=ben,
+        doc_type=doc_type,
+        name=name,
+        note=(data.note or "").strip() or None,
+    )
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+    return {"success": True, "document": doc.to_dict()}
+
+
+@router.delete("/documents/{doc_id}")
+async def delete_school_document(
+    doc_id: int,
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    db: Session = Depends(get_db)
+):
+    """Delete a document record."""
+    doc = db.query(ConsultantDocument).filter(
+        ConsultantDocument.id == doc_id,
+        ConsultantDocument.consultant_profile_id == profile.id
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    db.delete(doc)
+    db.commit()
+    return {"success": True, "message": "Document removed"}
 
 
 # ==================== FUNDING DATA ENDPOINTS ====================

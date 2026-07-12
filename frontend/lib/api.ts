@@ -721,6 +721,43 @@ export interface Form471WindowResponse {
   message: string;
 }
 
+// ==================== EQUIPMENT & WISHLIST TYPES ====================
+
+export interface EquipmentItem {
+  id: number;
+  ben: string;
+  kind: 'inventory' | 'wishlist';
+  category: 'C1' | 'C2';
+  name: string;
+  description?: string | null;
+  quantity: number;
+  maintenance_type?: 'break_fix' | 'mibs' | null;
+  term_start?: string | null;
+  term_end?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface EquipmentItemInput {
+  kind?: 'inventory' | 'wishlist';
+  category?: 'C1' | 'C2';
+  name?: string;
+  description?: string;
+  quantity?: number;
+  maintenance_type?: 'break_fix' | 'mibs' | null;
+  term_start?: string | null;
+  term_end?: string | null;
+}
+
+export interface EquipmentDocument {
+  id: number;
+  ben: string;
+  doc_type: 'bid' | 'form470';
+  name: string;
+  note?: string | null;
+  created_at?: string | null;
+}
+
 // ==================== SAVED LEADS TYPES ====================
 
 export interface EnrichedContactData {
@@ -1510,13 +1547,64 @@ class ApiClient {
    */
   async updateConsultantSchool(
     ben: string,
-    data: { notes?: string; tags?: string[]; loa_on_file?: boolean; loa_reference?: string }
+    data: { notes?: string; tags?: string[]; loa_on_file?: boolean; loa_reference?: string; happy_with_current?: boolean }
   ): Promise<ApiResponse<{ success: boolean; school: Record<string, unknown> }>> {
     return this.request(`/api/v1/consultant/schools/${ben}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   }
+
+  // ==================== EQUIPMENT & WISHLIST ====================
+
+  async getSchoolEquipment(ben: string): Promise<ApiResponse<{
+    success: boolean;
+    ben: string;
+    happy_with_current: boolean;
+    items: EquipmentItem[];
+    documents: EquipmentDocument[];
+  }>> {
+    return this.request(`/api/v1/consultant/schools/${ben}/equipment`);
+  }
+
+  async addSchoolEquipment(
+    ben: string,
+    data: EquipmentItemInput
+  ): Promise<ApiResponse<{ success: boolean; item: EquipmentItem }>> {
+    return this.request(`/api/v1/consultant/schools/${ben}/equipment`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateSchoolEquipment(
+    itemId: number,
+    data: EquipmentItemInput
+  ): Promise<ApiResponse<{ success: boolean; item: EquipmentItem }>> {
+    return this.request(`/api/v1/consultant/equipment/${itemId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSchoolEquipment(itemId: number): Promise<ApiResponse<{ success: boolean; message: string }>> {
+    return this.request(`/api/v1/consultant/equipment/${itemId}`, { method: 'DELETE' });
+  }
+
+  async addSchoolDocument(
+    ben: string,
+    data: { doc_type: 'bid' | 'form470'; name: string; note?: string }
+  ): Promise<ApiResponse<{ success: boolean; document: EquipmentDocument }>> {
+    return this.request(`/api/v1/consultant/schools/${ben}/documents`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteSchoolDocument(docId: number): Promise<ApiResponse<{ success: boolean; message: string }>> {
+    return this.request(`/api/v1/consultant/documents/${docId}`, { method: 'DELETE' });
+  }
+
 
   async validateBens(bens: string[]): Promise<ApiResponse<{
     total: number;

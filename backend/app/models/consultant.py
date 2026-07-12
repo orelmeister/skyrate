@@ -141,6 +141,10 @@ class ConsultantSchool(Base):
     loa_reference = Column(String(255), nullable=True)  # optional filename / note
     loa_marked_at = Column(DateTime, nullable=True)
 
+    # Equipment & Wishlist — "Happy with current" quick flag: the school is
+    # satisfied with existing equipment and is not requesting a refresh this cycle.
+    happy_with_current = Column(Boolean, default=False, nullable=False)
+
     # Timestamps
     added_at = Column(DateTime, default=datetime.utcnow)
     last_synced = Column(DateTime)
@@ -171,6 +175,92 @@ class ConsultantSchool(Base):
             "loa_on_file": bool(self.loa_on_file),
             "loa_reference": self.loa_reference,
             "loa_marked_at": self.loa_marked_at.isoformat() if self.loa_marked_at else None,
+            "happy_with_current": bool(self.happy_with_current),
             "added_at": self.added_at.isoformat() if self.added_at else None,
             "last_synced": self.last_synced.isoformat() if self.last_synced else None,
+        }
+
+
+class ConsultantEquipmentItem(Base):
+    """Equipment inventory & wishlist items for a school in a consultant's portfolio.
+
+    Powers the Equipment & Wishlist area:
+      - ``kind`` splits Current Inventory ("inventory") vs Wishlist ("wishlist")
+      - ``category`` groups by E-Rate Category 1 ("C1") / Category 2 ("C2")
+      - Category 2 items can carry a maintenance term (Break/Fix vs MIBS) with dates
+    """
+    __tablename__ = "consultant_equipment_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    consultant_profile_id = Column(Integer, ForeignKey("consultant_profiles.id"), nullable=False, index=True)
+    ben = Column(String(50), nullable=False, index=True)
+
+    kind = Column(String(20), nullable=False, default="inventory")      # "inventory" | "wishlist"
+    category = Column(String(4), nullable=False, default="C2")          # "C1" | "C2"
+
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    quantity = Column(Integer, default=1)
+
+    # Category 2 maintenance term (only meaningful when category == "C2")
+    # maintenance_type: None | "break_fix" (Basic Maintenance / Break-Fix) | "mibs" (Managed Internal Broadband Services)
+    maintenance_type = Column(String(20), nullable=True)
+    term_start = Column(DateTime, nullable=True)
+    term_end = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint('id', name='uq_consultant_equipment_id'),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "ben": self.ben,
+            "kind": self.kind,
+            "category": self.category,
+            "name": self.name,
+            "description": self.description,
+            "quantity": self.quantity or 0,
+            "maintenance_type": self.maintenance_type,
+            "term_start": self.term_start.isoformat() if self.term_start else None,
+            "term_end": self.term_end.isoformat() if self.term_end else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class ConsultantDocument(Base):
+    """Document records attached to a school's Equipment area.
+
+    Supports two clearly-separated upload zones:
+      - ``doc_type`` "bid"      = vendor bid response documents
+      - ``doc_type`` "form470"  = Form 470 posting documents
+
+    NOTE: this stores document METADATA (name/note/type) only. Binary file
+    storage requires object-storage infra and is intentionally deferred; the
+    consultant records what has been received per zone.
+    """
+    __tablename__ = "consultant_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    consultant_profile_id = Column(Integer, ForeignKey("consultant_profiles.id"), nullable=False, index=True)
+    ben = Column(String(50), nullable=False, index=True)
+
+    doc_type = Column(String(20), nullable=False, default="bid")  # "bid" | "form470"
+    name = Column(String(255), nullable=False)
+    note = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "ben": self.ben,
+            "doc_type": self.doc_type,
+            "name": self.name,
+            "note": self.note,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }

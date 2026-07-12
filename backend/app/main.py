@@ -679,6 +679,8 @@ def _run_schema_migrations(engine):
         ("consultant_schools", "loa_on_file", "TINYINT(1) NOT NULL DEFAULT 0", None),
         ("consultant_schools", "loa_reference", "VARCHAR(255) DEFAULT NULL", None),
         ("consultant_schools", "loa_marked_at", "DATETIME DEFAULT NULL", None),
+        # Equipment & Wishlist — "Happy with current" quick flag per school.
+        ("consultant_schools", "happy_with_current", "TINYINT(1) NOT NULL DEFAULT 0", None),
         # FRN status change queue — true USAC status-change date (FCDL), distinct
         # from created_at (detection time). Fixes old events showing as "2d ago".
         ("frn_status_changes_queue", "status_change_date", "DATETIME DEFAULT NULL", None),

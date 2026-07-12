@@ -16,6 +16,7 @@ import FRNDetailModal from "@/components/FRNDetailModal";
 import MissingIdentifierBanner from "@/components/MissingIdentifierBanner";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { useTabParam } from "@/hooks/useTabParam";
+import EquipmentArea from "./EquipmentArea";
 
 // ==================== MY TEAM (OWNER SEATS) ====================
 // Self-contained panel rendered in the Settings tab. Hidden entirely for team
@@ -177,6 +178,8 @@ interface EnhancedSchool {
   loa_on_file?: boolean;
   loa_reference?: string | null;
   loa_marked_at?: string | null;
+  // Equipment & Wishlist — "happy with current" quick flag
+  happy_with_current?: boolean;
   // Enriched fields from USAC
   entity_type?: string | null;
   address?: string | null;
@@ -6621,7 +6624,17 @@ function ConsultantPortalPage() {
                   </div>
                 </div>
               )}
-              
+
+              {/* Equipment & Wishlist area (Ari #11 + #13) */}
+              <EquipmentArea
+                ben={selectedSchool.ben}
+                initialHappy={selectedSchool.happy_with_current}
+                onHappyChange={(value) => {
+                  setSelectedSchool((prev) => (prev ? { ...prev, happy_with_current: value } : prev));
+                  setSchools((prev) => prev.map((s) => (s.ben === selectedSchool.ben ? { ...s, happy_with_current: value } : s)));
+                }}
+              />
+
               {/* School Details Row */}
               {enrichedSchoolData && enrichedSchoolData.address && (
                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
