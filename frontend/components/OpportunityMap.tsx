@@ -552,7 +552,7 @@ export default function OpportunityMap() {
         if (btn) {
           const onClick = () => {
             marker.closePopup();
-            lookupArea({ lat, lon });
+            lookupArea({ lat, lon: lng });
           };
           btn.addEventListener("click", onClick, { once: true });
         }
