@@ -1691,6 +1691,18 @@ function VendorPortalPage() {
             </h1>
           </div>
           <div className="flex items-center gap-3">
+            {/* Persistent portal switcher (super/admin) — always reachable so a
+                super account can never get trapped in the vendor portal (#14). */}
+            {(user?.role === 'super' || user?.role === 'admin') && (
+              <Link
+                href="/consultant"
+                title="Switch to the Consulting portal"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors text-sm font-medium"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 15l-3-3m0 0l3-3m-3 3h8M3 12a9 9 0 1118 0 9 9 0 01-18 0z" /></svg>
+                <span className="hidden sm:inline">Consulting</span>
+              </Link>
+            )}
             <button className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg relative">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
