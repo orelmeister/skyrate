@@ -2008,6 +2008,11 @@ async def get_dashboard_stats(
             "total_schools": 0,
             "total_c2_funding": 0,
             "total_c2_funding_year": 0,
+            "total_c2_committed": 0,
+            "total_c2_pending": 0,
+            "total_c2_budget_5yr": 0,
+            "total_c2_available": 0,
+            "c2_budget_cycle": None,
             "total_c1_funding": 0,
             "total_applications": 0,
             "denied_count": 0,
@@ -2027,7 +2032,11 @@ async def get_dashboard_stats(
         cached["total_schools"] = len(schools)
         return cached
     
-    total_c2_funding = 0
+    total_c2_funding = 0          # committed (funded) against the current 5-year cycle
+    total_c2_pending = 0          # pending (also reserves budget)
+    total_c2_budget_5yr = 0       # total 5-year C2 budget entitlement (current cycle)
+    total_c2_available = 0        # remaining C2 budget (current cycle)
+    c2_budget_cycle_label = None  # e.g. "FY2026-2030"
     total_c2_funding_year = 0
     total_c1_funding = 0
     total_applications = 0
@@ -2037,7 +2046,11 @@ async def get_dashboard_stats(
     bens_with_denials = set()
     
     # ========== STEP 1: Fetch C2 Budget data using C2 Budget Tool API ==========
-    # This gives us accurate 5-year C2 budget amounts
+    # This gives us accurate 5-year C2 budget amounts.
+    # Scoped to the CURRENT 5-year cycle so year-1 of a new cycle is not polluted
+    # by the prior (just-ended) cycle's committed dollars. USAC's own C2 budget math
+    # counts COMMITTED (funded + pending) against the budget, so "used" = committed,
+    # and remaining = available_c2_budget_amount.
     # OPTIMIZED: Batch query all BENs in one API call instead of individual calls
     try:
         if len(all_bens) == 1:
@@ -2049,12 +2062,30 @@ async def get_dashboard_stats(
         
         c2_data = fetch_usac_data('c2_budget', c2_ben_filter, limit=len(all_bens) * 10)
         
-        if c2_data:
+        # Each BEN has one row per 5-year cycle. Prefer the FY2026-2030 cycle;
+        # fall back to the latest cycle present if 2026 data is not yet published.
+        CURRENT_C2_CYCLE = 'FY2026-2030'
+        cycles_present = {str(r.get('c2_budget_cycle') or '') for r in (c2_data or [])}
+        cycles_present.discard('')
+        if CURRENT_C2_CYCLE in cycles_present:
+            active_cycle = CURRENT_C2_CYCLE
+        elif cycles_present:
+            active_cycle = sorted(cycles_present)[-1]
+        else:
+            active_cycle = None
+        c2_budget_cycle_label = active_cycle
+
+        if c2_data and active_cycle:
             for record in c2_data:
-                # funded_c2_budget_amount = total C2 funding committed for this entity
-                c2_funded = float(record.get("funded_c2_budget_amount") or 0)
-                total_c2_funding += c2_funded
-        print(f"DEBUG dashboard: Fetched C2 budget data for {len(all_bens)} BENs in single query, found {len(c2_data)} records")
+                if str(record.get('c2_budget_cycle') or '') != active_cycle:
+                    continue
+                total_c2_funding    += float(record.get("funded_c2_budget_amount") or 0)
+                total_c2_pending    += float(record.get("pending_c2_budget_amount") or 0)
+                total_c2_budget_5yr += float(record.get("c2_budget") or 0)
+                total_c2_available  += float(record.get("available_c2_budget_amount") or 0)
+        print(f"DEBUG dashboard: C2 cycle={active_cycle} committed={total_c2_funding} "
+              f"available={total_c2_available} budget={total_c2_budget_5yr} "
+              f"(from {len(c2_data)} rows across {len(all_bens)} BENs)")
     except Exception as e:
         print(f"Error fetching C2 Budget data: {e}")
     
@@ -2123,6 +2154,12 @@ async def get_dashboard_stats(
         "total_schools": len(schools),
         "total_c2_funding": total_c2_funding,
         "total_c2_funding_year": total_c2_funding_year,
+        # C2 5-year cycle budget breakdown (current cycle only)
+        "total_c2_committed": total_c2_funding,
+        "total_c2_pending": total_c2_pending,
+        "total_c2_budget_5yr": total_c2_budget_5yr,
+        "total_c2_available": total_c2_available,
+        "c2_budget_cycle": c2_budget_cycle_label,
         "total_c1_funding": total_c1_funding,
         "total_funding": total_c2_funding + total_c1_funding,
         "total_applications": total_applications,

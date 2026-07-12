@@ -227,6 +227,11 @@ interface DashboardStats {
   total_schools: number;
   total_c2_funding: number;
   total_c2_funding_year: number;
+  total_c2_committed: number;
+  total_c2_pending: number;
+  total_c2_budget_5yr: number;
+  total_c2_available: number;
+  c2_budget_cycle: string | null;
   total_c1_funding: number;
   total_funding: number;
   total_applications: number;
@@ -2637,23 +2642,41 @@ function ConsultantPortalPage() {
                     {isLoadingStats ? (
                       <span className="text-[10px] text-slate-400 font-medium px-2 py-0.5 bg-slate-50 rounded-full">Loading...</span>
                     ) : (
-                      <span className="text-[10px] text-green-600 font-medium px-2 py-0.5 bg-green-50 rounded-full">C2 · 5-yr cycle</span>
+                      <span className="text-[10px] text-green-600 font-medium px-2 py-0.5 bg-green-50 rounded-full">
+                        C2 · {dashboardStats?.c2_budget_cycle || '5-yr cycle'}
+                      </span>
                     )}
                   </div>
                   <div className="text-2xl font-bold text-slate-900">
                     {isLoadingStats ? (
                       <span className="text-slate-400">...</span>
                     ) : dashboardStats ? (
-                      `$${(dashboardStats.total_c2_funding / 1000000).toFixed(2)}M`
+                      `$${((dashboardStats.total_c2_committed ?? dashboardStats.total_c2_funding) / 1000000).toFixed(2)}M`
                     ) : (
                       "$0"
                     )}
                   </div>
-                  <div className="text-sm text-slate-500 mt-1">Category 2 Funded</div>
-                  {!isLoadingStats && dashboardStats && dashboardStats.total_c2_funding_year > 0 && (
-                    <div className="text-xs text-slate-400 mt-1">
-                      ${(dashboardStats.total_c2_funding_year / 1000000).toFixed(2)}M committed in FY{dashboardYear}
-                    </div>
+                  <div className="text-sm text-slate-500 mt-1">Category 2 Committed</div>
+                  {!isLoadingStats && dashboardStats && (dashboardStats.total_c2_budget_5yr || 0) > 0 && (
+                    <>
+                      <div className="text-xs text-slate-500 mt-2">
+                        <span className="font-semibold text-green-700">${(dashboardStats.total_c2_available / 1000000).toFixed(2)}M</span>
+                        {' '}left of ${(dashboardStats.total_c2_budget_5yr / 1000000).toFixed(2)}M 5-yr budget
+                      </div>
+                      {(() => {
+                        const used = dashboardStats.total_c2_budget_5yr > 0
+                          ? Math.min(100, Math.max(0, (dashboardStats.total_c2_committed / dashboardStats.total_c2_budget_5yr) * 100))
+                          : 0;
+                        return (
+                          <div className="mt-1.5">
+                            <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                              <div className="h-full rounded-full bg-green-500" style={{ width: `${used}%` }} />
+                            </div>
+                            <div className="text-[11px] text-slate-400 mt-1">{used.toFixed(0)}% of 5-yr budget committed</div>
+                          </div>
+                        );
+                      })()}
+                    </>
                   )}
                 </div>
                 

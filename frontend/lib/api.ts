@@ -1449,6 +1449,11 @@ class ApiClient {
     total_schools: number;
     total_c2_funding: number;
     total_c2_funding_year: number;
+    total_c2_committed: number;
+    total_c2_pending: number;
+    total_c2_budget_5yr: number;
+    total_c2_available: number;
+    c2_budget_cycle: string | null;
     total_c1_funding: number;
     total_funding: number;
     total_applications: number;
