@@ -331,6 +331,7 @@ export interface FRNStatusRecord {
   spin_name: string;
   contract_number?: string;
   service_type: string;
+  service_category?: string | null;
   status: string;
   pending_reason: string;
   commitment_amount: number;

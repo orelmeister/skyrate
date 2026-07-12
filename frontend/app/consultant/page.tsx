@@ -4386,7 +4386,16 @@ function ConsultantPortalPage() {
                               <div className="text-xs text-slate-500">{frn.state} • BEN: {frn.ben}</div>
                             </td>
                             <td className="px-4 py-3 text-slate-600">{frn.funding_year}</td>
-                            <td className="px-4 py-3 text-slate-600 truncate max-w-[150px]">{frn.service_type}</td>
+                            <td className="px-4 py-3 text-slate-600 max-w-[160px]">
+                              <div className="flex items-center gap-1.5">
+                                {frn.service_category && (
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${frn.service_category === 'C2' ? 'bg-indigo-100 text-indigo-700' : 'bg-sky-100 text-sky-700'}`}>
+                                    {frn.service_category}
+                                  </span>
+                                )}
+                                <span className="truncate">{frn.service_type}</span>
+                              </div>
+                            </td>
                             <td className="px-4 py-3 text-center">
                               <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                 frn.status?.toLowerCase().includes('funded') || frn.status?.toLowerCase().includes('committed')
@@ -4398,7 +4407,16 @@ function ConsultantPortalPage() {
                                 {frn.status || 'Unknown'}
                               </span>
                               {frn.pending_reason && (
-                                <div className="text-xs text-slate-500 mt-1">{frn.pending_reason}</div>
+                                <div className="mt-1">
+                                  <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                                    {frn.pending_reason}
+                                  </span>
+                                </div>
+                              )}
+                              {frn.fcdl_date && (
+                                <div className="text-[10px] text-slate-400 mt-1">
+                                  Changed {String(frn.fcdl_date).slice(0, 10)}
+                                </div>
                               )}
                             </td>
                             <td className="px-4 py-3 text-right font-medium text-slate-900">

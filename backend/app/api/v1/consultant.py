@@ -3742,6 +3742,15 @@ async def get_portfolio_frn_status(
                     sub_status = "Fully Invoiced"
             elif "denied" in status_text:
                 sub_status = "Denied"
+            # Derive E-Rate service category (C1 vs C2) from the service type so
+            # the filing dashboard can badge each FRN at a glance (#10).
+            _svc = (r.service_type or "").lower()
+            if any(k in _svc for k in ("internal connection", "managed internal", "basic maintenance", "internal broadband")):
+                service_category = "C2"
+            elif any(k in _svc for k in ("data transmission", "internet access", "voice", "wan", "transport")):
+                service_category = "C1"
+            else:
+                service_category = None
             frn_dict = {
                 "frn": r.frn,
                 "status": r.status,
@@ -3749,6 +3758,7 @@ async def get_portfolio_frn_status(
                 "commitment_amount": amount,
                 "disbursed_amount": disbursed,
                 "service_type": r.service_type,
+                "service_category": service_category,
                 "ben": ben_str,
                 "entity_name": r.organization_name or "",
                 "fcdl_date": r.fcdl_date,
