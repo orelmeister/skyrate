@@ -2,9 +2,10 @@
 
 import { useState, useCallback, useRef } from "react";
 import { useAuthStore } from "@/lib/auth-store";
+import { api, type Form470WindowResponse } from "@/lib/api";
 import {
   Upload, FileText, X, Plus, Scale, Trophy, AlertTriangle,
-  XCircle, RotateCcw, Gavel,
+  XCircle, RotateCcw, Gavel, Lock, CheckCircle2, Clock,
 } from "lucide-react";
 
 // ==================== TYPES ====================
@@ -84,6 +85,36 @@ export default function BidAnalysis() {
   const [result, setResult] = useState<BidAnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // #2 — 28-day competitive bidding window lock. A consultant/applicant may not
+  // evaluate bids or select a vendor until the Form 470's Allowable Contract Date.
+  const [form470Number, setForm470Number] = useState("");
+  const [windowState, setWindowState] = useState<Form470WindowResponse | null>(null);
+  const [checkingWindow, setCheckingWindow] = useState(false);
+
+  const bidWindowLocked = windowState?.found === true && windowState?.locked === true;
+
+  const checkBidWindow = useCallback(async () => {
+    const num = form470Number.trim();
+    if (!num) {
+      setWindowState(null);
+      return;
+    }
+    setCheckingWindow(true);
+    try {
+      const resp = await api.getForm470Window(num);
+      // Fail-open: on any error, do not lock the tool.
+      if (resp.success && resp.data) {
+        setWindowState(resp.data);
+      } else {
+        setWindowState(null);
+      }
+    } catch {
+      setWindowState(null);
+    } finally {
+      setCheckingWindow(false);
+    }
+  }, [form470Number]);
+
   const bidInputRef = useRef<HTMLInputElement>(null);
 
   const weightTotal = METRIC_ORDER.reduce((sum, k) => sum + weights[k], 0);
@@ -153,6 +184,13 @@ export default function BidAnalysis() {
   const handleAnalyze = async () => {
     if (bidFiles.length < 2) {
       setError("Upload at least 2 bids to compare.");
+      return;
+    }
+    if (bidWindowLocked) {
+      setError(
+        `Bid evaluation is locked until ${windowState?.allowable_contract_date}. ` +
+        `The 28-day competitive bidding window for Form 470 ${windowState?.application_number} has not closed.`
+      );
       return;
     }
     setIsAnalyzing(true);
@@ -375,6 +413,80 @@ export default function BidAnalysis() {
         </p>
       </div>
 
+      {/* #2 — Form 470 number + 28-day competitive bidding window check */}
+      <div className="mb-6">
+        <label className="block text-sm font-medium text-slate-600 mb-1">
+          Form 470 number <span className="text-slate-400">(optional — checks the 28-day bidding window)</span>
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={form470Number}
+            onChange={(e) => { setForm470Number(e.target.value); setWindowState(null); }}
+            onBlur={checkBidWindow}
+            placeholder="e.g. 250012345"
+            inputMode="numeric"
+            className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          <button
+            type="button"
+            onClick={checkBidWindow}
+            disabled={!form470Number.trim() || checkingWindow}
+            className="px-4 py-2 text-sm font-semibold rounded-lg border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+          >
+            {checkingWindow ? (
+              <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Clock className="w-4 h-4" />
+            )}
+            Check window
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-slate-400">
+          FCC rules require the competitive bidding process to stay open for at least 28 days
+          after a Form 470 is posted. Bids may not be evaluated or a vendor selected before the
+          Allowable Contract Date.
+        </p>
+
+        {/* Locked banner */}
+        {bidWindowLocked && (
+          <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+            <Lock className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-xs text-amber-800">
+              <p className="font-semibold">
+                Bid evaluation locked until {windowState?.allowable_contract_date}
+                {typeof windowState?.days_remaining === "number" && windowState.days_remaining > 0
+                  ? ` (${windowState.days_remaining} day${windowState.days_remaining === 1 ? "" : "s"} left)`
+                  : ""}
+              </p>
+              <p className="mt-0.5">
+                {windowState?.entity_name ? `${windowState.entity_name} — ` : ""}
+                Form 470 {windowState?.application_number}
+                {windowState?.posting_date ? ` was posted ${windowState.posting_date}.` : "."}{" "}
+                The 28-day competitive bidding window has not closed, so you may not evaluate
+                bids or select a vendor yet.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Window closed / open banner */}
+        {windowState?.found && !windowState.locked && windowState.allowable_contract_date && (
+          <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-emerald-800">
+              The 28-day bidding window closed on {windowState.allowable_contract_date}. You may
+              evaluate bids and select a vendor for Form 470 {windowState.application_number}.
+            </p>
+          </div>
+        )}
+
+        {/* Not found / no ACD note */}
+        {windowState && !windowState.found && (
+          <p className="mt-2 text-xs text-slate-500">{windowState.message}</p>
+        )}
+      </div>
+
       {/* Optional Form 470 reference */}
       <div className="mb-6">
         <label className="block text-sm font-medium text-slate-600 mb-1">
@@ -390,16 +502,22 @@ export default function BidAnalysis() {
       </div>
 
       {/* Submit */}
-      <div className="mb-8 flex justify-center">
+      <div className="mb-8 flex flex-col items-center gap-2">
         <button
           onClick={handleAnalyze}
-          disabled={bidFiles.length < 2 || isAnalyzing}
+          disabled={bidFiles.length < 2 || isAnalyzing || bidWindowLocked}
+          title={bidWindowLocked ? `Locked until ${windowState?.allowable_contract_date} — the 28-day competitive bidding window has not closed.` : undefined}
           className="px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-lg flex items-center gap-2"
         >
           {isAnalyzing ? (
             <>
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
               Analyzing bids...
+            </>
+          ) : bidWindowLocked ? (
+            <>
+              <Lock className="w-5 h-5" />
+              Bid evaluation locked
             </>
           ) : (
             <>
@@ -408,6 +526,11 @@ export default function BidAnalysis() {
             </>
           )}
         </button>
+        {bidWindowLocked && (
+          <p className="text-xs text-amber-700">
+            Unlocks {windowState?.allowable_contract_date} (28-day bidding window).
+          </p>
+        )}
       </div>
 
       {/* Error */}

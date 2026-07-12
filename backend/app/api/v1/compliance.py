@@ -515,6 +515,107 @@ async def bid_analysis_endpoint(
     return BidAnalysisResponse(**result)
 
 
+# ==================== FORM 470 28-DAY BID WINDOW ====================
+
+@router.get(
+    "/form470-window/{application_number}",
+    summary="Check the 28-day competitive bidding window for a Form 470",
+)
+async def form470_bid_window(
+    application_number: str,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Look up a Form 470's Allowable Contract Date (ACD) — the earliest date an
+    applicant may close competitive bidding, evaluate bids and select a vendor
+    (28 days after the 470 is posted, per FCC rules). Returns whether the
+    bid-evaluation window is still locked (today < ACD) and the unlock date.
+
+    Fail-open: if the 470 can't be found or the ACD can't be parsed, ``locked``
+    is False so the tool never blocks a user on a lookup error.
+    """
+    app_num = (application_number or "").strip()
+    if not app_num:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Application number required.",
+        )
+
+    def _parse_date(val):
+        if not val:
+            return None
+        s = str(val).strip()
+        if not s:
+            return None
+        # USAC returns ISO like '2026-02-12T00:00:00.000'
+        s = s.replace("Z", "").split("T")[0].split(" ")[0]
+        for fmt in ("%Y-%m-%d", "%m/%d/%Y"):
+            try:
+                return datetime.strptime(s, fmt).date()
+            except ValueError:
+                continue
+        return None
+
+    try:
+        from utils.usac_client import USACDataClient
+        client = USACDataClient()
+        detail = client.get_470_detail(app_num)
+    except Exception as e:
+        logger.warning("form470-window lookup failed for %s: %s", app_num, e)
+        return {
+            "success": False,
+            "application_number": app_num,
+            "found": False,
+            "locked": False,
+            "message": "Could not look up this Form 470. Bid evaluation is not blocked.",
+        }
+
+    if not detail or not detail.get("success"):
+        return {
+            "success": False,
+            "application_number": app_num,
+            "found": False,
+            "locked": False,
+            "message": "Form 470 not found. Double-check the application number.",
+        }
+
+    acd = _parse_date(detail.get("allowable_contract_date"))
+    posting = _parse_date(detail.get("posting_date"))
+    today = datetime.utcnow().date()
+
+    locked = bool(acd and today < acd)
+    days_remaining = (acd - today).days if (acd and locked) else 0
+
+    if locked:
+        message = (
+            f"Bid evaluation is locked until {acd.isoformat()} — the 28-day "
+            f"competitive bidding window has not closed."
+        )
+    elif acd:
+        message = (
+            f"The 28-day competitive bidding window closed on {acd.isoformat()}. "
+            f"You may evaluate bids and select a vendor."
+        )
+    else:
+        message = (
+            "No Allowable Contract Date on file for this Form 470; bid evaluation "
+            "is not blocked."
+        )
+
+    return {
+        "success": True,
+        "application_number": app_num,
+        "found": True,
+        "entity_name": (detail.get("entity") or {}).get("name"),
+        "status": detail.get("status"),
+        "posting_date": posting.isoformat() if posting else None,
+        "allowable_contract_date": acd.isoformat() if acd else None,
+        "locked": locked,
+        "days_remaining": days_remaining,
+        "message": message,
+    }
+
+
 # ==================== HISTORY ENDPOINTS ====================
 
 @router.get(

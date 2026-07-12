@@ -693,6 +693,20 @@ export interface Form470DetailResponse {
   error?: string;
 }
 
+// 28-day competitive bidding window check for a Form 470 (bid-evaluation lock).
+export interface Form470WindowResponse {
+  success: boolean;
+  application_number: string;
+  found: boolean;
+  entity_name?: string | null;
+  status?: string | null;
+  posting_date?: string | null;
+  allowable_contract_date?: string | null;
+  locked: boolean;
+  days_remaining?: number;
+  message: string;
+}
+
 // ==================== SAVED LEADS TYPES ====================
 
 export interface EnrichedContactData {
@@ -2576,6 +2590,15 @@ class ApiClient {
   async get470Detail(applicationNumber: string, version?: string): Promise<ApiResponse<Form470DetailResponse>> {
     const qs = version ? `?version=${encodeURIComponent(version)}` : '';
     return this.request(`/api/v1/vendor/470/${applicationNumber}${qs}`);
+  }
+
+  /**
+   * Check a Form 470's 28-day competitive bidding window (Allowable Contract
+   * Date). Used to lock bid evaluation until the window closes. Fail-open on
+   * the server: lookup errors return locked=false.
+   */
+  async getForm470Window(applicationNumber: string): Promise<ApiResponse<Form470WindowResponse>> {
+    return this.request(`/api/v1/compliance/form470-window/${encodeURIComponent(applicationNumber)}`);
   }
 
   /**
