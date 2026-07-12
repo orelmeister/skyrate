@@ -7,9 +7,10 @@ import { useAuthStore } from "@/lib/auth-store";
 import {
   Shield, Upload, AlertTriangle, CheckCircle, XCircle, FileText,
   ArrowLeft, ShieldCheck, Brain, ExternalLink, ChevronDown, ChevronRight,
-  Activity, Paperclip, X, Plus, History, RefreshCw, Check, Gavel, Clock
+  Activity, Paperclip, X, Plus, History, RefreshCw, Check, Gavel, Clock, CalendarDays
 } from "lucide-react";
 import BidAnalysis from "./bid-analysis";
+import ErateCalendar from "./ErateCalendar";
 import { api, type Form471WindowResponse } from "@/lib/api";
 
 // ==================== TYPES ====================
@@ -100,7 +101,7 @@ export default function CompliancePage() {
   const searchParams = useSearchParams();
   const { user, isAuthenticated, token, _hasHydrated } = useAuthStore();
 
-  const [activeTab, setActiveTab] = useState<"review" | "bids">("review");
+  const [activeTab, setActiveTab] = useState<"review" | "bids" | "calendar">("review");
   const [formType, setFormType] = useState("470");
   const [formNumber, setFormNumber] = useState("");
   const [notes, setNotes] = useState("");
@@ -406,9 +407,22 @@ export default function CompliancePage() {
             <Gavel className="w-4 h-4" />
             Bid Analysis
           </button>
+          <button
+            onClick={() => setActiveTab("calendar")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeTab === "calendar"
+                ? "bg-white text-indigo-700 shadow-sm"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <CalendarDays className="w-4 h-4" />
+            Annual Calendar
+          </button>
         </div>
 
         {activeTab === "bids" && <BidAnalysis />}
+
+        {activeTab === "calendar" && <ErateCalendar />}
 
         {activeTab === "review" && (
         <>
