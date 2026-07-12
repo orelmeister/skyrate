@@ -4249,6 +4249,31 @@ async def get_portfolio_frn_status(
     if _spin_q or _crn_q:
         rows = _query_local(None, year, status_filter)
 
+        # Re-query freshly-upserted rows by their FRN numbers (not by the
+        # contract_number/spin search term). This is critical: a CRN or SPIN may
+        # match the live USAC dataset via a column (e.g. crn_data / spin_name)
+        # whose value differs from what we persist into contract_number/spin, so
+        # re-filtering by the original term would silently return nothing. The
+        # FRN numbers we just wrote are the reliable key.
+        def _requery_by_frns(frn_numbers):
+            if not frn_numbers:
+                return []
+            qq = db.query(AdminFRNSnapshot).filter(AdminFRNSnapshot.frn.in_(frn_numbers))
+            if year is not None:
+                qq = qq.filter(AdminFRNSnapshot.funding_year == str(year))
+            if status_filter:
+                qq = qq.filter(AdminFRNSnapshot.status.ilike(f"%{status_filter}%"))
+            allrows = qq.order_by(AdminFRNSnapshot.last_refreshed.desc()).all()
+            seen = set()
+            uniq = []
+            for r in allrows:
+                key = (r.ben, r.frn)
+                if key in seen:
+                    continue
+                seen.add(key)
+                uniq.append(r)
+            return uniq
+
         # Live USAC fallback for CRN (contract number) when the cache misses.
         if not rows and _crn_q:
             try:
@@ -4281,7 +4306,7 @@ async def get_portfolio_frn_status(
                             db.expire_all()
                         except Exception as _upsert_err:
                             logger.warning(f"[frn-status crn={_crn_q}] cache writeback failed: {_upsert_err}")
-                        rows = _query_local(None, year, status_filter)
+                        rows = _requery_by_frns([f.get("frn") for f in live_frns if f.get("frn")])
             except Exception as _live_err:
                 logger.warning(f"[frn-status crn={_crn_q}] live USAC fetch failed: {_live_err}")
 
@@ -4317,7 +4342,7 @@ async def get_portfolio_frn_status(
                             db.expire_all()
                         except Exception as _upsert_err:
                             logger.warning(f"[frn-status spin={_spin_q}] cache writeback failed: {_upsert_err}")
-                        rows = _query_local(None, year, status_filter)
+                        rows = _requery_by_frns([f.get("frn") for f in live_frns if f.get("frn")])
             except Exception as _live_err:
                 logger.warning(f"[frn-status spin={_spin_q}] live USAC fetch failed: {_live_err}")
 
