@@ -81,6 +81,7 @@ export default function BidAnalysis() {
   const [dragActive, setDragActive] = useState(false);
   const [weights, setWeights] = useState<Record<MetricKey, number>>({ ...DEFAULT_WEIGHTS });
   const [form470Ref, setForm470Ref] = useState("");
+  const [form470File, setForm470File] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<BidAnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -128,6 +129,7 @@ export default function BidAnalysis() {
   }, [form470Number]);
 
   const bidInputRef = useRef<HTMLInputElement>(null);
+  const ref470InputRef = useRef<HTMLInputElement>(null);
 
   const weightTotal = METRIC_ORDER.reduce((sum, k) => sum + weights[k], 0);
   const priceIsPrimary = METRIC_ORDER.every(
@@ -218,6 +220,7 @@ export default function BidAnalysis() {
       for (const k of METRIC_ORDER) normalized[k] = Math.round((weights[k] * 100) / total);
       formData.append("weights", JSON.stringify(normalized));
       if (form470Ref.trim()) formData.append("form470_reference", form470Ref.trim());
+      if (form470File) formData.append("form470_file", form470File);
 
       const accessToken = token || localStorage.getItem("access_token");
       // Guard against a hung request (AI can be slow); abort after 120s so the
@@ -517,16 +520,71 @@ export default function BidAnalysis() {
         )}
       </div>
 
-      {/* Optional Form 470 reference */}
+      {/* Optional Form 470 / RFP — attach the document or paste the scope. Used only as the
+          requirements yardstick to judge bids against; never scored as a bid. */}
       <div className="mb-6">
         <label className="block text-sm font-medium text-slate-600 mb-1">
-          Form 470 scope / requirements <span className="text-slate-400">(optional)</span>
+          Form 470 / RFP <span className="text-slate-400">(optional — helps score technical fit)</span>
         </label>
+        <p className="mb-2 text-xs text-slate-400">
+          Attach your Form 470 or RFP document, or paste its requirements below. This is used
+          only as the yardstick to judge each bid against &mdash; it is never scored as a bid.
+        </p>
+
+        {form470File ? (
+          <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-3 py-2 mb-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <FileText className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+              <span className="text-sm text-slate-700 truncate">{form470File.name}</span>
+              <span className="text-xs text-slate-400 flex-shrink-0">
+                {(form470File.size / 1024 / 1024).toFixed(1)} MB
+              </span>
+            </div>
+            <button
+              onClick={() => setForm470File(null)}
+              className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+              aria-label="Remove Form 470 / RFP file"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => ref470InputRef.current?.click()}
+            className="flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 mb-2"
+          >
+            <Upload className="w-4 h-4" />
+            Attach Form 470 / RFP file
+            <span className="text-xs text-slate-400">(PDF, DOCX, DOC, TXT &middot; max 10 MB)</span>
+          </button>
+        )}
+        <input
+          ref={ref470InputRef}
+          type="file"
+          accept=".pdf,.docx,.doc,.txt"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) {
+              if (!isValidFile(f)) {
+                setError(`"${f.name}" is not supported. Accepted: PDF, DOCX, DOC, TXT.`);
+              } else if (f.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+                setError(`"${f.name}" exceeds ${MAX_FILE_SIZE_MB} MB limit.`);
+              } else {
+                setError(null);
+                setForm470File(f);
+              }
+            }
+            if (e.target) e.target.value = "";
+          }}
+          className="hidden"
+        />
+
         <textarea
           value={form470Ref}
           onChange={(e) => setForm470Ref(e.target.value)}
           rows={3}
-          placeholder="Paste the services/products and requirements from your Form 470 so the AI can judge technical fit against your actual needs."
+          placeholder="…or paste the services/products and requirements from your Form 470 so the AI can judge technical fit against your actual needs."
           className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
       </div>

@@ -427,6 +427,7 @@ async def bid_analysis_endpoint(
     bids: List[UploadFile] = File(...),
     weights: Optional[str] = Form(default=None),
     form470_reference: Optional[str] = Form(default=None),
+    form470_file: Optional[UploadFile] = File(default=None),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -438,6 +439,8 @@ async def bid_analysis_endpoint(
     - **weights**: optional JSON string of metric weights, e.g.
       `{"price": 60, "tco": 15, "technical": 15, "support": 5, "experience": 5}`.
     - **form470_reference**: optional text describing the Form 470 scope/requirements.
+    - **form470_file**: optional Form 470 / RFP document (PDF, DOCX, DOC, TXT). Its text is
+      used as the requirements yardstick to judge each bid against — it is NOT scored as a bid.
     """
     real_bids = [b for b in bids if b and b.filename]
     if len(real_bids) < 2:
@@ -493,10 +496,38 @@ async def bid_analysis_endpoint(
             detail="Could not extract readable text from at least 2 bids.",
         )
 
+    # Optional Form 470 / RFP document. Its text becomes the requirements yardstick the AI
+    # judges each bid against — it is NEVER added to the bid set (that was the bug that made
+    # an uploaded RFP get scored as a losing bid).
+    combined_reference = (form470_reference or "").strip()
+    if form470_file and form470_file.filename:
+        ref_name = form470_file.filename.lower()
+        if not any(ref_name.endswith(ext) for ext in SUPPORTED_EXTENSIONS):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported Form 470 / RFP file type '{form470_file.filename}'. Accepted: PDF, DOCX, DOC, TXT.",
+            )
+        ref_raw = await form470_file.read()
+        if len(ref_raw) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"Form 470 / RFP file '{form470_file.filename}' exceeds 10 MB limit.",
+            )
+        if ref_raw:
+            ref_text = extract_text_from_file(ref_raw, form470_file.filename)
+            if not ref_text:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Could not extract text from Form 470 / RFP '{form470_file.filename}'. It may be image-based or corrupted.",
+                )
+            combined_reference = (
+                f"{combined_reference}\n\n{ref_text}".strip() if combined_reference else ref_text
+            )
+
     result = await analyze_bids(
         bids=bid_docs,
         weights=parsed_weights,
-        form470_reference=form470_reference,
+        form470_reference=combined_reference or None,
     )
 
     if not result or not result.get("bids"):
