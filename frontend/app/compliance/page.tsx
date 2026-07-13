@@ -351,7 +351,55 @@ export default function CompliancePage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 lg:pl-64">
+      {/* Sidebar navigation (compliance is launched from the consultant portal) */}
+      <aside className="hidden lg:flex lg:flex-col fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-slate-200">
+        <div className="h-16 flex items-center gap-3 px-6 border-b border-slate-200">
+          <Link href="/consultant" className="flex items-center gap-3">
+            <img src="/images/logos/logo-icon-transparent.png" alt="SkyRate AI" width={36} height={36} className="rounded-lg" />
+            <div>
+              <span className="font-bold text-slate-900">SkyRate AI</span>
+              <span className="block text-xs text-slate-500">Consultant Portal</span>
+            </div>
+          </Link>
+        </div>
+        <nav className="p-4 space-y-1 overflow-y-auto">
+          {[
+            { id: "dashboard", label: "Dashboard", icon: "📊" },
+            { id: "schools", label: "My Schools", icon: "🏫" },
+            { id: "funding", label: "Funding Data", icon: "💰" },
+            { id: "frn-status", label: "FRN Status", icon: "📈" },
+            { id: "appeals", label: "Appeals", icon: "📋" },
+            { id: "pia", label: "PIA Assistant", icon: "🛡️" },
+            { id: "service-search", label: "Service Search", icon: "🔍" },
+          ].map((item) => (
+            <Link
+              key={item.id}
+              href={`/consultant?tab=${item.id}`}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left text-slate-600 hover:bg-slate-50 transition-all"
+            >
+              <span className="text-xl">{item.icon}</span>
+              <span>{item.label}</span>
+            </Link>
+          ))}
+          <Link
+            href="/compliance"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left bg-gradient-to-r from-purple-50 to-indigo-50 text-indigo-700 font-medium shadow-sm transition-all"
+          >
+            <span className="text-xl">🧭</span>
+            <span>Compliance</span>
+            <span className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-600"></span>
+          </Link>
+          <Link
+            href="/consultant?tab=settings"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left text-slate-600 hover:bg-slate-50 transition-all"
+          >
+            <span className="text-xl">⚙️</span>
+            <span>Settings</span>
+          </Link>
+        </nav>
+      </aside>
+
       {/* Header */}
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">

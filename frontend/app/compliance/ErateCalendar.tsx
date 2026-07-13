@@ -5,97 +5,187 @@ import { CalendarDays, Clock, CheckCircle2, Lock } from "lucide-react";
 import { api, type Form471WindowResponse } from "@/lib/api";
 
 /**
- * E-Rate Annual Calendar (Ari feedback #12).
+ * E-Rate Annual Calendar / Planning Timeline (Ari feedback #12).
  *
- * A full timeline of the E-Rate program year phases, with the current phase
- * highlighted, wired into the live Form 470 (28-day, #2) and Form 471 (January
- * window, #3) guardrails. USAC publishes exact dates each year; the ranges here
- * are the typical/estimated cadence and are labeled as such.
+ * A practical 12-step roadmap for a successful E-Rate funding year — mirrors the
+ * SkyRate "Plan. Procure. Fund. Implement. Reimburse." planning timeline. The
+ * current planning phase is highlighted by month, and the live Form 471 window
+ * (#3) is surfaced up top. USAC publishes exact dates each year; ranges below
+ * are the typical cadence and are labeled as such.
  */
 
 type Phase = {
-  key: string;
+  step: number;
+  month: string;
   title: string;
-  window: string;
-  /** inclusive month range (1-12) used to highlight the current phase */
-  months: [number, number];
-  description: string;
-  forms?: string;
+  icon: string;
+  bullets: string[];
+  /** planning-cycle months (1-12) used to highlight the current phase */
+  months?: number[];
+  /** continuous / post-year phases that run alongside the cycle */
+  continuous?: boolean;
 };
 
 const PHASES: Phase[] = [
   {
-    key: "bidding",
-    title: "Competitive Bidding — Form 470",
-    window: "July – January",
-    months: [7, 1],
-    forms: "Form 470",
-    description:
-      "Post your Form 470 to open competitive bidding. It must be posted for at least 28 days before you can select a vendor or file the Form 471.",
+    step: 1,
+    month: "July",
+    title: "Strategic Planning Begins",
+    icon: "🗂️",
+    months: [7],
+    bullets: [
+      "Assess technology needs for the upcoming funding year",
+      "Review expiring contracts",
+      "Meet with IT staff and stakeholders",
+      "Develop an E-Rate procurement strategy",
+    ],
   },
   {
-    key: "vendor",
-    title: "Vendor Selection & Contracts",
-    window: "After 28-day bid window",
-    months: [12, 2],
-    description:
-      "Once the 28-day bidding window closes, evaluate bids, select the most cost-effective vendor, and sign contracts ahead of the Form 471 window.",
+    step: 2,
+    month: "August",
+    title: "Requirements & Data Collection",
+    icon: "📊",
+    months: [8],
+    bullets: [
+      "Verify enrollment and discount data",
+      "Define bandwidth and equipment needs",
+      "Build technical specifications",
+      "Prepare procurement documents",
+    ],
   },
   {
-    key: "application",
-    title: "Application Filing — Form 471",
-    window: "Mid-January – Late March",
-    months: [1, 3],
-    forms: "Form 471",
-    description:
-      "File the Form 471 during USAC's annual application window. This is the funding request for Category 1 and Category 2 services.",
+    step: 3,
+    month: "September",
+    title: "Form 470 Preparation & Early Posting",
+    icon: "📝",
+    months: [9],
+    bullets: [
+      "Finalize bid specifications",
+      "Develop evaluation criteria",
+      "Many applicants begin posting FCC Forms 470",
+      "Competitive bidding begins",
+    ],
   },
   {
-    key: "pia",
+    step: 4,
+    month: "October",
+    title: "Competitive Bidding",
+    icon: "🤝",
+    months: [10],
+    bullets: [
+      "Continue posting Form 470s",
+      "Vendors submit proposals",
+      "Respond to vendor questions",
+      "Begin bid evaluations",
+    ],
+  },
+  {
+    step: 5,
+    month: "November",
+    title: "Vendor Evaluation & Selection",
+    icon: "🏅",
+    months: [11],
+    bullets: [
+      "Complete bid evaluations",
+      "Select the most cost-effective solution",
+      "Negotiate final contract terms",
+      "Prepare contracts for execution",
+    ],
+  },
+  {
+    step: 6,
+    month: "December",
+    title: "Contract Execution & Form 471 Preparation",
+    icon: "✍️",
+    months: [12],
+    bullets: [
+      "Execute contracts",
+      "Verify funding requests",
+      "Organize supporting documentation",
+      "Prepare FCC Form 471",
+    ],
+  },
+  {
+    step: 7,
+    month: "January – February",
+    title: "Form 471 Filing",
+    icon: "📨",
+    months: [1, 2],
+    bullets: [
+      "Submit FCC Form 471",
+      "Review FRNs",
+      "Verify funding requests",
+      "Prepare for PIA review",
+    ],
+  },
+  {
+    step: 8,
+    month: "March – April",
     title: "PIA Review",
-    window: "February – August",
-    months: [2, 8],
-    description:
-      "USAC's Program Integrity Assurance team reviews applications and may request additional information. Respond promptly to avoid delays.",
+    icon: "🔎",
+    months: [3, 4],
+    bullets: [
+      "Respond to Program Integrity Assurance requests",
+      "Submit supporting documentation",
+      "Monitor application status",
+    ],
   },
   {
-    key: "fcdl",
-    title: "Funding Commitments — FCDL",
-    window: "May – rolling",
-    months: [5, 9],
-    description:
-      "USAC issues Funding Commitment Decision Letters (FCDLs). Review commitments and file appeals within 60 days if needed.",
+    step: 9,
+    month: "May – June",
+    title: "Funding Commitments",
+    icon: "🏛️",
+    months: [5, 6],
+    bullets: [
+      "Review Funding Commitment Decision Letters (FCDLs)",
+      "Prepare implementation plans",
+      "Coordinate service delivery",
+      "Confirm CIPA and other compliance requirements",
+    ],
   },
   {
-    key: "cipa",
-    title: "Service Start & CIPA — Form 486",
-    window: "By ~October",
-    months: [7, 10],
-    forms: "Form 486",
-    description:
-      "File Form 486 to confirm services have started and CIPA compliance. Due 120 days after the FCDL date or the service start date, whichever is later.",
+    step: 10,
+    month: "July (Funding Year Begins)",
+    title: "Service Delivery",
+    icon: "🚚",
+    continuous: true,
+    bullets: [
+      "Begin eligible services",
+      "Track installations and implementation",
+      "Monitor project milestones",
+      "Maintain documentation",
+    ],
   },
   {
-    key: "invoicing",
-    title: "Invoicing — BEAR / SPI",
-    window: "After services delivered",
-    months: [10, 6],
-    forms: "Form 472 (BEAR) / Form 474 (SPI)",
-    description:
-      "Invoice USAC for delivered services. Reimbursement is limited to installed equipment or the monthly charges for internet/maintenance. Recurring-service delivery deadline is generally September 30 of the following funding year.",
+    step: 11,
+    month: "Ongoing (Throughout Year)",
+    title: "Invoicing & Reimbursement",
+    icon: "🧾",
+    continuous: true,
+    bullets: [
+      "File BEAR or SPI invoices",
+      "Track reimbursement status",
+      "Maintain audit documentation",
+      "Prepare for post-commitment reviews",
+    ],
+  },
+  {
+    step: 12,
+    month: "Post-Funding Year",
+    title: "Closeout & Record Retention",
+    icon: "📦",
+    continuous: true,
+    bullets: [
+      "Ensure all reimbursements are received",
+      "Address any remaining issues",
+      "Retain records for the required retention period (typically 10 years)",
+    ],
   },
 ];
 
-function inRange(month: number, [start, end]: [number, number]): boolean {
-  // handles ranges that wrap the calendar year (e.g. Jul–Jan)
-  if (start <= end) return month >= start && month <= end;
-  return month >= start || month <= end;
-}
-
 export default function ErateCalendar() {
   const [win, setWin] = useState<Form471WindowResponse | null>(null);
-  const now = new Date();
-  const currentMonth = now.getMonth() + 1;
+  const currentMonth = new Date().getMonth() + 1;
 
   useEffect(() => {
     let active = true;
@@ -112,43 +202,49 @@ export default function ErateCalendar() {
     };
   }, []);
 
+  // The single "current" planning phase = the first cycle step whose months
+  // include the current month (steps 1-9). Continuous phases (10-12) are marked
+  // separately as always-running.
+  const currentStep = PHASES.find((p) => p.months?.includes(currentMonth))?.step ?? null;
+
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-            <CalendarDays className="h-5 w-5" />
+      {/* Intro / tagline */}
+      <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-indigo-600 to-purple-600 p-6 text-white shadow-lg">
+        <div className="flex items-start gap-4">
+          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur">
+            <CalendarDays className="h-6 w-6" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">E-Rate Annual Calendar</h2>
-            <p className="text-sm text-slate-500">
-              The program-year cycle at a glance. Exact dates are set by USAC each year — ranges
-              below are the typical cadence.
-            </p>
+            <h2 className="text-2xl font-bold">E-Rate Planning Timeline</h2>
+            <p className="mt-1 text-indigo-100">A practical roadmap for a successful E-Rate funding year.</p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+              {["Plan", "Procure", "Fund", "Implement", "Reimburse"].map((w) => (
+                <span key={w} className="rounded-full bg-white/15 px-3 py-1">{w}</span>
+              ))}
+            </div>
           </div>
         </div>
 
         {/* Live Form 471 window tie-in (#3) */}
         {win && (
           <div
-            className={`mt-4 flex items-start gap-3 rounded-xl border p-4 ${
-              win.window_open
-                ? "border-emerald-200 bg-emerald-50"
-                : "border-amber-200 bg-amber-50"
+            className={`mt-4 flex items-start gap-3 rounded-xl border p-3 ${
+              win.window_open ? "border-emerald-300/40 bg-emerald-500/20" : "border-amber-300/40 bg-amber-500/20"
             }`}
           >
             {win.window_open ? (
-              <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-600" />
+              <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-200" />
             ) : (
-              <Clock className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
+              <Clock className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-200" />
             )}
             <div className="text-sm">
-              <p className={`font-medium ${win.window_open ? "text-emerald-800" : "text-amber-800"}`}>
+              <p className="font-medium">
                 {win.window_open
                   ? `The FY${win.funding_year} Form 471 filing window is OPEN.`
                   : `The FY${win.funding_year} Form 471 filing window is not open yet.`}
               </p>
-              <p className={win.window_open ? "text-emerald-700" : "text-amber-700"}>
+              <p className="text-white/80">
                 Expected window: {win.opens_on} – {win.closes_on}
                 {win.expected ? " (estimated — pending USAC confirmation)" : ""}.
               </p>
@@ -157,51 +253,70 @@ export default function ErateCalendar() {
         )}
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        <ol className="relative space-y-4 border-l border-slate-200 pl-6">
-          {PHASES.map((phase) => {
-            const isCurrent = inRange(currentMonth, phase.months);
-            return (
-              <li key={phase.key} className="relative">
-                <span
-                  className={`absolute -left-[31px] top-1.5 flex h-4 w-4 items-center justify-center rounded-full ring-4 ring-white ${
-                    isCurrent ? "bg-indigo-600" : "bg-slate-300"
-                  }`}
-                />
+      {/* Timeline grid */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {PHASES.map((phase) => {
+          const isCurrent = phase.step === currentStep;
+          return (
+            <div
+              key={phase.step}
+              className={`relative rounded-2xl border p-5 transition-shadow ${
+                isCurrent
+                  ? "border-indigo-400 bg-indigo-50/70 shadow-md ring-1 ring-indigo-200"
+                  : "border-slate-200 bg-white hover:shadow-sm"
+              }`}
+            >
+              <div className="mb-2 flex items-center gap-3">
                 <div
-                  className={`rounded-xl border p-4 ${
-                    isCurrent ? "border-indigo-300 bg-indigo-50/60" : "border-slate-200 bg-white"
+                  className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                    isCurrent ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600"
                   }`}
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-sm font-semibold text-slate-900">{phase.title}</h3>
-                    {isCurrent && (
-                      <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-[11px] font-medium text-white">
-                        Current phase
-                      </span>
-                    )}
-                    {phase.forms && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                        {phase.forms}
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-0.5 text-xs font-medium text-slate-500">{phase.window}</p>
-                  <p className="mt-1.5 text-sm text-slate-600">{phase.description}</p>
+                  {phase.step}
                 </div>
-              </li>
-            );
-          })}
-        </ol>
+                <div className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
+                  {phase.month}
+                </div>
+                <div className="ml-auto flex items-center gap-1.5">
+                  {phase.continuous && (
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                      Ongoing
+                    </span>
+                  )}
+                  {isCurrent && (
+                    <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] font-medium text-white">
+                      Now
+                    </span>
+                  )}
+                </div>
+              </div>
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <span aria-hidden>{phase.icon}</span>
+                {phase.title}
+              </h3>
+              <ul className="mt-2 space-y-1">
+                {phase.bullets.map((b, i) => (
+                  <li key={i} className="flex gap-2 text-xs text-slate-600">
+                    <span className="mt-1.5 h-1 w-1 flex-shrink-0 rounded-full bg-indigo-400" />
+                    <span>{b}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
 
-        <div className="mt-5 flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
-          <Lock className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-          <p>
-            Key guardrails: the Form 470 must be posted at least 28 days before vendor selection or
-            filing the Form 471, and the Form 471 can only be filed during USAC&apos;s annual
-            January–March window. Both are enforced in the Document Review and Bid Analysis tabs.
-          </p>
-        </div>
+      {/* Guardrail footnote */}
+      <div className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
+        <Lock className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+        <p>
+          Key guardrails: the Form 470 must be posted at least 28 days before vendor selection or
+          filing the Form 471, and the Form 471 can only be filed during USAC&apos;s annual
+          January–March window. Both are enforced in the Document Review and Bid Analysis tabs.
+          This timeline reflects common E-Rate planning milestones — actual filing dates may vary
+          based on applicant needs and FCC filing windows.
+        </p>
       </div>
     </div>
   );
