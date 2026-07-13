@@ -1234,6 +1234,106 @@ async def lookup_spin_details(
         )
 
 
+# ==================== CYBERSECURITY PILOT PROGRAM ====================
+
+@router.get("/pilot-frns")
+async def get_pilot_frns(
+    status: Optional[str] = None,
+    refresh: Optional[bool] = False,
+    limit: int = 2000,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
+    db: Session = Depends(get_db),
+):
+    """
+    Cybersecurity Pilot Program FCC Form 471 FRNs for the vendor's SPIN.
+
+    Serves from the locally cached `pilot_frn_snapshots` table for instant loads.
+    A live USAC fetch runs (bounded by VENDOR_FRN_LIVE_TIMEOUT_SECONDS) when the
+    cache is empty or ``refresh=true``; results are written back to the snapshot
+    table. Status changes are diffed/queued by the nightly scheduler job so they
+    flow into the same alert/digest system as E-Rate FRNs.
+    """
+    from ...models.pilot_frn_snapshot import PilotFRNSnapshot
+
+    spin = (profile.spin or "").strip() if profile else ""
+    if not spin:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No SPIN configured in your profile. Please add your SPIN in settings first.",
+        )
+
+    def _local_response():
+        q = db.query(PilotFRNSnapshot).filter(PilotFRNSnapshot.spin == spin)
+        if status:
+            q = q.filter(PilotFRNSnapshot.status.ilike(f"%{status}%"))
+        rows = q.order_by(PilotFRNSnapshot.last_refreshed.desc()).limit(limit).all()
+        frns = [r.to_dict() for r in rows]
+        funded = [f for f in frns if "fund" in str(f["status"]).lower() or "commit" in str(f["status"]).lower()]
+        denied = [f for f in frns if "deni" in str(f["status"]).lower() or "cancel" in str(f["status"]).lower()]
+        pending = [f for f in frns if f not in funded and f not in denied]
+        last_refreshed = max((r.last_refreshed for r in rows), default=None)
+        return {
+            "success": True,
+            "source": "cache",
+            "spin": spin,
+            "total_frns": len(frns),
+            "summary": {
+                "funded": {"count": len(funded), "amount": sum(f["committed_amount"] for f in funded)},
+                "denied": {"count": len(denied), "amount": sum(f["requested_amount"] for f in denied)},
+                "pending": {"count": len(pending), "amount": sum(f["requested_amount"] for f in pending)},
+            },
+            "frns": frns,
+            "last_refreshed": last_refreshed.isoformat() if last_refreshed else None,
+        }
+
+    have_cache = db.query(PilotFRNSnapshot).filter(PilotFRNSnapshot.spin == spin).first() is not None
+
+    if have_cache and not refresh:
+        return _local_response()
+
+    # Live fetch (bounded) + writeback.
+    try:
+        from utils.usac_client import USACDataClient
+        from ...services.frn_upsert import upsert_pilot_snapshots
+
+        client = USACDataClient()
+        live = await asyncio.wait_for(
+            run_in_threadpool(client.get_pilot_frns_by_spin, spin, status, limit),
+            timeout=VENDOR_FRN_LIVE_TIMEOUT_SECONDS,
+        )
+        if live and live.get("success"):
+            try:
+                upsert_pilot_snapshots(
+                    db,
+                    live.get("frns", []) or [],
+                    user_id=current_user.id,
+                    user_email=current_user.email,
+                    spin=spin,
+                    queue_status_changes=False,  # nightly cron owns alerting
+                )
+                db.expire_all()
+            except Exception as _up_err:
+                import logging as _lg
+                _lg.getLogger(__name__).warning(f"[vendor.pilot-frns spin={spin}] writeback failed: {_up_err}")
+            live["source"] = "live"
+            return live
+    except asyncio.TimeoutError:
+        if have_cache:
+            return _local_response()
+        return {
+            "success": True, "source": "timeout", "spin": spin, "total_frns": 0,
+            "summary": {"funded": {"count": 0, "amount": 0}, "denied": {"count": 0, "amount": 0}, "pending": {"count": 0, "amount": 0}},
+            "frns": [], "last_refreshed": None,
+        }
+    except Exception as e:
+        if have_cache:
+            return _local_response()
+        raise HTTPException(status_code=500, detail=f"Failed to fetch Cybersecurity Pilot FRNs: {str(e)}")
+
+    return _local_response()
+
+
 # ==================== FORM 470 LEAD GENERATION (Sprint 3) ====================
 
 class Form470SearchRequest(BaseModel):

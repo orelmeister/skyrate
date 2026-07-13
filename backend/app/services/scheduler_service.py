@@ -1595,6 +1595,62 @@ def refresh_admin_frn_snapshot():
         db.close()
 
 
+def refresh_pilot_frn_snapshot():
+    """
+    Refresh the Cybersecurity Pilot Program FRN snapshot for every vendor SPIN.
+    Runs nightly (after USAC's nightly pilot data refresh). Diffs each vendor's
+    Pilot FCC Form 471 FRNs and queues status changes into FrnStatusChangeQueue
+    so they surface through the SAME alert/digest system as E-Rate FRNs.
+    """
+    logger.info("Running Cybersecurity Pilot FRN snapshot refresh...")
+
+    db = SessionLocal()
+    try:
+        from utils.usac_client import USACDataClient
+        from ..models.vendor import VendorProfile
+        from .frn_upsert import upsert_pilot_snapshots
+
+        vendor_profiles = db.query(
+            VendorProfile.spin, VendorProfile.company_name, VendorProfile.user_id
+        ).filter(VendorProfile.spin.isnot(None), VendorProfile.spin != "").all()
+
+        client = USACDataClient()
+        total = {"inserts": 0, "updates": 0, "alerts": 0}
+        for vp in vendor_profiles:
+            try:
+                result = client.get_pilot_frns_by_spin(vp.spin)
+                if not result.get("success"):
+                    continue
+                frns = result.get("frns", []) or []
+                if not frns:
+                    continue
+                user = db.query(User).filter(User.id == vp.user_id).first()
+                res = upsert_pilot_snapshots(
+                    db, frns,
+                    user_id=vp.user_id,
+                    user_email=user.email if user else "",
+                    spin=vp.spin,
+                    queue_status_changes=True,
+                )
+                for k in total:
+                    total[k] += res.get(k, 0)
+            except Exception as e:
+                logger.warning(f"Pilot FRN snapshot fetch failed for SPIN {vp.spin}: {e}")
+
+        logger.info(
+            f"Pilot FRN snapshot refreshed: {total['inserts']} inserts, "
+            f"{total['updates']} updates, {total['alerts']} alerts queued"
+        )
+    except Exception as e:
+        logger.error(f"Pilot FRN snapshot refresh failed: {e}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+
 def background_refresh_portfolio(uid: int, uemail: str, ben_to_org: dict):
     """
     Background task to pull USAC FRN data for a specific user's BENs and UPSERT them.
@@ -2133,6 +2189,16 @@ def init_scheduler():
         name='Refresh admin FRN snapshot from USAC (daily 10:00 AM PT)',
         replace_existing=True,
         next_run_time=boot + timedelta(minutes=5),
+    )
+
+    # Cybersecurity Pilot FRN snapshot - daily (after USAC nightly pilot refresh)
+    scheduler.add_job(
+        refresh_pilot_frn_snapshot,
+        trigger=CronTrigger(hour=17, minute=30, timezone='UTC'),
+        id='refresh_pilot_frn_snapshot',
+        name='Refresh Cybersecurity Pilot FRN snapshot from USAC (daily)',
+        replace_existing=True,
+        next_run_time=boot + timedelta(minutes=8),
     )
     
     # Predictive leads refresh - weekly on Sunday 2 AM

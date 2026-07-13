@@ -37,6 +37,8 @@ USAC_ENDPOINTS = {
     '470_basic': 'https://opendata.usac.org/resource/jp7a-89nd.json',  # Basic Info (contacts, entity details)
     # Entity Information
     'entity_supplemental': 'https://opendata.usac.org/resource/7i5i-83qf.json',  # Supplemental Entity Info (contacts!)
+    # Cybersecurity Pilot Program (separate USAC pilot, NOT E-Rate)
+    'pilot_471': 'https://opendata.usac.org/resource/qr48-4kx4.json',  # Cybersecurity Pilot FCC Form 471
 }
 
 
@@ -1615,6 +1617,129 @@ class USACDataClient:
                 'success': False,
                 'error': f'Failed to fetch FRN status: {str(e)}'
             }
+
+    def get_pilot_frns_by_spin(
+        self,
+        spin: str,
+        status_filter: Optional[str] = None,
+        limit: int = 2000
+    ) -> Dict[str, Any]:
+        """
+        Get Cybersecurity Pilot Program FCC Form 471 FRNs for a SPIN (vendor).
+
+        The Cybersecurity Pilot is a separate USAC program from E-Rate; its FRNs
+        use a distinct id space (``CBR...``). This queries the Pilot FCC Form 471
+        dataset (qr48-4kx4) which filters directly on the numeric ``spin`` field.
+        The dataset has one row per line item, so rows are collapsed to one entry
+        per FRN (the FRN-level fields repeat across its line items).
+
+        Args:
+            spin: Service Provider Identification Number (numeric)
+            status_filter: Optional frn_status filter ('Funded', 'Denied', ...)
+            limit: Maximum line-item records to fetch
+
+        Returns:
+            Dict with pilot FRN records grouped by status.
+        """
+        try:
+            url = USAC_ENDPOINTS['pilot_471']
+            term = (spin or "").strip()
+            term_safe = term.replace("'", "''")
+
+            # Only the current version of each form (dataset also holds originals).
+            where_conditions = [
+                f"spin = '{term_safe}'",
+                "form_version = 'Current'",
+            ]
+            if status_filter:
+                sf_safe = status_filter.replace("'", "''")
+                where_conditions.append(f"frn_status = '{sf_safe}'")
+
+            params = {
+                '$where': ' AND '.join(where_conditions),
+                '$limit': limit,
+                '$order': 'last_updated_date_time DESC',
+            }
+
+            logger.info(f"Fetching Cybersecurity Pilot FRNs for SPIN {spin}")
+            response = self.session.get(url, params=params, timeout=60)
+            response.raise_for_status()
+            data = response.json() or []
+
+            # Collapse line items to one entry per FRN.
+            by_frn: Dict[str, Dict[str, Any]] = {}
+            for record in data:
+                frn = record.get('frn', '')
+                if not frn:
+                    continue
+                if frn not in by_frn:
+                    by_frn[frn] = {
+                        'frn': frn,
+                        'pilot_471_number': record.get('pilot_fcc_form_471_number', ''),
+                        'pilot_471_nickname': record.get('pilot_fcc_form_471_nickname', ''),
+                        'ben': record.get('billed_entity_number', ''),
+                        'entity_name': record.get('participant_name', ''),
+                        'entity_type': record.get('participant_type', ''),
+                        'state': record.get('participant_state', ''),
+                        'city': record.get('participant_city', ''),
+                        'spin': record.get('spin', '') or spin,
+                        'spin_name': record.get('service_provider_name', ''),
+                        'application_status': record.get('application_status', ''),
+                        'status': record.get('frn_status', 'Unknown'),
+                        'window_status': record.get('window_status', ''),
+                        'service_type': record.get('frn_category_of_service_type', ''),
+                        'requested_amount': _safe_float(record.get('frn_requested_amount', 0)),
+                        'committed_amount': _safe_float(record.get('frn_current_committed_amount', 0)),
+                        'discount_rate': _safe_float(record.get('discount_rate', 0)),
+                        'fcdl_date': record.get('fcdl_date', ''),
+                        'last_updated': record.get('last_updated_date_time', ''),
+                        'service_delivery_deadline': record.get('service_delivery_deadline', ''),
+                        'invoice_deadline': record.get('invoice_deadline_date_last', ''),
+                        'contract_award_date': record.get('contract_award_date', ''),
+                        'contract_expiration_date': record.get('contract_expiration_date', ''),
+                        'fcc_form_470_number': record.get('fcc_form_470_number', ''),
+                        'invoicing_method': record.get('invoicing_method', ''),
+                        'line_item_count': 0,
+                    }
+                by_frn[frn]['line_item_count'] += 1
+
+            frns = list(by_frn.values())
+            funded_count = funded_amount = 0
+            denied_count = denied_amount = 0
+            pending_count = pending_amount = 0
+            for f in frns:
+                sl = str(f['status']).lower()
+                if 'fund' in sl or 'commit' in sl:
+                    funded_count += 1
+                    funded_amount += f['committed_amount']
+                elif 'deni' in sl or 'cancel' in sl:
+                    denied_count += 1
+                    denied_amount += f['requested_amount']
+                else:
+                    pending_count += 1
+                    pending_amount += f['requested_amount']
+
+            return {
+                'success': True,
+                'spin': spin,
+                'spin_name': frns[0]['spin_name'] if frns else '',
+                'total_frns': len(frns),
+                'summary': {
+                    'funded': {'count': funded_count, 'amount': funded_amount},
+                    'denied': {'count': denied_count, 'amount': denied_amount},
+                    'pending': {'count': pending_count, 'amount': pending_amount},
+                },
+                'frns': frns,
+            }
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching Cybersecurity Pilot FRNs for SPIN {spin}: {e}")
+            return {'success': False, 'error': f'Failed to fetch Pilot FRNs: {str(e)}'}
+        except Exception as e:
+            import traceback
+            logger.error(f"Error in get_pilot_frns_by_spin: {type(e).__name__}: {str(e)}\n{traceback.format_exc()}")
+            return {'success': False, 'error': f'Failed to fetch Pilot FRNs: {str(e)}'}
+
 
     def get_frn_status_by_contract(
         self,

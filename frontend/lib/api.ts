@@ -367,6 +367,50 @@ export interface FRNStatusResponse {
   error?: string;
 }
 
+// ==================== CYBERSECURITY PILOT PROGRAM TYPES ====================
+
+export interface PilotFrnRecord {
+  frn: string;
+  pilot_471_number?: string;
+  pilot_471_nickname?: string;
+  status: string;
+  application_status?: string;
+  window_status?: string;
+  requested_amount: number;
+  committed_amount: number;
+  discount_rate: number;
+  service_type?: string;
+  entity_name?: string;
+  entity_type?: string;
+  ben?: string;
+  state?: string;
+  city?: string;
+  spin?: string;
+  spin_name?: string;
+  fcdl_date?: string;
+  last_updated?: string;
+  service_delivery_deadline?: string;
+  invoice_deadline?: string;
+  contract_award_date?: string;
+  contract_expiration_date?: string;
+  fcc_form_470_number?: string;
+  invoicing_method?: string;
+  line_item_count?: number;
+  last_refreshed?: string;
+}
+
+export interface PilotFrnResponse {
+  success: boolean;
+  source?: string;
+  spin: string;
+  total_frns: number;
+  summary: FRNStatusSummary;
+  frns: PilotFrnRecord[];
+  last_refreshed?: string | null;
+  error?: string;
+}
+
+
 // ==================== FRN WATCH / REPORT MONITOR TYPES ====================
 
 export interface FRNWatch {
@@ -2640,6 +2684,19 @@ class ApiClient {
   async getEntityFRNStatus(ben: string, year?: number): Promise<ApiResponse<EntityFRNStatusResponse>> {
     const params = year ? `?year=${year}` : '';
     return this.request(`/api/v1/vendor/frn-status/entity/${ben}${params}`);
+  }
+
+  /**
+   * Get Cybersecurity Pilot Program FCC Form 471 FRNs for the vendor's SPIN.
+   * Set refresh=true to force a live USAC fetch (otherwise served from cache).
+   */
+  async getPilotFrns(status?: string, refresh?: boolean, limit: number = 2000): Promise<ApiResponse<PilotFrnResponse>> {
+    const params = new URLSearchParams();
+    if (status) params.set('status', status);
+    if (refresh) params.set('refresh', 'true');
+    if (limit) params.set('limit', String(limit));
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/api/v1/vendor/pilot-frns${queryString}`);
   }
 
   // ==================== FORM 470 LEAD GENERATION (Sprint 3) ====================

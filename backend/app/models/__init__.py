@@ -30,6 +30,7 @@ from .blog import BlogPost, BlogStatus
 from .usac_cache import USACCache
 from .user_usac_cache import UserUsacCache, UsacSyncJob
 from .admin_frn_snapshot import AdminFRNSnapshot
+from .pilot_frn_snapshot import PilotFRNSnapshot
 from .promo_invite import PromoInvite, PromoInviteStatus
 from .prediction import PredictedLead, PredictionRefreshLog, PredictionType, PredictionStatus
 from .lead import Lead
@@ -92,6 +93,7 @@ __all__ = [
     "UsacSyncJob",
     # Admin FRN Snapshot
     "AdminFRNSnapshot",
+    "PilotFRNSnapshot",
     # Promo Invites
     "PromoInvite",
     "PromoInviteStatus",

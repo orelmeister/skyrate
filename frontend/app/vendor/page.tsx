@@ -18,8 +18,9 @@ import { SkeletonRows, SkeletonTable, SkeletonStatCards } from "@/components/Ske
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { DisbursementPanel } from "@/components/FRNDetailModal";
 import { ChevronRight, ChevronDown } from "lucide-react";
+import PilotFrns from "./PilotFrns";
 
-const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "470-leads", "map", "predicted-leads", "competitive", "search", "leads", "settings"] as const;
+const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "cyber-pilot", "470-leads", "map", "predicted-leads", "competitive", "search", "leads", "settings"] as const;
 type VendorTab = typeof VENDOR_TABS[number];
 
 interface SearchResult {
@@ -1551,6 +1552,7 @@ function VendorPortalPage() {
     { id: "dashboard", label: "Dashboard", icon: "📊" },
     { id: "my-entities", label: "My Entities", icon: "🏫" },
     { id: "frn-status", label: "FRN Status", icon: "📈" },
+    { id: "cyber-pilot", label: "Cybersecurity Pilot", icon: "🛡️" },
     { id: "470-leads", label: "Form 470 Leads", icon: "🎯" },
     { id: "map", label: "Opportunity Map", icon: "🗺️" },
     { id: "predicted-leads", label: "Predicted Leads", icon: "🔮" },
@@ -1968,6 +1970,9 @@ function VendorPortalPage() {
               </div>
             </div>
           )}
+
+        {/* Cybersecurity Pilot Program Tab */}
+        {activeTab === "cyber-pilot" && <PilotFrns />}
 
         {/* FRN Status Monitoring Tab (Sprint 2) */}
         {activeTab === "frn-status" && (
