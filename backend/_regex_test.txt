@@ -1,3 +1,0 @@
-﻿'price - 60%': False
-'price: 51%': False
-'cost: 55%': False
