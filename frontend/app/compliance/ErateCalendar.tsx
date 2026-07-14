@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { CalendarDays, Clock, CheckCircle2, Lock } from "lucide-react";
-import { api, type Form471WindowResponse } from "@/lib/api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { CalendarDays, Clock, CheckCircle2, Circle, Loader2, Lock } from "lucide-react";
+import { useAuthStore } from "@/lib/auth-store";
+import {
+  api,
+  type Form471WindowResponse,
+  type CompliancePlanResponse,
+  type TrackerPhaseGroup,
+  type TrackerTask,
+} from "@/lib/api";
 
 /**
  * E-Rate Annual Calendar / Planning Timeline (Ari feedback #12).
@@ -183,6 +190,11 @@ const PHASES: Phase[] = [
   },
 ];
 
+function formatDue(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 export default function ErateCalendar() {
   const [win, setWin] = useState<Form471WindowResponse | null>(null);
   const currentMonth = new Date().getMonth() + 1;
@@ -201,6 +213,44 @@ export default function ErateCalendar() {
       active = false;
     };
   }, []);
+
+  const { isAuthenticated, _hasHydrated } = useAuthStore();
+  const [plan, setPlan] = useState<CompliancePlanResponse | null>(null);
+  const [savingId, setSavingId] = useState<number | null>(null);
+
+  const loadPlan = useCallback(async () => {
+    try {
+      const resp = await api.getCompliancePlan();
+      if (resp.success && resp.data) setPlan(resp.data);
+    } catch {
+      /* non-blocking */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!_hasHydrated || !isAuthenticated) return;
+    loadPlan();
+  }, [_hasHydrated, isAuthenticated, loadPlan]);
+
+  const phaseMap = useMemo(() => {
+    const m: Record<number, TrackerPhaseGroup> = {};
+    plan?.phases.forEach((p) => {
+      m[p.phase_step] = p;
+    });
+    return m;
+  }, [plan]);
+
+  async function toggleTask(t: TrackerTask) {
+    if (savingId) return;
+    const next = t.status === "complete" ? "not_started" : "complete";
+    setSavingId(t.id);
+    try {
+      const resp = await api.updateComplianceTaskStatus(t.id, next);
+      if (resp.success) await loadPlan();
+    } finally {
+      setSavingId(null);
+    }
+  }
 
   // The single "current" planning phase = the first cycle step whose months
   // include the current month (steps 1-9). Continuous phases (10-12) are marked
@@ -253,6 +303,34 @@ export default function ErateCalendar() {
         )}
       </div>
 
+      {/* Overall compliance meter (authenticated users only) */}
+      {plan && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">
+                Your FY{plan.funding_year} compliance
+              </h3>
+              <p className="text-xs text-slate-500">
+                {plan.required_complete} of {plan.required_total} required items complete
+                {plan.overdue_total > 0 && (
+                  <span className="ml-1 font-medium text-rose-600">
+                    &middot; {plan.overdue_total} overdue
+                  </span>
+                )}
+              </p>
+            </div>
+            <div className="text-2xl font-bold text-indigo-600">{plan.overall_percent}%</div>
+          </div>
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all"
+              style={{ width: `${plan.overall_percent}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Timeline grid */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {PHASES.map((phase) => {
@@ -294,14 +372,71 @@ export default function ErateCalendar() {
                 <span aria-hidden>{phase.icon}</span>
                 {phase.title}
               </h3>
-              <ul className="mt-2 space-y-1">
-                {phase.bullets.map((b, i) => (
-                  <li key={i} className="flex gap-2 text-xs text-slate-600">
-                    <span className="mt-1.5 h-1 w-1 flex-shrink-0 rounded-full bg-indigo-400" />
-                    <span>{b}</span>
-                  </li>
-                ))}
-              </ul>
+              {(() => {
+                const group = phaseMap[phase.step];
+                if (!group || group.tasks.length === 0) {
+                  return (
+                    <ul className="mt-2 space-y-1">
+                      {phase.bullets.map((b, i) => (
+                        <li key={i} className="flex gap-2 text-xs text-slate-600">
+                          <span className="mt-1.5 h-1 w-1 flex-shrink-0 rounded-full bg-indigo-400" />
+                          <span>{b}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  );
+                }
+                return (
+                  <>
+                    <div className="mt-2 flex items-center gap-2">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className="h-full rounded-full bg-indigo-500 transition-all"
+                          style={{ width: `${group.percent}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] font-semibold text-slate-500">{group.percent}%</span>
+                    </div>
+                    <ul className="mt-2 space-y-1.5">
+                      {group.tasks.map((t) => {
+                        const done = t.status === "complete";
+                        const saving = savingId === t.id;
+                        return (
+                          <li key={t.id}>
+                            <button
+                              type="button"
+                              onClick={() => toggleTask(t)}
+                              disabled={saving}
+                              className="group flex w-full items-start gap-2 text-left text-xs"
+                            >
+                              {saving ? (
+                                <Loader2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 animate-spin text-indigo-500" />
+                              ) : done ? (
+                                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-500" />
+                              ) : (
+                                <Circle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-slate-300 group-hover:text-indigo-400" />
+                              )}
+                              <span className={done ? "text-slate-400 line-through" : "text-slate-700"}>
+                                {t.title}
+                                {t.due_date && (
+                                  <span
+                                    className={`ml-1 whitespace-nowrap text-[10px] ${
+                                      t.is_overdue ? "font-semibold text-rose-600" : "text-slate-400"
+                                    }`}
+                                  >
+                                    &middot; {t.is_overdue ? "overdue " : "due "}
+                                    {formatDue(t.due_date)}
+                                  </span>
+                                )}
+                              </span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </>
+                );
+              })()}
             </div>
           );
         })}

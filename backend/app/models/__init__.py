@@ -37,6 +37,7 @@ from .lead import Lead
 from .email_verification_token import EmailVerificationToken
 from .compliance_analysis import ComplianceAnalysis
 from .frn_status_change import FrnStatusChangeQueue
+from .compliance_tracker import CompliancePlan, ComplianceTask, ComplianceTaskTemplate
 
 __all__ = [
     "User",
@@ -108,4 +109,8 @@ __all__ = [
     "EmailVerificationToken",
     # Compliance audit history
     "ComplianceAnalysis",
+    # Compliance / assignment tracker
+    "CompliancePlan",
+    "ComplianceTask",
+    "ComplianceTaskTemplate",
 ]

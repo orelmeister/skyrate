@@ -766,6 +766,46 @@ export interface Form471WindowResponse {
   message: string;
 }
 
+// ==================== COMPLIANCE / ASSIGNMENT TRACKER TYPES ====================
+
+export interface TrackerTask {
+  id: number;
+  phase_step: number;
+  title: string;
+  category: string;
+  required: boolean;
+  due_date: string | null;
+  status: 'not_started' | 'in_progress' | 'complete' | 'skipped' | 'blocked';
+  is_overdue: boolean;
+  document_analysis_id: number | null;
+  notes: string | null;
+  is_custom: boolean;
+  sort_order: number;
+}
+
+export interface TrackerPhaseGroup {
+  phase_step: number;
+  total: number;
+  required_total: number;
+  complete: number;
+  required_complete: number;
+  percent: number;
+  overdue: number;
+  next_due: string | null;
+  tasks: TrackerTask[];
+}
+
+export interface CompliancePlanResponse {
+  plan_id: number;
+  funding_year: number;
+  ben: string | null;
+  overall_percent: number;
+  required_total: number;
+  required_complete: number;
+  overdue_total: number;
+  phases: TrackerPhaseGroup[];
+}
+
 // ==================== EQUIPMENT & WISHLIST TYPES ====================
 
 export interface EquipmentItem {
@@ -2787,6 +2827,55 @@ class ApiClient {
    */
   async getForm471Window(): Promise<ApiResponse<Form471WindowResponse>> {
     return this.request(`/api/v1/compliance/form471-window`);
+  }
+
+  // ==================== COMPLIANCE / ASSIGNMENT TRACKER ====================
+
+  /** Get (or lazily create) the current user's compliance tracker plan. */
+  async getCompliancePlan(fundingYear?: number): Promise<ApiResponse<CompliancePlanResponse>> {
+    const qs = fundingYear ? `?funding_year=${fundingYear}` : '';
+    return this.request(`/api/v1/compliance/tracker/plan${qs}`);
+  }
+
+  /** Update a tracker task's status (mark complete, in progress, skipped, etc.). */
+  async updateComplianceTaskStatus(
+    taskId: number,
+    status: TrackerTask['status'],
+  ): Promise<ApiResponse<TrackerTask>> {
+    return this.request(`/api/v1/compliance/tracker/task/${taskId}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  /** Add a user-defined task to a phase of the current plan. */
+  async addComplianceTask(
+    payload: { phase_step: number; title: string; category?: string; due_date?: string | null; required?: boolean },
+    fundingYear?: number,
+  ): Promise<ApiResponse<TrackerTask>> {
+    const qs = fundingYear ? `?funding_year=${fundingYear}` : '';
+    return this.request(`/api/v1/compliance/tracker/task${qs}`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  /** Edit a task's due date and/or notes. */
+  async patchComplianceTask(
+    taskId: number,
+    payload: { due_date?: string | null; notes?: string | null },
+  ): Promise<ApiResponse<TrackerTask>> {
+    return this.request(`/api/v1/compliance/tracker/task/${taskId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  /** Delete a user-added custom task. */
+  async deleteComplianceTask(taskId: number): Promise<ApiResponse<void>> {
+    return this.request(`/api/v1/compliance/tracker/task/${taskId}`, {
+      method: 'DELETE',
+    });
   }
 
   /**
