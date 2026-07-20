@@ -195,3 +195,98 @@ async def capture_lead(
     background_tasks.add_task(_send_admin_lead_email, lead.id, lead.to_dict())
 
     return LeadCaptureResponse(success=True, lead_id=lead.id)
+
+
+# ==================== DEMO BOOKING ====================
+
+import os
+
+_CALENDAR_URL = os.environ.get(
+    "DEMO_CALENDAR_URL", "https://calendar.app.google/edkn1FDx2mBngFGs9"
+)
+
+
+class DemoRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    email: EmailStr
+    phone: Optional[str] = Field(None, max_length=50)
+    role: Literal["consultant", "vendor", "applicant", "unsure"] = "unsure"
+    organization: Optional[str] = Field(None, max_length=255)
+    source: str = Field("skyrate.ai/demo", max_length=255)
+    hp: Optional[str] = Field(None, alias="_hp")
+
+    class Config:
+        populate_by_name = True
+
+
+class DemoResponse(BaseModel):
+    success: bool
+    lead_id: int
+    calendar_url: str
+
+
+@router.post("/demo", response_model=DemoResponse, status_code=status.HTTP_200_OK)
+async def request_demo(
+    payload: DemoRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Public demo-request intake. Captures the prospect, fires an INSTANT
+    Telegram alert (so a booking is never missed again), then returns the
+    Google Calendar URL for the frontend to redirect to.
+    """
+    client_ip = (request.client.host if request.client else "unknown") or "unknown"
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        client_ip = fwd.split(",")[0].strip() or client_ip
+
+    if not _check_rate_limit(client_ip):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many requests. Please try again in a minute.",
+        )
+
+    # Honeypot — bots get the calendar URL but no lead/alert is created.
+    if getattr(payload, "hp", None):
+        logger.warning(f"Demo honeypot triggered from {client_ip}")
+        return DemoResponse(success=True, lead_id=0, calendar_url=_CALENDAR_URL)
+
+    lead = Lead(
+        name=payload.name.strip(),
+        email=str(payload.email).lower().strip(),
+        phone=_strip_phone(payload.phone),
+        role=payload.role,
+        organization=(payload.organization or "").strip() or None,
+        source=(payload.source or "skyrate.ai/demo").strip(),
+        ip_address=client_ip,
+        user_agent=(request.headers.get("user-agent") or "")[:500] or None,
+        status="new",
+        notes="Demo booking request (redirected to calendar).",
+    )
+    db.add(lead)
+    db.commit()
+    db.refresh(lead)
+    logger.info(f"Demo request: id={lead.id} email={lead.email} org={lead.organization}")
+
+    # INSTANT Telegram alert — synchronous so it is never dropped. This is the
+    # whole point of the intake step: a Google Calendar self-booking never hits
+    # our backend, so without this the team gets no in-app/Telegram notice.
+    try:
+        from ...services.telegram_alerts import send_alert
+        parts = [f"Name: {lead.name}", f"Email: {lead.email}"]
+        if lead.organization:
+            parts.append(f"Org: {lead.organization}")
+        if lead.role and lead.role != "unsure":
+            parts.append(f"Role: {lead.role}")
+        if lead.phone:
+            parts.append(f"Phone: {lead.phone}")
+        send_alert(
+            title="New demo request",
+            body="\n".join(parts),
+            severity="info",
+            link="https://skyrate.ai/superadmin/leads",
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"Telegram demo alert failed: {e}")
+
+    return DemoResponse(success=True, lead_id=lead.id, calendar_url=_CALENDAR_URL)
