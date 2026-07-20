@@ -3,21 +3,21 @@ import Link from "next/link";
 import { Check, ArrowRight, Bell, Activity, Clock, Mail, BarChart3, Shield, Database, History } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "FRN Status Tracker 2026 — Free Real-Time E-Rate Alerts | SkyRate",
-  description: "Track any E-Rate FRN status in real time. Get instant USAC alerts when your funding is committed, denied, or flagged. Free — no account needed. Updated July 2026.",
+  title: "FRN Tracker & Status Checker 2026 — Free E-Rate FRN Lookup | SkyRate",
+  description: "Check any E-Rate FRN's status free in seconds — no signup. Or automate it: real-time USAC alerts the moment your funding is committed, denied, or flagged. Updated July 2026.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/features/frn-monitoring" },
   openGraph: {
-    title: "FRN Status Tracker 2026 — Free Real-Time E-Rate Alerts | SkyRate",
-    description: "Track any E-Rate FRN status in real time. Get instant USAC alerts when your funding is committed, denied, or flagged. Free — no account needed. Updated July 2026.",
+    title: "FRN Tracker & Status Checker 2026 — Free E-Rate FRN Lookup | SkyRate",
+    description: "Check any E-Rate FRN's status free in seconds — no signup. Or automate it: real-time USAC alerts when funding is committed, denied, or flagged. Updated July 2026.",
     url: "https://skyrate.ai/features/frn-monitoring",
     siteName: "SkyRate AI",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "FRN Status Tracker 2026 — Free Real-Time E-Rate Alerts | SkyRate",
-    description: "Track any E-Rate FRN status in real time. Instant USAC alerts when funding is committed, denied, or flagged. Free — no account needed. Updated July 2026.",
+    title: "FRN Tracker & Status Checker 2026 — Free E-Rate FRN Lookup | SkyRate",
+    description: "Check any E-Rate FRN's status free in seconds — no signup. Or automate real-time USAC alerts when funding is committed, denied, or flagged. Updated July 2026.",
   },
 };
 
@@ -135,7 +135,12 @@ export default function FRNMonitoringFeaturePage() {
             </h2>
             <p className="text-lg text-slate-600 max-w-2xl mx-auto">
               E-Rate consultants and applicants spend hours every week logging into USAC portals to
-              check FRN statuses manually. With SkyRate AI, monitoring is automatic and continuous.
+              check FRN statuses manually. With SkyRate AI, monitoring is automatic and continuous &mdash;
+              see our{" "}
+              <Link href="/pricing" className="text-purple-600 hover:text-purple-700 underline font-medium">
+                E-Rate software pricing
+              </Link>{" "}
+              to compare plans.
             </p>
           </div>
           <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
