@@ -41,7 +41,12 @@ METRIC_LABELS: dict[str, str] = {
 }
 
 # Max characters of bid text sent to the LLM (shared budget across all bids).
-MAX_TOTAL_CHARS = 120_000
+# Kept deliberately modest: field extraction only needs the substantive parts of each
+# bid, and input size is the dominant driver of generation latency. Sending the old
+# 120k chars (~30k tokens) pushed the Gemini call past the platform gateway timeout on
+# multi-bid uploads -> the client saw a 504. 40k chars keeps a typical 2-4 bid analysis
+# comfortably under the gateway limit while preserving every scored field.
+MAX_TOTAL_CHARS = 40_000
 
 SYSTEM_PROMPT = """You are an E-Rate bid evaluation analyst helping a school or library \
 review the competing vendor bids it received in response to a Form 470 competitive bidding \
@@ -258,17 +263,31 @@ async def analyze_bids(
         # That starves uvicorn/health checks and lets a slow generation ride past the
         # platform gateway limit -> the client sees a 504 Gateway Timeout (exactly the
         # "server error" reported on Bid Analysis). Run it in a worker thread so the
-        # event loop stays responsive, and cap it with a request timeout so a hung
-        # upstream fails fast with a clean message instead of a 504.
-        response = await asyncio.to_thread(
-            model.generate_content,
-            prompt,
-            generation_config=genai.GenerationConfig(
-                temperature=0.2,
-                response_mime_type="application/json",
-            ),
-            request_options={"timeout": 55},
-        )
+        # event loop stays responsive, cap the SDK network call, AND wrap the whole
+        # thing in a hard wall-clock deadline so a hung upstream returns a clean,
+        # actionable message well BEFORE the gateway would emit a 504.
+        try:
+            response = await asyncio.wait_for(
+                asyncio.to_thread(
+                    model.generate_content,
+                    prompt,
+                    generation_config=genai.GenerationConfig(
+                        temperature=0.2,
+                        max_output_tokens=8192,
+                        response_mime_type="application/json",
+                    ),
+                    request_options={"timeout": 40},
+                ),
+                timeout=44,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Bid analysis timed out (>44s, bids=%d)", len(bids))
+            return _empty_result(
+                "The analysis took too long and was stopped before finishing. "
+                "Try again with fewer or smaller bid files (2-3 works best), or "
+                "remove very long attachments/appendices from the PDFs.",
+                norm_weights, price_is_primary,
+            )
 
         # Safely extract the model text. With google.generativeai, accessing
         # response.text raises a ValueError when the candidate was safety-
@@ -406,6 +425,14 @@ async def analyze_bids(
         # Surface the actual error type/message so the UI shows WHY it failed
         # instead of an opaque generic message.
         logger.exception("Bid analysis failed")
+        emsg = f"{type(e).__name__}: {e}".lower()
+        if "deadline" in emsg or "timeout" in emsg or "504" in emsg:
+            return _empty_result(
+                "The analysis took too long and was stopped before finishing. "
+                "Try again with fewer or smaller bid files (2-3 works best), or "
+                "remove very long attachments/appendices from the PDFs.",
+                norm_weights, price_is_primary,
+            )
         return _empty_result(
             f"Bid analysis failed: {type(e).__name__}: {e}",
             norm_weights, price_is_primary,
