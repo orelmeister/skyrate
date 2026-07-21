@@ -227,7 +227,10 @@ async def analyze_bids(
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
+            # Use the app-wide configured model (default gemini-2.5-flash). The old
+            # hardcoded "gemini-2.0-flash" was RETIRED by Google (404 NotFound), which
+            # made every bid analysis fail and surface as a 502/"server error".
+            model_name=(settings.GEMINI_MODEL or "gemini-2.5-flash"),
             system_instruction=SYSTEM_PROMPT,
         )
 
