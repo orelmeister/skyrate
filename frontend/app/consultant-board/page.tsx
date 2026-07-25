@@ -126,7 +126,7 @@ export default function ConsultantBoard() {
             const dueCls = c.dueRisk >= 2 ? "text-rose-400 font-semibold" : c.dueRisk >= 1 ? "text-amber-400" : "text-slate-400";
             return (
               <div key={c.ben} className="border-b border-slate-800 last:border-0">
-                <button onClick={() => setOpen(open === c.ben ? null : c.ben)} className="w-full text-left grid grid-cols-2 md:grid-cols-[2.4fr_1.5fr_1.3fr_1.5fr_0.9fr_96px] gap-3.5 items-center px-4 py-3 hover:bg-slate-800/40 transition">
+                <div onClick={() => setOpen(open === c.ben ? null : c.ben)} role="button" tabIndex={0} className="w-full text-left grid grid-cols-2 md:grid-cols-[2.4fr_1.5fr_1.3fr_1.5fr_0.9fr_96px] gap-3.5 items-center px-4 py-3 hover:bg-slate-800/40 transition cursor-pointer">
                   <div><b className="text-sm block">{c.name}</b><span className="text-[11.5px] text-slate-400">BEN {c.ben} · {c.st} · ${(c.amt / 1000).toFixed(0)}K at stake</span></div>
                   <div className="hidden md:block text-[12.5px] text-slate-200">Phase {c.phase}<span className="block text-[11px] text-slate-400">{c.pt}</span></div>
                   <div className="flex items-center gap-2.5">
@@ -144,7 +144,7 @@ export default function ConsultantBoard() {
                       <button className="w-full text-[11.5px] rounded-lg px-2.5 py-2 border border-slate-700 text-slate-500 cursor-default">{c.owner === null ? "—" : "Ours"}</button>
                     )}
                   </div>
-                </button>
+                </div>
                 {open === c.ben && (
                   <div className="px-4 pb-4">
                     <div className="border-t border-dashed border-slate-700 pt-3.5">

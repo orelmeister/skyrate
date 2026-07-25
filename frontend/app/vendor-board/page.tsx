@@ -134,7 +134,7 @@ export default function VendorBoard() {
             const canBid = o.status === "new" || o.status === "reviewing";
             return (
               <div key={o.f470} className="border-b border-slate-800 last:border-0">
-                <button onClick={() => setOpen(open === o.f470 ? null : o.f470)} className="w-full text-left grid grid-cols-2 md:grid-cols-[2.3fr_1.6fr_1fr_1.2fr_1fr_104px] gap-3.5 items-center px-4 py-3 hover:bg-slate-800/40 transition">
+                <div onClick={() => setOpen(open === o.f470 ? null : o.f470)} role="button" tabIndex={0} className="w-full text-left grid grid-cols-2 md:grid-cols-[2.3fr_1.6fr_1fr_1.2fr_1fr_104px] gap-3.5 items-center px-4 py-3 hover:bg-slate-800/40 transition cursor-pointer">
                   <div><b className="text-sm block">{o.district}</b><span className="text-[11.5px] text-slate-400">{o.f470} · {o.st} · ${(o.value / 1000).toFixed(0)}K</span></div>
                   <div className="hidden md:block text-[12.5px] text-slate-200">{o.service}</div>
                   <div className="flex items-center gap-2">
@@ -150,7 +150,7 @@ export default function VendorBoard() {
                       <button className="w-full text-[11.5px] rounded-lg px-2 py-2 border border-slate-700 text-slate-500 cursor-default">{o.status === "submitted" ? "Awaiting" : o.status === "won" ? "Won" : "Closed"}</button>
                     )}
                   </div>
-                </button>
+                </div>
                 {open === o.f470 && (
                   <div className="px-4 pb-4">
                     <div className="border-t border-dashed border-slate-700 pt-3.5 grid md:grid-cols-2 gap-4">
