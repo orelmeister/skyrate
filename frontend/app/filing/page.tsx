@@ -6,11 +6,12 @@ import {
   PenLine, ClipboardList, Upload, Calendar, Clock, AlertTriangle, Check,
   Target, Sparkles, LayoutGrid, X, Flame, ArrowRight, FileText, Bell,
 } from "lucide-react";
+import { api, type CompliancePlanResponse, type TrackerTask } from "@/lib/api";
 
 /* ----------------------------- data ----------------------------- */
 type Owner = "you" | "team";
 type Col = "todo" | "doing" | "waiting" | "done";
-type Task = { id: string; t: string; own: Owner; col: Col; due: string; doc?: boolean; blk?: string };
+type Task = { id: string; t: string; own: Owner; col: Col; due: string; doc?: boolean; blk?: string; realId?: number; required?: boolean };
 type Phase = { n: number; mo: string; title: string; state: "done" | "current" | "future" };
 
 const PHASES: Phase[] = [
@@ -111,6 +112,43 @@ const SURVEY = [
 const READY_TOTAL = 22;
 const READY_BASE = 15;
 
+/* --------------- real compliance-tracker mapping (authed users) --------------- */
+function statusToCol(s: TrackerTask["status"]): Col {
+  if (s === "complete") return "done";
+  if (s === "in_progress") return "doing";
+  if (s === "blocked") return "waiting";
+  return "todo";
+}
+const YOU_RE = /\b(sign|upload|provide|approve|certify|complete|answer|confirm|submit|retain|maintain|review|respond)\b/i;
+function ownerFor(title: string): Owner { return YOU_RE.test(title) ? "you" : "team"; }
+function fmtDue(iso: string): string {
+  try { return new Date(iso + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
+  catch { return iso; }
+}
+function planToState(plan: CompliancePlanResponse): { tasks: Record<number, Task[]>; phaseState: Record<number, Phase["state"]>; current: number } {
+  const tasks: Record<number, Task[]> = {};
+  for (let n = 1; n <= 12; n++) tasks[n] = [];
+  const byStep: Record<number, CompliancePlanResponse["phases"][number]> = {};
+  plan.phases.forEach((g) => { byStep[g.phase_step] = g; });
+  for (let n = 1; n <= 12; n++) {
+    const g = byStep[n];
+    if (g) tasks[n] = [...g.tasks].sort((a, b) => a.sort_order - b.sort_order).map((tk) => ({
+      id: String(tk.id), realId: tk.id, t: tk.title, own: ownerFor(tk.title),
+      col: statusToCol(tk.status), due: tk.due_date ? fmtDue(tk.due_date) : (tk.is_overdue ? "overdue" : "\u2014"),
+      doc: tk.category === "document", required: tk.required,
+    }));
+  }
+  const phaseState: Record<number, Phase["state"]> = {};
+  let current = 12; let currentSet = false;
+  for (let n = 1; n <= 12; n++) {
+    const g = byStep[n]; const pct = g ? g.percent : 0;
+    if (pct >= 100) phaseState[n] = "done";
+    else if (!currentSet) { phaseState[n] = "current"; current = n; currentSet = true; }
+    else phaseState[n] = "future";
+  }
+  return { tasks, phaseState, current };
+}
+
 /* ----------------------------- component ----------------------------- */
 export default function FilingBoard() {
   const params = useSearchParams();
@@ -136,6 +174,7 @@ export default function FilingBoard() {
   const [uploaded, setUploaded] = useState(false);
   const [surveyStep, setSurveyStep] = useState(0);
   const [surveyAns, setSurveyAns] = useState<(number | null)[]>([null, null, null]);
+  const [plan, setPlan] = useState<CompliancePlanResponse | null>(null);
 
   // countdown
   const [cd, setCd] = useState({ d: 27, h: 14, m: 5 });
@@ -163,13 +202,54 @@ export default function FilingBoard() {
     return () => clearTimeout(id);
   }, [toast]);
 
+  // When signed in, load the user's REAL compliance-tracker plan and drive the
+  // board from it. Any failure (or no auth) silently keeps the demo data so the
+  // page still showcases perfectly for public / prospect review.
+  useEffect(() => {
+    let cancelled = false;
+    const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+    if (!token) return;
+    api.getCompliancePlan(2026).then((res) => {
+      if (cancelled || !res?.data?.phases?.length) return;
+      const mapped = planToState(res.data);
+      setTasks(mapped.tasks);
+      setPhaseState(mapped.phaseState);
+      setSelected(mapped.current);
+      setPlan(res.data);
+    }).catch(() => { /* keep demo data */ });
+    return () => { cancelled = true; };
+  }, []);
+
   const resolvedCount = useMemo(
     () => (tasks[3] || []).filter((t) => t.blk && t.col === "done").length,
     [tasks],
   );
-  const readyN = READY_BASE + resolvedCount;
-  const pct = Math.round((readyN / READY_TOTAL) * 100);
-  const itemsLeft = 3 - resolvedCount;
+  const currentPhaseNum = useMemo(() => {
+    for (let n = 1; n <= 12; n++) if (phaseState[n] === "current") return n;
+    return 3;
+  }, [phaseState]);
+  const realReq = useMemo(() => {
+    if (!plan) return null;
+    let total = 0, done = 0;
+    for (let n = 1; n <= 12; n++) for (const t of tasks[n] || []) if (t.required) { total++; if (t.col === "done") done++; }
+    return { total, done, pct: total ? Math.round((done / total) * 100) : 0 };
+  }, [plan, tasks]);
+  const blockerItems = useMemo(() => {
+    if (plan) {
+      return (tasks[currentPhaseNum] || []).filter((t) => t.own === "you" && t.col !== "done").slice(0, 4)
+        .map((t) => ({ id: t.id, phase: currentPhaseNum, title: t.t, sub: t.required ? "Required to file" : "Recommended step", cta: "Open", kind: inferKind(t), done: false }));
+    }
+    const find = (k: string) => (tasks[3] || []).find((x) => x.blk === k);
+    return [
+      { id: find("loa")?.id || "3c", phase: 3, title: "Sign your Letter of Agency", sub: "Lets us file on your behalf", cta: "Sign now", kind: "loa" as Kind, done: find("loa")?.col === "done" },
+      { id: find("survey")?.id || "3d", phase: 3, title: "Complete the services survey", sub: "Tells us what to bid out", cta: "Start", kind: "survey" as Kind, done: find("survey")?.col === "done" },
+      { id: find("inventory")?.id || "3e", phase: 3, title: "Upload current network inventory", sub: "Needed for the RFP scope", cta: "Upload", kind: "upload" as Kind, done: find("inventory")?.col === "done" },
+    ];
+  }, [plan, tasks, currentPhaseNum]);
+  const readyN = realReq ? realReq.done : READY_BASE + resolvedCount;
+  const readyTotal = realReq ? realReq.total : READY_TOTAL;
+  const pct = realReq ? realReq.pct : Math.round((readyN / READY_TOTAL) * 100);
+  const itemsLeft = blockerItems.filter((b) => !b.done).length;
 
   const drawerTask = drawer ? (tasks[drawer.phase] || []).find((t) => t.id === drawer.taskId) || null : null;
   const drawerKind = drawerTask ? inferKind(drawerTask) : "simple";
@@ -185,11 +265,14 @@ export default function FilingBoard() {
     const t = (tasks[3] || []).find((x) => x.blk === key);
     if (t) openTask(3, t.id);
   }
+  void openBlocker;
   function closeDrawer() {
     setDrawer(null);
   }
 
   function completeTask(phase: number, taskId: string) {
+    const rt = (tasks[phase] || []).find((t) => t.id === taskId);
+    if (plan && rt?.realId) { api.updateComplianceTaskStatus(rt.realId, "complete").catch(() => {}); }
     setTasks((prev) => {
       const next = { ...prev, [phase]: (prev[phase] || []).map((t) => (t.id === taskId ? { ...t, col: "done" as Col } : t)) };
       const all = (next[phase] || []).every((t) => t.col === "done");
@@ -295,7 +378,7 @@ export default function FilingBoard() {
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <b className="text-[42px] font-extrabold leading-none">{pct}%</b>
-                <span className="text-[11.5px] text-slate-400 mt-1">{readyN} / {READY_TOTAL} ready</span>
+                <span className="text-[11.5px] text-slate-400 mt-1">{readyN} / {readyTotal} ready</span>
               </div>
             </div>
             <div className={`text-xs font-bold text-slate-950 rounded-full px-3.5 py-1.5 bg-gradient-to-br ${itemsLeft <= 0 ? "from-emerald-500 to-teal-400" : brand.grad}`}>
@@ -334,25 +417,21 @@ export default function FilingBoard() {
               <AlertTriangle className="w-4 h-4 text-amber-400" /> Blocking your filing
             </h3>
             <div className="text-[11.5px] text-slate-400 mb-2.5">Clear these and we can file your 470</div>
-            {[
-              { key: "loa", icon: <PenLine className="w-4 h-4" />, t: "Sign your Letter of Agency", s: "Lets us file on your behalf", cta: "Sign now" },
-              { key: "survey", icon: <ClipboardList className="w-4 h-4" />, t: "Complete the services survey", s: "Tells us what to bid out", cta: "Start" },
-              { key: "inventory", icon: <FileText className="w-4 h-4" />, t: "Upload current network inventory", s: "Needed for the RFP scope", cta: "Upload" },
-            ].map((b) => {
-              const done = (tasks[3] || []).find((t) => t.blk === b.key)?.col === "done";
+            {blockerItems.map((b) => {
+              const kindIcon = b.kind === "loa" ? <PenLine className="w-4 h-4" /> : b.kind === "survey" ? <ClipboardList className="w-4 h-4" /> : b.kind === "upload" ? <FileText className="w-4 h-4" /> : <Target className="w-4 h-4" />;
               return (
-                <div key={b.key} className={`flex items-center gap-2.5 p-2.5 rounded-xl mb-2 border transition ${done ? "border-emerald-900 bg-emerald-950/40 opacity-75" : "border-amber-900/60 bg-amber-950/30"}`}>
-                  <div className={`w-[30px] h-[30px] rounded-lg flex items-center justify-center flex-none ${done ? "bg-emerald-900/50 text-emerald-300" : "bg-amber-900/50 text-amber-400"}`}>
-                    {done ? <Check className="w-4 h-4" /> : b.icon}
+                <div key={b.id} className={`flex items-center gap-2.5 p-2.5 rounded-xl mb-2 border transition ${b.done ? "border-emerald-900 bg-emerald-950/40 opacity-75" : "border-amber-900/60 bg-amber-950/30"}`}>
+                  <div className={`w-[30px] h-[30px] rounded-lg flex items-center justify-center flex-none ${b.done ? "bg-emerald-900/50 text-emerald-300" : "bg-amber-900/50 text-amber-400"}`}>
+                    {b.done ? <Check className="w-4 h-4" /> : kindIcon}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <b className="text-[12.5px] block">{b.t}</b>
-                    <span className="text-[11px] text-slate-400">{b.s}</span>
+                    <b className="text-[12.5px] block">{b.title}</b>
+                    <span className="text-[11px] text-slate-400">{b.sub}</span>
                   </div>
-                  {done ? (
+                  {b.done ? (
                     <span className="text-[11.5px] font-bold text-emerald-300 bg-emerald-900/40 rounded-lg px-2.5 py-1.5">Done</span>
                   ) : (
-                    <button onClick={() => openBlocker(b.key)} className={`text-[11.5px] font-bold text-slate-950 rounded-lg px-2.5 py-1.5 bg-gradient-to-br ${brand.grad} whitespace-nowrap`}>{b.cta}</button>
+                    <button onClick={() => openTask(b.phase, b.id)} className={`text-[11.5px] font-bold text-slate-950 rounded-lg px-2.5 py-1.5 bg-gradient-to-br ${brand.grad} whitespace-nowrap`}>{b.cta}</button>
                   )}
                 </div>
               );
