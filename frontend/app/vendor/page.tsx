@@ -48,12 +48,12 @@ async function forceDownloadFile(url: string, suggestedFilename?: string): Promi
     try {
       const u = new URL(url);
       if (u.hostname === "publicdata.usac.org") {
-        // Always route USAC PDFs through the backend proxy â€” same-origin request
+        // Always route USAC PDFs through the backend proxy — same-origin request
         // avoids CORS issues and gives the browser proper Content-Disposition.
         fetchUrl = `/api/v1/vendor/rfp-download?url=${encodeURIComponent(url)}`;
       }
     } catch {
-      // not a parseable URL â€” fall through to direct fetch
+      // not a parseable URL — fall through to direct fetch
     }
 
     const response = await fetch(fetchUrl, { method: "GET", credentials: "same-origin" });
@@ -139,7 +139,7 @@ function VendorCommandCenter({
           </h1>
           <p className="text-slate-400 mt-1 text-sm">
             {stats ? (
-              <>You service <span className="text-slate-200 font-medium">{stats.total_entities.toLocaleString()}</span> entities â€” {leadsLoaded ? (<><span className="text-slate-200 font-medium">{leadsTotal.toLocaleString()}</span> open opportunities today.</>) : "loading opportunitiesâ€¦"}</>
+              <>You service <span className="text-slate-200 font-medium">{stats.total_entities.toLocaleString()}</span> entities — {leadsLoaded ? (<><span className="text-slate-200 font-medium">{leadsTotal.toLocaleString()}</span> open opportunities today.</>) : "loading opportunities…"}</>
             ) : "Here's your E-Rate opportunity command center."}
           </p>
         </div>
@@ -170,7 +170,7 @@ function VendorCommandCenter({
             <div className="w-11 h-11 rounded-xl bg-purple-500/20 flex items-center justify-center text-purple-300"><Target className="w-5 h-5" /></div>
             <ArrowUpRight className="w-5 h-5 text-slate-500 group-hover:text-purple-300 transition-colors" />
           </div>
-          <div className="text-4xl font-bold mt-4">{leadsLoaded ? leadsTotal.toLocaleString() : "â€”"}</div>
+          <div className="text-4xl font-bold mt-4">{leadsLoaded ? leadsTotal.toLocaleString() : "—"}</div>
           <div className="text-sm text-slate-400 mt-1">Open Form 470 opportunities</div>
         </button>
 
@@ -192,7 +192,7 @@ function VendorCommandCenter({
               <div className="min-w-0">
                 <div className="font-semibold truncate">{nextDeadline.l.entity_name}</div>
                 <div className="text-xs text-slate-400 mt-0.5">{[nextDeadline.l.city, nextDeadline.l.state].filter(Boolean).join(", ")}</div>
-                <button onClick={() => onOpenLead(nextDeadline.l.application_number)} className="mt-2 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500 transition-all">Reach out â†’</button>
+                <button onClick={() => onOpenLead(nextDeadline.l.application_number)} className="mt-2 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500 transition-all">Reach out →</button>
               </div>
             </div>
           ) : (
@@ -202,12 +202,12 @@ function VendorCommandCenter({
 
         <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-5">
           <div className="flex items-center gap-2 text-slate-400 text-sm mb-3"><Building2 className="w-4 h-4" /> Your portfolio</div>
-          <div className="text-3xl font-bold">{authM != null ? `$${authM.toFixed(2)}M` : "â€”"}</div>
+          <div className="text-3xl font-bold">{authM != null ? `$${authM.toFixed(2)}M` : "—"}</div>
           <div className="text-xs text-slate-400">E-Rate authorized across your customers</div>
           <div className="mt-4 space-y-2 text-sm">
-            <div className="flex items-center justify-between"><span className="text-slate-400">Entities serviced</span><span className="font-semibold">{stats?.total_entities?.toLocaleString() ?? "â€”"}</span></div>
-            <div className="flex items-center justify-between"><span className="text-slate-400">Years active</span><span className="font-semibold">{yearsActive || "â€”"}</span></div>
-            <div className="flex items-center justify-between"><span className="text-slate-400">Saved leads</span><span className="font-semibold">{savedLoading && savedCount === 0 ? "â€”" : savedCount}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-400">Entities serviced</span><span className="font-semibold">{stats?.total_entities?.toLocaleString() ?? "—"}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-400">Years active</span><span className="font-semibold">{yearsActive || "—"}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-400">Saved leads</span><span className="font-semibold">{savedLoading && savedCount === 0 ? "—" : savedCount}</span></div>
           </div>
         </div>
       </div>
@@ -230,17 +230,17 @@ function VendorCommandCenter({
               ))}
             </div>
           ) : (
-            <div className="text-slate-500 text-sm py-8 text-center">{leadsLoading && !leadsLoaded ? "Loadingâ€¦" : "You're all caught up."}</div>
+            <div className="text-slate-500 text-sm py-8 text-center">{leadsLoading && !leadsLoaded ? "Loading…" : "You're all caught up."}</div>
           )}
         </div>
 
         <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-5">
           <div className="flex items-center justify-between mb-3">
             <div><div className="font-semibold">Latest opportunities</div><div className="text-xs text-slate-400">Newest RFPs posted to USAC</div></div>
-            <button onClick={() => onTab("470-leads")} className="text-xs text-purple-300 hover:text-purple-200 font-medium">Browse all â†’</button>
+            <button onClick={() => onTab("470-leads")} className="text-xs text-purple-300 hover:text-purple-200 font-medium">Browse all →</button>
           </div>
           {leadsLoading && leads.length === 0 ? (
-            <div className="text-slate-500 text-sm py-8 text-center">Loading opportunitiesâ€¦</div>
+            <div className="text-slate-500 text-sm py-8 text-center">Loading opportunities…</div>
           ) : leads.length === 0 ? (
             <div className="text-slate-500 text-sm py-8 text-center">No open Form 470s to show.</div>
           ) : (
@@ -250,7 +250,7 @@ function VendorCommandCenter({
                 return (
                   <button key={l.application_number} onClick={() => onOpenLead(l.application_number)} className="w-full text-left flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-slate-800/60 transition-colors">
                     <div className="w-2 h-2 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 shrink-0" />
-                    <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{l.entity_name}</div><div className="text-xs text-slate-400 truncate">{[l.city, l.state].filter(Boolean).join(", ")}{cat ? ` Â· ${cat}` : ""}</div></div>
+                    <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{l.entity_name}</div><div className="text-xs text-slate-400 truncate">{[l.city, l.state].filter(Boolean).join(", ")}{cat ? ` · ${cat}` : ""}</div></div>
                     <ChevronRight className="w-4 h-4 text-slate-600 shrink-0" />
                   </button>
                 );
@@ -265,13 +265,13 @@ function VendorCommandCenter({
         <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-5 mt-5">
           <div className="flex items-center justify-between mb-3">
             <div><div className="font-semibold">Top customers by E-Rate funding</div><div className="text-xs text-slate-400">Your highest-value relationships</div></div>
-            <button onClick={() => onTab("my-entities")} className="text-xs text-purple-300 hover:text-purple-200 font-medium">View all â†’</button>
+            <button onClick={() => onTab("my-entities")} className="text-xs text-purple-300 hover:text-purple-200 font-medium">View all →</button>
           </div>
           <div className="space-y-1.5">
             {entities.slice(0, 5).map((e, i) => (
               <div key={e.ben} className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-slate-800/40 transition-colors">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500/30 to-pink-500/20 flex items-center justify-center text-sm font-bold text-purple-200">{i + 1}</div>
-                <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{e.organization_name}</div><div className="text-xs text-slate-400">{e.state} Â· {e.frn_count} FRNs Â· {e.funding_years?.length || 0} yrs</div></div>
+                <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{e.organization_name}</div><div className="text-xs text-slate-400">{e.state} · {e.frn_count} FRNs · {e.funding_years?.length || 0} yrs</div></div>
                 <div className="text-sm font-semibold text-emerald-400">{money(e.total_amount || 0)}</div>
               </div>
             ))}
@@ -657,7 +657,7 @@ function VendorPortalPage() {
   const [form470DetailLoading, setForm470DetailLoading] = useState(false);
   const [showForm470Modal, setShowForm470Modal] = useState(false);
 
-  // Dashboard "Latest Opportunities" â€” a lightweight, newest-first slice of Form 470
+  // Dashboard "Latest Opportunities" — a lightweight, newest-first slice of Form 470
   // leads shown on the landing dashboard. Kept separate from the full 470-leads tab
   // state so the two never interfere.
   const [dashLeads, setDashLeads] = useState<Form470Lead[]>([]);
@@ -871,7 +871,7 @@ function VendorPortalPage() {
     if (activeTab === "frn-status" && !profile?.spin && !isLoading) {
       setFrnStatusGlobalView(true);
     }
-    // Perf (A4): fetch serviced entities (USAC roundtrip) lazily â€” only when
+    // Perf (A4): fetch serviced entities (USAC roundtrip) lazily — only when
     // the dashboard or "my-entities" tab is open. The dashboard needs the
     // stats payload to render its purple success banner; without it, the
     // banner would fall back to the "Complete Your Profile" warning even
@@ -1279,7 +1279,7 @@ function VendorPortalPage() {
     setEnrichmentData(null);
   };
 
-  // Lightweight loader for the dashboard "Latest Opportunities" feed â€” newest
+  // Lightweight loader for the dashboard "Latest Opportunities" feed — newest
   // Form 470 postings, capped small so the landing page stays fast.
   const loadDashboardOpportunities = async () => {
     setDashLeadsLoading(true);
@@ -1752,7 +1752,7 @@ function VendorPortalPage() {
   };
 
   // Show loading state while checking payment status
-  // perf_v2: gated â€” see consultant/page.tsx for rationale.
+  // perf_v2: gated — see consultant/page.tsx for rationale.
   if (!PERF_V2_ENABLED && (!_hasHydrated || checkingPayment)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -1768,14 +1768,14 @@ function VendorPortalPage() {
     return (
       <div className="min-h-screen bg-slate-50 px-4 py-8">
         <div className="max-w-7xl mx-auto space-y-6">
-          {/* Dashboard skeleton â€” Phase A4 loading UX */}
+          {/* Dashboard skeleton — Phase A4 loading UX */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
             <SkeletonRows rows={1} height="h-7" gap="" />
             <SkeletonRows rows={1} height="h-4" gap="" />
           </div>
           <SkeletonStatCards count={4} />
           <SkeletonTable rows={6} columns={5} />
-          <div className="text-center text-slate-400 text-sm">Loading your dashboardâ€¦</div>
+          <div className="text-center text-slate-400 text-sm">Loading your dashboard…</div>
         </div>
       </div>
     );
@@ -1800,17 +1800,17 @@ function VendorPortalPage() {
   ];
 
   const navItems = [
-    { id: "dashboard", label: "Dashboard", icon: "ðŸ“Š" },
-    { id: "my-entities", label: "My Entities", icon: "ðŸ«" },
-    { id: "frn-status", label: "FRN Status", icon: "ðŸ“ˆ" },
-    { id: "cyber-pilot", label: "Cybersecurity Pilot", icon: "ðŸ›¡ï¸" },
-    { id: "470-leads", label: "Form 470 Leads", icon: "ðŸŽ¯" },
-    { id: "map", label: "Opportunity Map", icon: "ðŸ—ºï¸" },
-    { id: "predicted-leads", label: "Predicted Leads", icon: "ðŸ”®" },
-    { id: "competitive", label: "471 Lookup", icon: "ðŸ”Ž" },
-    { id: "search", label: "School Search", icon: "ðŸ”" },
-    { id: "leads", label: "Saved Leads", icon: "ðŸ“‹" },
-    { id: "settings", label: "Settings", icon: "âš™ï¸" },
+    { id: "dashboard", label: "Dashboard", icon: "📊" },
+    { id: "my-entities", label: "My Entities", icon: "🏫" },
+    { id: "frn-status", label: "FRN Status", icon: "📈" },
+    { id: "cyber-pilot", label: "Cybersecurity Pilot", icon: "🛡️" },
+    { id: "470-leads", label: "Form 470 Leads", icon: "🎯" },
+    { id: "map", label: "Opportunity Map", icon: "🗺️" },
+    { id: "predicted-leads", label: "Predicted Leads", icon: "🔮" },
+    { id: "competitive", label: "471 Lookup", icon: "🔎" },
+    { id: "search", label: "School Search", icon: "🔍" },
+    { id: "leads", label: "Saved Leads", icon: "📋" },
+    { id: "settings", label: "Settings", icon: "⚙️" },
   ];
 
   return (
@@ -1855,7 +1855,7 @@ function VendorPortalPage() {
             href="/industry-pulse"
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all text-slate-600 hover:bg-slate-50"
           >
-            <span className="text-xl">ðŸ“Š</span>
+            <span className="text-xl">📊</span>
             <span>Industry Pulse</span>
           </Link>
         </nav>
@@ -1869,7 +1869,7 @@ function VendorPortalPage() {
                 href="/consultant"
                 className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-slate-600 hover:bg-indigo-50 hover:text-indigo-700 transition-all text-sm"
               >
-                <span className="text-lg">ðŸ“Š</span>
+                <span className="text-lg">📊</span>
                 <span>Consultant Portal</span>
                 <svg className="w-4 h-4 ml-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </Link>
@@ -1877,7 +1877,7 @@ function VendorPortalPage() {
                 href="/super"
                 className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-slate-600 hover:bg-yellow-50 hover:text-yellow-700 transition-all text-sm"
               >
-                <span className="text-lg">â­</span>
+                <span className="text-lg">⭐</span>
                 <span>Super Dashboard</span>
                 <svg className="w-4 h-4 ml-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </Link>
@@ -1893,7 +1893,7 @@ function VendorPortalPage() {
                 {user?.role === 'super' || user?.role === 'admin' ? 'Full Access' : 'Pro Plan'}
               </span>
               <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs">
-                {user?.role === 'super' ? 'â­ Super' : user?.role === 'admin' ? 'ðŸ”‘ Admin' : 'Active'}
+                {user?.role === 'super' ? '⭐ Super' : user?.role === 'admin' ? '🔑 Admin' : 'Active'}
               </span>
             </div>
             <div className="text-2xl font-bold">{profile?.search_count || 0} Searches</div>
@@ -1944,7 +1944,7 @@ function VendorPortalPage() {
             </h1>
           </div>
           <div className="flex items-center gap-3">
-            {/* Persistent portal switcher (super/admin) â€” always reachable so a
+            {/* Persistent portal switcher (super/admin) — always reachable so a
                 super account can never get trapped in the vendor portal (#14). */}
             {(user?.role === 'super' || user?.role === 'admin') && (
               <Link
@@ -2007,7 +2007,7 @@ function VendorPortalPage() {
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
-                    <span className="text-3xl">ðŸ“ˆ</span>
+                    <span className="text-3xl">📈</span>
                   </div>
                   <div>
                     <h1 className="text-2xl font-bold">FRN Status Monitoring</h1>
@@ -2031,7 +2031,7 @@ function VendorPortalPage() {
                           return `${Math.round(diff / 1440)}d ago`;
                         })()}</>
                       ) : "Not yet synced"}
-                      {" â€” "}
+                      {" — "}
                       <button
                         onClick={() => loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason, undefined, undefined, undefined, frnStatusGlobalView)}
                         disabled={!frnStatusGlobalView && !profile?.spin}
@@ -2062,7 +2062,7 @@ function VendorPortalPage() {
                 } ${!profile?.spin ? "opacity-50 cursor-not-allowed" : ""}`}
                 title={!profile?.spin ? "Configure your SPIN in Settings to view your own contracts" : "View your contracts"}
               >
-                ðŸ’¼ My Contracts (SPIN Scoped)
+                💼 My Contracts (SPIN Scoped)
               </button>
               <button
                 type="button"
@@ -2077,7 +2077,7 @@ function VendorPortalPage() {
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                ðŸŒ Global USAC Market (All FRNs)
+                🌐 Global USAC Market (All FRNs)
               </button>
             </div>
 
@@ -2085,7 +2085,7 @@ function VendorPortalPage() {
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-200 p-5 shadow-sm">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-                    <span className="text-2xl">ðŸŒ</span>
+                    <span className="text-2xl">🌐</span>
                   </div>
                   <div className="flex-1">
                     <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Global USAC Market View</h2>
@@ -2106,7 +2106,7 @@ function VendorPortalPage() {
               <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200 p-6">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
-                    <span className="text-2xl">âš ï¸</span>
+                    <span className="text-2xl">⚠️</span>
                   </div>
                   <div className="flex-1">
                     <h2 className="text-lg font-semibold text-slate-900">SPIN Not Configured</h2>
@@ -2118,7 +2118,7 @@ function VendorPortalPage() {
                     onClick={() => setActiveTab("settings")}
                     className="px-4 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors text-sm font-medium"
                   >
-                    Setup SPIN â†’
+                    Setup SPIN →
                   </button>
                 </div>
               </div>
@@ -2227,7 +2227,7 @@ function VendorPortalPage() {
                       {frnStatusLoading ? (
                         <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                       ) : (
-                        <span>ðŸ”</span>
+                        <span>🔍</span>
                       )}
                       Apply Filters
                     </button>
@@ -2240,14 +2240,14 @@ function VendorPortalPage() {
                     <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm text-slate-600">Total FRNs</span>
-                        <span className="text-2xl">ðŸ“‹</span>
+                        <span className="text-2xl">📋</span>
                       </div>
                       <div className="text-3xl font-bold text-slate-900">{frnStatusData.total_frns}</div>
                     </div>
                     <div className="bg-white rounded-2xl border border-green-200 p-6 shadow-sm bg-gradient-to-br from-green-50 to-emerald-50">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm text-green-700">Funded</span>
-                        <span className="text-2xl">âœ…</span>
+                        <span className="text-2xl">✅</span>
                       </div>
                       <div className="text-3xl font-bold text-green-700">{frnStatusData.summary?.funded?.count || 0}</div>
                       <div className="text-sm text-green-600 mt-1">
@@ -2257,7 +2257,7 @@ function VendorPortalPage() {
                     <div className="bg-white rounded-2xl border border-red-200 p-6 shadow-sm bg-gradient-to-br from-red-50 to-rose-50">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm text-red-700">Denied</span>
-                        <span className="text-2xl">âŒ</span>
+                        <span className="text-2xl">❌</span>
                       </div>
                       <div className="text-3xl font-bold text-red-700">{frnStatusData.summary?.denied?.count || 0}</div>
                       <div className="text-sm text-red-600 mt-1">
@@ -2267,7 +2267,7 @@ function VendorPortalPage() {
                     <div className="bg-white rounded-2xl border border-amber-200 p-6 shadow-sm bg-gradient-to-br from-amber-50 to-yellow-50">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm text-amber-700">Pending</span>
-                        <span className="text-2xl">â³</span>
+                        <span className="text-2xl">⏳</span>
                       </div>
                       <div className="text-3xl font-bold text-amber-700">{frnStatusData.summary?.pending?.count || 0}</div>
                       <div className="text-sm text-amber-600 mt-1">
@@ -2317,10 +2317,10 @@ function VendorPortalPage() {
                               <span className="inline-flex items-center gap-1">
                                 Entity
                                 {frnTableSort?.field === 'entity_name' && (
-                                  <span className="text-blue-600">{frnTableSort.dir === 'asc' ? 'â†‘' : 'â†“'}</span>
+                                  <span className="text-blue-600">{frnTableSort.dir === 'asc' ? '↑' : '↓'}</span>
                                 )}
                                 {frnTableSort?.field !== 'entity_name' && (
-                                  <span className="text-slate-300">â†•</span>
+                                  <span className="text-slate-300">↕</span>
                                 )}
                               </span>
                             </th>
@@ -2360,7 +2360,7 @@ function VendorPortalPage() {
                               </td>
                               <td className="px-4 py-3">
                                 <div className="font-medium text-slate-900 truncate max-w-[200px]">{frn.entity_name}</div>
-                                <div className="text-xs text-slate-500">{frn.state} â€¢ BEN: {frn.ben}</div>
+                                <div className="text-xs text-slate-500">{frn.state} • BEN: {frn.ben}</div>
                               </td>
                               <td className="px-4 py-3 text-slate-600">{frn.funding_year}</td>
                               <td className="px-4 py-3 text-slate-600 truncate max-w-[150px]">{frn.service_type}</td>
@@ -2468,7 +2468,7 @@ function VendorPortalPage() {
                 {frnStatusData && sortedFrnData.length === 0 && (
                   <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
                     <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                      <span className="text-3xl">ðŸ“­</span>
+                      <span className="text-3xl">📭</span>
                     </div>
                     <h3 className="text-lg font-semibold text-slate-900">No FRNs Found</h3>
                     <p className="text-sm text-slate-600 mt-2">
@@ -2481,7 +2481,7 @@ function VendorPortalPage() {
                 {!frnStatusData && !frnStatusLoading && (
                   <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
                     <div className="w-16 h-16 rounded-full bg-teal-100 flex items-center justify-center mx-auto mb-4">
-                      <span className="text-3xl">ðŸ“ˆ</span>
+                      <span className="text-3xl">📈</span>
                     </div>
                     <h3 className="text-lg font-semibold text-slate-900">{frnStatusGlobalView ? 'Load Global Market Data' : profile?.spin ? 'Load FRN Status' : 'Search Any BEN'}</h3>
                     <p className="text-sm text-slate-600 mt-2 mb-4">
@@ -2681,7 +2681,7 @@ function VendorPortalPage() {
                 ) : null}
               </div>
 
-              {/* Report History â€” latest report + archive toggle */}
+              {/* Report History — latest report + archive toggle */}
               {reportHistory.length > 0 && (
                 <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
                   <div className="flex items-center justify-between mb-4">
@@ -2788,7 +2788,7 @@ function VendorPortalPage() {
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
-                    <span className="text-3xl">ðŸŽ¯</span>
+                    <span className="text-3xl">🎯</span>
                   </div>
                   <div>
                     <h1 className="text-2xl font-bold">Form 470 Lead Generation</h1>
@@ -2803,12 +2803,12 @@ function VendorPortalPage() {
               </div>
             </div>
 
-            {/* Compliance guardrails explainer â€” E-Rate pre-bid rules. Native
+            {/* Compliance guardrails explainer — E-Rate pre-bid rules. Native
                 <details> disclosure so no extra React state is needed. */}
             <details className="bg-blue-50 border border-blue-200 rounded-2xl p-5 group">
               <summary className="flex items-center gap-2 cursor-pointer list-none font-semibold text-slate-900">
-                <span className="text-lg">ðŸ›¡ï¸</span>
-                E-Rate competitive-bidding rules â€” read before you reach out
+                <span className="text-lg">🛡️</span>
+                E-Rate competitive-bidding rules — read before you reach out
                 <span className="ml-auto text-blue-600 text-sm group-open:hidden">Show</span>
                 <span className="ml-auto text-blue-600 text-sm hidden group-open:inline">Hide</span>
               </summary>
@@ -2938,7 +2938,7 @@ function VendorPortalPage() {
                 </div>
               </div>
 
-              {/* Deal-size ($) filters â€” uses USAC C2 Budget Tool data (6brt-5pbv).
+              {/* Deal-size ($) filters — uses USAC C2 Budget Tool data (6brt-5pbv).
                   Requires a State filter (we only enrich state-scoped queries). */}
               <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
@@ -2990,7 +2990,7 @@ function VendorPortalPage() {
                     className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                   >
                     <option value="">Newest First</option>
-                    <option value="entity_name">Applicant Name (Aâ†’Z)</option>
+                    <option value="entity_name">Applicant Name (A→Z)</option>
                     <option value="c2_budget_available">Highest C2 Budget Available</option>
                   </select>
                 </div>
@@ -3006,7 +3006,7 @@ function VendorPortalPage() {
                     </>
                   ) : (
                     <>
-                      <span>ðŸ”</span>
+                      <span>🔍</span>
                       Search 470s
                     </>
                   )}
@@ -3055,8 +3055,8 @@ function VendorPortalPage() {
                 <div>
                   <div className="font-medium text-green-800">Found {form470TotalLeads} Form 470 Leads</div>
                   <div className="text-sm text-green-600">
-                    {form470Filters.manufacturer && `Manufacturer: ${form470Filters.manufacturer} â€¢ `}
-                    {form470Filters.state && `State: ${form470Filters.state} â€¢ `}
+                    {form470Filters.manufacturer && `Manufacturer: ${form470Filters.manufacturer} • `}
+                    {form470Filters.state && `State: ${form470Filters.state} • `}
                     {form470Filters.category && `Category ${form470Filters.category}`}
                   </div>
                 </div>
@@ -3098,10 +3098,10 @@ function VendorPortalPage() {
                           <span className="flex items-center gap-1">
                             Entity
                             {form470Sort?.field === 'entity_name' && (
-                              <span className="text-blue-600">{form470Sort.dir === 'asc' ? 'â†‘' : 'â†“'}</span>
+                              <span className="text-blue-600">{form470Sort.dir === 'asc' ? '↑' : '↓'}</span>
                             )}
                             {form470Sort?.field !== 'entity_name' && (
-                              <span className="text-slate-300">â†•</span>
+                              <span className="text-slate-300">↕</span>
                             )}
                           </span>
                         </th>
@@ -3128,7 +3128,7 @@ function VendorPortalPage() {
                           <td className="px-4 py-3">
                             <div className="font-medium text-slate-900">{lead.entity_name || 'Unknown'}</div>
                             <div className="text-sm text-slate-500">
-                              470 #{lead.application_number} â€¢ {lead.applicant_type}
+                              470 #{lead.application_number} • {lead.applicant_type}
                             </div>
                           </td>
                           <td className="px-4 py-3">
@@ -3177,7 +3177,7 @@ function VendorPortalPage() {
                                 )}
                               </>
                             ) : (
-                              <span className="text-xs text-slate-400">â€”</span>
+                              <span className="text-xs text-slate-400">—</span>
                             )}
                           </td>
                           <td className="px-4 py-3">
@@ -3209,7 +3209,7 @@ function VendorPortalPage() {
             {!form470Loading && form470Leads.length === 0 && !form470Error && (
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center">
                 <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-3xl">ðŸŽ¯</span>
+                  <span className="text-3xl">🎯</span>
                 </div>
                 <h3 className="text-lg font-medium text-slate-900 mb-2">Search for Form 470 Leads</h3>
                 <p className="text-slate-600 mb-4">
@@ -3229,7 +3229,7 @@ function VendorPortalPage() {
           </div>
         )}
 
-        {/* Opportunity Map Tab (Phase D â€” geospatial) */}
+        {/* Opportunity Map Tab (Phase D — geospatial) */}
         {activeTab === "map" && (
           <div className="space-y-6">
             <OpportunityMap />
@@ -3265,7 +3265,7 @@ function VendorPortalPage() {
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
-                    <span className="text-3xl">ðŸŽ¯</span>
+                    <span className="text-3xl">🎯</span>
                   </div>
                   <div>
                     <h1 className="text-2xl font-bold">Form 471 Competitive Analysis</h1>
@@ -3313,7 +3313,7 @@ function VendorPortalPage() {
                     </>
                   ) : (
                     <>
-                      <span>ðŸ”</span>
+                      <span>🔍</span>
                       Search
                     </>
                   )}
@@ -3520,7 +3520,7 @@ function VendorPortalPage() {
                               <tr className="bg-slate-50">
                                 <td colSpan={8} className="px-4 py-3">
                                   {isLoadingItems ? (
-                                    <div className="py-3 text-sm text-slate-500">Loading line itemsâ€¦</div>
+                                    <div className="py-3 text-sm text-slate-500">Loading line items…</div>
                                   ) : !lineItems || lineItems.length === 0 ? (
                                     <div className="py-3 text-sm text-slate-500">No line items found for this FRN.</div>
                                   ) : (
@@ -3541,14 +3541,14 @@ function VendorPortalPage() {
                                         <tbody className="divide-y divide-slate-100">
                                           {lineItems.map((li, liIdx) => (
                                             <tr key={liIdx} className="hover:bg-slate-50">
-                                              <td className="px-3 py-2 font-mono text-slate-600">{li.line_item_number || 'â€”'}</td>
-                                              <td className="px-3 py-2 text-slate-700">{li.function || 'â€”'}</td>
-                                              <td className="px-3 py-2 text-slate-700">{li.product || 'â€”'}</td>
-                                              <td className="px-3 py-2 text-slate-700">{li.manufacturer || 'â€”'}</td>
-                                              <td className="px-3 py-2 text-slate-700">{li.model || 'â€”'}</td>
-                                              <td className="px-3 py-2 text-right text-slate-700">{li.quantity != null ? li.quantity.toLocaleString() : 'â€”'}</td>
-                                              <td className="px-3 py-2 text-right text-slate-700">{li.unit_cost != null ? `$${li.unit_cost.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : 'â€”'}</td>
-                                              <td className="px-3 py-2 text-right font-medium text-green-600">{li.extended_cost != null ? `$${li.extended_cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'â€”'}</td>
+                                              <td className="px-3 py-2 font-mono text-slate-600">{li.line_item_number || '—'}</td>
+                                              <td className="px-3 py-2 text-slate-700">{li.function || '—'}</td>
+                                              <td className="px-3 py-2 text-slate-700">{li.product || '—'}</td>
+                                              <td className="px-3 py-2 text-slate-700">{li.manufacturer || '—'}</td>
+                                              <td className="px-3 py-2 text-slate-700">{li.model || '—'}</td>
+                                              <td className="px-3 py-2 text-right text-slate-700">{li.quantity != null ? li.quantity.toLocaleString() : '—'}</td>
+                                              <td className="px-3 py-2 text-right text-slate-700">{li.unit_cost != null ? `$${li.unit_cost.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '—'}</td>
+                                              <td className="px-3 py-2 text-right font-medium text-green-600">{li.extended_cost != null ? `$${li.extended_cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}</td>
                                             </tr>
                                           ))}
                                         </tbody>
@@ -3630,7 +3630,7 @@ function VendorPortalPage() {
                               <div className="flex-1 min-w-0">
                                 <div className="font-medium text-slate-900 truncate">{comp.name}</div>
                                 <div className="text-xs text-slate-500">
-                                  {comp.frn_count} FRNs â€¢ {comp.entity_count || 0} entities
+                                  {comp.frn_count} FRNs • {comp.entity_count || 0} entities
                                 </div>
                               </div>
                               <div className="text-right">
@@ -3794,10 +3794,10 @@ function VendorPortalPage() {
                           <span className="flex items-center gap-1">
                             School Name
                             {schoolSearchSort?.field === 'name' && (
-                              <span className="text-blue-600">{schoolSearchSort.dir === 'asc' ? 'â†‘' : 'â†“'}</span>
+                              <span className="text-blue-600">{schoolSearchSort.dir === 'asc' ? '↑' : '↓'}</span>
                             )}
                             {schoolSearchSort?.field !== 'name' && (
-                              <span className="text-slate-300">â†•</span>
+                              <span className="text-slate-300">↕</span>
                             )}
                           </span>
                         </th>
@@ -3853,7 +3853,7 @@ function VendorPortalPage() {
               {searchTotalCount > 0 && (
                 <div className="flex items-center justify-between bg-white rounded-2xl border border-slate-200 px-4 py-3 mt-3">
                   <span className="text-sm text-slate-500">
-                    Page {searchPage} of {searchTotalPages} Â· {searchTotalCount.toLocaleString()} total results
+                    Page {searchPage} of {searchTotalPages} · {searchTotalCount.toLocaleString()} total results
                   </span>
                   <div className="flex items-center gap-2">
                     <button
@@ -3862,7 +3862,7 @@ function VendorPortalPage() {
                       disabled={isLoading || searchPage <= 1}
                       className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      â† Previous
+                      ← Previous
                     </button>
                     {Array.from({ length: Math.min(5, searchTotalPages) }, (_, i) => {
                       // window of 5 pages around current
@@ -3891,7 +3891,7 @@ function VendorPortalPage() {
                       disabled={isLoading || searchPage >= searchTotalPages}
                       className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      Next â†’
+                      Next →
                     </button>
                   </div>
                 </div>
@@ -3902,12 +3902,12 @@ function VendorPortalPage() {
             {searchResults.length === 0 && !isLoading && (
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center">
                 <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                  <span className="text-3xl">ðŸ”</span>
+                  <span className="text-3xl">🔍</span>
                 </div>
                 <h2 className="text-lg font-semibold text-slate-900">No Results Yet</h2>
                 <p className="text-slate-500 mt-2 max-w-md mx-auto">
                   {searchYear === 2026
-                    ? "No results for FY 2026 yet. USAC FY 2026 data is partially populated â€” try FY 2025 if you don't see results."
+                    ? "No results for FY 2026 yet. USAC FY 2026 data is partially populated — try FY 2025 if you don't see results."
                     : "Use the filters above to search for schools with E-Rate funding and find your next customers."}
                 </p>
               </div>
@@ -3923,7 +3923,7 @@ function VendorPortalPage() {
                 <div>
                   <h2 className="text-xl font-bold text-slate-900">Saved Leads</h2>
                   <p className="text-sm text-slate-500 mt-1">
-                    {savedLeadsTotalCount} leads saved â€¢ Manage and enrich your leads
+                    {savedLeadsTotalCount} leads saved • Manage and enrich your leads
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -3950,7 +3950,7 @@ function VendorPortalPage() {
                     disabled={savedLeads.length === 0}
                     className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors flex items-center gap-2 disabled:opacity-50"
                   >
-                    <span>ðŸ“¥</span>
+                    <span>📥</span>
                     Export {selectedLeadIds.size > 0 ? `(${selectedLeadIds.size})` : 'All'}
                   </button>
                   
@@ -4034,7 +4034,7 @@ function VendorPortalPage() {
                                 {lead.entity_name || `BEN: ${lead.ben}`}
                               </h3>
                               <p className="text-sm text-slate-500 mt-0.5">
-                                Form {lead.form_type} #{lead.application_number} â€¢ {lead.entity_city}, {lead.entity_state}
+                                Form {lead.form_type} #{lead.application_number} • {lead.entity_city}, {lead.entity_state}
                               </p>
                             </div>
                             
@@ -4105,7 +4105,7 @@ function VendorPortalPage() {
                             ))}
                             {lead.enrichment_date && (
                               <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs">
-                                âœ¨ Enriched
+                                ✨ Enriched
                               </span>
                             )}
                           </div>
@@ -4116,10 +4116,10 @@ function VendorPortalPage() {
                           <button
                             onClick={() => {
                               if (lead.form_type === '470') {
-                                // Real Form 470 lead â€” fetch full USAC detail
+                                // Real Form 470 lead — fetch full USAC detail
                                 load470Detail(lead.application_number);
                               } else {
-                                // Predicted or 471 lead â€” show saved lead's own data in detail modal
+                                // Predicted or 471 lead — show saved lead's own data in detail modal
                                 setSelectedSavedLeadDetail(lead);
                                 setShowSavedLeadDetailModal(true);
                               }
@@ -4171,7 +4171,7 @@ function VendorPortalPage() {
             ) : (
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center">
                 <div className="w-16 h-16 rounded-2xl bg-purple-100 flex items-center justify-center mx-auto mb-4">
-                  <span className="text-3xl">ðŸ“‹</span>
+                  <span className="text-3xl">📋</span>
                 </div>
                 <h2 className="text-lg font-semibold text-slate-900">No Saved Leads</h2>
                 <p className="text-slate-500 mt-2 max-w-md mx-auto">
@@ -4196,7 +4196,7 @@ function VendorPortalPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
-                      <span className="text-2xl">âœ…</span>
+                      <span className="text-2xl">✅</span>
                     </div>
                     <div>
                       <h2 className="text-lg font-semibold text-slate-900">SPIN Verified</h2>
@@ -4221,7 +4221,7 @@ function VendorPortalPage() {
               <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200 p-6">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
-                    <span className="text-2xl">âš ï¸</span>
+                    <span className="text-2xl">⚠️</span>
                   </div>
                   <div>
                     <h2 className="text-lg font-semibold text-slate-900">SPIN Not Configured</h2>
@@ -4232,7 +4232,7 @@ function VendorPortalPage() {
                       onClick={() => setActiveTab("settings")}
                       className="mt-2 text-sm text-amber-700 hover:underline font-medium"
                     >
-                      Go to Settings â†’
+                      Go to Settings →
                     </button>
                   </div>
                 </div>
@@ -4245,7 +4245,7 @@ function VendorPortalPage() {
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-                      <span className="text-2xl">ðŸ«</span>
+                      <span className="text-2xl">🏫</span>
                     </div>
                   </div>
                   <div className="text-3xl font-bold text-slate-900">{servicedEntitiesStats.total_entities}</div>
@@ -4255,7 +4255,7 @@ function VendorPortalPage() {
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
-                      <span className="text-2xl">ðŸ’°</span>
+                      <span className="text-2xl">💰</span>
                     </div>
                   </div>
                   <div className="text-3xl font-bold text-slate-900">
@@ -4267,7 +4267,7 @@ function VendorPortalPage() {
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
-                      <span className="text-2xl">ðŸ“…</span>
+                      <span className="text-2xl">📅</span>
                     </div>
                   </div>
                   <div className="text-3xl font-bold text-slate-900">{servicedEntitiesStats.funding_years.length}</div>
@@ -4326,10 +4326,10 @@ function VendorPortalPage() {
                             <span className="flex items-center gap-1">
                               Entity Name
                               {servicedEntitiesSort?.field === 'organization_name' && (
-                                <span className="text-blue-600">{servicedEntitiesSort.dir === 'asc' ? 'â†‘' : 'â†“'}</span>
+                                <span className="text-blue-600">{servicedEntitiesSort.dir === 'asc' ? '↑' : '↓'}</span>
                               )}
                               {servicedEntitiesSort?.field !== 'organization_name' && (
-                                <span className="text-slate-300">â†•</span>
+                                <span className="text-slate-300">↕</span>
                               )}
                             </span>
                           </th>
@@ -4400,7 +4400,7 @@ function VendorPortalPage() {
                                   <div className="text-xs text-slate-400">{entity.current_year}</div>
                                 </div>
                               ) : (
-                                <span className="text-slate-400 text-sm">â€”</span>
+                                <span className="text-slate-400 text-sm">—</span>
                               )}
                             </td>
                             <td className="px-4 py-3">
@@ -4412,7 +4412,7 @@ function VendorPortalPage() {
                                   <div className="text-xs text-slate-400">{entity.current_year}</div>
                                 </div>
                               ) : (
-                                <span className="text-slate-400 text-sm">â€”</span>
+                                <span className="text-slate-400 text-sm">—</span>
                               )}
                             </td>
                             <td className="px-4 py-3 font-semibold text-green-600 text-right">
@@ -4448,7 +4448,7 @@ function VendorPortalPage() {
                 ) : (
                   <div className="p-12 text-center">
                     <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                      <span className="text-3xl">ðŸ«</span>
+                      <span className="text-3xl">🏫</span>
                     </div>
                     <h2 className="text-lg font-semibold text-slate-900">No Invoice Data Found</h2>
                     <p className="text-slate-500 mt-2 max-w-md mx-auto">
@@ -4468,7 +4468,7 @@ function VendorPortalPage() {
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
-                  <span className="text-xl">ðŸ”‘</span>
+                  <span className="text-xl">🔑</span>
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">SPIN Configuration</h2>
@@ -4519,7 +4519,7 @@ function VendorPortalPage() {
                   {spinValidation && (
                     <div className="mt-3 p-4 bg-green-50 border border-green-200 rounded-xl">
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="text-green-600">âœ“</span>
+                        <span className="text-green-600">✓</span>
                         <span className="font-semibold text-green-700">Valid SPIN Found</span>
                       </div>
                       <div className="grid grid-cols-2 gap-3 text-sm">
@@ -4559,7 +4559,7 @@ function VendorPortalPage() {
                       
                       {profile?.spin === spinInput && (
                         <div className="mt-3 text-sm text-green-600">
-                          âœ“ This SPIN is saved to your profile
+                          ✓ This SPIN is saved to your profile
                         </div>
                       )}
                     </div>
@@ -4590,7 +4590,7 @@ function VendorPortalPage() {
                         onClick={() => setActiveTab("my-entities")}
                         className="text-sm text-purple-600 hover:underline"
                       >
-                        View Serviced Entities â†’
+                        View Serviced Entities →
                       </button>
                     </div>
                   </div>
@@ -4602,7 +4602,7 @@ function VendorPortalPage() {
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
-                  <span className="text-xl">ðŸ¢</span>
+                  <span className="text-xl">🏢</span>
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Company Profile</h2>
@@ -4649,7 +4649,7 @@ function VendorPortalPage() {
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
-                  <span className="text-xl">ðŸ› ï¸</span>
+                  <span className="text-xl">🛠️</span>
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Services Offered</h2>
@@ -4680,7 +4680,7 @@ function VendorPortalPage() {
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
-                  <span className="text-xl">ðŸ””</span>
+                  <span className="text-xl">🔔</span>
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Notification Preferences</h2>
@@ -4694,7 +4694,7 @@ function VendorPortalPage() {
                 href="/settings/notifications"
                 className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl hover:bg-indigo-100 font-medium text-sm transition"
               >
-                ðŸ”” Manage Notification Settings â†’
+                🔔 Manage Notification Settings →
               </a>
             </div>
 
@@ -4702,7 +4702,7 @@ function VendorPortalPage() {
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
-                  <span className="text-xl">{user?.role === 'super' || user?.role === 'admin' ? 'â­' : 'ðŸ’³'}</span>
+                  <span className="text-xl">{user?.role === 'super' || user?.role === 'admin' ? '⭐' : '💳'}</span>
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">
@@ -4716,11 +4716,11 @@ function VendorPortalPage() {
               <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-100">
                 <div>
                   <div className="font-semibold text-slate-900">
-                    {user?.role === 'super' ? 'â­ Super Account â€” Full Access' : user?.role === 'admin' ? 'ðŸ”‘ Admin Account â€” Full Access' : user?.subscription?.plan === 'yearly' ? 'Yearly Plan' : 'Monthly Plan'}
+                    {user?.role === 'super' ? '⭐ Super Account — Full Access' : user?.role === 'admin' ? '🔑 Admin Account — Full Access' : user?.subscription?.plan === 'yearly' ? 'Yearly Plan' : 'Monthly Plan'}
                   </div>
                   <div className="text-sm text-slate-500 mt-1">
                     Status: <span className="text-green-600 font-medium">
-                      {user?.role === 'super' || user?.role === 'admin' ? 'Active â€” No billing required' : user?.subscription?.status || 'Unknown'}
+                      {user?.role === 'super' || user?.role === 'admin' ? 'Active — No billing required' : user?.subscription?.status || 'Unknown'}
                     </span>
                   </div>
                 </div>
@@ -4743,7 +4743,7 @@ function VendorPortalPage() {
                   </p>
                   <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg mb-3">
                     <p className="text-[11px] text-amber-800">
-                      <strong>Demo helper</strong> â€” visible because this is a test/demo account. Lets you retarget onto any vendor SPIN on the fly.
+                      <strong>Demo helper</strong> — visible because this is a test/demo account. Lets you retarget onto any vendor SPIN on the fly.
                     </p>
                   </div>
 
@@ -4986,7 +4986,7 @@ function VendorPortalPage() {
                                         ? 'bg-red-100 text-red-700'
                                         : 'bg-slate-100 text-slate-600'
                                     }`}>
-                                      {item.category} â€¢ {item.status}
+                                      {item.category} • {item.status}
                                     </div>
                                   </div>
                                 </div>
@@ -5042,10 +5042,10 @@ function VendorPortalPage() {
                   <div className="flex items-center gap-3">
                     <span className="text-3xl">
                       {selectedFRN.status?.toLowerCase().includes('funded') || selectedFRN.status?.toLowerCase().includes('committed')
-                        ? 'âœ…'
+                        ? '✅'
                         : selectedFRN.status?.toLowerCase().includes('denied')
-                        ? 'âŒ'
-                        : 'â³'}
+                        ? '❌'
+                        : '⏳'}
                     </span>
                     <div>
                       <h2 className="text-xl font-bold">FRN: {selectedFRN.frn}</h2>
@@ -5078,7 +5078,7 @@ function VendorPortalPage() {
                 {/* Entity Information */}
                 <div className="bg-slate-50 rounded-xl p-4">
                   <h3 className="text-sm font-semibold text-slate-600 mb-3 flex items-center gap-2">
-                    <span className="text-lg">ðŸ«</span> Entity Information
+                    <span className="text-lg">🏫</span> Entity Information
                   </h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -5103,7 +5103,7 @@ function VendorPortalPage() {
                 {/* Funding Information */}
                 <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4 border border-green-100">
                   <h3 className="text-sm font-semibold text-green-700 mb-3 flex items-center gap-2">
-                    <span className="text-lg">ðŸ’°</span> Funding Information
+                    <span className="text-lg">💰</span> Funding Information
                   </h3>
                   <div className="grid grid-cols-3 gap-4">
                     <div>
@@ -5136,7 +5136,7 @@ function VendorPortalPage() {
                         ${selectedFRN.disbursed_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || '0'}
                       </div>
                       <span className="text-[10px] text-green-600 block mt-0.5 font-medium group-hover:underline">
-                        {disbursementOpen ? 'Click to collapse' : 'Click to view schedule â†’'}
+                        {disbursementOpen ? 'Click to collapse' : 'Click to view schedule →'}
                       </span>
                     </div>
                     <div>
@@ -5173,7 +5173,7 @@ function VendorPortalPage() {
                 {selectedFRN.pending_reason && (
                   <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
                     <h3 className="text-sm font-semibold text-amber-700 mb-2 flex items-center gap-2">
-                      <span className="text-lg">âš ï¸</span> Pending Reason
+                      <span className="text-lg">⚠️</span> Pending Reason
                     </h3>
                     <p className="text-amber-800">{selectedFRN.pending_reason}</p>
                   </div>
@@ -5183,7 +5183,7 @@ function VendorPortalPage() {
                 {selectedFRN.fcdl_comment && (
                   <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
                     <h3 className="text-sm font-semibold text-blue-700 mb-2 flex items-center gap-2">
-                      <span className="text-lg">ðŸ“</span> FCDL Comment
+                      <span className="text-lg">📝</span> FCDL Comment
                     </h3>
                     <p className="text-blue-800">{selectedFRN.fcdl_comment}</p>
                   </div>
@@ -5192,7 +5192,7 @@ function VendorPortalPage() {
                 {/* Key Dates */}
                 <div className="bg-slate-50 rounded-xl p-4">
                   <h3 className="text-sm font-semibold text-slate-600 mb-3 flex items-center gap-2">
-                    <span className="text-lg">ðŸ“…</span> Key Dates
+                    <span className="text-lg">📅</span> Key Dates
                   </h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     <div>
@@ -5225,7 +5225,7 @@ function VendorPortalPage() {
                 {/* Invoicing Information */}
                 <div className="bg-slate-50 rounded-xl p-4">
                   <h3 className="text-sm font-semibold text-slate-600 mb-3 flex items-center gap-2">
-                    <span className="text-lg">ðŸ“‹</span> Invoicing Information
+                    <span className="text-lg">📋</span> Invoicing Information
                   </h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
@@ -5252,7 +5252,7 @@ function VendorPortalPage() {
                 {/* Vendor Information */}
                 <div className="bg-purple-50 rounded-xl p-4 border border-purple-100">
                   <h3 className="text-sm font-semibold text-purple-700 mb-3 flex items-center gap-2">
-                    <span className="text-lg">ðŸ¢</span> Vendor Information
+                    <span className="text-lg">🏢</span> Vendor Information
                   </h3>
                   <div>
                     <div className="text-xs text-purple-600">Service Provider</div>
@@ -5271,7 +5271,7 @@ function VendorPortalPage() {
             {/* Modal Footer */}
             <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center">
               <div className="text-sm text-slate-500">
-                FRN: {selectedFRN.frn} â€¢ Application: {selectedFRN.application_number}
+                FRN: {selectedFRN.frn} • Application: {selectedFRN.application_number}
               </div>
               <button
                 onClick={() => { setShowFRNDetailModal(false); setDisbursementOpen(false); }}
@@ -5301,7 +5301,7 @@ function VendorPortalPage() {
                 <div>
                   <h2 className="text-xl font-bold">{form470Detail?.entity?.name || 'Loading...'}</h2>
                   <p className="text-orange-100 mt-1">
-                    Form 470 #{form470Detail?.application_number} â€¢ {form470Detail?.funding_year}
+                    Form 470 #{form470Detail?.application_number} • {form470Detail?.funding_year}
                   </p>
                 </div>
                 <button
@@ -5323,11 +5323,11 @@ function VendorPortalPage() {
                 </div>
               ) : form470Detail ? (
                 <div className="space-y-6">
-                  {/* Version toggle â€” a revised 470 keeps both Original & Current on file */}
+                  {/* Version toggle — a revised 470 keeps both Original & Current on file */}
                   {form470Detail.available_versions && form470Detail.available_versions.length > 1 && (
                     <div className="flex flex-wrap items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl p-3">
                       <span className="text-sm text-amber-800 font-medium">
-                        ðŸ“ This Form 470 was revised. Viewing:
+                        📝 This Form 470 was revised. Viewing:
                       </span>
                       <div className="inline-flex rounded-lg border border-amber-300 overflow-hidden">
                         {['Current', 'Original'].filter(v => form470Detail.available_versions?.includes(v)).map((v) => {
@@ -5357,7 +5357,7 @@ function VendorPortalPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-slate-50 rounded-xl p-4">
                       <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                        <span>ðŸ«</span> Entity Information
+                        <span>🏫</span> Entity Information
                       </h3>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
@@ -5381,7 +5381,7 @@ function VendorPortalPage() {
                               rel="noopener noreferrer" 
                               className="text-blue-600 hover:underline"
                             >
-                              Visit â†’
+                              Visit →
                             </a>
                           </div>
                         )}
@@ -5390,7 +5390,7 @@ function VendorPortalPage() {
 
                     <div className="bg-slate-50 rounded-xl p-4">
                       <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                        <span>ðŸ‘¤</span> Contact Information
+                        <span>👤</span> Contact Information
                         {/* LinkedIn Search Button */}
                         {form470Detail.contact?.name && (
                           <a
@@ -5493,7 +5493,7 @@ function VendorPortalPage() {
                   {enrichmentData?.additional_contacts && enrichmentData.additional_contacts.length > 0 && (
                     <div className="bg-indigo-50 rounded-xl p-4">
                       <h3 className="font-semibold text-indigo-800 mb-3 flex items-center gap-2">
-                        <span>ðŸ‘¥</span> Additional Contacts at Organization
+                        <span>👥</span> Additional Contacts at Organization
                       </h3>
                       <div className="space-y-3">
                         {enrichmentData.additional_contacts.slice(0, 5).map((contact, idx) => (
@@ -5542,7 +5542,7 @@ function VendorPortalPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-orange-50 rounded-xl p-4">
                       <h3 className="font-semibold text-orange-800 mb-3 flex items-center gap-2">
-                        <span>ðŸ­</span> Manufacturers Requested
+                        <span>🏭</span> Manufacturers Requested
                       </h3>
                       <div className="flex flex-wrap gap-2">
                         {form470Detail.manufacturers?.length > 0 ? (
@@ -5559,7 +5559,7 @@ function VendorPortalPage() {
 
                     <div className="bg-blue-50 rounded-xl p-4">
                       <h3 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
-                        <span>ðŸ“‹</span> Categories & Services
+                        <span>📋</span> Categories & Services
                       </h3>
                       <div className="flex flex-wrap gap-2 mb-2">
                         {form470Detail.categories?.map((cat, idx) => (
@@ -5746,7 +5746,7 @@ function VendorPortalPage() {
                     </>
                   ) : (
                     <>
-                      <span>ðŸ’¾</span>
+                      <span>💾</span>
                       Save Lead
                     </>
                   )}
@@ -5754,7 +5754,7 @@ function VendorPortalPage() {
               ) : (
                 <div className="flex items-center gap-2">
                   <span className="px-3 py-2 bg-emerald-100 text-emerald-700 rounded-xl text-sm flex items-center gap-2">
-                    <span>âœ“</span>
+                    <span>✓</span>
                     Saved
                   </span>
                   <button
@@ -5781,12 +5781,12 @@ function VendorPortalPage() {
                     </>
                   ) : enrichmentData ? (
                     <>
-                      <span>ðŸ”„</span>
+                      <span>🔄</span>
                       Re-enrich
                     </>
                   ) : (
                     <>
-                      <span>âœ¨</span>
+                      <span>✨</span>
                       Find More Contacts
                     </>
                   )}
@@ -5799,7 +5799,7 @@ function VendorPortalPage() {
                   href={`mailto:${form470Detail.contact.email}?subject=Regarding Form 470 ${form470Detail.application_number}`}
                   className="px-4 py-2 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors flex items-center gap-2"
                 >
-                  <span>ðŸ“§</span>
+                  <span>📧</span>
                   Contact Entity
                 </a>
               )}
@@ -6244,8 +6244,8 @@ function VendorPortalPage() {
                 <div>
                   <h2 className="text-xl font-bold">{selectedSavedLeadDetail.entity_name || `BEN: ${selectedSavedLeadDetail.ben}`}</h2>
                   <p className="text-purple-100 mt-1">
-                    {selectedSavedLeadDetail.form_type === 'predicted' ? 'ðŸ”® Predicted Lead' : `Form ${selectedSavedLeadDetail.form_type}`} #{selectedSavedLeadDetail.application_number}
-                    {selectedSavedLeadDetail.funding_year && ` â€¢ FY ${selectedSavedLeadDetail.funding_year}`}
+                    {selectedSavedLeadDetail.form_type === 'predicted' ? '🔮 Predicted Lead' : `Form ${selectedSavedLeadDetail.form_type}`} #{selectedSavedLeadDetail.application_number}
+                    {selectedSavedLeadDetail.funding_year && ` • FY ${selectedSavedLeadDetail.funding_year}`}
                   </p>
                 </div>
                 <button
@@ -6266,7 +6266,7 @@ function VendorPortalPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="bg-slate-50 rounded-xl p-4">
                     <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <span>ðŸ«</span> Entity Information
+                      <span>🏫</span> Entity Information
                     </h3>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
@@ -6300,7 +6300,7 @@ function VendorPortalPage() {
                       {selectedSavedLeadDetail.entity_website && (
                         <div className="flex justify-between">
                           <span className="text-slate-500">Website:</span>
-                          <a href={selectedSavedLeadDetail.entity_website.startsWith('http') ? selectedSavedLeadDetail.entity_website : `https://${selectedSavedLeadDetail.entity_website}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Visit â†’</a>
+                          <a href={selectedSavedLeadDetail.entity_website.startsWith('http') ? selectedSavedLeadDetail.entity_website : `https://${selectedSavedLeadDetail.entity_website}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Visit →</a>
                         </div>
                       )}
                     </div>
@@ -6308,7 +6308,7 @@ function VendorPortalPage() {
 
                   <div className="bg-slate-50 rounded-xl p-4">
                     <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <span>ðŸ‘¤</span> Contact Information
+                      <span>👤</span> Contact Information
                       {selectedSavedLeadDetail.contact_name && selectedSavedLeadDetail.entity_name && (
                         <a
                           href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(selectedSavedLeadDetail.contact_name + ' ' + selectedSavedLeadDetail.entity_name)}`}
@@ -6351,7 +6351,7 @@ function VendorPortalPage() {
                       {selectedSavedLeadDetail.enriched_data?.linkedin_url && (
                         <div className="flex justify-between">
                           <span className="text-slate-500">LinkedIn:</span>
-                          <a href={selectedSavedLeadDetail.enriched_data.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">View Profile â†’</a>
+                          <a href={selectedSavedLeadDetail.enriched_data.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">View Profile →</a>
                         </div>
                       )}
                     </div>
@@ -6362,7 +6362,7 @@ function VendorPortalPage() {
                 {(selectedSavedLeadDetail.categories?.length > 0 || selectedSavedLeadDetail.services?.length > 0 || selectedSavedLeadDetail.manufacturers?.length > 0) && (
                   <div className="bg-slate-50 rounded-xl p-4">
                     <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <span>ðŸ“¦</span> Services & Categories
+                      <span>📦</span> Services & Categories
                     </h3>
                     <div className="flex flex-wrap gap-2">
                       {selectedSavedLeadDetail.categories?.map((cat: string, idx: number) => (
@@ -6382,7 +6382,7 @@ function VendorPortalPage() {
                 {(selectedSavedLeadDetail.funding_amount || selectedSavedLeadDetail.committed_amount || selectedSavedLeadDetail.funded_amount) && (
                   <div className="bg-slate-50 rounded-xl p-4">
                     <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <span>ðŸ’°</span> Funding Information
+                      <span>💰</span> Funding Information
                     </h3>
                     <div className="grid grid-cols-3 gap-4 text-sm">
                       {selectedSavedLeadDetail.funding_amount != null && (
@@ -6411,7 +6411,7 @@ function VendorPortalPage() {
                 {selectedSavedLeadDetail.enriched_data?.additional_contacts && selectedSavedLeadDetail.enriched_data.additional_contacts.length > 0 && (
                   <div className="bg-slate-50 rounded-xl p-4">
                     <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <span>ðŸ‘¥</span> Additional Contacts ({selectedSavedLeadDetail.enriched_data.additional_contacts.length})
+                      <span>👥</span> Additional Contacts ({selectedSavedLeadDetail.enriched_data.additional_contacts.length})
                     </h3>
                     <div className="space-y-2">
                       {selectedSavedLeadDetail.enriched_data.additional_contacts.map((contact: any, idx: number) => (
@@ -6434,7 +6434,7 @@ function VendorPortalPage() {
                 {selectedSavedLeadDetail.all_contacts && selectedSavedLeadDetail.all_contacts.length > 0 && (
                   <div className="bg-slate-50 rounded-xl p-4">
                     <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <span>ðŸ“‹</span> USAC Contacts ({selectedSavedLeadDetail.all_contacts.length})
+                      <span>📋</span> USAC Contacts ({selectedSavedLeadDetail.all_contacts.length})
                     </h3>
                     <div className="space-y-2">
                       {selectedSavedLeadDetail.all_contacts.map((contact, idx) => (
@@ -6453,7 +6453,7 @@ function VendorPortalPage() {
                 {/* Notes */}
                 {selectedSavedLeadDetail.notes && (
                   <div className="bg-yellow-50 rounded-xl p-4">
-                    <h3 className="font-semibold text-slate-900 mb-2">ðŸ“ Notes</h3>
+                    <h3 className="font-semibold text-slate-900 mb-2">📝 Notes</h3>
                     <p className="text-sm text-slate-700 whitespace-pre-wrap">{selectedSavedLeadDetail.notes}</p>
                   </div>
                 )}
@@ -6467,7 +6467,7 @@ function VendorPortalPage() {
                   href={`mailto:${selectedSavedLeadDetail.contact_email}?subject=Regarding E-Rate Services for ${selectedSavedLeadDetail.entity_name || selectedSavedLeadDetail.ben}`}
                   className="px-4 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-2"
                 >
-                  ðŸ“§ Contact Entity
+                  📧 Contact Entity
                 </a>
               )}
               {selectedSavedLeadDetail.entity_name && (
