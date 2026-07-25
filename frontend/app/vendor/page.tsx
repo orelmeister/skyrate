@@ -17,7 +17,7 @@ import MissingIdentifierBanner from "@/components/MissingIdentifierBanner";
 import { SkeletonRows, SkeletonTable, SkeletonStatCards } from "@/components/Skeleton";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { DisbursementPanel } from "@/components/FRNDetailModal";
-import { ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronRight, ChevronDown, Target, Clock, Building2, Bell, ArrowUpRight, Zap, BarChart3, Search, TrendingUp } from "lucide-react";
 import PilotFrns from "./PilotFrns";
 
 const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "cyber-pilot", "470-leads", "map", "predicted-leads", "competitive", "search", "leads", "settings"] as const;
@@ -48,12 +48,12 @@ async function forceDownloadFile(url: string, suggestedFilename?: string): Promi
     try {
       const u = new URL(url);
       if (u.hostname === "publicdata.usac.org") {
-        // Always route USAC PDFs through the backend proxy — same-origin request
+        // Always route USAC PDFs through the backend proxy â€” same-origin request
         // avoids CORS issues and gives the browser proper Content-Disposition.
         fetchUrl = `/api/v1/vendor/rfp-download?url=${encodeURIComponent(url)}`;
       }
     } catch {
-      // not a parseable URL — fall through to direct fetch
+      // not a parseable URL â€” fall through to direct fetch
     }
 
     const response = await fetch(fetchUrl, { method: "GET", credentials: "same-origin" });
@@ -78,6 +78,223 @@ async function forceDownloadFile(url: string, suggestedFilename?: string): Promi
     console.error("forceDownloadFile failed, falling back to new-tab open:", err);
     window.open(url, "_blank", "noopener,noreferrer");
   }
+}
+
+// ---------------------------------------------------------------------------
+// VendorCommandCenter
+// Dark, bento-style "command center" home for the vendor portal. Mirrors the
+// SkyRate dashboard-revamp design concept: greeting header, opportunity KPI,
+// a real 28-day bid-window ring for the next closing Form 470, a portfolio
+// summary, a "needs your attention" queue of soonest-closing RFPs, a live
+// opportunities feed, top customers, and quick actions. All wired to real data.
+// ---------------------------------------------------------------------------
+function VendorCommandCenter({
+  profile, stats, entities, leads, leadsLoading, leadsLoaded, leadsTotal,
+  savedCount, savedLoading, user, onTab, onOpenLead,
+}: {
+  profile: VendorProfile | null;
+  stats: { total_entities: number; total_authorized: number; funding_years: string[]; service_provider_name: string | null } | null;
+  entities: ServicedEntity[];
+  leads: Form470Lead[];
+  leadsLoading: boolean;
+  leadsLoaded: boolean;
+  leadsTotal: number;
+  savedCount: number;
+  savedLoading: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  user: any;
+  onTab: (t: VendorTab) => void;
+  onOpenLead: (app: string) => void;
+}) {
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const company = stats?.service_provider_name || profile?.company_name || "there";
+  const authM = stats ? stats.total_authorized / 1e6 : null;
+  const yearsActive = stats?.funding_years?.length ?? 0;
+  const planLabel = user?.role === 'super' ? 'Super' : user?.role === 'admin' ? 'Admin' : user?.subscription?.status === 'trialing' ? 'Trial' : 'Pro';
+
+  const withDeadline = leads.map((l) => {
+    const d = l.allowable_contract_date ? new Date(l.allowable_contract_date) : null;
+    const days = d && !isNaN(d.getTime()) ? Math.ceil((d.getTime() - Date.now()) / 86400000) : null;
+    return { l, days };
+  });
+  const closing = withDeadline.filter((x) => x.days != null && x.days >= 0).sort((a, b) => (a.days as number) - (b.days as number));
+  const nextDeadline = closing[0] || null;
+  const attention = closing.slice(0, 3);
+
+  const RING = 28; // Form 470 minimum bidding window (days)
+  const dLeft = nextDeadline?.days ?? null;
+  const ringPct = dLeft != null ? Math.max(0, Math.min(1, dLeft / RING)) : 0;
+  const R = 34;
+  const CIRC = 2 * Math.PI * R;
+  const money = (n: number) => n >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(0)}K` : `$${n}`;
+
+  return (
+    <div className="rounded-3xl bg-[#0a0a16] border border-slate-800/80 p-6 md:p-8 text-slate-100 shadow-2xl">
+      {/* Greeting header */}
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold">
+            {greeting}, <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">{company}</span>
+          </h1>
+          <p className="text-slate-400 mt-1 text-sm">
+            {stats ? (
+              <>You service <span className="text-slate-200 font-medium">{stats.total_entities.toLocaleString()}</span> entities â€” {leadsLoaded ? (<><span className="text-slate-200 font-medium">{leadsTotal.toLocaleString()}</span> open opportunities today.</>) : "loading opportunitiesâ€¦"}</>
+            ) : "Here's your E-Rate opportunity command center."}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700">{planLabel} plan</span>
+          <button onClick={() => onTab("470-leads")} className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all flex items-center gap-1.5">
+            <Target className="w-4 h-4" /> Browse leads
+          </button>
+        </div>
+      </div>
+
+      {/* No-SPIN prompt */}
+      {!profile?.spin && (
+        <button onClick={() => onTab("settings")} className="w-full text-left mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 flex items-center gap-3 hover:bg-amber-500/15 transition-colors">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-300"><Zap className="w-5 h-5" /></div>
+          <div className="flex-1">
+            <div className="font-semibold text-amber-200">Connect your SPIN to unlock your portfolio</div>
+            <div className="text-sm text-amber-200/70">See the entities you service and your E-Rate history.</div>
+          </div>
+          <ChevronRight className="w-5 h-5 text-amber-300" />
+        </button>
+      )}
+
+      {/* Top bento row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <button onClick={() => onTab("470-leads")} className="text-left rounded-2xl bg-gradient-to-br from-purple-600/20 to-pink-600/10 border border-purple-500/20 p-5 hover:border-purple-400/40 transition-all group">
+          <div className="flex items-center justify-between">
+            <div className="w-11 h-11 rounded-xl bg-purple-500/20 flex items-center justify-center text-purple-300"><Target className="w-5 h-5" /></div>
+            <ArrowUpRight className="w-5 h-5 text-slate-500 group-hover:text-purple-300 transition-colors" />
+          </div>
+          <div className="text-4xl font-bold mt-4">{leadsLoaded ? leadsTotal.toLocaleString() : "â€”"}</div>
+          <div className="text-sm text-slate-400 mt-1">Open Form 470 opportunities</div>
+        </button>
+
+        <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-5">
+          <div className="flex items-center gap-2 text-slate-400 text-sm mb-3"><Clock className="w-4 h-4" /> Next bid deadline</div>
+          {nextDeadline ? (
+            <div className="flex items-center gap-4">
+              <div className="relative w-24 h-24 shrink-0">
+                <svg width="96" height="96" viewBox="0 0 96 96">
+                  <circle cx="48" cy="48" r={R} fill="none" stroke="#1e293b" strokeWidth="8" />
+                  <circle cx="48" cy="48" r={R} fill="none" stroke="url(#vccRing)" strokeWidth="8" strokeLinecap="round" strokeDasharray={CIRC} strokeDashoffset={CIRC * (1 - ringPct)} transform="rotate(-90 48 48)" />
+                  <defs><linearGradient id="vccRing" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#a855f7" /><stop offset="1" stopColor="#ec4899" /></linearGradient></defs>
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-xl font-bold">{dLeft}</span>
+                  <span className="text-[10px] text-slate-400 -mt-0.5">days</span>
+                </div>
+              </div>
+              <div className="min-w-0">
+                <div className="font-semibold truncate">{nextDeadline.l.entity_name}</div>
+                <div className="text-xs text-slate-400 mt-0.5">{[nextDeadline.l.city, nextDeadline.l.state].filter(Boolean).join(", ")}</div>
+                <button onClick={() => onOpenLead(nextDeadline.l.application_number)} className="mt-2 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500 transition-all">Reach out â†’</button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-slate-500 text-sm py-6 text-center">No open bid deadlines right now.</div>
+          )}
+        </div>
+
+        <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-5">
+          <div className="flex items-center gap-2 text-slate-400 text-sm mb-3"><Building2 className="w-4 h-4" /> Your portfolio</div>
+          <div className="text-3xl font-bold">{authM != null ? `$${authM.toFixed(2)}M` : "â€”"}</div>
+          <div className="text-xs text-slate-400">E-Rate authorized across your customers</div>
+          <div className="mt-4 space-y-2 text-sm">
+            <div className="flex items-center justify-between"><span className="text-slate-400">Entities serviced</span><span className="font-semibold">{stats?.total_entities?.toLocaleString() ?? "â€”"}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-400">Years active</span><span className="font-semibold">{yearsActive || "â€”"}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-400">Saved leads</span><span className="font-semibold">{savedLoading && savedCount === 0 ? "â€”" : savedCount}</span></div>
+          </div>
+        </div>
+      </div>
+
+      {/* Middle row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
+        <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div><div className="font-semibold">Needs your attention</div><div className="text-xs text-slate-400">Opportunities closing soonest</div></div>
+            <Bell className="w-4 h-4 text-slate-500" />
+          </div>
+          {attention.length > 0 ? (
+            <div className="space-y-2">
+              {attention.map(({ l, days }) => (
+                <div key={l.application_number} className="flex items-center gap-3 rounded-xl bg-slate-800/50 border border-slate-700/50 p-3">
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold ${(days as number) <= 7 ? "bg-red-500/20 text-red-300" : "bg-amber-500/20 text-amber-300"}`}>{days}d</div>
+                  <div className="flex-1 min-w-0"><div className="font-medium truncate text-sm">{l.entity_name}</div><div className="text-xs text-slate-400 truncate">{[l.city, l.state].filter(Boolean).join(", ")}</div></div>
+                  <button onClick={() => onOpenLead(l.application_number)} className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-100 transition-colors shrink-0">Reach out</button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-slate-500 text-sm py-8 text-center">{leadsLoading && !leadsLoaded ? "Loadingâ€¦" : "You're all caught up."}</div>
+          )}
+        </div>
+
+        <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div><div className="font-semibold">Latest opportunities</div><div className="text-xs text-slate-400">Newest RFPs posted to USAC</div></div>
+            <button onClick={() => onTab("470-leads")} className="text-xs text-purple-300 hover:text-purple-200 font-medium">Browse all â†’</button>
+          </div>
+          {leadsLoading && leads.length === 0 ? (
+            <div className="text-slate-500 text-sm py-8 text-center">Loading opportunitiesâ€¦</div>
+          ) : leads.length === 0 ? (
+            <div className="text-slate-500 text-sm py-8 text-center">No open Form 470s to show.</div>
+          ) : (
+            <div className="space-y-1.5">
+              {leads.slice(0, 5).map((l) => {
+                const cat = (l.categories || [])[0] || (l.service_types || [])[0];
+                return (
+                  <button key={l.application_number} onClick={() => onOpenLead(l.application_number)} className="w-full text-left flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-slate-800/60 transition-colors">
+                    <div className="w-2 h-2 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 shrink-0" />
+                    <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{l.entity_name}</div><div className="text-xs text-slate-400 truncate">{[l.city, l.state].filter(Boolean).join(", ")}{cat ? ` Â· ${cat}` : ""}</div></div>
+                    <ChevronRight className="w-4 h-4 text-slate-600 shrink-0" />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Top customers */}
+      {entities.length > 0 && (
+        <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-5 mt-5">
+          <div className="flex items-center justify-between mb-3">
+            <div><div className="font-semibold">Top customers by E-Rate funding</div><div className="text-xs text-slate-400">Your highest-value relationships</div></div>
+            <button onClick={() => onTab("my-entities")} className="text-xs text-purple-300 hover:text-purple-200 font-medium">View all â†’</button>
+          </div>
+          <div className="space-y-1.5">
+            {entities.slice(0, 5).map((e, i) => (
+              <div key={e.ben} className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-slate-800/40 transition-colors">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500/30 to-pink-500/20 flex items-center justify-center text-sm font-bold text-purple-200">{i + 1}</div>
+                <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{e.organization_name}</div><div className="text-xs text-slate-400">{e.state} Â· {e.frn_count} FRNs Â· {e.funding_years?.length || 0} yrs</div></div>
+                <div className="text-sm font-semibold text-emerald-400">{money(e.total_amount || 0)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Quick actions */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
+        {([
+          { label: "Browse 470 leads", icon: <Target className="w-5 h-5" />, tab: "470-leads" as VendorTab },
+          { label: "FRN status", icon: <BarChart3 className="w-5 h-5" />, tab: "frn-status" as VendorTab },
+          { label: "Search schools", icon: <Search className="w-5 h-5" />, tab: "search" as VendorTab },
+          { label: "Competitive intel", icon: <TrendingUp className="w-5 h-5" />, tab: "competitive" as VendorTab },
+        ]).map((a) => (
+          <button key={a.label} onClick={() => onTab(a.tab)} className="rounded-2xl bg-slate-900/60 border border-slate-800 hover:border-purple-500/40 hover:bg-slate-800/60 p-4 flex flex-col items-center gap-2 transition-all text-slate-300 hover:text-white">
+            <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-purple-300">{a.icon}</div>
+            <span className="text-sm font-medium">{a.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function VendorPortalWrapper() {
@@ -440,7 +657,7 @@ function VendorPortalPage() {
   const [form470DetailLoading, setForm470DetailLoading] = useState(false);
   const [showForm470Modal, setShowForm470Modal] = useState(false);
 
-  // Dashboard "Latest Opportunities" — a lightweight, newest-first slice of Form 470
+  // Dashboard "Latest Opportunities" â€” a lightweight, newest-first slice of Form 470
   // leads shown on the landing dashboard. Kept separate from the full 470-leads tab
   // state so the two never interfere.
   const [dashLeads, setDashLeads] = useState<Form470Lead[]>([]);
@@ -654,7 +871,7 @@ function VendorPortalPage() {
     if (activeTab === "frn-status" && !profile?.spin && !isLoading) {
       setFrnStatusGlobalView(true);
     }
-    // Perf (A4): fetch serviced entities (USAC roundtrip) lazily — only when
+    // Perf (A4): fetch serviced entities (USAC roundtrip) lazily â€” only when
     // the dashboard or "my-entities" tab is open. The dashboard needs the
     // stats payload to render its purple success banner; without it, the
     // banner would fall back to the "Complete Your Profile" warning even
@@ -1062,7 +1279,7 @@ function VendorPortalPage() {
     setEnrichmentData(null);
   };
 
-  // Lightweight loader for the dashboard "Latest Opportunities" feed — newest
+  // Lightweight loader for the dashboard "Latest Opportunities" feed â€” newest
   // Form 470 postings, capped small so the landing page stays fast.
   const loadDashboardOpportunities = async () => {
     setDashLeadsLoading(true);
@@ -1535,7 +1752,7 @@ function VendorPortalPage() {
   };
 
   // Show loading state while checking payment status
-  // perf_v2: gated — see consultant/page.tsx for rationale.
+  // perf_v2: gated â€” see consultant/page.tsx for rationale.
   if (!PERF_V2_ENABLED && (!_hasHydrated || checkingPayment)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -1551,14 +1768,14 @@ function VendorPortalPage() {
     return (
       <div className="min-h-screen bg-slate-50 px-4 py-8">
         <div className="max-w-7xl mx-auto space-y-6">
-          {/* Dashboard skeleton — Phase A4 loading UX */}
+          {/* Dashboard skeleton â€” Phase A4 loading UX */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3">
             <SkeletonRows rows={1} height="h-7" gap="" />
             <SkeletonRows rows={1} height="h-4" gap="" />
           </div>
           <SkeletonStatCards count={4} />
           <SkeletonTable rows={6} columns={5} />
-          <div className="text-center text-slate-400 text-sm">Loading your dashboard…</div>
+          <div className="text-center text-slate-400 text-sm">Loading your dashboardâ€¦</div>
         </div>
       </div>
     );
@@ -1583,17 +1800,17 @@ function VendorPortalPage() {
   ];
 
   const navItems = [
-    { id: "dashboard", label: "Dashboard", icon: "📊" },
-    { id: "my-entities", label: "My Entities", icon: "🏫" },
-    { id: "frn-status", label: "FRN Status", icon: "📈" },
-    { id: "cyber-pilot", label: "Cybersecurity Pilot", icon: "🛡️" },
-    { id: "470-leads", label: "Form 470 Leads", icon: "🎯" },
-    { id: "map", label: "Opportunity Map", icon: "🗺️" },
-    { id: "predicted-leads", label: "Predicted Leads", icon: "🔮" },
-    { id: "competitive", label: "471 Lookup", icon: "🔎" },
-    { id: "search", label: "School Search", icon: "🔍" },
-    { id: "leads", label: "Saved Leads", icon: "📋" },
-    { id: "settings", label: "Settings", icon: "⚙️" },
+    { id: "dashboard", label: "Dashboard", icon: "ðŸ“Š" },
+    { id: "my-entities", label: "My Entities", icon: "ðŸ«" },
+    { id: "frn-status", label: "FRN Status", icon: "ðŸ“ˆ" },
+    { id: "cyber-pilot", label: "Cybersecurity Pilot", icon: "ðŸ›¡ï¸" },
+    { id: "470-leads", label: "Form 470 Leads", icon: "ðŸŽ¯" },
+    { id: "map", label: "Opportunity Map", icon: "ðŸ—ºï¸" },
+    { id: "predicted-leads", label: "Predicted Leads", icon: "ðŸ”®" },
+    { id: "competitive", label: "471 Lookup", icon: "ðŸ”Ž" },
+    { id: "search", label: "School Search", icon: "ðŸ”" },
+    { id: "leads", label: "Saved Leads", icon: "ðŸ“‹" },
+    { id: "settings", label: "Settings", icon: "âš™ï¸" },
   ];
 
   return (
@@ -1638,7 +1855,7 @@ function VendorPortalPage() {
             href="/industry-pulse"
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all text-slate-600 hover:bg-slate-50"
           >
-            <span className="text-xl">📊</span>
+            <span className="text-xl">ðŸ“Š</span>
             <span>Industry Pulse</span>
           </Link>
         </nav>
@@ -1652,7 +1869,7 @@ function VendorPortalPage() {
                 href="/consultant"
                 className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-slate-600 hover:bg-indigo-50 hover:text-indigo-700 transition-all text-sm"
               >
-                <span className="text-lg">📊</span>
+                <span className="text-lg">ðŸ“Š</span>
                 <span>Consultant Portal</span>
                 <svg className="w-4 h-4 ml-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </Link>
@@ -1660,7 +1877,7 @@ function VendorPortalPage() {
                 href="/super"
                 className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-slate-600 hover:bg-yellow-50 hover:text-yellow-700 transition-all text-sm"
               >
-                <span className="text-lg">⭐</span>
+                <span className="text-lg">â­</span>
                 <span>Super Dashboard</span>
                 <svg className="w-4 h-4 ml-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </Link>
@@ -1676,7 +1893,7 @@ function VendorPortalPage() {
                 {user?.role === 'super' || user?.role === 'admin' ? 'Full Access' : 'Pro Plan'}
               </span>
               <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs">
-                {user?.role === 'super' ? '⭐ Super' : user?.role === 'admin' ? '🔑 Admin' : 'Active'}
+                {user?.role === 'super' ? 'â­ Super' : user?.role === 'admin' ? 'ðŸ”‘ Admin' : 'Active'}
               </span>
             </div>
             <div className="text-2xl font-bold">{profile?.search_count || 0} Searches</div>
@@ -1727,7 +1944,7 @@ function VendorPortalPage() {
             </h1>
           </div>
           <div className="flex items-center gap-3">
-            {/* Persistent portal switcher (super/admin) — always reachable so a
+            {/* Persistent portal switcher (super/admin) â€” always reachable so a
                 super account can never get trapped in the vendor portal (#14). */}
             {(user?.role === 'super' || user?.role === 'admin') && (
               <Link
@@ -1763,330 +1980,20 @@ function VendorPortalPage() {
         {/* Page Content */}
         <div className="p-6">
           {activeTab === "dashboard" && (
-            <div className="space-y-6">
-              {/* Company Info Banner */}
-              {profile?.spin ? (
-                servicedEntitiesStats ? (
-                  <div className="bg-gradient-to-r from-purple-600 via-purple-700 to-pink-600 rounded-2xl p-6 text-white shadow-lg">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
-                          <span className="text-3xl">🏢</span>
-                        </div>
-                        <div>
-                          <h1 className="text-2xl font-bold">{servicedEntitiesStats.service_provider_name || profile.company_name || 'Your Company'}</h1>
-                          <div className="flex items-center gap-3 mt-1 text-purple-100">
-                            <span className="font-mono bg-white/20 px-2 py-0.5 rounded text-sm">SPIN: {profile.spin}</span>
-                            <span className="flex items-center gap-1 text-sm">
-                              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                              Active Service Provider
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => setActiveTab("my-entities")}
-                        className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
-                      >
-                        View All Entities →
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-4 gap-6 mt-6 pt-6 border-t border-white/20">
-                      <div>
-                        <div className="text-3xl font-bold">{servicedEntitiesStats.total_entities}</div>
-                        <div className="text-sm text-purple-200 mt-1">Entities Serviced</div>
-                      </div>
-                      <div>
-                        <div className="text-3xl font-bold">${(servicedEntitiesStats.total_authorized / 1000000).toFixed(2)}M</div>
-                        <div className="text-sm text-purple-200 mt-1">Total E-Rate Authorized</div>
-                      </div>
-                      <div>
-                        <div className="text-3xl font-bold">{servicedEntitiesStats.funding_years.length}</div>
-                        <div className="text-sm text-purple-200 mt-1">Years Active</div>
-                      </div>
-                      <div>
-                        <div className="text-3xl font-bold">{servicedEntitiesStats.funding_years[0] || 'N/A'}</div>
-                        <div className="text-sm text-purple-200 mt-1">Most Recent Year</div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  // Loading variant of the success banner — shown while
-                  // serviced-entity stats are still being fetched. Keeps the
-                  // purple gradient so it never flashes as a warning when a
-                  // SPIN is set.
-                  <div className="bg-gradient-to-r from-purple-600 via-purple-700 to-pink-600 rounded-2xl p-6 text-white shadow-lg">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
-                          <span className="text-3xl">🏢</span>
-                        </div>
-                        <div>
-                          <h1 className="text-2xl font-bold">{profile.company_name || 'Your Company'}</h1>
-                          <div className="flex items-center gap-3 mt-1 text-purple-100">
-                            <span className="font-mono bg-white/20 px-2 py-0.5 rounded text-sm">SPIN: {profile.spin}</span>
-                            <span className="flex items-center gap-1 text-sm">
-                              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                              Active Service Provider
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => setActiveTab("my-entities")}
-                        className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
-                      >
-                        View All Entities →
-                      </button>
-                    </div>
-                    <div className="mt-6 pt-6 border-t border-white/20 flex items-center gap-3 text-purple-100">
-                      <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      <span className="text-sm">Loading your E-Rate portfolio…</span>
-                    </div>
-                  </div>
-                )
-              ) : (
-                <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200 p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
-                      <span className="text-2xl">⚠️</span>
-                    </div>
-                    <div className="flex-1">
-                      <h2 className="text-lg font-semibold text-slate-900">Complete Your Profile</h2>
-                      <p className="text-sm text-slate-600 mt-1">
-                        Add your SPIN number to see your serviced entities and E-Rate history
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setActiveTab("settings")}
-                      className="px-4 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors text-sm font-medium"
-                    >
-                      Setup SPIN →
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* KPI row — real metrics only (no vanity/placeholder numbers) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <button
-                  onClick={() => setActiveTab("470-leads")}
-                  className="text-left bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md hover:border-purple-300 transition-all group"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 rounded-xl bg-purple-100 group-hover:bg-purple-200 flex items-center justify-center transition-colors">
-                      <span className="text-2xl">🎯</span>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-purple-500 transition-colors" />
-                  </div>
-                  <div className="text-3xl font-bold text-slate-900">{!dashLeadsLoaded ? '—' : dashLeadsTotal.toLocaleString()}</div>
-                  <div className="text-sm text-slate-500 mt-1">Open Form 470 opportunities</div>
-                </button>
-
-                <button
-                  onClick={() => setActiveTab("leads")}
-                  className="text-left bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md hover:border-green-300 transition-all group"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 rounded-xl bg-green-100 group-hover:bg-green-200 flex items-center justify-center transition-colors">
-                      <span className="text-2xl">🔖</span>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-green-500 transition-colors" />
-                  </div>
-                  <div className="text-3xl font-bold text-slate-900">{savedLeadsLoading && savedLeadsTotalCount === 0 ? '—' : savedLeadsTotalCount.toLocaleString()}</div>
-                  <div className="text-sm text-slate-500 mt-1">Saved leads in your pipeline</div>
-                </button>
-
-                <button
-                  onClick={() => setActiveTab("my-entities")}
-                  className="text-left bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all group"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 rounded-xl bg-blue-100 group-hover:bg-blue-200 flex items-center justify-center transition-colors">
-                      <span className="text-2xl">🏫</span>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 transition-colors" />
-                  </div>
-                  <div className="text-3xl font-bold text-slate-900">{servicedEntitiesStats ? servicedEntitiesStats.total_entities.toLocaleString() : (profile?.spin ? '—' : '0')}</div>
-                  <div className="text-sm text-slate-500 mt-1">Entities you currently service</div>
-                </button>
-
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 rounded-xl bg-pink-100 flex items-center justify-center">
-                      <span className="text-2xl">💼</span>
-                    </div>
-                    <span className="text-xs text-pink-600 font-medium px-2 py-1 bg-pink-50 rounded-full">
-                      {user?.role === 'super' || user?.role === 'admin' ? 'Full' : 'Active'}
-                    </span>
-                  </div>
-                  <div className="text-3xl font-bold text-slate-900">
-                    {user?.role === 'super' ? 'Super' : user?.role === 'admin' ? 'Admin' : user?.subscription?.status === 'trialing' ? 'Trial' : 'Pro'}
-                  </div>
-                  <div className="text-sm text-slate-500 mt-1">
-                    {user?.role === 'super' || user?.role === 'admin' ? 'Full access' : 'Your plan'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Latest Form 470 Opportunities — the vendor's core job-to-be-done */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-                  <div>
-                    <h2 className="text-lg font-semibold text-slate-900">Latest Form 470 opportunities</h2>
-                    <p className="text-sm text-slate-500">Newest RFPs posted to USAC — reach out before your competitors do</p>
-                  </div>
-                  <button
-                    onClick={() => setActiveTab("470-leads")}
-                    className="text-sm text-purple-600 hover:underline font-medium whitespace-nowrap"
-                  >
-                    Browse all →
-                  </button>
-                </div>
-                {dashLeadsLoading && dashLeads.length === 0 ? (
-                  <div className="p-10 text-center text-slate-400">
-                    <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-                    Loading opportunities…
-                  </div>
-                ) : dashLeads.length === 0 ? (
-                  <div className="p-10 text-center">
-                    <div className="text-4xl mb-2">🎯</div>
-                    <p className="text-slate-700 font-medium">No open Form 470s to show right now</p>
-                    <p className="text-sm text-slate-400 mt-1">New RFPs appear here as schools and libraries post them.</p>
-                    <button
-                      onClick={() => setActiveTab("470-leads")}
-                      className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-xl text-sm font-medium hover:bg-purple-700 transition-colors"
-                    >
-                      Explore all opportunities →
-                    </button>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-slate-100">
-                    {dashLeads.slice(0, 5).map((lead) => {
-                      const tags = [...(lead.categories || []), ...(lead.service_types || [])].filter(Boolean).slice(0, 3);
-                      const posted = lead.posting_date ? new Date(lead.posting_date) : null;
-                      const deadline = lead.allowable_contract_date ? new Date(lead.allowable_contract_date) : null;
-                      const daysLeft = deadline && !isNaN(deadline.getTime()) ? Math.ceil((deadline.getTime() - Date.now()) / 86400000) : null;
-                      return (
-                        <button
-                          key={lead.application_number}
-                          onClick={() => load470Detail(lead.application_number)}
-                          className="w-full text-left p-4 flex items-center gap-4 hover:bg-slate-50 transition-colors"
-                        >
-                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center text-lg shrink-0">🏫</div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-slate-900 truncate">{lead.entity_name}</div>
-                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                              <span className="text-xs text-slate-500">{[lead.city, lead.state].filter(Boolean).join(', ')}</span>
-                              {tags.map((t, i) => (
-                                <span key={i} className="text-[11px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 border border-purple-100">{t}</span>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="text-right shrink-0">
-                            {daysLeft != null && daysLeft >= 0 ? (
-                              <div className={`text-sm font-semibold ${daysLeft <= 7 ? 'text-red-600' : daysLeft <= 21 ? 'text-amber-600' : 'text-slate-700'}`}>
-                                {daysLeft === 0 ? 'Closes today' : `${daysLeft}d to bid`}
-                              </div>
-                            ) : posted && !isNaN(posted.getTime()) ? (
-                              <div className="text-sm font-medium text-slate-500">Posted {posted.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
-                            ) : null}
-                            <div className="text-xs text-slate-400">#{lead.application_number}</div>
-                          </div>
-                          <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Top Entities Preview */}
-              {servicedEntities.length > 0 && (
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-                    <div>
-                      <h2 className="text-lg font-semibold text-slate-900">Top Entities by E-Rate Funding</h2>
-                      <p className="text-sm text-slate-500">Your highest-value customer relationships</p>
-                    </div>
-                    <button
-                      onClick={() => setActiveTab("my-entities")}
-                      className="text-sm text-purple-600 hover:underline font-medium"
-                    >
-                      View All →
-                    </button>
-                  </div>
-                  <div className="divide-y divide-slate-100">
-                    {servicedEntities.slice(0, 5).map((entity, idx) => (
-                      <div key={entity.ben} className="p-4 flex items-center gap-4 hover:bg-slate-50 transition-colors">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center font-bold text-purple-600">
-                          {idx + 1}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-slate-900 truncate">{entity.organization_name}</div>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-xs text-slate-500">{entity.state}</span>
-                            <span className="text-slate-300">•</span>
-                            <span className="text-xs text-slate-500">{entity.frn_count} FRNs</span>
-                            <span className="text-slate-300">•</span>
-                            <span className="text-xs text-slate-500">{entity.funding_years?.length || 0} years</span>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-semibold text-green-600">${entity.total_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-                          <div className="text-xs text-slate-500">authorized</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Quick Actions — all routed to real, high-value tabs */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-6">
-                <h2 className="text-lg font-semibold text-slate-900 mb-4">Quick actions</h2>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <button
-                    onClick={() => setActiveTab("470-leads")}
-                    className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-purple-300 hover:bg-purple-50 transition-all text-center group"
-                  >
-                    <div className="w-10 h-10 rounded-lg bg-purple-100 group-hover:bg-purple-200 flex items-center justify-center mx-auto mb-2 transition-colors">
-                      <span className="text-xl">🎯</span>
-                    </div>
-                    <span className="text-sm font-medium text-slate-700">Browse 470 leads</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("frn-status")}
-                    className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-teal-300 hover:bg-teal-50 transition-all text-center group"
-                  >
-                    <div className="w-10 h-10 rounded-lg bg-teal-100 group-hover:bg-teal-200 flex items-center justify-center mx-auto mb-2 transition-colors">
-                      <span className="text-xl">📈</span>
-                    </div>
-                    <span className="text-sm font-medium text-slate-700">FRN status</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("search")}
-                    className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-all text-center group"
-                  >
-                    <div className="w-10 h-10 rounded-lg bg-blue-100 group-hover:bg-blue-200 flex items-center justify-center mx-auto mb-2 transition-colors">
-                      <span className="text-xl">🔍</span>
-                    </div>
-                    <span className="text-sm font-medium text-slate-700">Search schools</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("competitive")}
-                    className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-pink-300 hover:bg-pink-50 transition-all text-center group"
-                  >
-                    <div className="w-10 h-10 rounded-lg bg-pink-100 group-hover:bg-pink-200 flex items-center justify-center mx-auto mb-2 transition-colors">
-                      <span className="text-xl">📊</span>
-                    </div>
-                    <span className="text-sm font-medium text-slate-700">Competitive intel</span>
-                  </button>
-                </div>
-              </div>
-            </div>
+            <VendorCommandCenter
+              profile={profile}
+              stats={servicedEntitiesStats}
+              entities={servicedEntities}
+              leads={dashLeads}
+              leadsLoading={dashLeadsLoading}
+              leadsLoaded={dashLeadsLoaded}
+              leadsTotal={dashLeadsTotal}
+              savedCount={savedLeadsTotalCount}
+              savedLoading={savedLeadsLoading}
+              user={user}
+              onTab={setActiveTab}
+              onOpenLead={load470Detail}
+            />
           )}
 
         {/* Cybersecurity Pilot Program Tab */}
@@ -2100,7 +2007,7 @@ function VendorPortalPage() {
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
-                    <span className="text-3xl">📈</span>
+                    <span className="text-3xl">ðŸ“ˆ</span>
                   </div>
                   <div>
                     <h1 className="text-2xl font-bold">FRN Status Monitoring</h1>
@@ -2124,7 +2031,7 @@ function VendorPortalPage() {
                           return `${Math.round(diff / 1440)}d ago`;
                         })()}</>
                       ) : "Not yet synced"}
-                      {" — "}
+                      {" â€” "}
                       <button
                         onClick={() => loadFRNStatus(frnStatusYear, frnStatusFilter, frnPendingReason, undefined, undefined, undefined, frnStatusGlobalView)}
                         disabled={!frnStatusGlobalView && !profile?.spin}
@@ -2155,7 +2062,7 @@ function VendorPortalPage() {
                 } ${!profile?.spin ? "opacity-50 cursor-not-allowed" : ""}`}
                 title={!profile?.spin ? "Configure your SPIN in Settings to view your own contracts" : "View your contracts"}
               >
-                💼 My Contracts (SPIN Scoped)
+                ðŸ’¼ My Contracts (SPIN Scoped)
               </button>
               <button
                 type="button"
@@ -2170,7 +2077,7 @@ function VendorPortalPage() {
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                🌐 Global USAC Market (All FRNs)
+                ðŸŒ Global USAC Market (All FRNs)
               </button>
             </div>
 
@@ -2178,7 +2085,7 @@ function VendorPortalPage() {
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-200 p-5 shadow-sm">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-                    <span className="text-2xl">🌐</span>
+                    <span className="text-2xl">ðŸŒ</span>
                   </div>
                   <div className="flex-1">
                     <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Global USAC Market View</h2>
@@ -2199,7 +2106,7 @@ function VendorPortalPage() {
               <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200 p-6">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
-                    <span className="text-2xl">⚠️</span>
+                    <span className="text-2xl">âš ï¸</span>
                   </div>
                   <div className="flex-1">
                     <h2 className="text-lg font-semibold text-slate-900">SPIN Not Configured</h2>
@@ -2211,7 +2118,7 @@ function VendorPortalPage() {
                     onClick={() => setActiveTab("settings")}
                     className="px-4 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors text-sm font-medium"
                   >
-                    Setup SPIN →
+                    Setup SPIN â†’
                   </button>
                 </div>
               </div>
@@ -2320,7 +2227,7 @@ function VendorPortalPage() {
                       {frnStatusLoading ? (
                         <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                       ) : (
-                        <span>🔍</span>
+                        <span>ðŸ”</span>
                       )}
                       Apply Filters
                     </button>
@@ -2333,14 +2240,14 @@ function VendorPortalPage() {
                     <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm text-slate-600">Total FRNs</span>
-                        <span className="text-2xl">📋</span>
+                        <span className="text-2xl">ðŸ“‹</span>
                       </div>
                       <div className="text-3xl font-bold text-slate-900">{frnStatusData.total_frns}</div>
                     </div>
                     <div className="bg-white rounded-2xl border border-green-200 p-6 shadow-sm bg-gradient-to-br from-green-50 to-emerald-50">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm text-green-700">Funded</span>
-                        <span className="text-2xl">✅</span>
+                        <span className="text-2xl">âœ…</span>
                       </div>
                       <div className="text-3xl font-bold text-green-700">{frnStatusData.summary?.funded?.count || 0}</div>
                       <div className="text-sm text-green-600 mt-1">
@@ -2350,7 +2257,7 @@ function VendorPortalPage() {
                     <div className="bg-white rounded-2xl border border-red-200 p-6 shadow-sm bg-gradient-to-br from-red-50 to-rose-50">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm text-red-700">Denied</span>
-                        <span className="text-2xl">❌</span>
+                        <span className="text-2xl">âŒ</span>
                       </div>
                       <div className="text-3xl font-bold text-red-700">{frnStatusData.summary?.denied?.count || 0}</div>
                       <div className="text-sm text-red-600 mt-1">
@@ -2360,7 +2267,7 @@ function VendorPortalPage() {
                     <div className="bg-white rounded-2xl border border-amber-200 p-6 shadow-sm bg-gradient-to-br from-amber-50 to-yellow-50">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm text-amber-700">Pending</span>
-                        <span className="text-2xl">⏳</span>
+                        <span className="text-2xl">â³</span>
                       </div>
                       <div className="text-3xl font-bold text-amber-700">{frnStatusData.summary?.pending?.count || 0}</div>
                       <div className="text-sm text-amber-600 mt-1">
@@ -2410,10 +2317,10 @@ function VendorPortalPage() {
                               <span className="inline-flex items-center gap-1">
                                 Entity
                                 {frnTableSort?.field === 'entity_name' && (
-                                  <span className="text-blue-600">{frnTableSort.dir === 'asc' ? '↑' : '↓'}</span>
+                                  <span className="text-blue-600">{frnTableSort.dir === 'asc' ? 'â†‘' : 'â†“'}</span>
                                 )}
                                 {frnTableSort?.field !== 'entity_name' && (
-                                  <span className="text-slate-300">↕</span>
+                                  <span className="text-slate-300">â†•</span>
                                 )}
                               </span>
                             </th>
@@ -2453,7 +2360,7 @@ function VendorPortalPage() {
                               </td>
                               <td className="px-4 py-3">
                                 <div className="font-medium text-slate-900 truncate max-w-[200px]">{frn.entity_name}</div>
-                                <div className="text-xs text-slate-500">{frn.state} • BEN: {frn.ben}</div>
+                                <div className="text-xs text-slate-500">{frn.state} â€¢ BEN: {frn.ben}</div>
                               </td>
                               <td className="px-4 py-3 text-slate-600">{frn.funding_year}</td>
                               <td className="px-4 py-3 text-slate-600 truncate max-w-[150px]">{frn.service_type}</td>
@@ -2561,7 +2468,7 @@ function VendorPortalPage() {
                 {frnStatusData && sortedFrnData.length === 0 && (
                   <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
                     <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                      <span className="text-3xl">📭</span>
+                      <span className="text-3xl">ðŸ“­</span>
                     </div>
                     <h3 className="text-lg font-semibold text-slate-900">No FRNs Found</h3>
                     <p className="text-sm text-slate-600 mt-2">
@@ -2574,7 +2481,7 @@ function VendorPortalPage() {
                 {!frnStatusData && !frnStatusLoading && (
                   <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
                     <div className="w-16 h-16 rounded-full bg-teal-100 flex items-center justify-center mx-auto mb-4">
-                      <span className="text-3xl">📈</span>
+                      <span className="text-3xl">ðŸ“ˆ</span>
                     </div>
                     <h3 className="text-lg font-semibold text-slate-900">{frnStatusGlobalView ? 'Load Global Market Data' : profile?.spin ? 'Load FRN Status' : 'Search Any BEN'}</h3>
                     <p className="text-sm text-slate-600 mt-2 mb-4">
@@ -2774,7 +2681,7 @@ function VendorPortalPage() {
                 ) : null}
               </div>
 
-              {/* Report History — latest report + archive toggle */}
+              {/* Report History â€” latest report + archive toggle */}
               {reportHistory.length > 0 && (
                 <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
                   <div className="flex items-center justify-between mb-4">
@@ -2881,7 +2788,7 @@ function VendorPortalPage() {
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
-                    <span className="text-3xl">🎯</span>
+                    <span className="text-3xl">ðŸŽ¯</span>
                   </div>
                   <div>
                     <h1 className="text-2xl font-bold">Form 470 Lead Generation</h1>
@@ -2896,12 +2803,12 @@ function VendorPortalPage() {
               </div>
             </div>
 
-            {/* Compliance guardrails explainer — E-Rate pre-bid rules. Native
+            {/* Compliance guardrails explainer â€” E-Rate pre-bid rules. Native
                 <details> disclosure so no extra React state is needed. */}
             <details className="bg-blue-50 border border-blue-200 rounded-2xl p-5 group">
               <summary className="flex items-center gap-2 cursor-pointer list-none font-semibold text-slate-900">
-                <span className="text-lg">🛡️</span>
-                E-Rate competitive-bidding rules — read before you reach out
+                <span className="text-lg">ðŸ›¡ï¸</span>
+                E-Rate competitive-bidding rules â€” read before you reach out
                 <span className="ml-auto text-blue-600 text-sm group-open:hidden">Show</span>
                 <span className="ml-auto text-blue-600 text-sm hidden group-open:inline">Hide</span>
               </summary>
@@ -3031,7 +2938,7 @@ function VendorPortalPage() {
                 </div>
               </div>
 
-              {/* Deal-size ($) filters — uses USAC C2 Budget Tool data (6brt-5pbv).
+              {/* Deal-size ($) filters â€” uses USAC C2 Budget Tool data (6brt-5pbv).
                   Requires a State filter (we only enrich state-scoped queries). */}
               <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
@@ -3083,7 +2990,7 @@ function VendorPortalPage() {
                     className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                   >
                     <option value="">Newest First</option>
-                    <option value="entity_name">Applicant Name (A→Z)</option>
+                    <option value="entity_name">Applicant Name (Aâ†’Z)</option>
                     <option value="c2_budget_available">Highest C2 Budget Available</option>
                   </select>
                 </div>
@@ -3099,7 +3006,7 @@ function VendorPortalPage() {
                     </>
                   ) : (
                     <>
-                      <span>🔍</span>
+                      <span>ðŸ”</span>
                       Search 470s
                     </>
                   )}
@@ -3148,8 +3055,8 @@ function VendorPortalPage() {
                 <div>
                   <div className="font-medium text-green-800">Found {form470TotalLeads} Form 470 Leads</div>
                   <div className="text-sm text-green-600">
-                    {form470Filters.manufacturer && `Manufacturer: ${form470Filters.manufacturer} • `}
-                    {form470Filters.state && `State: ${form470Filters.state} • `}
+                    {form470Filters.manufacturer && `Manufacturer: ${form470Filters.manufacturer} â€¢ `}
+                    {form470Filters.state && `State: ${form470Filters.state} â€¢ `}
                     {form470Filters.category && `Category ${form470Filters.category}`}
                   </div>
                 </div>
@@ -3191,10 +3098,10 @@ function VendorPortalPage() {
                           <span className="flex items-center gap-1">
                             Entity
                             {form470Sort?.field === 'entity_name' && (
-                              <span className="text-blue-600">{form470Sort.dir === 'asc' ? '↑' : '↓'}</span>
+                              <span className="text-blue-600">{form470Sort.dir === 'asc' ? 'â†‘' : 'â†“'}</span>
                             )}
                             {form470Sort?.field !== 'entity_name' && (
-                              <span className="text-slate-300">↕</span>
+                              <span className="text-slate-300">â†•</span>
                             )}
                           </span>
                         </th>
@@ -3221,7 +3128,7 @@ function VendorPortalPage() {
                           <td className="px-4 py-3">
                             <div className="font-medium text-slate-900">{lead.entity_name || 'Unknown'}</div>
                             <div className="text-sm text-slate-500">
-                              470 #{lead.application_number} • {lead.applicant_type}
+                              470 #{lead.application_number} â€¢ {lead.applicant_type}
                             </div>
                           </td>
                           <td className="px-4 py-3">
@@ -3270,7 +3177,7 @@ function VendorPortalPage() {
                                 )}
                               </>
                             ) : (
-                              <span className="text-xs text-slate-400">—</span>
+                              <span className="text-xs text-slate-400">â€”</span>
                             )}
                           </td>
                           <td className="px-4 py-3">
@@ -3302,7 +3209,7 @@ function VendorPortalPage() {
             {!form470Loading && form470Leads.length === 0 && !form470Error && (
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center">
                 <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-3xl">🎯</span>
+                  <span className="text-3xl">ðŸŽ¯</span>
                 </div>
                 <h3 className="text-lg font-medium text-slate-900 mb-2">Search for Form 470 Leads</h3>
                 <p className="text-slate-600 mb-4">
@@ -3322,7 +3229,7 @@ function VendorPortalPage() {
           </div>
         )}
 
-        {/* Opportunity Map Tab (Phase D — geospatial) */}
+        {/* Opportunity Map Tab (Phase D â€” geospatial) */}
         {activeTab === "map" && (
           <div className="space-y-6">
             <OpportunityMap />
@@ -3358,7 +3265,7 @@ function VendorPortalPage() {
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
-                    <span className="text-3xl">🎯</span>
+                    <span className="text-3xl">ðŸŽ¯</span>
                   </div>
                   <div>
                     <h1 className="text-2xl font-bold">Form 471 Competitive Analysis</h1>
@@ -3406,7 +3313,7 @@ function VendorPortalPage() {
                     </>
                   ) : (
                     <>
-                      <span>🔍</span>
+                      <span>ðŸ”</span>
                       Search
                     </>
                   )}
@@ -3613,7 +3520,7 @@ function VendorPortalPage() {
                               <tr className="bg-slate-50">
                                 <td colSpan={8} className="px-4 py-3">
                                   {isLoadingItems ? (
-                                    <div className="py-3 text-sm text-slate-500">Loading line items…</div>
+                                    <div className="py-3 text-sm text-slate-500">Loading line itemsâ€¦</div>
                                   ) : !lineItems || lineItems.length === 0 ? (
                                     <div className="py-3 text-sm text-slate-500">No line items found for this FRN.</div>
                                   ) : (
@@ -3634,14 +3541,14 @@ function VendorPortalPage() {
                                         <tbody className="divide-y divide-slate-100">
                                           {lineItems.map((li, liIdx) => (
                                             <tr key={liIdx} className="hover:bg-slate-50">
-                                              <td className="px-3 py-2 font-mono text-slate-600">{li.line_item_number || '—'}</td>
-                                              <td className="px-3 py-2 text-slate-700">{li.function || '—'}</td>
-                                              <td className="px-3 py-2 text-slate-700">{li.product || '—'}</td>
-                                              <td className="px-3 py-2 text-slate-700">{li.manufacturer || '—'}</td>
-                                              <td className="px-3 py-2 text-slate-700">{li.model || '—'}</td>
-                                              <td className="px-3 py-2 text-right text-slate-700">{li.quantity != null ? li.quantity.toLocaleString() : '—'}</td>
-                                              <td className="px-3 py-2 text-right text-slate-700">{li.unit_cost != null ? `$${li.unit_cost.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '—'}</td>
-                                              <td className="px-3 py-2 text-right font-medium text-green-600">{li.extended_cost != null ? `$${li.extended_cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}</td>
+                                              <td className="px-3 py-2 font-mono text-slate-600">{li.line_item_number || 'â€”'}</td>
+                                              <td className="px-3 py-2 text-slate-700">{li.function || 'â€”'}</td>
+                                              <td className="px-3 py-2 text-slate-700">{li.product || 'â€”'}</td>
+                                              <td className="px-3 py-2 text-slate-700">{li.manufacturer || 'â€”'}</td>
+                                              <td className="px-3 py-2 text-slate-700">{li.model || 'â€”'}</td>
+                                              <td className="px-3 py-2 text-right text-slate-700">{li.quantity != null ? li.quantity.toLocaleString() : 'â€”'}</td>
+                                              <td className="px-3 py-2 text-right text-slate-700">{li.unit_cost != null ? `$${li.unit_cost.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : 'â€”'}</td>
+                                              <td className="px-3 py-2 text-right font-medium text-green-600">{li.extended_cost != null ? `$${li.extended_cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'â€”'}</td>
                                             </tr>
                                           ))}
                                         </tbody>
@@ -3723,7 +3630,7 @@ function VendorPortalPage() {
                               <div className="flex-1 min-w-0">
                                 <div className="font-medium text-slate-900 truncate">{comp.name}</div>
                                 <div className="text-xs text-slate-500">
-                                  {comp.frn_count} FRNs • {comp.entity_count || 0} entities
+                                  {comp.frn_count} FRNs â€¢ {comp.entity_count || 0} entities
                                 </div>
                               </div>
                               <div className="text-right">
@@ -3887,10 +3794,10 @@ function VendorPortalPage() {
                           <span className="flex items-center gap-1">
                             School Name
                             {schoolSearchSort?.field === 'name' && (
-                              <span className="text-blue-600">{schoolSearchSort.dir === 'asc' ? '↑' : '↓'}</span>
+                              <span className="text-blue-600">{schoolSearchSort.dir === 'asc' ? 'â†‘' : 'â†“'}</span>
                             )}
                             {schoolSearchSort?.field !== 'name' && (
-                              <span className="text-slate-300">↕</span>
+                              <span className="text-slate-300">â†•</span>
                             )}
                           </span>
                         </th>
@@ -3946,7 +3853,7 @@ function VendorPortalPage() {
               {searchTotalCount > 0 && (
                 <div className="flex items-center justify-between bg-white rounded-2xl border border-slate-200 px-4 py-3 mt-3">
                   <span className="text-sm text-slate-500">
-                    Page {searchPage} of {searchTotalPages} · {searchTotalCount.toLocaleString()} total results
+                    Page {searchPage} of {searchTotalPages} Â· {searchTotalCount.toLocaleString()} total results
                   </span>
                   <div className="flex items-center gap-2">
                     <button
@@ -3955,7 +3862,7 @@ function VendorPortalPage() {
                       disabled={isLoading || searchPage <= 1}
                       className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      ← Previous
+                      â† Previous
                     </button>
                     {Array.from({ length: Math.min(5, searchTotalPages) }, (_, i) => {
                       // window of 5 pages around current
@@ -3984,7 +3891,7 @@ function VendorPortalPage() {
                       disabled={isLoading || searchPage >= searchTotalPages}
                       className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      Next →
+                      Next â†’
                     </button>
                   </div>
                 </div>
@@ -3995,12 +3902,12 @@ function VendorPortalPage() {
             {searchResults.length === 0 && !isLoading && (
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center">
                 <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                  <span className="text-3xl">🔍</span>
+                  <span className="text-3xl">ðŸ”</span>
                 </div>
                 <h2 className="text-lg font-semibold text-slate-900">No Results Yet</h2>
                 <p className="text-slate-500 mt-2 max-w-md mx-auto">
                   {searchYear === 2026
-                    ? "No results for FY 2026 yet. USAC FY 2026 data is partially populated — try FY 2025 if you don't see results."
+                    ? "No results for FY 2026 yet. USAC FY 2026 data is partially populated â€” try FY 2025 if you don't see results."
                     : "Use the filters above to search for schools with E-Rate funding and find your next customers."}
                 </p>
               </div>
@@ -4016,7 +3923,7 @@ function VendorPortalPage() {
                 <div>
                   <h2 className="text-xl font-bold text-slate-900">Saved Leads</h2>
                   <p className="text-sm text-slate-500 mt-1">
-                    {savedLeadsTotalCount} leads saved • Manage and enrich your leads
+                    {savedLeadsTotalCount} leads saved â€¢ Manage and enrich your leads
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -4043,7 +3950,7 @@ function VendorPortalPage() {
                     disabled={savedLeads.length === 0}
                     className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors flex items-center gap-2 disabled:opacity-50"
                   >
-                    <span>📥</span>
+                    <span>ðŸ“¥</span>
                     Export {selectedLeadIds.size > 0 ? `(${selectedLeadIds.size})` : 'All'}
                   </button>
                   
@@ -4127,7 +4034,7 @@ function VendorPortalPage() {
                                 {lead.entity_name || `BEN: ${lead.ben}`}
                               </h3>
                               <p className="text-sm text-slate-500 mt-0.5">
-                                Form {lead.form_type} #{lead.application_number} • {lead.entity_city}, {lead.entity_state}
+                                Form {lead.form_type} #{lead.application_number} â€¢ {lead.entity_city}, {lead.entity_state}
                               </p>
                             </div>
                             
@@ -4198,7 +4105,7 @@ function VendorPortalPage() {
                             ))}
                             {lead.enrichment_date && (
                               <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs">
-                                ✨ Enriched
+                                âœ¨ Enriched
                               </span>
                             )}
                           </div>
@@ -4209,10 +4116,10 @@ function VendorPortalPage() {
                           <button
                             onClick={() => {
                               if (lead.form_type === '470') {
-                                // Real Form 470 lead — fetch full USAC detail
+                                // Real Form 470 lead â€” fetch full USAC detail
                                 load470Detail(lead.application_number);
                               } else {
-                                // Predicted or 471 lead — show saved lead's own data in detail modal
+                                // Predicted or 471 lead â€” show saved lead's own data in detail modal
                                 setSelectedSavedLeadDetail(lead);
                                 setShowSavedLeadDetailModal(true);
                               }
@@ -4264,7 +4171,7 @@ function VendorPortalPage() {
             ) : (
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center">
                 <div className="w-16 h-16 rounded-2xl bg-purple-100 flex items-center justify-center mx-auto mb-4">
-                  <span className="text-3xl">📋</span>
+                  <span className="text-3xl">ðŸ“‹</span>
                 </div>
                 <h2 className="text-lg font-semibold text-slate-900">No Saved Leads</h2>
                 <p className="text-slate-500 mt-2 max-w-md mx-auto">
@@ -4289,7 +4196,7 @@ function VendorPortalPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
-                      <span className="text-2xl">✅</span>
+                      <span className="text-2xl">âœ…</span>
                     </div>
                     <div>
                       <h2 className="text-lg font-semibold text-slate-900">SPIN Verified</h2>
@@ -4314,7 +4221,7 @@ function VendorPortalPage() {
               <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200 p-6">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
-                    <span className="text-2xl">⚠️</span>
+                    <span className="text-2xl">âš ï¸</span>
                   </div>
                   <div>
                     <h2 className="text-lg font-semibold text-slate-900">SPIN Not Configured</h2>
@@ -4325,7 +4232,7 @@ function VendorPortalPage() {
                       onClick={() => setActiveTab("settings")}
                       className="mt-2 text-sm text-amber-700 hover:underline font-medium"
                     >
-                      Go to Settings →
+                      Go to Settings â†’
                     </button>
                   </div>
                 </div>
@@ -4338,7 +4245,7 @@ function VendorPortalPage() {
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-                      <span className="text-2xl">🏫</span>
+                      <span className="text-2xl">ðŸ«</span>
                     </div>
                   </div>
                   <div className="text-3xl font-bold text-slate-900">{servicedEntitiesStats.total_entities}</div>
@@ -4348,7 +4255,7 @@ function VendorPortalPage() {
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
-                      <span className="text-2xl">💰</span>
+                      <span className="text-2xl">ðŸ’°</span>
                     </div>
                   </div>
                   <div className="text-3xl font-bold text-slate-900">
@@ -4360,7 +4267,7 @@ function VendorPortalPage() {
                 <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
-                      <span className="text-2xl">📅</span>
+                      <span className="text-2xl">ðŸ“…</span>
                     </div>
                   </div>
                   <div className="text-3xl font-bold text-slate-900">{servicedEntitiesStats.funding_years.length}</div>
@@ -4419,10 +4326,10 @@ function VendorPortalPage() {
                             <span className="flex items-center gap-1">
                               Entity Name
                               {servicedEntitiesSort?.field === 'organization_name' && (
-                                <span className="text-blue-600">{servicedEntitiesSort.dir === 'asc' ? '↑' : '↓'}</span>
+                                <span className="text-blue-600">{servicedEntitiesSort.dir === 'asc' ? 'â†‘' : 'â†“'}</span>
                               )}
                               {servicedEntitiesSort?.field !== 'organization_name' && (
-                                <span className="text-slate-300">↕</span>
+                                <span className="text-slate-300">â†•</span>
                               )}
                             </span>
                           </th>
@@ -4493,7 +4400,7 @@ function VendorPortalPage() {
                                   <div className="text-xs text-slate-400">{entity.current_year}</div>
                                 </div>
                               ) : (
-                                <span className="text-slate-400 text-sm">—</span>
+                                <span className="text-slate-400 text-sm">â€”</span>
                               )}
                             </td>
                             <td className="px-4 py-3">
@@ -4505,7 +4412,7 @@ function VendorPortalPage() {
                                   <div className="text-xs text-slate-400">{entity.current_year}</div>
                                 </div>
                               ) : (
-                                <span className="text-slate-400 text-sm">—</span>
+                                <span className="text-slate-400 text-sm">â€”</span>
                               )}
                             </td>
                             <td className="px-4 py-3 font-semibold text-green-600 text-right">
@@ -4541,7 +4448,7 @@ function VendorPortalPage() {
                 ) : (
                   <div className="p-12 text-center">
                     <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                      <span className="text-3xl">🏫</span>
+                      <span className="text-3xl">ðŸ«</span>
                     </div>
                     <h2 className="text-lg font-semibold text-slate-900">No Invoice Data Found</h2>
                     <p className="text-slate-500 mt-2 max-w-md mx-auto">
@@ -4561,7 +4468,7 @@ function VendorPortalPage() {
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
-                  <span className="text-xl">🔑</span>
+                  <span className="text-xl">ðŸ”‘</span>
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">SPIN Configuration</h2>
@@ -4612,7 +4519,7 @@ function VendorPortalPage() {
                   {spinValidation && (
                     <div className="mt-3 p-4 bg-green-50 border border-green-200 rounded-xl">
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="text-green-600">✓</span>
+                        <span className="text-green-600">âœ“</span>
                         <span className="font-semibold text-green-700">Valid SPIN Found</span>
                       </div>
                       <div className="grid grid-cols-2 gap-3 text-sm">
@@ -4652,7 +4559,7 @@ function VendorPortalPage() {
                       
                       {profile?.spin === spinInput && (
                         <div className="mt-3 text-sm text-green-600">
-                          ✓ This SPIN is saved to your profile
+                          âœ“ This SPIN is saved to your profile
                         </div>
                       )}
                     </div>
@@ -4683,7 +4590,7 @@ function VendorPortalPage() {
                         onClick={() => setActiveTab("my-entities")}
                         className="text-sm text-purple-600 hover:underline"
                       >
-                        View Serviced Entities →
+                        View Serviced Entities â†’
                       </button>
                     </div>
                   </div>
@@ -4695,7 +4602,7 @@ function VendorPortalPage() {
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
-                  <span className="text-xl">🏢</span>
+                  <span className="text-xl">ðŸ¢</span>
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Company Profile</h2>
@@ -4742,7 +4649,7 @@ function VendorPortalPage() {
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
-                  <span className="text-xl">🛠️</span>
+                  <span className="text-xl">ðŸ› ï¸</span>
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Services Offered</h2>
@@ -4773,7 +4680,7 @@ function VendorPortalPage() {
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
-                  <span className="text-xl">🔔</span>
+                  <span className="text-xl">ðŸ””</span>
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Notification Preferences</h2>
@@ -4787,7 +4694,7 @@ function VendorPortalPage() {
                 href="/settings/notifications"
                 className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl hover:bg-indigo-100 font-medium text-sm transition"
               >
-                🔔 Manage Notification Settings →
+                ðŸ”” Manage Notification Settings â†’
               </a>
             </div>
 
@@ -4795,7 +4702,7 @@ function VendorPortalPage() {
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
-                  <span className="text-xl">{user?.role === 'super' || user?.role === 'admin' ? '⭐' : '💳'}</span>
+                  <span className="text-xl">{user?.role === 'super' || user?.role === 'admin' ? 'â­' : 'ðŸ’³'}</span>
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">
@@ -4809,11 +4716,11 @@ function VendorPortalPage() {
               <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-100">
                 <div>
                   <div className="font-semibold text-slate-900">
-                    {user?.role === 'super' ? '⭐ Super Account — Full Access' : user?.role === 'admin' ? '🔑 Admin Account — Full Access' : user?.subscription?.plan === 'yearly' ? 'Yearly Plan' : 'Monthly Plan'}
+                    {user?.role === 'super' ? 'â­ Super Account â€” Full Access' : user?.role === 'admin' ? 'ðŸ”‘ Admin Account â€” Full Access' : user?.subscription?.plan === 'yearly' ? 'Yearly Plan' : 'Monthly Plan'}
                   </div>
                   <div className="text-sm text-slate-500 mt-1">
                     Status: <span className="text-green-600 font-medium">
-                      {user?.role === 'super' || user?.role === 'admin' ? 'Active — No billing required' : user?.subscription?.status || 'Unknown'}
+                      {user?.role === 'super' || user?.role === 'admin' ? 'Active â€” No billing required' : user?.subscription?.status || 'Unknown'}
                     </span>
                   </div>
                 </div>
@@ -4836,7 +4743,7 @@ function VendorPortalPage() {
                   </p>
                   <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg mb-3">
                     <p className="text-[11px] text-amber-800">
-                      <strong>Demo helper</strong> — visible because this is a test/demo account. Lets you retarget onto any vendor SPIN on the fly.
+                      <strong>Demo helper</strong> â€” visible because this is a test/demo account. Lets you retarget onto any vendor SPIN on the fly.
                     </p>
                   </div>
 
@@ -5079,7 +4986,7 @@ function VendorPortalPage() {
                                         ? 'bg-red-100 text-red-700'
                                         : 'bg-slate-100 text-slate-600'
                                     }`}>
-                                      {item.category} • {item.status}
+                                      {item.category} â€¢ {item.status}
                                     </div>
                                   </div>
                                 </div>
@@ -5135,10 +5042,10 @@ function VendorPortalPage() {
                   <div className="flex items-center gap-3">
                     <span className="text-3xl">
                       {selectedFRN.status?.toLowerCase().includes('funded') || selectedFRN.status?.toLowerCase().includes('committed')
-                        ? '✅'
+                        ? 'âœ…'
                         : selectedFRN.status?.toLowerCase().includes('denied')
-                        ? '❌'
-                        : '⏳'}
+                        ? 'âŒ'
+                        : 'â³'}
                     </span>
                     <div>
                       <h2 className="text-xl font-bold">FRN: {selectedFRN.frn}</h2>
@@ -5171,7 +5078,7 @@ function VendorPortalPage() {
                 {/* Entity Information */}
                 <div className="bg-slate-50 rounded-xl p-4">
                   <h3 className="text-sm font-semibold text-slate-600 mb-3 flex items-center gap-2">
-                    <span className="text-lg">🏫</span> Entity Information
+                    <span className="text-lg">ðŸ«</span> Entity Information
                   </h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -5196,7 +5103,7 @@ function VendorPortalPage() {
                 {/* Funding Information */}
                 <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4 border border-green-100">
                   <h3 className="text-sm font-semibold text-green-700 mb-3 flex items-center gap-2">
-                    <span className="text-lg">💰</span> Funding Information
+                    <span className="text-lg">ðŸ’°</span> Funding Information
                   </h3>
                   <div className="grid grid-cols-3 gap-4">
                     <div>
@@ -5229,7 +5136,7 @@ function VendorPortalPage() {
                         ${selectedFRN.disbursed_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || '0'}
                       </div>
                       <span className="text-[10px] text-green-600 block mt-0.5 font-medium group-hover:underline">
-                        {disbursementOpen ? 'Click to collapse' : 'Click to view schedule →'}
+                        {disbursementOpen ? 'Click to collapse' : 'Click to view schedule â†’'}
                       </span>
                     </div>
                     <div>
@@ -5266,7 +5173,7 @@ function VendorPortalPage() {
                 {selectedFRN.pending_reason && (
                   <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
                     <h3 className="text-sm font-semibold text-amber-700 mb-2 flex items-center gap-2">
-                      <span className="text-lg">⚠️</span> Pending Reason
+                      <span className="text-lg">âš ï¸</span> Pending Reason
                     </h3>
                     <p className="text-amber-800">{selectedFRN.pending_reason}</p>
                   </div>
@@ -5276,7 +5183,7 @@ function VendorPortalPage() {
                 {selectedFRN.fcdl_comment && (
                   <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
                     <h3 className="text-sm font-semibold text-blue-700 mb-2 flex items-center gap-2">
-                      <span className="text-lg">📝</span> FCDL Comment
+                      <span className="text-lg">ðŸ“</span> FCDL Comment
                     </h3>
                     <p className="text-blue-800">{selectedFRN.fcdl_comment}</p>
                   </div>
@@ -5285,7 +5192,7 @@ function VendorPortalPage() {
                 {/* Key Dates */}
                 <div className="bg-slate-50 rounded-xl p-4">
                   <h3 className="text-sm font-semibold text-slate-600 mb-3 flex items-center gap-2">
-                    <span className="text-lg">📅</span> Key Dates
+                    <span className="text-lg">ðŸ“…</span> Key Dates
                   </h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     <div>
@@ -5318,7 +5225,7 @@ function VendorPortalPage() {
                 {/* Invoicing Information */}
                 <div className="bg-slate-50 rounded-xl p-4">
                   <h3 className="text-sm font-semibold text-slate-600 mb-3 flex items-center gap-2">
-                    <span className="text-lg">📋</span> Invoicing Information
+                    <span className="text-lg">ðŸ“‹</span> Invoicing Information
                   </h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
@@ -5345,7 +5252,7 @@ function VendorPortalPage() {
                 {/* Vendor Information */}
                 <div className="bg-purple-50 rounded-xl p-4 border border-purple-100">
                   <h3 className="text-sm font-semibold text-purple-700 mb-3 flex items-center gap-2">
-                    <span className="text-lg">🏢</span> Vendor Information
+                    <span className="text-lg">ðŸ¢</span> Vendor Information
                   </h3>
                   <div>
                     <div className="text-xs text-purple-600">Service Provider</div>
@@ -5364,7 +5271,7 @@ function VendorPortalPage() {
             {/* Modal Footer */}
             <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center">
               <div className="text-sm text-slate-500">
-                FRN: {selectedFRN.frn} • Application: {selectedFRN.application_number}
+                FRN: {selectedFRN.frn} â€¢ Application: {selectedFRN.application_number}
               </div>
               <button
                 onClick={() => { setShowFRNDetailModal(false); setDisbursementOpen(false); }}
@@ -5394,7 +5301,7 @@ function VendorPortalPage() {
                 <div>
                   <h2 className="text-xl font-bold">{form470Detail?.entity?.name || 'Loading...'}</h2>
                   <p className="text-orange-100 mt-1">
-                    Form 470 #{form470Detail?.application_number} • {form470Detail?.funding_year}
+                    Form 470 #{form470Detail?.application_number} â€¢ {form470Detail?.funding_year}
                   </p>
                 </div>
                 <button
@@ -5416,11 +5323,11 @@ function VendorPortalPage() {
                 </div>
               ) : form470Detail ? (
                 <div className="space-y-6">
-                  {/* Version toggle — a revised 470 keeps both Original & Current on file */}
+                  {/* Version toggle â€” a revised 470 keeps both Original & Current on file */}
                   {form470Detail.available_versions && form470Detail.available_versions.length > 1 && (
                     <div className="flex flex-wrap items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl p-3">
                       <span className="text-sm text-amber-800 font-medium">
-                        📝 This Form 470 was revised. Viewing:
+                        ðŸ“ This Form 470 was revised. Viewing:
                       </span>
                       <div className="inline-flex rounded-lg border border-amber-300 overflow-hidden">
                         {['Current', 'Original'].filter(v => form470Detail.available_versions?.includes(v)).map((v) => {
@@ -5450,7 +5357,7 @@ function VendorPortalPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-slate-50 rounded-xl p-4">
                       <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                        <span>🏫</span> Entity Information
+                        <span>ðŸ«</span> Entity Information
                       </h3>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
@@ -5474,7 +5381,7 @@ function VendorPortalPage() {
                               rel="noopener noreferrer" 
                               className="text-blue-600 hover:underline"
                             >
-                              Visit →
+                              Visit â†’
                             </a>
                           </div>
                         )}
@@ -5483,7 +5390,7 @@ function VendorPortalPage() {
 
                     <div className="bg-slate-50 rounded-xl p-4">
                       <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                        <span>👤</span> Contact Information
+                        <span>ðŸ‘¤</span> Contact Information
                         {/* LinkedIn Search Button */}
                         {form470Detail.contact?.name && (
                           <a
@@ -5586,7 +5493,7 @@ function VendorPortalPage() {
                   {enrichmentData?.additional_contacts && enrichmentData.additional_contacts.length > 0 && (
                     <div className="bg-indigo-50 rounded-xl p-4">
                       <h3 className="font-semibold text-indigo-800 mb-3 flex items-center gap-2">
-                        <span>👥</span> Additional Contacts at Organization
+                        <span>ðŸ‘¥</span> Additional Contacts at Organization
                       </h3>
                       <div className="space-y-3">
                         {enrichmentData.additional_contacts.slice(0, 5).map((contact, idx) => (
@@ -5635,7 +5542,7 @@ function VendorPortalPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-orange-50 rounded-xl p-4">
                       <h3 className="font-semibold text-orange-800 mb-3 flex items-center gap-2">
-                        <span>🏭</span> Manufacturers Requested
+                        <span>ðŸ­</span> Manufacturers Requested
                       </h3>
                       <div className="flex flex-wrap gap-2">
                         {form470Detail.manufacturers?.length > 0 ? (
@@ -5652,7 +5559,7 @@ function VendorPortalPage() {
 
                     <div className="bg-blue-50 rounded-xl p-4">
                       <h3 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
-                        <span>📋</span> Categories & Services
+                        <span>ðŸ“‹</span> Categories & Services
                       </h3>
                       <div className="flex flex-wrap gap-2 mb-2">
                         {form470Detail.categories?.map((cat, idx) => (
@@ -5839,7 +5746,7 @@ function VendorPortalPage() {
                     </>
                   ) : (
                     <>
-                      <span>💾</span>
+                      <span>ðŸ’¾</span>
                       Save Lead
                     </>
                   )}
@@ -5847,7 +5754,7 @@ function VendorPortalPage() {
               ) : (
                 <div className="flex items-center gap-2">
                   <span className="px-3 py-2 bg-emerald-100 text-emerald-700 rounded-xl text-sm flex items-center gap-2">
-                    <span>✓</span>
+                    <span>âœ“</span>
                     Saved
                   </span>
                   <button
@@ -5874,12 +5781,12 @@ function VendorPortalPage() {
                     </>
                   ) : enrichmentData ? (
                     <>
-                      <span>🔄</span>
+                      <span>ðŸ”„</span>
                       Re-enrich
                     </>
                   ) : (
                     <>
-                      <span>✨</span>
+                      <span>âœ¨</span>
                       Find More Contacts
                     </>
                   )}
@@ -5892,7 +5799,7 @@ function VendorPortalPage() {
                   href={`mailto:${form470Detail.contact.email}?subject=Regarding Form 470 ${form470Detail.application_number}`}
                   className="px-4 py-2 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors flex items-center gap-2"
                 >
-                  <span>📧</span>
+                  <span>ðŸ“§</span>
                   Contact Entity
                 </a>
               )}
@@ -6337,8 +6244,8 @@ function VendorPortalPage() {
                 <div>
                   <h2 className="text-xl font-bold">{selectedSavedLeadDetail.entity_name || `BEN: ${selectedSavedLeadDetail.ben}`}</h2>
                   <p className="text-purple-100 mt-1">
-                    {selectedSavedLeadDetail.form_type === 'predicted' ? '🔮 Predicted Lead' : `Form ${selectedSavedLeadDetail.form_type}`} #{selectedSavedLeadDetail.application_number}
-                    {selectedSavedLeadDetail.funding_year && ` • FY ${selectedSavedLeadDetail.funding_year}`}
+                    {selectedSavedLeadDetail.form_type === 'predicted' ? 'ðŸ”® Predicted Lead' : `Form ${selectedSavedLeadDetail.form_type}`} #{selectedSavedLeadDetail.application_number}
+                    {selectedSavedLeadDetail.funding_year && ` â€¢ FY ${selectedSavedLeadDetail.funding_year}`}
                   </p>
                 </div>
                 <button
@@ -6359,7 +6266,7 @@ function VendorPortalPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="bg-slate-50 rounded-xl p-4">
                     <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <span>🏫</span> Entity Information
+                      <span>ðŸ«</span> Entity Information
                     </h3>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
@@ -6393,7 +6300,7 @@ function VendorPortalPage() {
                       {selectedSavedLeadDetail.entity_website && (
                         <div className="flex justify-between">
                           <span className="text-slate-500">Website:</span>
-                          <a href={selectedSavedLeadDetail.entity_website.startsWith('http') ? selectedSavedLeadDetail.entity_website : `https://${selectedSavedLeadDetail.entity_website}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Visit →</a>
+                          <a href={selectedSavedLeadDetail.entity_website.startsWith('http') ? selectedSavedLeadDetail.entity_website : `https://${selectedSavedLeadDetail.entity_website}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Visit â†’</a>
                         </div>
                       )}
                     </div>
@@ -6401,7 +6308,7 @@ function VendorPortalPage() {
 
                   <div className="bg-slate-50 rounded-xl p-4">
                     <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <span>👤</span> Contact Information
+                      <span>ðŸ‘¤</span> Contact Information
                       {selectedSavedLeadDetail.contact_name && selectedSavedLeadDetail.entity_name && (
                         <a
                           href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(selectedSavedLeadDetail.contact_name + ' ' + selectedSavedLeadDetail.entity_name)}`}
@@ -6444,7 +6351,7 @@ function VendorPortalPage() {
                       {selectedSavedLeadDetail.enriched_data?.linkedin_url && (
                         <div className="flex justify-between">
                           <span className="text-slate-500">LinkedIn:</span>
-                          <a href={selectedSavedLeadDetail.enriched_data.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">View Profile →</a>
+                          <a href={selectedSavedLeadDetail.enriched_data.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">View Profile â†’</a>
                         </div>
                       )}
                     </div>
@@ -6455,7 +6362,7 @@ function VendorPortalPage() {
                 {(selectedSavedLeadDetail.categories?.length > 0 || selectedSavedLeadDetail.services?.length > 0 || selectedSavedLeadDetail.manufacturers?.length > 0) && (
                   <div className="bg-slate-50 rounded-xl p-4">
                     <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <span>📦</span> Services & Categories
+                      <span>ðŸ“¦</span> Services & Categories
                     </h3>
                     <div className="flex flex-wrap gap-2">
                       {selectedSavedLeadDetail.categories?.map((cat: string, idx: number) => (
@@ -6475,7 +6382,7 @@ function VendorPortalPage() {
                 {(selectedSavedLeadDetail.funding_amount || selectedSavedLeadDetail.committed_amount || selectedSavedLeadDetail.funded_amount) && (
                   <div className="bg-slate-50 rounded-xl p-4">
                     <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <span>💰</span> Funding Information
+                      <span>ðŸ’°</span> Funding Information
                     </h3>
                     <div className="grid grid-cols-3 gap-4 text-sm">
                       {selectedSavedLeadDetail.funding_amount != null && (
@@ -6504,7 +6411,7 @@ function VendorPortalPage() {
                 {selectedSavedLeadDetail.enriched_data?.additional_contacts && selectedSavedLeadDetail.enriched_data.additional_contacts.length > 0 && (
                   <div className="bg-slate-50 rounded-xl p-4">
                     <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <span>👥</span> Additional Contacts ({selectedSavedLeadDetail.enriched_data.additional_contacts.length})
+                      <span>ðŸ‘¥</span> Additional Contacts ({selectedSavedLeadDetail.enriched_data.additional_contacts.length})
                     </h3>
                     <div className="space-y-2">
                       {selectedSavedLeadDetail.enriched_data.additional_contacts.map((contact: any, idx: number) => (
@@ -6527,7 +6434,7 @@ function VendorPortalPage() {
                 {selectedSavedLeadDetail.all_contacts && selectedSavedLeadDetail.all_contacts.length > 0 && (
                   <div className="bg-slate-50 rounded-xl p-4">
                     <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <span>📋</span> USAC Contacts ({selectedSavedLeadDetail.all_contacts.length})
+                      <span>ðŸ“‹</span> USAC Contacts ({selectedSavedLeadDetail.all_contacts.length})
                     </h3>
                     <div className="space-y-2">
                       {selectedSavedLeadDetail.all_contacts.map((contact, idx) => (
@@ -6546,7 +6453,7 @@ function VendorPortalPage() {
                 {/* Notes */}
                 {selectedSavedLeadDetail.notes && (
                   <div className="bg-yellow-50 rounded-xl p-4">
-                    <h3 className="font-semibold text-slate-900 mb-2">📝 Notes</h3>
+                    <h3 className="font-semibold text-slate-900 mb-2">ðŸ“ Notes</h3>
                     <p className="text-sm text-slate-700 whitespace-pre-wrap">{selectedSavedLeadDetail.notes}</p>
                   </div>
                 )}
@@ -6560,7 +6467,7 @@ function VendorPortalPage() {
                   href={`mailto:${selectedSavedLeadDetail.contact_email}?subject=Regarding E-Rate Services for ${selectedSavedLeadDetail.entity_name || selectedSavedLeadDetail.ben}`}
                   className="px-4 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-2"
                 >
-                  📧 Contact Entity
+                  ðŸ“§ Contact Entity
                 </a>
               )}
               {selectedSavedLeadDetail.entity_name && (
