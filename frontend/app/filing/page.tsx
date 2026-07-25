@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import {
   PenLine, ClipboardList, Upload, Calendar, Clock, AlertTriangle, Check,
   Target, Sparkles, LayoutGrid, X, Flame, ArrowRight, FileText, Bell,
@@ -151,11 +150,9 @@ function planToState(plan: CompliancePlanResponse): { tasks: Record<number, Task
 
 /* ----------------------------- component ----------------------------- */
 export default function FilingBoard() {
-  const params = useSearchParams();
-  const isSkyrate = (params.get("brand") || "erateapp").toLowerCase() === "skyrate";
-  const brand = isSkyrate
-    ? { name: "SkyRate", ai: ".AI", grad: "from-purple-600 to-pink-500", team: "SkyRate", r1: "#a855f7", r2: "#ec4899" }
-    : { name: "erateapp", ai: "", grad: "from-indigo-500 to-teal-400", team: "erateapp team", r1: "#4f7cf7", r2: "#2dd4bf" };
+  // This route lives on the skyrate.ai domain, so it is ALWAYS SkyRate-branded.
+  // Never surface the "erateapp" brand here (that brand belongs to erateapp.com only).
+  const brand = { name: "SkyRate", ai: ".AI", grad: "from-purple-600 to-pink-500", team: "SkyRate", r1: "#a855f7", r2: "#ec4899" };
 
   const [tasks, setTasks] = useState<Record<number, Task[]>>(() =>
     JSON.parse(JSON.stringify(INITIAL_TASKS)),
