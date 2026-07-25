@@ -439,6 +439,14 @@ function VendorPortalPage() {
   const [form470Detail, setForm470Detail] = useState<Form470DetailResponse | null>(null);
   const [form470DetailLoading, setForm470DetailLoading] = useState(false);
   const [showForm470Modal, setShowForm470Modal] = useState(false);
+
+  // Dashboard "Latest Opportunities" — a lightweight, newest-first slice of Form 470
+  // leads shown on the landing dashboard. Kept separate from the full 470-leads tab
+  // state so the two never interfere.
+  const [dashLeads, setDashLeads] = useState<Form470Lead[]>([]);
+  const [dashLeadsLoading, setDashLeadsLoading] = useState(false);
+  const [dashLeadsTotal, setDashLeadsTotal] = useState(0);
+  const [dashLeadsLoaded, setDashLeadsLoaded] = useState(false);
   
   // Saved Leads state
   const [savedLeads, setSavedLeads] = useState<SavedLead[]>([]);
@@ -654,6 +662,14 @@ function VendorPortalPage() {
     // double-fire when switching between dashboard and my-entities.
     if ((activeTab === 'dashboard' || activeTab === 'my-entities') && profile?.spin && servicedEntities.length === 0 && !servicedEntitiesLoading) {
       loadServicedEntities();
+    }
+    // Dashboard command-center data: newest Form 470 opportunities + the vendor's
+    // saved-lead pipeline count. Both load once, lazily, when the dashboard opens.
+    if (activeTab === 'dashboard' && !dashLeadsLoaded && !dashLeadsLoading) {
+      loadDashboardOpportunities();
+    }
+    if (activeTab === 'dashboard' && savedLeads.length === 0 && !savedLeadsLoading) {
+      loadSavedLeads();
     }
   }, [activeTab, profile?.spin]);
 
@@ -1044,6 +1060,24 @@ function VendorPortalPage() {
     setIsLeadSaved(false);
     setCurrentSavedLead(null);
     setEnrichmentData(null);
+  };
+
+  // Lightweight loader for the dashboard "Latest Opportunities" feed — newest
+  // Form 470 postings, capped small so the landing page stays fast.
+  const loadDashboardOpportunities = async () => {
+    setDashLeadsLoading(true);
+    try {
+      const response = await api.get470Leads({ limit: 6 });
+      if (response.success && response.data) {
+        setDashLeads(response.data.leads || []);
+        setDashLeadsTotal(response.data.total_leads || 0);
+      }
+    } catch (error) {
+      console.error("Failed to load dashboard opportunities:", error);
+    } finally {
+      setDashLeadsLoading(false);
+      setDashLeadsLoaded(true);
+    }
   };
 
   // Saved Leads functions
@@ -1835,57 +1869,138 @@ function VendorPortalPage() {
                 </div>
               )}
 
-              {/* Stats Grid */}
+              {/* KPI row — real metrics only (no vanity/placeholder numbers) */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                <button
+                  onClick={() => setActiveTab("470-leads")}
+                  className="text-left bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md hover:border-purple-300 transition-all group"
+                >
                   <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
-                      <span className="text-2xl">🔍</span>
+                    <div className="w-12 h-12 rounded-xl bg-purple-100 group-hover:bg-purple-200 flex items-center justify-center transition-colors">
+                      <span className="text-2xl">🎯</span>
                     </div>
-                    <span className="text-xs text-green-600 font-medium px-2 py-1 bg-green-50 rounded-full">+24%</span>
+                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-purple-500 transition-colors" />
                   </div>
-                  <div className="text-3xl font-bold text-slate-900">{profile?.search_count || 0}</div>
-                  <div className="text-sm text-slate-500 mt-1">Searches This Month</div>
-                </div>
-                
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="text-3xl font-bold text-slate-900">{!dashLeadsLoaded ? '—' : dashLeadsTotal.toLocaleString()}</div>
+                  <div className="text-sm text-slate-500 mt-1">Open Form 470 opportunities</div>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab("leads")}
+                  className="text-left bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md hover:border-green-300 transition-all group"
+                >
                   <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
-                      <span className="text-2xl">📋</span>
+                    <div className="w-12 h-12 rounded-xl bg-green-100 group-hover:bg-green-200 flex items-center justify-center transition-colors">
+                      <span className="text-2xl">🔖</span>
                     </div>
-                    <span className="text-xs text-green-600 font-medium px-2 py-1 bg-green-50 rounded-full">+12</span>
+                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-green-500 transition-colors" />
                   </div>
-                  <div className="text-3xl font-bold text-slate-900">0</div>
-                  <div className="text-sm text-slate-500 mt-1">Saved Leads</div>
-                </div>
-                
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="text-3xl font-bold text-slate-900">{savedLeadsLoading && savedLeadsTotalCount === 0 ? '—' : savedLeadsTotalCount.toLocaleString()}</div>
+                  <div className="text-sm text-slate-500 mt-1">Saved leads in your pipeline</div>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab("my-entities")}
+                  className="text-left bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all group"
+                >
                   <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
-                      <span className="text-2xl">📤</span>
+                    <div className="w-12 h-12 rounded-xl bg-blue-100 group-hover:bg-blue-200 flex items-center justify-center transition-colors">
+                      <span className="text-2xl">🏫</span>
                     </div>
-                    <span className="text-xs text-amber-600 font-medium px-2 py-1 bg-amber-50 rounded-full">5 today</span>
+                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 transition-colors" />
                   </div>
-                  <div className="text-3xl font-bold text-slate-900">0</div>
-                  <div className="text-sm text-slate-500 mt-1">Exports</div>
-                </div>
-                
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="text-3xl font-bold text-slate-900">{servicedEntitiesStats ? servicedEntitiesStats.total_entities.toLocaleString() : (profile?.spin ? '—' : '0')}</div>
+                  <div className="text-sm text-slate-500 mt-1">Entities you currently service</div>
+                </button>
+
+                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
                   <div className="flex items-center justify-between mb-4">
                     <div className="w-12 h-12 rounded-xl bg-pink-100 flex items-center justify-center">
-                      <span className="text-2xl">✅</span>
+                      <span className="text-2xl">💼</span>
                     </div>
                     <span className="text-xs text-pink-600 font-medium px-2 py-1 bg-pink-50 rounded-full">
-                      {user?.role === 'super' || user?.role === 'admin' ? '⭐ Full' : 'Active'}
+                      {user?.role === 'super' || user?.role === 'admin' ? 'Full' : 'Active'}
                     </span>
                   </div>
                   <div className="text-3xl font-bold text-slate-900">
                     {user?.role === 'super' ? 'Super' : user?.role === 'admin' ? 'Admin' : user?.subscription?.status === 'trialing' ? 'Trial' : 'Pro'}
                   </div>
                   <div className="text-sm text-slate-500 mt-1">
-                    {user?.role === 'super' || user?.role === 'admin' ? 'Full Access' : 'Subscription'}
+                    {user?.role === 'super' || user?.role === 'admin' ? 'Full access' : 'Your plan'}
                   </div>
                 </div>
+              </div>
+
+              {/* Latest Form 470 Opportunities — the vendor's core job-to-be-done */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900">Latest Form 470 opportunities</h2>
+                    <p className="text-sm text-slate-500">Newest RFPs posted to USAC — reach out before your competitors do</p>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab("470-leads")}
+                    className="text-sm text-purple-600 hover:underline font-medium whitespace-nowrap"
+                  >
+                    Browse all →
+                  </button>
+                </div>
+                {dashLeadsLoading && dashLeads.length === 0 ? (
+                  <div className="p-10 text-center text-slate-400">
+                    <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                    Loading opportunities…
+                  </div>
+                ) : dashLeads.length === 0 ? (
+                  <div className="p-10 text-center">
+                    <div className="text-4xl mb-2">🎯</div>
+                    <p className="text-slate-700 font-medium">No open Form 470s to show right now</p>
+                    <p className="text-sm text-slate-400 mt-1">New RFPs appear here as schools and libraries post them.</p>
+                    <button
+                      onClick={() => setActiveTab("470-leads")}
+                      className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-xl text-sm font-medium hover:bg-purple-700 transition-colors"
+                    >
+                      Explore all opportunities →
+                    </button>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {dashLeads.slice(0, 5).map((lead) => {
+                      const tags = [...(lead.categories || []), ...(lead.service_types || [])].filter(Boolean).slice(0, 3);
+                      const posted = lead.posting_date ? new Date(lead.posting_date) : null;
+                      const deadline = lead.allowable_contract_date ? new Date(lead.allowable_contract_date) : null;
+                      const daysLeft = deadline && !isNaN(deadline.getTime()) ? Math.ceil((deadline.getTime() - Date.now()) / 86400000) : null;
+                      return (
+                        <button
+                          key={lead.application_number}
+                          onClick={() => load470Detail(lead.application_number)}
+                          className="w-full text-left p-4 flex items-center gap-4 hover:bg-slate-50 transition-colors"
+                        >
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center text-lg shrink-0">🏫</div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-slate-900 truncate">{lead.entity_name}</div>
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              <span className="text-xs text-slate-500">{[lead.city, lead.state].filter(Boolean).join(', ')}</span>
+                              {tags.map((t, i) => (
+                                <span key={i} className="text-[11px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 border border-purple-100">{t}</span>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            {daysLeft != null && daysLeft >= 0 ? (
+                              <div className={`text-sm font-semibold ${daysLeft <= 7 ? 'text-red-600' : daysLeft <= 21 ? 'text-amber-600' : 'text-slate-700'}`}>
+                                {daysLeft === 0 ? 'Closes today' : `${daysLeft}d to bid`}
+                              </div>
+                            ) : posted && !isNaN(posted.getTime()) ? (
+                              <div className="text-sm font-medium text-slate-500">Posted {posted.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                            ) : null}
+                            <div className="text-xs text-slate-400">#{lead.application_number}</div>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Top Entities Preview */}
@@ -1929,42 +2044,45 @@ function VendorPortalPage() {
                 </div>
               )}
 
-              {/* Quick Actions */}
+              {/* Quick Actions — all routed to real, high-value tabs */}
               <div className="bg-white rounded-2xl border border-slate-200 p-6">
-                <h2 className="text-lg font-semibold text-slate-900 mb-4">Quick Actions</h2>
+                <h2 className="text-lg font-semibold text-slate-900 mb-4">Quick actions</h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <button
-                    onClick={() => setActiveTab("search")}
+                    onClick={() => setActiveTab("470-leads")}
                     className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-purple-300 hover:bg-purple-50 transition-all text-center group"
                   >
                     <div className="w-10 h-10 rounded-lg bg-purple-100 group-hover:bg-purple-200 flex items-center justify-center mx-auto mb-2 transition-colors">
+                      <span className="text-xl">🎯</span>
+                    </div>
+                    <span className="text-sm font-medium text-slate-700">Browse 470 leads</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("frn-status")}
+                    className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-teal-300 hover:bg-teal-50 transition-all text-center group"
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-teal-100 group-hover:bg-teal-200 flex items-center justify-center mx-auto mb-2 transition-colors">
+                      <span className="text-xl">📈</span>
+                    </div>
+                    <span className="text-sm font-medium text-slate-700">FRN status</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("search")}
+                    className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-all text-center group"
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-blue-100 group-hover:bg-blue-200 flex items-center justify-center mx-auto mb-2 transition-colors">
                       <span className="text-xl">🔍</span>
                     </div>
-                    <span className="text-sm font-medium text-slate-700">Search Schools</span>
+                    <span className="text-sm font-medium text-slate-700">Search schools</span>
                   </button>
                   <button
-                    onClick={() => setActiveTab("leads")}
-                    className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-green-300 hover:bg-green-50 transition-all text-center group"
-                  >
-                    <div className="w-10 h-10 rounded-lg bg-green-100 group-hover:bg-green-200 flex items-center justify-center mx-auto mb-2 transition-colors">
-                      <span className="text-xl">📋</span>
-                    </div>
-                    <span className="text-sm font-medium text-slate-700">View Leads</span>
-                  </button>
-                  <button className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-amber-300 hover:bg-amber-50 transition-all text-center group">
-                    <div className="w-10 h-10 rounded-lg bg-amber-100 group-hover:bg-amber-200 flex items-center justify-center mx-auto mb-2 transition-colors">
-                      <span className="text-xl">📤</span>
-                    </div>
-                    <span className="text-sm font-medium text-slate-700">Export Data</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("settings")}
+                    onClick={() => setActiveTab("competitive")}
                     className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-pink-300 hover:bg-pink-50 transition-all text-center group"
                   >
                     <div className="w-10 h-10 rounded-lg bg-pink-100 group-hover:bg-pink-200 flex items-center justify-center mx-auto mb-2 transition-colors">
-                      <span className="text-xl">⚙️</span>
+                      <span className="text-xl">📊</span>
                     </div>
-                    <span className="text-sm font-medium text-slate-700">Settings</span>
+                    <span className="text-sm font-medium text-slate-700">Competitive intel</span>
                   </button>
                 </div>
               </div>
