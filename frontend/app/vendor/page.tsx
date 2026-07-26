@@ -17,7 +17,7 @@ import MissingIdentifierBanner from "@/components/MissingIdentifierBanner";
 import { SkeletonRows, SkeletonTable, SkeletonStatCards } from "@/components/Skeleton";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { DisbursementPanel } from "@/components/FRNDetailModal";
-import { ChevronRight, ChevronDown, Target, Clock, Building2, Bell, ArrowUpRight, Zap, BarChart3, Search, TrendingUp } from "lucide-react";
+import { ChevronRight, ChevronDown, Target, Clock, Building2, Bell, ArrowUpRight, Zap, BarChart3, Search, TrendingUp, Home, Activity, Shield, Map as MapIcon, Sparkles, FileSearch, Bookmark, Settings as SettingsIcon, HelpCircle, PanelLeft, Sun, Moon, LogOut } from "lucide-react";
 import PilotFrns from "./PilotFrns";
 
 const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "cyber-pilot", "470-leads", "map", "predicted-leads", "competitive", "search", "leads", "settings"] as const;
@@ -90,7 +90,7 @@ async function forceDownloadFile(url: string, suggestedFilename?: string): Promi
 // ---------------------------------------------------------------------------
 function VendorCommandCenter({
   profile, stats, entities, leads, leadsLoading, leadsLoaded, leadsTotal,
-  savedCount, savedLoading, user, onTab, onOpenLead,
+  savedCount, savedLoading, user, onTab, onOpenLead, dark,
 }: {
   profile: VendorProfile | null;
   stats: { total_entities: number; total_authorized: number; funding_years: string[]; service_provider_name: string | null } | null;
@@ -105,6 +105,7 @@ function VendorCommandCenter({
   user: any;
   onTab: (t: VendorTab) => void;
   onOpenLead: (app: string) => void;
+  dark: boolean;
 }) {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -129,22 +130,37 @@ function VendorCommandCenter({
   const CIRC = 2 * Math.PI * R;
   const money = (n: number) => n >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(0)}K` : `$${n}`;
 
+  // Theme-aware class fragments
+  const container = dark ? "bg-[#0a0a16] border-slate-800/80 text-slate-100" : "bg-white border-slate-200 text-slate-900";
+  const card = dark ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-200 shadow-sm";
+  const muted = dark ? "text-slate-400" : "text-slate-500";
+  const faint = dark ? "text-slate-500" : "text-slate-400";
+  const chip = dark ? "bg-slate-800 text-slate-300 border-slate-700" : "bg-slate-100 text-slate-600 border-slate-200";
+  const link = dark ? "text-purple-300 hover:text-purple-200" : "text-purple-600 hover:text-purple-700";
+  const rowHover = dark ? "hover:bg-slate-800/60" : "hover:bg-slate-50";
+  const softRow = dark ? "bg-slate-800/50 border-slate-700/50" : "bg-slate-50 border-slate-200";
+  const reachBtn = dark ? "bg-slate-700 hover:bg-slate-600 text-slate-100" : "bg-slate-200 hover:bg-slate-300 text-slate-800";
+  const subInk = dark ? "text-slate-200" : "text-slate-800";
+  const ringTrack = dark ? "#1e293b" : "#e2e8f0";
+  const qaIcon = dark ? "bg-slate-800 text-purple-300" : "bg-slate-100 text-purple-600";
+  const qaBtn = dark ? "bg-slate-900/60 border-slate-800 hover:border-purple-500/40 hover:bg-slate-800/60 text-slate-300 hover:text-white" : "bg-white border-slate-200 hover:border-purple-300 hover:bg-slate-50 text-slate-600 hover:text-slate-900 shadow-sm";
+
   return (
-    <div className="rounded-3xl bg-[#0a0a16] border border-slate-800/80 p-6 md:p-8 text-slate-100 shadow-2xl">
+    <div className={`rounded-3xl border p-6 md:p-8 shadow-2xl ${container}`}>
       {/* Greeting header */}
       <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">
             {greeting}, <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">{company}</span>
           </h1>
-          <p className="text-slate-400 mt-1 text-sm">
+          <p className={`mt-1 text-sm ${muted}`}>
             {stats ? (
-              <>You service <span className="text-slate-200 font-medium">{stats.total_entities.toLocaleString()}</span> entities — {leadsLoaded ? (<><span className="text-slate-200 font-medium">{leadsTotal.toLocaleString()}</span> open opportunities today.</>) : "loading opportunities…"}</>
+              <>You service <span className={`font-medium ${subInk}`}>{stats.total_entities.toLocaleString()}</span> entities — {leadsLoaded ? (<><span className={`font-medium ${subInk}`}>{leadsTotal.toLocaleString()}</span> open opportunities today.</>) : "loading opportunities…"}</>
             ) : "Here's your E-Rate opportunity command center."}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700">{planLabel} plan</span>
+          <span className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${chip}`}>{planLabel} plan</span>
           <button onClick={() => onTab("470-leads")} className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all flex items-center gap-1.5">
             <Target className="w-4 h-4" /> Browse leads
           </button>
@@ -154,104 +170,104 @@ function VendorCommandCenter({
       {/* No-SPIN prompt */}
       {!profile?.spin && (
         <button onClick={() => onTab("settings")} className="w-full text-left mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 flex items-center gap-3 hover:bg-amber-500/15 transition-colors">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-300"><Zap className="w-5 h-5" /></div>
+          <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-500"><Zap className="w-5 h-5" /></div>
           <div className="flex-1">
-            <div className="font-semibold text-amber-200">Connect your SPIN to unlock your portfolio</div>
-            <div className="text-sm text-amber-200/70">See the entities you service and your E-Rate history.</div>
+            <div className={`font-semibold ${dark ? "text-amber-200" : "text-amber-700"}`}>Connect your SPIN to unlock your portfolio</div>
+            <div className={`text-sm ${dark ? "text-amber-200/70" : "text-amber-600"}`}>See the entities you service and your E-Rate history.</div>
           </div>
-          <ChevronRight className="w-5 h-5 text-amber-300" />
+          <ChevronRight className="w-5 h-5 text-amber-500" />
         </button>
       )}
 
       {/* Top bento row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <button onClick={() => onTab("470-leads")} className="text-left rounded-2xl bg-gradient-to-br from-purple-600/20 to-pink-600/10 border border-purple-500/20 p-5 hover:border-purple-400/40 transition-all group">
+        <button onClick={() => onTab("470-leads")} className={`text-left rounded-2xl p-5 border transition-all group ${dark ? "bg-gradient-to-br from-purple-600/20 to-pink-600/10 border-purple-500/20 hover:border-purple-400/40" : "bg-gradient-to-br from-purple-50 to-pink-50 border-purple-100 hover:border-purple-300"}`}>
           <div className="flex items-center justify-between">
-            <div className="w-11 h-11 rounded-xl bg-purple-500/20 flex items-center justify-center text-purple-300"><Target className="w-5 h-5" /></div>
-            <ArrowUpRight className="w-5 h-5 text-slate-500 group-hover:text-purple-300 transition-colors" />
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${dark ? "bg-purple-500/20 text-purple-300" : "bg-purple-100 text-purple-600"}`}><Target className="w-5 h-5" /></div>
+            <ArrowUpRight className={`w-5 h-5 ${faint} group-hover:text-purple-400 transition-colors`} />
           </div>
           <div className="text-4xl font-bold mt-4">{leadsLoaded ? leadsTotal.toLocaleString() : "—"}</div>
-          <div className="text-sm text-slate-400 mt-1">Open Form 470 opportunities</div>
+          <div className={`text-sm mt-1 ${muted}`}>Open Form 470 opportunities</div>
         </button>
 
-        <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-5">
-          <div className="flex items-center gap-2 text-slate-400 text-sm mb-3"><Clock className="w-4 h-4" /> Next bid deadline</div>
+        <div className={`rounded-2xl border p-5 ${card}`}>
+          <div className={`flex items-center gap-2 text-sm mb-3 ${muted}`}><Clock className="w-4 h-4" /> Next bid deadline</div>
           {nextDeadline ? (
             <div className="flex items-center gap-4">
               <div className="relative w-24 h-24 shrink-0">
                 <svg width="96" height="96" viewBox="0 0 96 96">
-                  <circle cx="48" cy="48" r={R} fill="none" stroke="#1e293b" strokeWidth="8" />
+                  <circle cx="48" cy="48" r={R} fill="none" stroke={ringTrack} strokeWidth="8" />
                   <circle cx="48" cy="48" r={R} fill="none" stroke="url(#vccRing)" strokeWidth="8" strokeLinecap="round" strokeDasharray={CIRC} strokeDashoffset={CIRC * (1 - ringPct)} transform="rotate(-90 48 48)" />
                   <defs><linearGradient id="vccRing" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#a855f7" /><stop offset="1" stopColor="#ec4899" /></linearGradient></defs>
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <span className="text-xl font-bold">{dLeft}</span>
-                  <span className="text-[10px] text-slate-400 -mt-0.5">days</span>
+                  <span className={`text-[10px] -mt-0.5 ${muted}`}>days</span>
                 </div>
               </div>
               <div className="min-w-0">
                 <div className="font-semibold truncate">{nextDeadline.l.entity_name}</div>
-                <div className="text-xs text-slate-400 mt-0.5">{[nextDeadline.l.city, nextDeadline.l.state].filter(Boolean).join(", ")}</div>
+                <div className={`text-xs mt-0.5 ${muted}`}>{[nextDeadline.l.city, nextDeadline.l.state].filter(Boolean).join(", ")}</div>
                 <button onClick={() => onOpenLead(nextDeadline.l.application_number)} className="mt-2 text-xs font-semibold px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500 transition-all">Reach out →</button>
               </div>
             </div>
           ) : (
-            <div className="text-slate-500 text-sm py-6 text-center">No open bid deadlines right now.</div>
+            <div className={`text-sm py-6 text-center ${faint}`}>No open bid deadlines right now.</div>
           )}
         </div>
 
-        <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-5">
-          <div className="flex items-center gap-2 text-slate-400 text-sm mb-3"><Building2 className="w-4 h-4" /> Your portfolio</div>
+        <div className={`rounded-2xl border p-5 ${card}`}>
+          <div className={`flex items-center gap-2 text-sm mb-3 ${muted}`}><Building2 className="w-4 h-4" /> Your portfolio</div>
           <div className="text-3xl font-bold">{authM != null ? `$${authM.toFixed(2)}M` : "—"}</div>
-          <div className="text-xs text-slate-400">E-Rate authorized across your customers</div>
+          <div className={`text-xs ${muted}`}>E-Rate authorized across your customers</div>
           <div className="mt-4 space-y-2 text-sm">
-            <div className="flex items-center justify-between"><span className="text-slate-400">Entities serviced</span><span className="font-semibold">{stats?.total_entities?.toLocaleString() ?? "—"}</span></div>
-            <div className="flex items-center justify-between"><span className="text-slate-400">Years active</span><span className="font-semibold">{yearsActive || "—"}</span></div>
-            <div className="flex items-center justify-between"><span className="text-slate-400">Saved leads</span><span className="font-semibold">{savedLoading && savedCount === 0 ? "—" : savedCount}</span></div>
+            <div className="flex items-center justify-between"><span className={muted}>Entities serviced</span><span className="font-semibold">{stats?.total_entities?.toLocaleString() ?? "—"}</span></div>
+            <div className="flex items-center justify-between"><span className={muted}>Years active</span><span className="font-semibold">{yearsActive || "—"}</span></div>
+            <div className="flex items-center justify-between"><span className={muted}>Saved leads</span><span className="font-semibold">{savedLoading && savedCount === 0 ? "—" : savedCount}</span></div>
           </div>
         </div>
       </div>
 
       {/* Middle row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
-        <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-5">
+        <div className={`rounded-2xl border p-5 ${card}`}>
           <div className="flex items-center justify-between mb-3">
-            <div><div className="font-semibold">Needs your attention</div><div className="text-xs text-slate-400">Opportunities closing soonest</div></div>
-            <Bell className="w-4 h-4 text-slate-500" />
+            <div><div className="font-semibold">Needs your attention</div><div className={`text-xs ${muted}`}>Opportunities closing soonest</div></div>
+            <Bell className={`w-4 h-4 ${faint}`} />
           </div>
           {attention.length > 0 ? (
             <div className="space-y-2">
               {attention.map(({ l, days }) => (
-                <div key={l.application_number} className="flex items-center gap-3 rounded-xl bg-slate-800/50 border border-slate-700/50 p-3">
-                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold ${(days as number) <= 7 ? "bg-red-500/20 text-red-300" : "bg-amber-500/20 text-amber-300"}`}>{days}d</div>
-                  <div className="flex-1 min-w-0"><div className="font-medium truncate text-sm">{l.entity_name}</div><div className="text-xs text-slate-400 truncate">{[l.city, l.state].filter(Boolean).join(", ")}</div></div>
-                  <button onClick={() => onOpenLead(l.application_number)} className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-100 transition-colors shrink-0">Reach out</button>
+                <div key={l.application_number} className={`flex items-center gap-3 rounded-xl border p-3 ${softRow}`}>
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold ${(days as number) <= 7 ? "bg-red-500/20 text-red-500" : "bg-amber-500/20 text-amber-600"}`}>{days}d</div>
+                  <div className="flex-1 min-w-0"><div className="font-medium truncate text-sm">{l.entity_name}</div><div className={`text-xs truncate ${muted}`}>{[l.city, l.state].filter(Boolean).join(", ")}</div></div>
+                  <button onClick={() => onOpenLead(l.application_number)} className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors shrink-0 ${reachBtn}`}>Reach out</button>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-slate-500 text-sm py-8 text-center">{leadsLoading && !leadsLoaded ? "Loading…" : "You're all caught up."}</div>
+            <div className={`text-sm py-8 text-center ${faint}`}>{leadsLoading && !leadsLoaded ? "Loading…" : "You're all caught up."}</div>
           )}
         </div>
 
-        <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-5">
+        <div className={`rounded-2xl border p-5 ${card}`}>
           <div className="flex items-center justify-between mb-3">
-            <div><div className="font-semibold">Latest opportunities</div><div className="text-xs text-slate-400">Newest RFPs posted to USAC</div></div>
-            <button onClick={() => onTab("470-leads")} className="text-xs text-purple-300 hover:text-purple-200 font-medium">Browse all →</button>
+            <div><div className="font-semibold">Latest opportunities</div><div className={`text-xs ${muted}`}>Newest RFPs posted to USAC</div></div>
+            <button onClick={() => onTab("470-leads")} className={`text-xs font-medium ${link}`}>Browse all →</button>
           </div>
           {leadsLoading && leads.length === 0 ? (
-            <div className="text-slate-500 text-sm py-8 text-center">Loading opportunities…</div>
+            <div className={`text-sm py-8 text-center ${faint}`}>Loading opportunities…</div>
           ) : leads.length === 0 ? (
-            <div className="text-slate-500 text-sm py-8 text-center">No open Form 470s to show.</div>
+            <div className={`text-sm py-8 text-center ${faint}`}>No open Form 470s to show.</div>
           ) : (
             <div className="space-y-1.5">
               {leads.slice(0, 5).map((l) => {
                 const cat = (l.categories || [])[0] || (l.service_types || [])[0];
                 return (
-                  <button key={l.application_number} onClick={() => onOpenLead(l.application_number)} className="w-full text-left flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-slate-800/60 transition-colors">
+                  <button key={l.application_number} onClick={() => onOpenLead(l.application_number)} className={`w-full text-left flex items-center gap-3 rounded-xl px-3 py-2 transition-colors ${rowHover}`}>
                     <div className="w-2 h-2 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 shrink-0" />
-                    <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{l.entity_name}</div><div className="text-xs text-slate-400 truncate">{[l.city, l.state].filter(Boolean).join(", ")}{cat ? ` · ${cat}` : ""}</div></div>
-                    <ChevronRight className="w-4 h-4 text-slate-600 shrink-0" />
+                    <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{l.entity_name}</div><div className={`text-xs truncate ${muted}`}>{[l.city, l.state].filter(Boolean).join(", ")}{cat ? ` · ${cat}` : ""}</div></div>
+                    <ChevronRight className={`w-4 h-4 shrink-0 ${faint}`} />
                   </button>
                 );
               })}
@@ -262,17 +278,17 @@ function VendorCommandCenter({
 
       {/* Top customers */}
       {entities.length > 0 && (
-        <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-5 mt-5">
+        <div className={`rounded-2xl border p-5 mt-5 ${card}`}>
           <div className="flex items-center justify-between mb-3">
-            <div><div className="font-semibold">Top customers by E-Rate funding</div><div className="text-xs text-slate-400">Your highest-value relationships</div></div>
-            <button onClick={() => onTab("my-entities")} className="text-xs text-purple-300 hover:text-purple-200 font-medium">View all →</button>
+            <div><div className="font-semibold">Top customers by E-Rate funding</div><div className={`text-xs ${muted}`}>Your highest-value relationships</div></div>
+            <button onClick={() => onTab("my-entities")} className={`text-xs font-medium ${link}`}>View all →</button>
           </div>
           <div className="space-y-1.5">
             {entities.slice(0, 5).map((e, i) => (
-              <div key={e.ben} className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-slate-800/40 transition-colors">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500/30 to-pink-500/20 flex items-center justify-center text-sm font-bold text-purple-200">{i + 1}</div>
-                <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{e.organization_name}</div><div className="text-xs text-slate-400">{e.state} · {e.frn_count} FRNs · {e.funding_years?.length || 0} yrs</div></div>
-                <div className="text-sm font-semibold text-emerald-400">{money(e.total_amount || 0)}</div>
+              <div key={e.ben} className={`flex items-center gap-3 rounded-xl px-3 py-2 transition-colors ${rowHover}`}>
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${dark ? "bg-gradient-to-br from-purple-500/30 to-pink-500/20 text-purple-200" : "bg-gradient-to-br from-purple-100 to-pink-100 text-purple-600"}`}>{i + 1}</div>
+                <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{e.organization_name}</div><div className={`text-xs ${muted}`}>{e.state} · {e.frn_count} FRNs · {e.funding_years?.length || 0} yrs</div></div>
+                <div className={`text-sm font-semibold ${dark ? "text-emerald-400" : "text-emerald-600"}`}>{money(e.total_amount || 0)}</div>
               </div>
             ))}
           </div>
@@ -287,8 +303,8 @@ function VendorCommandCenter({
           { label: "Search schools", icon: <Search className="w-5 h-5" />, tab: "search" as VendorTab },
           { label: "Competitive intel", icon: <TrendingUp className="w-5 h-5" />, tab: "competitive" as VendorTab },
         ]).map((a) => (
-          <button key={a.label} onClick={() => onTab(a.tab)} className="rounded-2xl bg-slate-900/60 border border-slate-800 hover:border-purple-500/40 hover:bg-slate-800/60 p-4 flex flex-col items-center gap-2 transition-all text-slate-300 hover:text-white">
-            <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-purple-300">{a.icon}</div>
+          <button key={a.label} onClick={() => onTab(a.tab)} className={`rounded-2xl border p-4 flex flex-col items-center gap-2 transition-all ${qaBtn}`}>
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${qaIcon}`}>{a.icon}</div>
             <span className="text-sm font-medium">{a.label}</span>
           </button>
         ))}
@@ -460,6 +476,19 @@ function VendorPortalPage() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [selectedSchools, setSelectedSchools] = useState<Set<string>>(new Set());
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Dark / light theme for the whole vendor portal shell. Defaults to dark
+  // (matches the SkyRate command-center design concept); persisted per-browser.
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  useEffect(() => {
+    const saved = typeof window !== "undefined" ? localStorage.getItem("vendor_theme") : null;
+    if (saved === "light" || saved === "dark") setTheme(saved);
+  }, []);
+  const toggleTheme = () => setTheme((p) => {
+    const next = p === "dark" ? "light" : "dark";
+    try { localStorage.setItem("vendor_theme", next); } catch { /* ignore */ }
+    return next;
+  });
+  const dark = theme === "dark";
   
   // Search filters
   const [searchState, setSearchState] = useState("");
@@ -1799,128 +1828,138 @@ function VendorPortalPage() {
     "Managed Internal Broadband Services"
   ];
 
-  const navItems = [
-    { id: "dashboard", label: "Dashboard", icon: "📊" },
-    { id: "my-entities", label: "My Entities", icon: "🏫" },
-    { id: "frn-status", label: "FRN Status", icon: "📈" },
-    { id: "cyber-pilot", label: "Cybersecurity Pilot", icon: "🛡️" },
-    { id: "470-leads", label: "Form 470 Leads", icon: "🎯" },
-    { id: "map", label: "Opportunity Map", icon: "🗺️" },
-    { id: "predicted-leads", label: "Predicted Leads", icon: "🔮" },
-    { id: "competitive", label: "471 Lookup", icon: "🔎" },
-    { id: "search", label: "School Search", icon: "🔍" },
-    { id: "leads", label: "Saved Leads", icon: "📋" },
-    { id: "settings", label: "Settings", icon: "⚙️" },
+  // Sidebar organized into intent-based zones (concept: 4 grouped zones with
+  // single-weight SVG icons) instead of one flat list of 11 emoji items.
+  const navGroups: { label: string; items: { id: VendorTab; label: string; Icon: typeof Home }[] }[] = [
+    { label: "Overview", items: [
+      { id: "dashboard", label: "Dashboard", Icon: Home },
+    ]},
+    { label: "Opportunities", items: [
+      { id: "470-leads", label: "Form 470 Leads", Icon: Target },
+      { id: "map", label: "Opportunity Map", Icon: MapIcon },
+      { id: "predicted-leads", label: "Predicted Leads", Icon: Sparkles },
+      { id: "leads", label: "Saved Leads", Icon: Bookmark },
+    ]},
+    { label: "Your Customers", items: [
+      { id: "my-entities", label: "My Entities", Icon: Building2 },
+      { id: "frn-status", label: "FRN Status", Icon: Activity },
+    ]},
+    { label: "Intelligence", items: [
+      { id: "competitive", label: "471 Lookup", Icon: FileSearch },
+      { id: "search", label: "School Search", Icon: Search },
+      { id: "cyber-pilot", label: "Cybersecurity Pilot", Icon: Shield },
+    ]},
+    { label: "Account", items: [
+      { id: "settings", label: "Settings", Icon: SettingsIcon },
+    ]},
   ];
+  const allNav = navGroups.flatMap((g) => g.items);
+  const activeLabel = allNav.find((i) => i.id === activeTab)?.label || "Dashboard";
+
+  // Theme-aware shell class fragments
+  const shellSide = dark ? "bg-[#0f1020] border-slate-800" : "bg-white border-slate-200";
+  const shellMain = dark ? "bg-[#0a0b15]" : "bg-slate-50";
+  const shellTop = dark ? "bg-[#0c0d1a] border-slate-800" : "bg-white border-slate-200";
+  const groupLabelCls = dark ? "text-slate-500" : "text-slate-400";
+  const railText = dark ? "text-slate-300" : "text-slate-600";
+  const railHover = dark ? "hover:bg-slate-800/60 hover:text-white" : "hover:bg-slate-50 hover:text-slate-900";
+  const railActive = dark ? "bg-gradient-to-r from-purple-500/20 to-pink-500/10 text-white" : "bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700";
+  const iconBtnCls = dark ? "border-slate-700 text-slate-300 hover:border-purple-500 hover:text-white" : "border-slate-200 text-slate-600 hover:bg-slate-100";
+  const crumbInk = dark ? "text-slate-100" : "text-slate-900";
+  const crumbFaint = dark ? "text-slate-500" : "text-slate-400";
+  const searchCls = dark ? "bg-slate-900 border-slate-700 text-slate-400" : "bg-slate-50 border-slate-200 text-slate-500";
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className={`min-h-screen ${shellMain}`}>
       {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transform transition-transform duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 border-r transform transition-transform duration-200 ease-in-out ${shellSide} ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 flex flex-col`}>
         {/* Logo */}
-        <div className="h-16 flex items-center gap-3 px-6 border-b border-slate-200">
+        <div className={`h-16 flex items-center gap-3 px-5 border-b ${dark ? 'border-slate-800' : 'border-slate-200'}`}>
           <Link href="/" className="flex items-center gap-3">
-            <img src="/images/logos/logo-icon-transparent.png" alt="SkyRate AI" width={36} height={36} className="rounded-lg" />
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/20">
+              <Sparkles className="w-5 h-5 text-white" />
+            </div>
             <div>
-              <span className="font-bold text-slate-900">SkyRate AI</span>
-              <span className="block text-xs text-slate-500">
+              <span className={`font-bold ${crumbInk}`}>SkyRate AI</span>
+              <span className={`block text-xs ${dark ? 'text-slate-500' : 'text-slate-500'}`}>
                 Vendor Portal{(user?.role === 'super' || user?.role === 'admin') ? ` (${user.role})` : ''}
               </span>
             </div>
           </Link>
         </div>
 
-        {/* Navigation */}
-        <nav className="p-4 space-y-1">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id as VendorTab)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${
-                activeTab === item.id
-                  ? "bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700 font-medium shadow-sm"
-                  : "text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              <span className="text-xl">{item.icon}</span>
-              <span>{item.label}</span>
-              {activeTab === item.id && (
-                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-purple-600"></span>
+        {/* Grouped navigation */}
+        <nav className="flex-1 overflow-y-auto px-3 py-4">
+          {navGroups.map((group) => (
+            <div key={group.label} className="mb-4">
+              <div className={`px-3 pb-1.5 text-[10.5px] font-bold uppercase tracking-wider ${groupLabelCls}`}>{group.label}</div>
+              {group.items.map((item) => {
+                const active = activeTab === item.id;
+                const Ico = item.Icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => { setActiveTab(item.id); setSidebarOpen(false); }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all mb-0.5 ${active ? `${railActive} font-medium` : `${railText} ${railHover}`}`}
+                  >
+                    <Ico className="w-[18px] h-[18px]" />
+                    <span className="text-sm">{item.label}</span>
+                    {active && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-purple-500" />}
+                  </button>
+                );
+              })}
+              {group.label === 'Intelligence' && (
+                <Link href="/industry-pulse" className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all mb-0.5 ${railText} ${railHover}`}>
+                  <BarChart3 className="w-[18px] h-[18px]" />
+                  <span className="text-sm">Industry Pulse</span>
+                </Link>
               )}
-            </button>
+            </div>
           ))}
 
-          {/* Industry Pulse link */}
-          <Link
-            href="/industry-pulse"
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all text-slate-600 hover:bg-slate-50"
-          >
-            <span className="text-xl">📊</span>
-            <span>Industry Pulse</span>
-          </Link>
+          {/* Portal Switcher (super/admin only) */}
+          {(user?.role === 'super' || user?.role === 'admin') && (
+            <div className="mb-2">
+              <div className={`px-3 pb-1.5 text-[10.5px] font-bold uppercase tracking-wider ${groupLabelCls}`}>Switch Portal</div>
+              <Link href="/consultant" className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all mb-0.5 ${railText} ${railHover}`}>
+                <Building2 className="w-[18px] h-[18px]" /><span className="text-sm">Consultant Portal</span>
+                <ChevronRight className="w-4 h-4 ml-auto opacity-50" />
+              </Link>
+              <Link href="/super" className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all mb-0.5 ${railText} ${railHover}`}>
+                <Sparkles className="w-[18px] h-[18px]" /><span className="text-sm">Super Dashboard</span>
+                <ChevronRight className="w-4 h-4 ml-auto opacity-50" />
+              </Link>
+            </div>
+          )}
         </nav>
 
-        {/* Portal Switcher (super/admin only) */}
-        {(user?.role === 'super' || user?.role === 'admin') && (
-          <div className="px-4 pb-3">
-            <div className="border-t border-slate-200 pt-3">
-              <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold px-4 mb-2">Switch Portal</p>
-              <Link
-                href="/consultant"
-                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-slate-600 hover:bg-indigo-50 hover:text-indigo-700 transition-all text-sm"
-              >
-                <span className="text-lg">📊</span>
-                <span>Consultant Portal</span>
-                <svg className="w-4 h-4 ml-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-              </Link>
-              <Link
-                href="/super"
-                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-slate-600 hover:bg-yellow-50 hover:text-yellow-700 transition-all text-sm"
-              >
-                <span className="text-lg">⭐</span>
-                <span>Super Dashboard</span>
-                <svg className="w-4 h-4 ml-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-              </Link>
-            </div>
-          </div>
-        )}
-
-        {/* Subscription Card */}
-        <div className="absolute bottom-20 left-4 right-4">
-          <div className="bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl p-4 text-white">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium opacity-90">
+        {/* Pinned footer: plan card + profile */}
+        <div className={`border-t p-3 ${dark ? 'border-slate-800' : 'border-slate-200'}`}>
+          <div className="rounded-2xl p-3 mb-2 bg-gradient-to-br from-purple-600 to-pink-600 text-white">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium opacity-90">
                 {user?.role === 'super' || user?.role === 'admin' ? 'Full Access' : 'Pro Plan'}
               </span>
-              <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs">
-                {user?.role === 'super' ? '⭐ Super' : user?.role === 'admin' ? '🔑 Admin' : 'Active'}
+              <span className="px-2 py-0.5 bg-white/20 rounded-full text-[10px] font-semibold">
+                {user?.role === 'super' ? 'Super' : user?.role === 'admin' ? 'Admin' : 'Active'}
               </span>
             </div>
-            <div className="text-2xl font-bold">{profile?.search_count || 0} Searches</div>
-            <div className="text-sm opacity-75 mt-1">
-              {user?.role === 'super' || user?.role === 'admin' ? 'Full platform access' : 'Unlimited access'}
-            </div>
+            <div className="text-lg font-bold mt-0.5">{profile?.search_count || 0} Searches</div>
           </div>
-        </div>
-
-        {/* User Profile */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200 bg-white">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center text-purple-700 font-semibold">
+          <div className="flex items-center gap-2.5 px-1">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center text-white font-semibold shrink-0">
               {user?.first_name?.[0] || user?.email?.[0]?.toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="font-medium text-slate-900 truncate">{user?.full_name || user?.email}</div>
-              <div className="text-xs text-slate-500 truncate">{profile?.company_name}</div>
+              <div className={`text-sm font-medium truncate ${crumbInk}`}>{user?.full_name || user?.email}</div>
+              <div className={`text-xs truncate ${dark ? 'text-slate-500' : 'text-slate-500'}`}>{profile?.company_name}</div>
             </div>
             <button
               onClick={handleLogout}
-              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
               title="Logout"
+              className={`p-2 rounded-lg transition-colors ${dark ? 'text-slate-400 hover:text-red-400 hover:bg-red-500/10' : 'text-slate-400 hover:text-red-500 hover:bg-red-50'}`}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
+              <LogOut className="w-[18px] h-[18px]" />
             </button>
           </div>
         </div>
@@ -1929,47 +1968,62 @@ function VendorPortalPage() {
       {/* Main Content */}
       <main className="lg:ml-64">
         {/* Top Bar */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 sticky top-0 z-40">
-          <div className="flex items-center gap-4">
+        <header className={`h-16 border-b flex items-center justify-between px-5 sticky top-0 z-40 ${shellTop}`}>
+          <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+              className={`lg:hidden w-9 h-9 rounded-lg border flex items-center justify-center ${iconBtnCls}`}
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
+              <PanelLeft className="w-5 h-5" />
             </button>
-            <h1 className="text-xl font-semibold text-slate-900">
-              {navItems.find(i => i.id === activeTab)?.label}
-            </h1>
+            <div className="text-sm truncate">
+              <span className={crumbFaint}>SkyRate AI</span>
+              <span className={`mx-1.5 ${crumbFaint}`}>·</span>
+              <span className={`font-semibold ${crumbInk}`}>{activeLabel}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            {/* Persistent portal switcher (super/admin) — always reachable so a
-                super account can never get trapped in the vendor portal (#14). */}
+          <div className="flex items-center gap-2">
+            {/* Search (visual) */}
+            <div className={`hidden md:flex items-center gap-2 rounded-lg border px-3 py-2 text-sm w-56 ${searchCls}`}>
+              <Search className="w-4 h-4" />
+              <span className="flex-1 truncate">Search or jump to…</span>
+            </div>
             {(user?.role === 'super' || user?.role === 'admin') && (
               <Link
                 href="/consultant"
                 title="Switch to the Consulting portal"
-                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors text-sm font-medium"
+                className={`hidden lg:flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors text-sm font-medium ${dark ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20' : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 15l-3-3m0 0l3-3m-3 3h8M3 12a9 9 0 1118 0 9 9 0 01-18 0z" /></svg>
-                <span className="hidden sm:inline">Consulting</span>
+                <Building2 className="w-4 h-4" />
+                <span className="hidden xl:inline">Consulting</span>
               </Link>
             )}
-            <button className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg relative">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+            {/* Theme toggle */}
+            <button
+              onClick={toggleTheme}
+              title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+              className={`w-9 h-9 rounded-lg border flex items-center justify-center ${iconBtnCls}`}
+            >
+              {dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
+            {/* Notifications */}
+            <button className={`w-9 h-9 rounded-lg border flex items-center justify-center relative ${iconBtnCls}`} title="Notifications">
+              <Bell className="w-5 h-5" />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full"></span>
+            </button>
+            {/* Help */}
+            <button className={`hidden sm:flex w-9 h-9 rounded-lg border items-center justify-center ${iconBtnCls}`} title="Help">
+              <HelpCircle className="w-5 h-5" />
+            </button>
+            {/* Refresh */}
             <button
               onClick={loadProfile}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${dark ? 'bg-slate-800 hover:bg-slate-700 text-slate-200' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
             >
               <svg className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              Refresh
+              <span className="hidden sm:inline">Refresh</span>
             </button>
           </div>
         </header>
@@ -1993,6 +2047,7 @@ function VendorPortalPage() {
               user={user}
               onTab={setActiveTab}
               onOpenLead={load470Detail}
+              dark={dark}
             />
           )}
 
