@@ -1876,9 +1876,7 @@ function VendorPortalPage() {
         {/* Logo */}
         <div className={`h-16 flex items-center gap-3 px-5 border-b ${dark ? 'border-slate-800' : 'border-slate-200'}`}>
           <Link href="/" className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/20">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
+            <img src="/images/logos/logo-icon-transparent.png" alt="SkyRate AI" width={36} height={36} className="w-9 h-9 rounded-xl" />
             <div>
               <span className={`font-bold ${crumbInk}`}>SkyRate AI</span>
               <span className={`block text-xs ${dark ? 'text-slate-500' : 'text-slate-500'}`}>
