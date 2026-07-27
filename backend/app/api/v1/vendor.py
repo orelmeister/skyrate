@@ -1982,6 +1982,78 @@ async def rfp_download_proxy(url: str):
     return StreamingResponse(_iter(), media_type=content_type, headers=headers)
 
 
+@router.get("/470/entity/{ben}")
+async def get_470_by_ben(
+    ben: str,
+    year: Optional[int] = None,
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
+    db: Session = Depends(get_db),
+):
+    """
+    Look up the Form 470 posting(s) for a single entity (BEN) from the local
+    vendor_form470_snapshots table (current + next funding year). Powers the
+    "search by BEN" box in the Form 470 Leads tab. Returns the same lead shape
+    as /470/leads so the frontend can open the existing detail modal directly.
+    An empty `leads` list means the entity hasn't posted a Form 470 this cycle.
+    """
+    import json as _json
+    from ...models.vendor_form470_snapshot import VendorForm470Snapshot
+
+    def _safe_json_list(raw):
+        if not raw:
+            return []
+        try:
+            return _json.loads(raw)
+        except Exception:
+            return []
+
+    ben_clean = (ben or "").strip()
+    if not ben_clean:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="BEN is required",
+        )
+
+    try:
+        q = db.query(VendorForm470Snapshot).filter(VendorForm470Snapshot.ben == ben_clean)
+        if year:
+            q = q.filter(VendorForm470Snapshot.funding_year == str(year))
+        rows = q.order_by(VendorForm470Snapshot.funding_year.desc()).limit(50).all()
+        leads = [{
+            "application_number": r.application_number,
+            "funding_year": r.funding_year,
+            "ben": r.ben,
+            "entity_name": r.entity_name,
+            "state": r.state,
+            "city": r.city,
+            "applicant_type": r.applicant_type,
+            "status": r.status,
+            "posting_date": r.posting_date,
+            "allowable_contract_date": r.allowable_contract_date,
+            "contact_name": r.contact_name,
+            "contact_email": r.contact_email,
+            "contact_phone": r.contact_phone,
+            "technical_contact": r.technical_contact,
+            "technical_email": r.technical_email,
+            "technical_phone": r.technical_phone,
+            "cat1_description": r.cat1_description,
+            "cat2_description": r.cat2_description,
+            "services": _safe_json_list(r.services_json),
+            "manufacturers": _safe_json_list(r.manufacturers_json),
+            "service_types": _safe_json_list(r.service_types_json),
+            "categories": _safe_json_list(r.categories_json),
+            "c2_budget_total": r.c2_budget_total,
+            "c2_budget_available": r.c2_budget_available,
+            "c2_budget_cycle": r.c2_budget_cycle,
+        } for r in rows]
+        return {"success": True, "ben": ben_clean, "total_leads": len(leads), "leads": leads}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to look up Form 470 for BEN: {str(e)}",
+        )
+
+
 @router.post("/470/search")
 async def search_470(
     data: Form470SearchRequest,

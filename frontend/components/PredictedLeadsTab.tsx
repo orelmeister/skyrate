@@ -186,12 +186,15 @@ function ConfidenceBadge({ score }: { score: number }) {
   );
 }
 
-export default function PredictedLeadsTab({ onView471 }: { onView471?: (ben: string, year?: number, frn?: string) => void }) {
+export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?: (ben: string, year?: number, frn?: string) => void; onView470?: (applicationNumber: string) => void }) {
   const [leads, setLeads] = useState<PredictedLead[]>([]);
   const [stats, setStats] = useState<PredictionStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedLead, setSelectedLead] = useState<PredictedLead | null>(null);
+  // Form 470 filing check for the selected entity (Ari request): did they post a 470?
+  const [f470Loading, setF470Loading] = useState(false);
+  const [f470Result, setF470Result] = useState<{ filed: boolean; leads: { application_number: string; funding_year: string; entity_name: string }[] } | null>(null);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
 
@@ -306,6 +309,27 @@ export default function PredictedLeadsTab({ onView471 }: { onView471?: (ben: str
     setSaveError(null);
     setEnrichedData(null);
     setEnrichError(null);
+    setF470Result(null);
+    setF470Loading(false);
+  };
+
+  // Check whether the selected entity has posted a Form 470 this cycle.
+  const checkForm470 = async () => {
+    if (!selectedLead?.ben) return;
+    setF470Loading(true);
+    try {
+      const res = await api.get470ByBen(selectedLead.ben);
+      const leads = (res.data?.leads || []).map((l) => ({
+        application_number: l.application_number,
+        funding_year: l.funding_year,
+        entity_name: l.entity_name,
+      }));
+      setF470Result({ filed: leads.length > 0, leads });
+    } catch {
+      setF470Result({ filed: false, leads: [] });
+    } finally {
+      setF470Loading(false);
+    }
   };
 
   const handleSaveAsLead = async () => {
@@ -930,6 +954,48 @@ export default function PredictedLeadsTab({ onView471 }: { onView471?: (ben: str
                 >
                   🔎 View Form 471{selectedLead.funding_year ? ` (FY${selectedLead.funding_year})` : ""}
                 </button>
+              )}
+
+              {/* Form 470 filing status — has this entity posted a 470 this cycle? */}
+              {selectedLead.ben && (
+                <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  {f470Result === null ? (
+                    <button
+                      onClick={checkForm470}
+                      disabled={f470Loading}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-100 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {f470Loading ? (
+                        <><span className="w-4 h-4 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin"></span> Checking…</>
+                      ) : "📄 Check Form 470 filing"}
+                    </button>
+                  ) : f470Result.filed ? (
+                    <div>
+                      <div className="flex items-center gap-2 text-sm font-medium text-emerald-700 mb-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                        Form 470 filed this cycle
+                      </div>
+                      <div className="space-y-1">
+                        {f470Result.leads.slice(0, 4).map((l) => (
+                          <button
+                            key={l.application_number}
+                            onClick={() => onView470 && onView470(l.application_number)}
+                            disabled={!onView470}
+                            className="w-full text-left text-xs px-2 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-purple-50 hover:border-purple-200 transition-all flex items-center gap-2 disabled:cursor-default"
+                          >
+                            <span className="text-slate-700">FY{l.funding_year} · #{l.application_number}</span>
+                            {onView470 && <span className="ml-auto text-purple-600 font-medium">View →</span>}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                      <span className="w-2 h-2 rounded-full bg-slate-300"></span>
+                      No Form 470 posted this cycle yet.
+                    </div>
+                  )}
+                </div>
               )}
 
               {/* Save Error */}

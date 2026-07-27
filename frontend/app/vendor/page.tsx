@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useAuthStore, deriveRequiresPaymentSetup } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
 import { PERF_V2_ENABLED } from "@/lib/featureFlags";
-import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse, FRNStatusResponse, FRNStatusSummaryResponse, FRNStatusRecord, Form470Lead, Form470LeadsResponse, Form470DetailResponse, SavedLead, EnrichedContactData, FRNWatch, CreateWatchRequest, FRNReportHistory } from "@/lib/api";
+import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse, FRNStatusResponse, FRNStatusSummaryResponse, FRNStatusRecord, Form470Lead, Form470LeadsResponse, Form470DetailResponse, SavedLead, EnrichedContactData, FRNWatch, CreateWatchRequest, FRNReportHistory, VendorDisbursementResponse } from "@/lib/api";
 import { Form471LineItem } from "@/lib/api";
 import { useTabParam } from "@/hooks/useTabParam";
 import PredictedLeadsTab from "@/components/PredictedLeadsTab";
@@ -17,10 +17,10 @@ import MissingIdentifierBanner from "@/components/MissingIdentifierBanner";
 import { SkeletonRows, SkeletonTable, SkeletonStatCards } from "@/components/Skeleton";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { DisbursementPanel } from "@/components/FRNDetailModal";
-import { ChevronRight, ChevronDown, Target, Clock, Building2, Bell, ArrowUpRight, Zap, BarChart3, Search, TrendingUp, Home, Activity, Shield, Map as MapIcon, Sparkles, FileSearch, Bookmark, Settings as SettingsIcon, HelpCircle, PanelLeft, Sun, Moon, LogOut } from "lucide-react";
+import { ChevronRight, ChevronDown, Target, Clock, Building2, Bell, ArrowUpRight, Zap, BarChart3, Search, TrendingUp, Home, Activity, Shield, Map as MapIcon, Sparkles, FileSearch, Bookmark, Settings as SettingsIcon, HelpCircle, PanelLeft, Sun, Moon, LogOut, Receipt } from "lucide-react";
 import PilotFrns from "./PilotFrns";
 
-const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "cyber-pilot", "470-leads", "map", "predicted-leads", "competitive", "search", "leads", "settings"] as const;
+const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "cyber-pilot", "470-leads", "map", "predicted-leads", "competitive", "invoicing", "search", "leads", "settings"] as const;
 type VendorTab = typeof VENDOR_TABS[number];
 
 interface SearchResult {
@@ -480,18 +480,29 @@ function VendorPortalPage() {
   // the visitor's OS preference (prefers-color-scheme); once they toggle, that
   // explicit choice is remembered per-browser and wins over the OS setting.
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  // First-visit hint: gently point out the theme toggle until the user has
+  // either toggled it or dismissed the tip once.
+  const [themeHint, setThemeHint] = useState(false);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const saved = localStorage.getItem("vendor_theme");
     if (saved === "light" || saved === "dark") { setTheme(saved); return; }
     // No saved choice yet -> follow the operating system / browser preference.
     if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) setTheme("light");
+    if (!localStorage.getItem("vendor_theme_hint_seen")) setThemeHint(true);
   }, []);
-  const toggleTheme = () => setTheme((p) => {
-    const next = p === "dark" ? "light" : "dark";
-    try { localStorage.setItem("vendor_theme", next); } catch { /* ignore */ }
-    return next;
-  });
+  const dismissThemeHint = () => {
+    setThemeHint(false);
+    try { localStorage.setItem("vendor_theme_hint_seen", "1"); } catch { /* ignore */ }
+  };
+  const toggleTheme = () => {
+    dismissThemeHint();
+    setTheme((p) => {
+      const next = p === "dark" ? "light" : "dark";
+      try { localStorage.setItem("vendor_theme", next); } catch { /* ignore */ }
+      return next;
+    });
+  };
   const dark = theme === "dark";
   
   // Search filters
@@ -697,6 +708,20 @@ function VendorPortalPage() {
   const [dashLeadsLoading, setDashLeadsLoading] = useState(false);
   const [dashLeadsTotal, setDashLeadsTotal] = useState(0);
   const [dashLeadsLoaded, setDashLeadsLoaded] = useState(false);
+
+  // BEN lookup box (Form 470 Leads tab): jump straight to an entity's 470.
+  const [benLookup, setBenLookup] = useState("");
+  const [benLookupLoading, setBenLookupLoading] = useState(false);
+  const [benLookupMsg, setBenLookupMsg] = useState<string | null>(null);
+  const [benLookupResults, setBenLookupResults] = useState<Form470Lead[]>([]);
+
+  // Invoicing tab: vendor's own SPIN-scoped disbursement schedule.
+  const [invoiceData, setInvoiceData] = useState<VendorDisbursementResponse | null>(null);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [invoiceError, setInvoiceError] = useState<string | null>(null);
+  const [invoiceLoaded, setInvoiceLoaded] = useState(false);
+  const [invoiceYear, setInvoiceYear] = useState<number | undefined>(undefined);
+  const [invoiceExpanded, setInvoiceExpanded] = useState<Set<string>>(new Set());
   
   // Saved Leads state
   const [savedLeads, setSavedLeads] = useState<SavedLead[]>([]);
@@ -920,6 +945,10 @@ function VendorPortalPage() {
     }
     if (activeTab === 'dashboard' && savedLeads.length === 0 && !savedLeadsLoading) {
       loadSavedLeads();
+    }
+    // Invoicing tab: load the vendor's disbursement schedule once on open.
+    if (activeTab === 'invoicing' && !invoiceLoaded && !invoiceLoading) {
+      loadInvoices(invoiceYear);
     }
   }, [activeTab, profile?.spin]);
 
@@ -1327,6 +1356,56 @@ function VendorPortalPage() {
     } finally {
       setDashLeadsLoading(false);
       setDashLeadsLoaded(true);
+    }
+  };
+
+  // BEN lookup: fetch the 470(s) for a specific entity. If exactly one, open the
+  // detail modal directly (same screen as clicking a lead). If several, list
+  // them. If none, tell the user the entity hasn't posted a 470 this cycle.
+  const handleBenLookup = async () => {
+    const ben = benLookup.trim();
+    if (!ben) return;
+    setBenLookupLoading(true);
+    setBenLookupMsg(null);
+    setBenLookupResults([]);
+    try {
+      const res = await api.get470ByBen(ben);
+      const leads = res.data?.leads || [];
+      if (leads.length === 0) {
+        setBenLookupMsg(`No open Form 470 found for BEN ${ben} this funding cycle. They may not have posted one yet.`);
+      } else if (leads.length === 1) {
+        load470Detail(leads[0].application_number);
+        setBenLookupMsg(null);
+      } else {
+        setBenLookupResults(leads);
+        setBenLookupMsg(`${leads.length} Form 470 postings found for BEN ${ben} — pick one:`);
+      }
+    } catch (error) {
+      console.error("BEN lookup failed:", error);
+      setBenLookupMsg("Lookup failed. Please check the BEN and try again.");
+    } finally {
+      setBenLookupLoading(false);
+    }
+  };
+
+  // Invoicing: pull the vendor's own disbursement schedule (scoped to their SPIN).
+  const loadInvoices = async (year?: number) => {
+    if (!profile?.spin) { setInvoiceLoaded(true); return; }
+    setInvoiceLoading(true);
+    setInvoiceError(null);
+    try {
+      const res = await api.getVendorDisbursements({ spin: profile.spin, year });
+      if (res.success && res.data) {
+        setInvoiceData(res.data);
+      } else {
+        setInvoiceError(res.error || "Failed to load invoicing data.");
+      }
+    } catch (error) {
+      console.error("Failed to load invoices:", error);
+      setInvoiceError("Failed to load invoicing data.");
+    } finally {
+      setInvoiceLoading(false);
+      setInvoiceLoaded(true);
     }
   };
 
@@ -1848,6 +1927,9 @@ function VendorPortalPage() {
       { id: "my-entities", label: "My Entities", Icon: Building2 },
       { id: "frn-status", label: "FRN Status", Icon: Activity },
     ]},
+    { label: "Billing", items: [
+      { id: "invoicing", label: "Invoicing", Icon: Receipt },
+    ]},
     { label: "Intelligence", items: [
       { id: "competitive", label: "471 Lookup", Icon: FileSearch },
       { id: "search", label: "School Search", Icon: Search },
@@ -2001,13 +2083,23 @@ function VendorPortalPage() {
               </Link>
             )}
             {/* Theme toggle */}
-            <button
-              onClick={toggleTheme}
-              title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
-              className={`w-9 h-9 rounded-lg border flex items-center justify-center ${iconBtnCls}`}
-            >
-              {dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
+            <div className="relative">
+              <button
+                onClick={toggleTheme}
+                title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+                className={`w-9 h-9 rounded-lg border flex items-center justify-center ${iconBtnCls} ${themeHint ? 'ring-2 ring-purple-400 ring-offset-2 ' + (dark ? 'ring-offset-[#0c0d1a]' : 'ring-offset-white') + ' animate-pulse' : ''}`}
+              >
+                {dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+              {themeHint && (
+                <div className="absolute right-0 top-11 z-50 w-52 rounded-xl bg-slate-900 text-white text-xs p-3 shadow-xl border border-slate-700">
+                  <div className="font-semibold mb-0.5">Prefer {dark ? 'light' : 'dark'} mode?</div>
+                  <div className="text-slate-300">Tap here anytime to switch — we&apos;ll remember your choice.</div>
+                  <button onClick={dismissThemeHint} className="mt-2 text-purple-300 hover:text-purple-200 font-medium">Got it</button>
+                  <div className="absolute -top-1.5 right-3 w-3 h-3 bg-slate-900 border-l border-t border-slate-700 rotate-45"></div>
+                </div>
+              )}
+            </div>
             {/* Notifications */}
             <button className={`w-9 h-9 rounded-lg border flex items-center justify-center relative ${iconBtnCls}`} title="Notifications">
               <Bell className="w-5 h-5" />
@@ -2055,6 +2147,120 @@ function VendorPortalPage() {
 
         {/* Cybersecurity Pilot Program Tab */}
         {activeTab === "cyber-pilot" && <PilotFrns />}
+
+        {/* Invoicing / Disbursement Schedule Tab */}
+        {activeTab === "invoicing" && (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 rounded-2xl p-6 text-white shadow-lg">
+              <div className="flex items-start justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center"><Receipt className="w-7 h-7" /></div>
+                  <div>
+                    <h1 className="text-2xl font-bold">Invoicing &amp; Disbursements</h1>
+                    <p className="text-teal-100 mt-1">Track your invoices — filed, paid, and outstanding{profile?.spin ? ` · SPIN ${profile.spin}` : ''}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <select value={invoiceYear ?? ''} onChange={(e) => { const y = e.target.value ? parseInt(e.target.value, 10) : undefined; setInvoiceYear(y); setInvoiceLoaded(false); loadInvoices(y); }} className="bg-white/20 border border-white/30 rounded-lg px-3 py-1.5 text-sm font-semibold text-white backdrop-blur cursor-pointer focus:outline-none">
+                    <option value="" className="text-slate-900">All years</option>
+                    {(() => { const cy = new Date().getFullYear(); const ys: number[] = []; for (let y = cy + 1; y >= cy - 6; y--) ys.push(y); return ys.map(y => (<option key={y} value={y} className="text-slate-900">FY{y}</option>)); })()}
+                  </select>
+                  <button onClick={() => { setInvoiceLoaded(false); loadInvoices(invoiceYear); }} className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors">Refresh</button>
+                </div>
+              </div>
+            </div>
+
+            {!profile?.spin ? (
+              <div className="bg-white rounded-2xl border border-amber-200 p-6 flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600"><Zap className="w-6 h-6" /></div>
+                <div className="flex-1">
+                  <h2 className="text-lg font-semibold text-slate-900">Add your SPIN to see invoicing</h2>
+                  <p className="text-sm text-slate-600 mt-1">Your invoice and disbursement schedule is matched to your SPIN.</p>
+                </div>
+                <button onClick={() => setActiveTab('settings')} className="px-4 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 text-sm font-medium">Setup SPIN →</button>
+              </div>
+            ) : invoiceLoading ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400">
+                <div className="w-8 h-8 border-4 border-teal-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                Loading your invoice schedule…
+              </div>
+            ) : invoiceError ? (
+              <div className="bg-white rounded-2xl border border-red-200 p-6 text-red-600">{invoiceError}</div>
+            ) : invoiceData && invoiceData.frns.length > 0 ? (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {(() => {
+                    const req = invoiceData.total_requested || 0;
+                    const paid = invoiceData.total_disbursed || 0;
+                    const out = Math.max(0, req - paid);
+                    const M = (n: number) => n >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(0)}K` : `$${n.toFixed(0)}`;
+                    const cards = [
+                      { label: 'Total invoiced', val: M(req), sub: `${invoiceData.line_count} invoice lines`, color: 'text-slate-900' },
+                      { label: 'Paid / disbursed', val: M(paid), sub: `${req > 0 ? Math.round(paid / req * 100) : 0}% of invoiced`, color: 'text-emerald-600' },
+                      { label: 'Outstanding', val: M(out), sub: `across ${invoiceData.frn_count} FRNs`, color: 'text-amber-600' },
+                    ];
+                    return cards.map(c => (
+                      <div key={c.label} className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                        <div className="text-sm text-slate-500">{c.label}</div>
+                        <div className={`text-3xl font-bold mt-1 ${c.color}`}>{c.val}</div>
+                        <div className="text-xs text-slate-400 mt-1">{c.sub}</div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="p-4 border-b border-slate-200"><h2 className="text-lg font-semibold text-slate-900">Invoices by FRN</h2><p className="text-sm text-slate-500">Click a row to see individual invoice lines</p></div>
+                  <div className="divide-y divide-slate-100">
+                    {invoiceData.frns.map((g) => {
+                      const out = Math.max(0, (g.total_requested || 0) - (g.total_disbursed || 0));
+                      const M = (n: number) => n >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(0)}K` : `$${n.toFixed(0)}`;
+                      const open = invoiceExpanded.has(g.frn);
+                      return (
+                        <div key={g.frn}>
+                          <button onClick={() => setInvoiceExpanded(prev => { const n = new Set(prev); if (n.has(g.frn)) n.delete(g.frn); else n.add(g.frn); return n; })} className="w-full text-left p-4 flex items-center gap-4 hover:bg-slate-50 transition-colors">
+                            {open ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-slate-900 truncate">{g.billed_entity_name}</div>
+                              <div className="text-xs text-slate-500">FRN {g.frn} · FY{g.funding_year || '—'} · {g.line_count} lines</div>
+                            </div>
+                            <div className="text-right shrink-0 w-24"><div className="text-sm font-semibold text-slate-900">{M(g.total_requested || 0)}</div><div className="text-xs text-slate-500">invoiced</div></div>
+                            <div className="text-right shrink-0 w-24 hidden sm:block"><div className="text-sm font-semibold text-emerald-600">{M(g.total_disbursed || 0)}</div><div className="text-xs text-slate-500">paid</div></div>
+                            <div className="text-right shrink-0 w-24"><div className={`text-sm font-semibold ${out > 0 ? 'text-amber-600' : 'text-slate-400'}`}>{M(out)}</div><div className="text-xs text-slate-500">outstanding</div></div>
+                          </button>
+                          {open && (
+                            <div className="bg-slate-50 px-4 pb-3 overflow-x-auto">
+                              <table className="w-full text-sm min-w-[520px]">
+                                <thead><tr className="text-xs text-slate-500 text-left"><th className="py-2 font-medium">Invoice</th><th className="py-2 font-medium">Status</th><th className="py-2 font-medium">Invoice date</th><th className="py-2 font-medium text-right">Requested</th><th className="py-2 font-medium text-right">Disbursed</th></tr></thead>
+                                <tbody>
+                                  {g.lines.map((ln, i) => (
+                                    <tr key={`${ln.invoice_id}-${ln.inv_line_num}-${i}`} className="border-t border-slate-200">
+                                      <td className="py-2 text-slate-700">{ln.invoice_id || '—'}{ln.invoice_type ? ` · ${ln.invoice_type}` : ''}</td>
+                                      <td className="py-2 text-slate-600">{ln.status || '—'}</td>
+                                      <td className="py-2 text-slate-600">{ln.invoice_date || '—'}</td>
+                                      <td className="py-2 text-right text-slate-700">{M(ln.requested_amount || 0)}</td>
+                                      <td className="py-2 text-right text-emerald-600">{M(ln.disbursed_amount || 0)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+                <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3"><Receipt className="w-7 h-7 text-slate-400" /></div>
+                <h3 className="font-medium text-slate-900 mb-1">No invoices found</h3>
+                <p className="text-sm text-slate-500">USAC has no invoice/disbursement records for your SPIN{invoiceYear ? ` in FY${invoiceYear}` : ''} yet.</p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* FRN Status Monitoring Tab (Sprint 2) */}
         {activeTab === "frn-status" && (
@@ -3076,6 +3282,41 @@ function VendorPortalPage() {
                 </button>
               </div>
 
+              {/* Look up a specific BEN — jump straight to that entity's 470 */}
+              <div className="mt-4 rounded-xl border border-purple-200 bg-purple-50/60 p-4">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Know the entity? Look up their Form 470 by BEN</label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    value={benLookup}
+                    onChange={(e) => setBenLookup(e.target.value.replace(/[^0-9]/g, ''))}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleBenLookup(); }}
+                    inputMode="numeric"
+                    placeholder="Enter a BEN (e.g. 16056315)"
+                    className="flex-1 min-w-[200px] px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  />
+                  <button
+                    onClick={handleBenLookup}
+                    disabled={benLookupLoading || !benLookup.trim()}
+                    className="px-5 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-medium hover:from-purple-500 hover:to-pink-500 transition-all disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {benLookupLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <Search className="w-4 h-4" />}
+                    Look up 470
+                  </button>
+                </div>
+                {benLookupMsg && <p className="text-sm text-slate-600 mt-2">{benLookupMsg}</p>}
+                {benLookupResults.length > 0 && (
+                  <div className="mt-2 divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
+                    {benLookupResults.map((l) => (
+                      <button key={l.application_number} onClick={() => load470Detail(l.application_number)} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2">
+                        <span className="font-medium text-slate-900">{l.entity_name}</span>
+                        <span className="text-xs text-slate-500">FY{l.funding_year} · #{l.application_number}</span>
+                        <ChevronRight className="w-4 h-4 ml-auto text-slate-400" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Quick Manufacturer Buttons */}
               <div className="mt-4 flex flex-wrap gap-2">
                 <span className="text-sm text-slate-500">Quick search:</span>
@@ -3311,6 +3552,7 @@ function VendorPortalPage() {
               setActiveTab("competitive");
               search471ByBen(ben, lookupYear);
             }}
+            onView470={(applicationNumber) => load470Detail(applicationNumber)}
           />
         )}
 

@@ -673,6 +673,49 @@ export interface Form470LeadsResponse {
   error?: string;
 }
 
+export interface VendorDisbursementLine {
+  invoice_id: string;
+  invoice_type: string;
+  inv_line_num: string;
+  status: string;
+  invoice_date: string | null;
+  completion_date: string | null;
+  customer_billed_date: string | null;
+  delivery_deadline: string | null;
+  requested_amount: number;
+  disbursed_amount: number;
+  service_type: string;
+  category: string;
+}
+
+export interface VendorDisbursementFrn {
+  frn: string;
+  funding_year: string | null;
+  billed_entity_number: string;
+  billed_entity_name: string;
+  service_provider_name: string;
+  spin: string;
+  service_type: string;
+  category: string;
+  lines: VendorDisbursementLine[];
+  total_requested: number;
+  total_disbursed: number;
+  line_count: number;
+}
+
+export interface VendorDisbursementResponse {
+  success: boolean;
+  ben?: string | null;
+  frn?: string | null;
+  spin?: string | null;
+  frns: VendorDisbursementFrn[];
+  frn_count: number;
+  line_count: number;
+  total_requested: number;
+  total_disbursed: number;
+  error?: string;
+}
+
 export interface VendorAlertSubscription {
   id: number;
   name: string;
@@ -2809,6 +2852,30 @@ class ApiClient {
   async get470Detail(applicationNumber: string, version?: string): Promise<ApiResponse<Form470DetailResponse>> {
     const qs = version ? `?version=${encodeURIComponent(version)}` : '';
     return this.request(`/api/v1/vendor/470/${applicationNumber}${qs}`);
+  }
+
+  /**
+   * Look up the Form 470 posting(s) for a single entity by BEN. Powers the
+   * "search by BEN" box in the Form 470 Leads tab. Empty leads -> not filed.
+   */
+  async get470ByBen(ben: string, year?: number): Promise<ApiResponse<Form470LeadsResponse>> {
+    const qs = year ? `?year=${year}` : '';
+    return this.request(`/api/v1/vendor/470/entity/${encodeURIComponent(ben)}${qs}`);
+  }
+
+  /**
+   * Vendor invoice / disbursement schedule (USAC Invoice Disbursements dataset).
+   * Filter by the vendor's own SPIN (and optionally a BEN, FRN or year) to see
+   * which invoices were filed, what's been paid, and what's still outstanding.
+   */
+  async getVendorDisbursements(filters: { spin?: string; ben?: string; frn?: string; year?: number }): Promise<ApiResponse<VendorDisbursementResponse>> {
+    const params = new URLSearchParams();
+    if (filters.spin) params.append('spin', filters.spin);
+    if (filters.ben) params.append('ben', filters.ben);
+    if (filters.frn) params.append('frn', filters.frn);
+    if (filters.year) params.append('year', filters.year.toString());
+    const qs = params.toString();
+    return this.request(`/api/v1/vendor/disbursement-schedule${qs ? '?' + qs : ''}`);
   }
 
   /**
