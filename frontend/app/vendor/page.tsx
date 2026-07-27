@@ -476,12 +476,16 @@ function VendorPortalPage() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [selectedSchools, setSelectedSchools] = useState<Set<string>>(new Set());
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  // Dark / light theme for the whole vendor portal shell. Defaults to dark
-  // (matches the SkyRate command-center design concept); persisted per-browser.
+  // Dark / light theme for the whole vendor portal shell. On first load we honor
+  // the visitor's OS preference (prefers-color-scheme); once they toggle, that
+  // explicit choice is remembered per-browser and wins over the OS setting.
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   useEffect(() => {
-    const saved = typeof window !== "undefined" ? localStorage.getItem("vendor_theme") : null;
-    if (saved === "light" || saved === "dark") setTheme(saved);
+    if (typeof window === "undefined") return;
+    const saved = localStorage.getItem("vendor_theme");
+    if (saved === "light" || saved === "dark") { setTheme(saved); return; }
+    // No saved choice yet -> follow the operating system / browser preference.
+    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) setTheme("light");
   }, []);
   const toggleTheme = () => setTheme((p) => {
     const next = p === "dark" ? "light" : "dark";

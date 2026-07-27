@@ -520,12 +520,16 @@ function ConsultantPortalPage() {
   const [newBen, setNewBen] = useState("");
   const [newNotes, setNewNotes] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  // Dark / light theme for the whole consultant portal shell. Defaults to dark
-  // (matches the SkyRate command-center concept); persisted per-browser.
+  // Dark / light theme for the whole consultant portal shell. On first load we
+  // honor the visitor's OS preference (prefers-color-scheme); once they toggle,
+  // that explicit choice is remembered per-browser and wins over the OS setting.
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   useEffect(() => {
-    const saved = typeof window !== "undefined" ? localStorage.getItem("consultant_theme") : null;
-    if (saved === "light" || saved === "dark") setTheme(saved);
+    if (typeof window === "undefined") return;
+    const saved = localStorage.getItem("consultant_theme");
+    if (saved === "light" || saved === "dark") { setTheme(saved); return; }
+    // No saved choice yet -> follow the operating system / browser preference.
+    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) setTheme("light");
   }, []);
   const toggleTheme = () => setTheme((p) => {
     const next = p === "dark" ? "light" : "dark";
