@@ -6,6 +6,7 @@ Handles school portfolios, funding data, and appeal generation
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
@@ -908,7 +909,16 @@ async def add_crn(
         payment_status="active",
     )
     db.add(crn_record)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # Race: a concurrent request (double-submit) already inserted this CRN.
+        # The uq_consultant_crn unique constraint caught it — respond idempotently.
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"CRN {crn_value} is already added to your account"
+        )
     
     # Also update profile's primary CRN if this is the first
     if is_first_crn:
