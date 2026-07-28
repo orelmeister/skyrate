@@ -1656,6 +1656,9 @@ function ConsultantPortalPage() {
   };
 
   const handleAddNewCRN = async () => {
+    // Re-entry guard: prevents double-submit (rapid button clicks or repeated
+    // Enter key presses) from firing multiple /crns/add requests in flight.
+    if (addingCrn) return;
     const crn = newCrnInput.trim();
     if (!crn) {
       setAddCrnError("Please enter a CRN number");
@@ -5110,7 +5113,7 @@ function ConsultantPortalPage() {
                         placeholder="Enter CRN (e.g., 17026509)"
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono uppercase mb-3"
                         autoFocus
-                        onKeyDown={(e) => e.key === 'Enter' && handleAddNewCRN()}
+                        onKeyDown={(e) => e.key === 'Enter' && !addingCrn && handleAddNewCRN()}
                       />
                       
                       {addCrnError && (
