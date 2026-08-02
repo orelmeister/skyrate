@@ -930,25 +930,30 @@ class USACDataClient:
             response.raise_for_status()
             
             data = response.json()
-            
-            if not data:
-                return {
-                    'success': False,
-                    'error': f'No records found for BEN {ben} with SPIN {spin}'
+
+            # Get basic entity info from first invoice record (if any). When the
+            # invoice dataset is empty (common for the current, not-yet-disbursed
+            # funding year), we DON'T bail out — we fall through and build the view
+            # purely from FRN commitments below so the vendor sees the same data
+            # the consultant portal shows.
+            if data:
+                first_record = data[0]
+                entity_info = {
+                    'ben': ben,
+                    'organization_name': first_record.get('billed_entity_name', 'Unknown'),
+                    'state': first_record.get('billed_entity_state', ''),
+                    'city': first_record.get('billed_entity_city', ''),
+                    'service_provider_name': first_record.get('inv_service_provider_name', ''),
                 }
-            
-            df = pd.DataFrame(data)
-            
-            # Get basic entity info from first record
-            first_record = data[0]
-            entity_info = {
-                'ben': ben,
-                'organization_name': first_record.get('billed_entity_name', 'Unknown'),
-                'state': first_record.get('billed_entity_state', ''),
-                'city': first_record.get('billed_entity_city', ''),
-                'service_provider_name': first_record.get('inv_service_provider_name', ''),
-            }
-            
+            else:
+                entity_info = {
+                    'ben': ben,
+                    'organization_name': 'Unknown',
+                    'state': '',
+                    'city': '',
+                    'service_provider_name': '',
+                }
+
             # Aggregate by funding year and category
             years_data = {}
             total_cat1 = 0
@@ -956,8 +961,8 @@ class USACDataClient:
             total_all = 0
             all_service_types = set()
             all_frns = set()
-            
-            for _, record in df.iterrows():
+
+            for record in data:
                 year = str(record.get('funding_year', ''))
                 if year in ['nan', 'None', '']:
                     continue
@@ -1012,6 +1017,68 @@ class USACDataClient:
                     'status': status
                 })
             
+            # PARITY FIX (vendor <-> consultant): the invoice/disbursement dataset
+            # only contains a funding year AFTER USAC has disbursed against it.
+            # Recently-committed years (e.g. the current funding year) therefore
+            # appear EMPTY in the vendor "my entities" funding view even though the
+            # consultant view (built on FRN commitments) shows them. Merge in any
+            # committed funding years that the invoice data does not yet cover so
+            # both portals show the same entity/year data.
+            try:
+                frn_result = self.get_frn_status_by_ben(ben, spin=spin)
+                if frn_result.get('success'):
+                    # Backfill entity name/state from commitments when the invoice
+                    # dataset had no records (current-year, not-yet-disbursed case).
+                    if not data:
+                        if frn_result.get('entity_name'):
+                            entity_info['organization_name'] = frn_result['entity_name']
+                        if frn_result.get('entity_state'):
+                            entity_info['state'] = frn_result['entity_state']
+                    for frn in frn_result.get('frns', []):
+                        fy = str(frn.get('funding_year', '') or '')
+                        if fy in ['', 'nan', 'None']:
+                            continue
+                        # Only ADD years the invoice dataset is missing — never
+                        # overwrite invoiced (actually-disbursed) year totals.
+                        if fy in years_data:
+                            continue
+                        cat_raw = str(frn.get('service_type', '') or '')
+                        amount = safe_float(frn.get('commitment_amount'))
+                        yd = years_data.setdefault(fy, {
+                            'year': fy,
+                            'cat1_total': 0,
+                            'cat2_total': 0,
+                            'total': 0,
+                            'frn_count': 0,
+                            'service_types': set(),
+                            'line_items': [],
+                            'committed_only': True,  # not yet invoiced/disbursed
+                        })
+                        is_cat2 = 'category 2' in cat_raw.lower() or 'cat 2' in cat_raw.lower()
+                        if is_cat2:
+                            yd['cat2_total'] += amount
+                            total_cat2 += amount
+                        else:
+                            yd['cat1_total'] += amount
+                            total_cat1 += amount
+                        yd['total'] += amount
+                        total_all += amount
+                        yd['frn_count'] += 1
+                        if cat_raw:
+                            yd['service_types'].add(cat_raw)
+                        frn_no = frn.get('frn', '')
+                        if frn_no:
+                            all_frns.add(frn_no)
+                        yd['line_items'].append({
+                            'frn': frn_no,
+                            'service_type': cat_raw,
+                            'category': cat_raw,
+                            'amount': amount,
+                            'status': frn.get('status', ''),
+                        })
+            except Exception as merge_err:
+                logger.warning(f"FRN commitment merge failed for BEN {ben}: {merge_err}")
+
             # Convert sets to lists
             for year_data in years_data.values():
                 year_data['service_types'] = list(year_data['service_types'])

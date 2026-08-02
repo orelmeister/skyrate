@@ -499,7 +499,7 @@ function SignUpPage() {
                 issues we would have missed. The FRN monitoring alone paid for itself.&rdquo;
               </p>
               <p className="text-xs text-slate-500 mt-2 font-medium">
-                — Ari Bernstein, E-Rate Consultant
+                — Verified SkyRate customer
               </p>
             </div>
 
