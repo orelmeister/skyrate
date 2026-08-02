@@ -30,6 +30,9 @@ interface BidEvaluation {
   products_services: string[];
   key_specs: string[];
   notable_terms: string[];
+  responsive: boolean;
+  disqualified: boolean;
+  disqualification_reason: string | null;
   scores: BidScoreBreakdown;
   weighted_total: number;
   rationale: string;
@@ -81,7 +84,7 @@ export default function BidAnalysis() {
   const [dragActive, setDragActive] = useState(false);
   const [weights, setWeights] = useState<Record<MetricKey, number>>({ ...DEFAULT_WEIGHTS });
   const [form470Ref, setForm470Ref] = useState("");
-  const [form470File, setForm470File] = useState<File | null>(null);
+  const [form470Files, setForm470Files] = useState<File[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<BidAnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -220,7 +223,7 @@ export default function BidAnalysis() {
       for (const k of METRIC_ORDER) normalized[k] = Math.round((weights[k] * 100) / total);
       formData.append("weights", JSON.stringify(normalized));
       if (form470Ref.trim()) formData.append("form470_reference", form470Ref.trim());
-      if (form470File) formData.append("form470_file", form470File);
+      for (const f of form470Files) formData.append("form470_files", f);
 
       const accessToken = token || localStorage.getItem("access_token");
       // Guard against a hung request (AI can be slow); abort after 120s so the
@@ -531,49 +534,57 @@ export default function BidAnalysis() {
           only as the yardstick to judge each bid against &mdash; it is never scored as a bid.
         </p>
 
-        {form470File ? (
-          <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-3 py-2 mb-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <FileText className="w-4 h-4 text-indigo-500 flex-shrink-0" />
-              <span className="text-sm text-slate-700 truncate">{form470File.name}</span>
-              <span className="text-xs text-slate-400 flex-shrink-0">
-                {(form470File.size / 1024 / 1024).toFixed(1)} MB
-              </span>
-            </div>
-            <button
-              onClick={() => setForm470File(null)}
-              className="p-1 text-slate-400 hover:text-red-500 transition-colors"
-              aria-label="Remove Form 470 / RFP file"
-            >
-              <X className="w-4 h-4" />
-            </button>
+        {form470Files.length > 0 && (
+          <div className="space-y-2 mb-2">
+            {form470Files.map((f, idx) => (
+              <div key={idx} className="flex items-center justify-between bg-white border border-slate-200 rounded-lg px-3 py-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileText className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                  <span className="text-sm text-slate-700 truncate">{f.name}</span>
+                  <span className="text-xs text-slate-400 flex-shrink-0">
+                    {(f.size / 1024 / 1024).toFixed(1)} MB
+                  </span>
+                </div>
+                <button
+                  onClick={() => setForm470Files((prev) => prev.filter((_, i) => i !== idx))}
+                  className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                  aria-label="Remove Form 470 / RFP file"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
           </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => ref470InputRef.current?.click()}
-            className="flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 mb-2"
-          >
-            <Upload className="w-4 h-4" />
-            Attach Form 470 / RFP file
-            <span className="text-xs text-slate-400">(PDF, DOCX, DOC, TXT &middot; max 10 MB)</span>
-          </button>
         )}
+        <button
+          type="button"
+          onClick={() => ref470InputRef.current?.click()}
+          className="flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 mb-2"
+        >
+          <Upload className="w-4 h-4" />
+          {form470Files.length > 0 ? "Add another Form 470 / RFP / addendum" : "Attach Form 470 / RFP file(s)"}
+          <span className="text-xs text-slate-400">(PDF, DOCX, DOC, TXT &middot; max 10 MB each)</span>
+        </button>
         <input
           ref={ref470InputRef}
           type="file"
           accept=".pdf,.docx,.doc,.txt"
+          multiple
           onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) {
+            const files = Array.from(e.target.files || []);
+            const valid: File[] = [];
+            for (const f of files) {
               if (!isValidFile(f)) {
                 setError(`"${f.name}" is not supported. Accepted: PDF, DOCX, DOC, TXT.`);
               } else if (f.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
                 setError(`"${f.name}" exceeds ${MAX_FILE_SIZE_MB} MB limit.`);
               } else {
-                setError(null);
-                setForm470File(f);
+                valid.push(f);
               }
+            }
+            if (valid.length) {
+              setError(null);
+              setForm470Files((prev) => [...prev, ...valid]);
             }
             if (e.target) e.target.value = "";
           }}
@@ -670,6 +681,19 @@ export default function BidAnalysis() {
             </div>
           )}
 
+          {/* No responsive bid — every bid was disqualified */}
+          {!result.winner && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-6 h-6 text-amber-500 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-800">No responsive bid</p>
+                  <p className="text-sm text-amber-700 mt-1">{result.rationale}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Comparison table */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
@@ -699,20 +723,31 @@ export default function BidAnalysis() {
                     <tr
                       key={bid.source_index}
                       className={`border-t border-slate-100 ${
-                        bid.rank === 1 ? "bg-emerald-50/40" : ""
-                      }`}
+                        bid.rank === 1 && !bid.disqualified ? "bg-emerald-50/40" : ""
+                      } ${bid.disqualified ? "opacity-60" : ""}`}
                     >
-                      <td className="px-4 py-3 text-slate-500 font-medium">{bid.rank}</td>
+                      <td className="px-4 py-3 text-slate-500 font-medium">{bid.disqualified ? "\u2014" : bid.rank}</td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-slate-900">{bid.vendor_name}</span>
-                          {bid.rank === 1 && (
+                          {bid.rank === 1 && !bid.disqualified && (
                             <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-semibold">
                               <Trophy className="w-3 h-3" />
                               Winner
                             </span>
                           )}
+                          {bid.disqualified && (
+                            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-semibold">
+                              <XCircle className="w-3 h-3" />
+                              Disqualified
+                            </span>
+                          )}
                         </div>
+                        {bid.disqualified && bid.disqualification_reason && (
+                          <span className="block text-xs text-red-600 mt-0.5 max-w-[220px]">
+                            {bid.disqualification_reason}
+                          </span>
+                        )}
                         <span className="block text-xs text-slate-400 truncate max-w-[180px]">
                           {bid.filename}
                         </span>

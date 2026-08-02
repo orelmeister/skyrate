@@ -79,6 +79,17 @@ priced compliant bid should score highest.
    - support: quality of support commitments and SLA.
    - experience: vendor experience and prior performance signals present in the bid.
 
+3. DETERMINE RESPONSIVENESS against the Form 470 requirements/scope provided below (if any):
+   - A bid is NON-RESPONSIVE if it fails a MANDATORY requirement of the Form 470 — e.g. it \
+offers a materially different service than requested (such as a shared/best-effort or DIA \
+circuit when a SYMMETRICAL dedicated circuit was required), omits a required service or line \
+item, offers insufficient bandwidth/quantity/term, or ignores a mandatory contract term.
+   - For a non-responsive bid set "responsive": false and "disqualified": true, and give a short \
+"disqualification_reason". A non-responsive bid CANNOT be the winner regardless of price.
+   - If the Form 470 requirements are NOT provided, or the bid clearly meets them, set \
+"responsive": true, "disqualified": false, "disqualification_reason": null. Do not disqualify a \
+bid on speculation — only when it clearly fails a stated mandatory requirement.
+
 Also provide a one-sentence rationale per bid.
 
 Return ONLY valid JSON in this exact shape:
@@ -94,6 +105,9 @@ Return ONLY valid JSON in this exact shape:
       "products_services": ["string"],
       "key_specs": ["string"],
       "notable_terms": ["string"],
+      "responsive": true,
+      "disqualified": false,
+      "disqualification_reason": "string" | null,
       "scores": {
         "price": 0-100,
         "tco": 0-100,
@@ -369,6 +383,16 @@ async def analyze_bids(
                 1,
             )
 
+            # Responsiveness / disqualification gate (FCC competitive bidding): a bid that
+            # fails a mandatory Form 470 requirement is non-responsive and can NEVER win,
+            # regardless of its price/weighted score.
+            disqualified = bool(match.get("disqualified"))
+            responsive_raw = match.get("responsive")
+            responsive = (not disqualified) if responsive_raw is None else bool(responsive_raw)
+            if not responsive:
+                disqualified = True
+            disq_reason = match.get("disqualification_reason") or None
+
             evaluated.append({
                 "source_index": i,
                 "filename": bid.get("filename", f"bid_{i}"),
@@ -380,17 +404,21 @@ async def analyze_bids(
                 "products_services": match.get("products_services") or [],
                 "key_specs": match.get("key_specs") or [],
                 "notable_terms": match.get("notable_terms") or [],
+                "responsive": responsive,
+                "disqualified": disqualified,
+                "disqualification_reason": disq_reason,
                 "scores": clean_scores,
                 "weighted_total": weighted_total,
                 "rationale": match.get("rationale") or "",
             })
 
-        # Rank by weighted total (highest first).
-        evaluated.sort(key=lambda b: b["weighted_total"], reverse=True)
+        # Rank by weighted total (highest first), but DISQUALIFIED (non-responsive) bids are
+        # always sorted to the bottom and can never be the winner.
+        evaluated.sort(key=lambda b: (b["disqualified"], -b["weighted_total"]))
         for rank, b in enumerate(evaluated, 1):
             b["rank"] = rank
 
-        winner = evaluated[0] if evaluated else None
+        winner = next((b for b in evaluated if not b["disqualified"]), None)
         ranking = [
             {
                 "rank": b["rank"],
@@ -408,6 +436,19 @@ async def analyze_bids(
                 f"score of {winner['weighted_total']} out of 100 under the selected "
                 f"weighting (price weighted at {norm_weights['price']}%)."
             )
+        disqualified_bids = [b for b in evaluated if b["disqualified"]]
+        if disqualified_bids:
+            names = ", ".join(b["vendor_name"] for b in disqualified_bids)
+            note = (
+                f" {len(disqualified_bids)} bid(s) were flagged NON-RESPONSIVE and excluded "
+                f"from winning ({names}) — review the disqualification reason for each."
+            )
+            rationale = (rationale + note).strip() if rationale else note.strip()
+            if winner is None:
+                rationale = (
+                    "No bid was responsive to the Form 470 requirements, so no winner can be "
+                    "recommended. Review each disqualification reason." + note
+                )
 
         return {
             "bids": evaluated,
