@@ -88,6 +88,7 @@ export default function BidAnalysis() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<BidAnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [progressMsg, setProgressMsg] = useState<string | null>(null);
 
   // #2 — 28-day competitive bidding window lock. A consultant/applicant may not
   // evaluate bids or select a vendor until the Form 470's Allowable Contract Date.
@@ -213,6 +214,7 @@ export default function BidAnalysis() {
     setIsAnalyzing(true);
     setError(null);
     setResult(null);
+    setProgressMsg("Uploading bids\u2026");
 
     try {
       const formData = new FormData();
@@ -226,39 +228,77 @@ export default function BidAnalysis() {
       for (const f of form470Files) formData.append("form470_files", f);
 
       const accessToken = token || localStorage.getItem("access_token");
-      // Guard against a hung request (AI can be slow); abort after 120s so the
-      // button doesn't spin forever with no feedback.
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000);
-      let response: Response;
-      try {
-        response = await fetch("/api/v1/compliance/bid-analysis", {
-          method: "POST",
-          headers: {
-            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-          },
-          body: formData,
-          signal: controller.signal,
-        });
-      } finally {
-        clearTimeout(timeoutId);
-      }
+      const authHeaders: Record<string, string> = accessToken
+        ? { Authorization: `Bearer ${accessToken}` }
+        : {};
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => null);
-        throw new Error(errData?.detail || `Server error (HTTP ${response.status})`);
+      // Step 1 — enqueue an async job. Uploading + text extraction happens in the
+      // request; the slow AI scoring runs in a background task we poll for. This
+      // avoids the front-end request timing out on large multi-bid uploads.
+      const createRes = await fetch("/api/v1/compliance/bid-analysis/jobs", {
+        method: "POST",
+        headers: { ...authHeaders },
+        body: formData,
+      });
+      if (!createRes.ok) {
+        const errData = await createRes.json().catch(() => null);
+        throw new Error(errData?.detail || `Server error (HTTP ${createRes.status})`);
       }
+      const { job_id: jobId } = (await createRes.json()) as { job_id: string };
+      if (!jobId) throw new Error("Could not start the analysis job. Please try again.");
 
-      const data: BidAnalysisResult = await response.json();
-      setResult(data);
+      // Step 2 — poll for the result. Give the AI up to ~4 minutes (bounded so the
+      // UI never hangs indefinitely), checking every 2.5s.
+      setProgressMsg("Analyzing bids with AI\u2026 this can take a minute.");
+      const startedAt = Date.now();
+      const MAX_POLL_MS = 240000;
+      const POLL_INTERVAL_MS = 2500;
+
+      const finalData = await new Promise<BidAnalysisResult>((resolve, reject) => {
+        const poll = async () => {
+          try {
+            const statusRes = await fetch(`/api/v1/compliance/bid-analysis/jobs/${jobId}`, {
+              headers: { ...authHeaders },
+            });
+            if (!statusRes.ok) {
+              const errData = await statusRes.json().catch(() => null);
+              reject(new Error(errData?.detail || `Server error (HTTP ${statusRes.status})`));
+              return;
+            }
+            const job = (await statusRes.json()) as {
+              status: string;
+              result?: BidAnalysisResult;
+              error?: string;
+            };
+            if (job.status === "succeeded" && job.result) {
+              resolve(job.result);
+              return;
+            }
+            if (job.status === "failed") {
+              reject(new Error(job.error || "Bid analysis failed. Please try again."));
+              return;
+            }
+            const elapsed = Date.now() - startedAt;
+            if (elapsed > MAX_POLL_MS) {
+              reject(new Error("The analysis timed out. Try fewer or smaller files."));
+              return;
+            }
+            const secs = Math.round(elapsed / 1000);
+            setProgressMsg(`Analyzing bids with AI\u2026 (${secs}s)`);
+            setTimeout(poll, POLL_INTERVAL_MS);
+          } catch (e) {
+            reject(e);
+          }
+        };
+        void poll();
+      });
+
+      setResult(finalData);
     } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        setError("The analysis timed out after 2 minutes. Try fewer or smaller files.");
-      } else {
-        setError(err instanceof Error ? err.message : "Bid analysis failed. Please try again.");
-      }
+      setError(err instanceof Error ? err.message : "Bid analysis failed. Please try again.");
     } finally {
       setIsAnalyzing(false);
+      setProgressMsg(null);
     }
   };
 
@@ -625,6 +665,9 @@ export default function BidAnalysis() {
             </>
           )}
         </button>
+        {isAnalyzing && progressMsg && (
+          <p className="text-xs text-slate-500">{progressMsg}</p>
+        )}
         {bidWindowLocked && (
           <p className="text-xs text-amber-700">
             Unlocks {windowState?.allowable_contract_date} (28-day bidding window).
