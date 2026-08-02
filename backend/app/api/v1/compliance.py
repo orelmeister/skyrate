@@ -428,7 +428,7 @@ async def _prepare_bid_inputs(
     weights: Optional[str],
     form470_reference: Optional[str],
     form470_file: Optional[UploadFile],
-    form470_files: Optional[List[UploadFile]],
+    form470_files: List[UploadFile],
 ) -> Tuple[List[dict], Optional[dict], Optional[str]]:
     """Validate + extract text from the uploaded bids and Form 470 references.
 
@@ -537,7 +537,7 @@ async def bid_analysis_endpoint(
     weights: Optional[str] = Form(default=None),
     form470_reference: Optional[str] = Form(default=None),
     form470_file: Optional[UploadFile] = File(default=None),
-    form470_files: Optional[List[UploadFile]] = File(default=None),
+    form470_files: List[UploadFile] = File(default=[]),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -685,7 +685,7 @@ async def create_bid_analysis_job(
     weights: Optional[str] = Form(default=None),
     form470_reference: Optional[str] = Form(default=None),
     form470_file: Optional[UploadFile] = File(default=None),
-    form470_files: Optional[List[UploadFile]] = File(default=None),
+    form470_files: List[UploadFile] = File(default=[]),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
