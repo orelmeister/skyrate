@@ -339,7 +339,77 @@ class PredictionService:
     # =========================================================================
     # PREDICTION ALGORITHM 2: EQUIPMENT REFRESH
     # =========================================================================
-    
+
+    def _iter_equipment_records(
+        self,
+        target_years: List[int],
+        states: Optional[List[str]] = None,
+        page: int = 5000,
+        max_per_year: int = 20000,
+    ):
+        """Yield 471 equipment line items, paginating EACH funding year
+        independently.
+
+        The 471 line-items dataset has millions of rows. A single national
+        query across all target years (ordered funding_year ASC, one 5000-row
+        page) only ever returned the earliest year's first 5000 rows — a severe
+        undercount that made Equipment Refresh predictions appear empty. Paging
+        per year restores balanced coverage across all target years.
+        """
+        for fy in target_years:
+            offset = 0
+            while offset < max_per_year:
+                result = self.usac_client.get_471_equipment_details(
+                    funding_years=[fy],
+                    states=states,
+                    limit=page,
+                    offset=offset,
+                )
+                if not result.get('success'):
+                    logger.warning(
+                        f"Equipment query failed for FY{fy} offset {offset}: "
+                        f"{result.get('error')}"
+                    )
+                    break
+                data = result.get('data') or []
+                for rec in data:
+                    yield rec
+                if len(data) < page:
+                    break
+                offset += page
+
+    def _iter_c2_records(
+        self,
+        budget_cycles: List[str],
+        states: Optional[List[str]] = None,
+        min_remaining_budget: float = 5000,
+        page: int = 5000,
+        max_total: int = 40000,
+    ):
+        """Yield C2 budget opportunity records, paginating through the full
+        result set instead of a single 5000-row page (the active cycle can hold
+        30k+ entities, so one page silently dropped most of them)."""
+        offset = 0
+        while offset < max_total:
+            result = self.usac_client.get_c2_budget_opportunities(
+                min_remaining_budget=min_remaining_budget,
+                budget_cycles=budget_cycles,
+                states=states,
+                limit=page,
+                offset=offset,
+            )
+            if not result.get('success'):
+                logger.warning(
+                    f"C2 budget query failed at offset {offset}: {result.get('error')}"
+                )
+                break
+            data = result.get('data') or []
+            for rec in data:
+                yield rec
+            if len(data) < page:
+                break
+            offset += page
+
     def _predict_equipment_refresh(
         self,
         db: Session,
@@ -365,20 +435,12 @@ class PredictionService:
         # Look for equipment purchased 4-7 years ago (due for refresh)
         target_years = list(range(current_year - 7, current_year - 3))
         
-        result = self.usac_client.get_471_equipment_details(
-            funding_years=target_years,
-            states=states,
-            limit=5000
-        )
-        
-        if not result.get('success') or not result.get('data'):
-            logger.warning("No equipment data found or API error")
-            return 0
-        
         # Group by BEN + manufacturer to avoid duplicate predictions per line item
         seen_ben_mfr = set()
-        
-        for record in result['data']:
+        got_any = False
+
+        for record in self._iter_equipment_records(target_years, states):
+            got_any = True
             try:
                 ben = record.get('ben', '')
                 manufacturer = record.get('form_471_manufacturer_name', '')
@@ -490,7 +552,10 @@ class PredictionService:
             except Exception as e:
                 logger.warning(f"Error processing equipment record: {e}")
                 continue
-        
+
+        if not got_any:
+            logger.warning("No equipment data found or API error")
+
         db.commit()
         return count
     
@@ -531,19 +596,10 @@ class PredictionService:
         active_end = active_start + cycle_len - 1
         active_cycle = f"FY{active_start}-{active_end}"
         ending_cycles = [active_cycle]
-        
-        result = self.usac_client.get_c2_budget_opportunities(
-            min_remaining_budget=5000,
-            budget_cycles=ending_cycles,
-            states=states,
-            limit=5000
-        )
-        
-        if not result.get('success') or not result.get('data'):
-            logger.warning("No C2 budget opportunities found or API error")
-            return 0
-        
-        for record in result['data']:
+
+        got_any = False
+        for record in self._iter_c2_records(ending_cycles, states):
+            got_any = True
             try:
                 ben = record.get('ben', '')
                 if not ben:
@@ -636,7 +692,10 @@ class PredictionService:
             except Exception as e:
                 logger.warning(f"Error processing C2 budget record: {e}")
                 continue
-        
+
+        if not got_any:
+            logger.warning("No C2 budget opportunities found or API error")
+
         db.commit()
         return count
     

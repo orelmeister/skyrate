@@ -3622,7 +3622,7 @@ class USACDataClient:
             params = {
                 '$limit': limit,
                 '$offset': offset,
-                '$order': 'funding_year ASC',
+                '$order': 'funding_year ASC, funding_request_number, form_471_line_item_number',
                 '$select': (
                     'funding_request_number, application_number, ben, organization_name, '
                     'state, funding_year, form_471_manufacturer_name, model_of_equipment, '
@@ -3771,7 +3771,7 @@ class USACDataClient:
                 '$where': ' AND '.join(where_parts),
                 '$limit': limit,
                 '$offset': offset,
-                '$order': 'available_c2_budget_amount DESC',
+                '$order': 'available_c2_budget_amount DESC, ben',
                 '$select': (
                     'ben, billed_entity_name, state, city, applicant_type, '
                     'c2_budget, available_c2_budget_amount, funded_c2_budget_amount, '
