@@ -131,6 +131,20 @@ class Settings(BaseSettings):
     # USAC / Socrata
     SOCRATA_APP_TOKEN: Optional[str] = None
 
+    # ── erateapp Phase-1 embed/SSO bridge ──────────────────────────────────
+    # Shared HMAC secret used to sign short-lived SSO tokens handed to
+    # app.erateapp.com so a logged-in SkyRate applicant lands in their embedded
+    # filing-journey without a second login. The SAME value must be set in the
+    # erateapp (Bluehost) environment. The entire bridge is INERT until this is
+    # set — no token is minted and the /portal route returns 503 — so it is
+    # completely safe to ship before the secret is provisioned.
+    ERATEAPP_SSO_SECRET: Optional[str] = None
+    # Base origin of the erateapp system-of-record that the SkyRate shell
+    # reverse-proxies / links to for the embedded entity portal.
+    ERATEAPP_BASE_URL: str = "https://app.erateapp.com"
+    # SSO token lifetime (seconds). Short-lived by design.
+    ERATEAPP_SSO_TTL_SECONDS: int = 120
+
     # perf_v2 single-shot performance overhaul
     # Master flag for cache-first portal reads + USAC hydration service.
     # When false, all new code paths fall back to the legacy live-fetch behavior.

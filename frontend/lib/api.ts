@@ -4202,6 +4202,25 @@ class ApiClient {
     return this.request(`/api/v1/applicant/disbursements${queryString}`);
   }
 
+  // ==================== ERATEAPP PORTAL (Phase-1 embed/SSO) ====================
+
+  /**
+   * Check whether the erateapp portal bridge is enabled (shared secret set).
+   * No auth required.
+   */
+  async getErateappBridgeStatus(): Promise<ApiResponse<{ enabled: boolean }>> {
+    return this.request('/api/v1/erateapp/status');
+  }
+
+  /**
+   * Get a one-time white-labeled URL that logs the current user into their
+   * embedded erateapp filing-journey portal via SSO. Returns 503 (mapped to
+   * an error response) while the bridge is disabled.
+   */
+  async getErateappPortalSession(): Promise<ApiResponse<{ ben: string; embed_url: string; expires_in: number }>> {
+    return this.request('/api/v1/erateapp/portal-session');
+  }
+
   // ==================== FRN WATCH / REPORT MONITOR ====================
 
   /**
