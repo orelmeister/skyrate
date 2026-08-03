@@ -11,12 +11,12 @@ import ROICalculator from "@/components/ROICalculator";
 import AudienceChips from "@/components/AudienceChips";
 
 export const metadata: Metadata = {
-  title: "SkyRate AI — Manage Your Entire E-Rate Book in One Place",
-  description: "Built for E-Rate consultants: track 500+ FRNs in real time, automate Form 470 reviews, generate PIA-ready appeals, and never miss a filing window. 14-day free trial.",
-  keywords: "E-Rate consultant software, FRN tracker, Form 470 review, PIA response, appeal generation, USAC tracker, E-Rate portfolio management, school funding",
+  title: "SkyRate AI — E-Rate Bidding, FRN Tracking & Compliance for Schools",
+  description: "The E-Rate platform for applicants: run compliant Form 470 bid evaluations, track every FRN in real time, and follow a step-by-step compliance workflow so you never miss a deadline. 14-day free trial.",
+  keywords: "E-Rate compliance software, Form 470 bid evaluation, FRN tracker, FRN management, E-Rate filing workflow, USAC tracker, school E-Rate application, Category 2 budget, E-Rate for applicants",
   openGraph: {
-    title: "SkyRate AI — Manage Your Entire E-Rate Book in One Place",
-    description: "Track 500+ FRNs, automate Form 470 reviews, generate PIA appeals. Built for E-Rate consultants, vendors, and applicants.",
+    title: "SkyRate AI — E-Rate Bidding, FRN Tracking & Compliance for Schools",
+    description: "Run compliant bid evaluations, track every FRN in real time, and follow a guided compliance workflow. Built for E-Rate applicants, consultants, and vendors.",
     type: "website",
     url: "https://skyrate.ai",
     siteName: "SkyRate AI",
@@ -24,8 +24,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "SkyRate AI — E-Rate Intelligence Platform",
-    description: "AI-powered E-Rate funding intelligence for consultants, vendors, and applicants.",
+    title: "SkyRate AI — E-Rate Compliance & FRN Intelligence",
+    description: "AI-powered E-Rate bidding, FRN tracking, and compliance workflow for schools, libraries, consultants, and vendors.",
     images: ['/images/marketing/twitter.png'],
   },
   robots: "index, follow",
@@ -115,15 +115,15 @@ export default function HomePage() {
             <div className="text-center lg:text-left animate-slide-up">
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-500/10 text-indigo-300 rounded-full text-sm font-medium mb-6 sm:mb-8 border border-indigo-500/20">
                 <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-                Trusted by 500+ E-Rate Professionals
+                Trusted across 500+ schools &amp; libraries
               </div>
               <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-5 sm:mb-6 leading-tight">
-                Manage Your Entire{" "}
-                <span className="gradient-text">E-Rate Book</span>{" "}
-                in One Place
+                Run a Compliant{" "}
+                <span className="gradient-text">E-Rate Application</span>{" "}
+                — Start to Finish
               </h1>
               <p className="text-base sm:text-lg lg:text-xl text-slate-400 mb-8 sm:mb-10 max-w-xl mx-auto lg:mx-0 leading-relaxed">
-                Track 500+ FRNs in real time, automate Form 470 reviews, generate PIA-ready appeals, and never miss a filing window — the platform built for serious E-Rate consultants.
+                Evaluate your Form 470 bids the compliant way, track every FRN in real time, and follow a guided compliance workflow so you never miss a deadline — the E-Rate platform built for schools, libraries, and the consultants who serve them.
               </p>
               {/* Audience selector chips — above CTA to let visitors self-select role */}
               <div className="mb-6">
@@ -166,20 +166,20 @@ export default function HomePage() {
                   </div>
                   <div className="grid grid-cols-2 gap-3 mb-4">
                     <div className="bg-white/5 rounded-xl p-4 border border-white/5">
-                      <div className="text-2xl font-bold text-white">127</div>
-                      <div className="text-xs text-slate-400">Schools Managed</div>
+                      <div className="text-2xl font-bold text-white">42</div>
+                      <div className="text-xs text-slate-400">FRNs Tracked</div>
                     </div>
                     <div className="bg-white/5 rounded-xl p-4 border border-white/5">
-                      <div className="text-2xl font-bold text-green-400">87%</div>
-                      <div className="text-xs text-slate-400">Appeal Success</div>
+                      <div className="text-2xl font-bold text-green-400">100%</div>
+                      <div className="text-xs text-slate-400">Compliance Ready</div>
                     </div>
                     <div className="bg-white/5 rounded-xl p-4 border border-white/5">
                       <div className="text-2xl font-bold text-indigo-400">$4.2M</div>
                       <div className="text-xs text-slate-400">Funding Tracked</div>
                     </div>
                     <div className="bg-white/5 rounded-xl p-4 border border-white/5">
-                      <div className="text-2xl font-bold text-purple-400">23</div>
-                      <div className="text-xs text-slate-400">Active Appeals</div>
+                      <div className="text-2xl font-bold text-purple-400">6</div>
+                      <div className="text-xs text-slate-400">Bids Evaluated</div>
                     </div>
                   </div>
                   <div className="bg-white/5 rounded-xl p-4 border border-white/5">
@@ -187,10 +187,10 @@ export default function HomePage() {
                       <div className="w-8 h-8 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 flex items-center justify-center">
                         <Image src="/images/icons/ai.png" alt="AI" width={20} height={20} />
                       </div>
-                      <span className="text-xs font-medium text-indigo-300">AI Appeal Strategy</span>
+                      <span className="text-xs font-medium text-indigo-300">AI Bid Evaluation</span>
                     </div>
                     <p className="text-xs text-slate-400 leading-relaxed">
-                      Based on denial code 470-001, citing FCC Order 19-117 for good faith exemptions on minor procedural errors...
+                      Vendor B flagged non-responsive (asymmetrical circuit); Vendor A wins on price as the primary factor — bid matrix ready for PIA...
                     </p>
                   </div>
                 </div>
@@ -278,24 +278,24 @@ export default function HomePage() {
               </div>
               <div className="grid sm:grid-cols-3 gap-4 sm:gap-6">
                 <div className="light-card p-5 sm:p-6 rounded-2xl hover-lift">
-                  <Image src="/images/icons/appeal.png" alt="" width={44} height={44} className="rounded-2xl mb-4" />
-                  <h3 className="text-lg font-bold text-slate-900 mb-2">Time-Consuming Research</h3>
+                  <Image src="/images/icons/vendor.png" alt="" width={44} height={44} className="rounded-2xl mb-4" />
+                  <h3 className="text-lg font-bold text-slate-900 mb-2">Bid Evaluation Is Risky</h3>
                   <p className="text-sm sm:text-base text-slate-600">
-                    Hours searching USAC portals and manually tracking denial patterns across schools.
+                    Pick the wrong vendor or skip a step and your funding is exposed to a PIA denial.
+                  </p>
+                </div>
+                <div className="light-card p-5 sm:p-6 rounded-2xl hover-lift">
+                  <Image src="/images/icons/dashboard.png" alt="" width={44} height={44} className="rounded-2xl mb-4" />
+                  <h3 className="text-lg font-bold text-slate-900 mb-2">FRNs Are Hard to Track</h3>
+                  <p className="text-sm sm:text-base text-slate-600">
+                    Without live visibility, commitments, disbursements, and status changes slip through the cracks.
                   </p>
                 </div>
                 <div className="light-card p-5 sm:p-6 rounded-2xl hover-lift">
                   <Image src="/images/icons/funding.png" alt="" width={44} height={44} className="rounded-2xl mb-4" />
-                  <h3 className="text-lg font-bold text-slate-900 mb-2">Rising Denial Rates</h3>
+                  <h3 className="text-lg font-bold text-slate-900 mb-2">Deadlines Are Unforgiving</h3>
                   <p className="text-sm sm:text-base text-slate-600">
-                    Without systematic tracking, you&apos;re losing winnable funding every cycle.
-                  </p>
-                </div>
-                <div className="light-card p-5 sm:p-6 rounded-2xl hover-lift">
-                  <Image src="/images/icons/vendor.png" alt="" width={44} height={44} className="rounded-2xl mb-4" />
-                  <h3 className="text-lg font-bold text-slate-900 mb-2">Missed Opportunities</h3>
-                  <p className="text-sm sm:text-base text-slate-600">
-                    Form 470 leads slip by and revenue opportunities disappear.
+                    Miss the 28-day window or a filing date and you lose a full year of funding.
                   </p>
                 </div>
               </div>
@@ -317,45 +317,45 @@ export default function HomePage() {
           </div>
           {/* Bento Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            {/* Large card - spans 2 cols */}
+            {/* Large card - spans 2 cols — LEAD: Bid Analysis / Compliance */}
             <div className="sm:col-span-2 light-card p-6 sm:p-8 rounded-2xl hover-lift border-l-4 border-l-indigo-500">
               <Image src="/images/icons/ai.png" alt="" width={48} height={48} className="rounded-2xl mb-4" />
-              <h3 className="text-xl sm:text-2xl font-semibold text-slate-900 mb-2">AI-Powered Analysis</h3>
+              <h3 className="text-xl sm:text-2xl font-semibold text-slate-900 mb-2">Compliant Bid Evaluation</h3>
               <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
-                Advanced AI <Link href="/features/denial-analysis" className="text-indigo-600 hover:text-indigo-700 font-medium">denial analysis</Link> and automated <Link href="/features/appeal-generator" className="text-indigo-600 hover:text-indigo-700 font-medium">appeal generation</Link>. Our AI understands E-Rate regulations, FCC orders, and USAC precedents to craft winning strategies for your schools.
+                Upload the bids you receive on your Form 470 and let SkyRate score them the compliant way — flagging non-responsive bids, enforcing price as the primary factor, and producing a defensible bid matrix. Choose the right vendor with confidence and a clean paper trail for PIA.
               </p>
             </div>
-            {/* Regular card */}
+            {/* Regular card — FRN Management */}
             <div className="light-card p-5 sm:p-6 rounded-2xl hover-lift border-l-4 border-l-blue-500">
+              <Image src="/images/icons/dashboard.png" alt="" width={40} height={40} className="rounded-2xl mb-3" />
+              <h3 className="text-base sm:text-lg font-semibold text-slate-900 mb-1 sm:mb-2">FRN Management</h3>
+              <p className="text-slate-600 text-xs sm:text-sm">Track every <Link href="/tools/frn-tracker" className="text-indigo-600 hover:text-indigo-700 font-medium">FRN&apos;s status</Link>, commitment, and disbursement across funding years in one view.</p>
+            </div>
+            {/* Regular card — Real-Time USAC Data */}
+            <div className="light-card p-5 sm:p-6 rounded-2xl hover-lift border-l-4 border-l-purple-500">
               <Image src="/images/icons/school.png" alt="" width={40} height={40} className="rounded-2xl mb-3" />
               <h3 className="text-base sm:text-lg font-semibold text-slate-900 mb-1 sm:mb-2">Real-Time USAC Data</h3>
-              <p className="text-slate-600 text-xs sm:text-sm">Direct API integration with USAC Open Data Portal for live updates.</p>
+              <p className="text-slate-600 text-xs sm:text-sm">Live FRN status and funding updates straight from the USAC Open Data Portal.</p>
             </div>
-            {/* Regular card */}
-            <div className="light-card p-5 sm:p-6 rounded-2xl hover-lift border-l-4 border-l-purple-500">
-              <Image src="/images/icons/dashboard.png" alt="" width={40} height={40} className="rounded-2xl mb-3" />
-              <h3 className="text-base sm:text-lg font-semibold text-slate-900 mb-1 sm:mb-2">Portfolio Management</h3>
-              <p className="text-slate-600 text-xs sm:text-sm">Track schools, vendors, and <Link href="/tools/frn-tracker" className="text-indigo-600 hover:text-indigo-700 font-medium">FRN status</Link> across cycles in one view.</p>
-            </div>
-            {/* Regular card */}
+            {/* Regular card — Deadline / window alerts */}
             <div className="light-card p-5 sm:p-6 rounded-2xl hover-lift border-l-4 border-l-emerald-500">
               <Image src="/images/icons/funding.png" alt="" width={40} height={40} className="rounded-2xl mb-3" />
-              <h3 className="text-base sm:text-lg font-semibold text-slate-900 mb-1 sm:mb-2">Instant Insights</h3>
-              <p className="text-slate-600 text-xs sm:text-sm">Natural language queries return answers in seconds, not hours.</p>
+              <h3 className="text-base sm:text-lg font-semibold text-slate-900 mb-1 sm:mb-2">Deadline &amp; Window Alerts</h3>
+              <p className="text-slate-600 text-xs sm:text-sm">Never miss the 28-day bidding window, filing dates, or invoice deadlines.</p>
             </div>
-            {/* Large card - spans 2 cols */}
-            <div className="sm:col-span-2 light-card p-6 sm:p-8 rounded-2xl hover-lift border-l-4 border-l-pink-500">
-              <Image src="/images/icons/appeal.png" alt="" width={48} height={48} className="rounded-2xl mb-4" />
-              <h3 className="text-xl sm:text-2xl font-semibold text-slate-900 mb-2">Automated Appeal Generation</h3>
+            {/* Large card - spans 2 cols — Compliance workflow */}
+            <div className="sm:col-span-2 light-card p-6 sm:p-8 rounded-2xl hover-lift border-l-4 border-l-teal-500">
+              <Image src="/images/icons/dashboard.png" alt="" width={48} height={48} className="rounded-2xl mb-4" />
+              <h3 className="text-xl sm:text-2xl font-semibold text-slate-900 mb-2">Guided Compliance Workflow</h3>
               <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
-                Generate professional, USAC-compliant appeal letters in seconds with our <Link href="/features/appeal-generator" className="text-indigo-600 hover:text-indigo-700 font-medium">AI appeal letter generator</Link>. Our AI analyzes denial reasons, funding year rules, and relevant FCC orders to produce compelling appeals with an 87% success rate.
+                A step-by-step E-Rate filing journey walks you through every phase — needs assessment, Form 470, the 28-day bidding window, vendor selection, Form 471, and PIA — with a live readiness checklist so nothing slips and every step is audit-ready.
               </p>
             </div>
-            {/* Regular card */}
-            <div className="light-card p-5 sm:p-6 rounded-2xl hover-lift border-l-4 border-l-teal-500">
-              <Image src="/images/icons/vendor.png" alt="" width={40} height={40} className="rounded-2xl mb-3" />
-              <h3 className="text-base sm:text-lg font-semibold text-slate-900 mb-1 sm:mb-2">Form 470 Tracking</h3>
-              <p className="text-slate-600 text-xs sm:text-sm">Monitor <Link href="/features/form-470-tracking" className="text-indigo-600 hover:text-indigo-700 font-medium">Form 470 postings</Link> and never miss a lead opportunity.</p>
+            {/* Regular card — Appeals (demoted to supporting) */}
+            <div className="light-card p-5 sm:p-6 rounded-2xl hover-lift border-l-4 border-l-pink-500">
+              <Image src="/images/icons/appeal.png" alt="" width={40} height={40} className="rounded-2xl mb-3" />
+              <h3 className="text-base sm:text-lg font-semibold text-slate-900 mb-1 sm:mb-2">Appeals &amp; PIA Support</h3>
+              <p className="text-slate-600 text-xs sm:text-sm">If a denial happens, turn it around fast with AI-assisted <Link href="/features/appeal-generator" className="text-indigo-600 hover:text-indigo-700 font-medium">appeal letters</Link> and PIA responses.</p>
             </div>
           </div>
         </div>
@@ -375,16 +375,16 @@ export default function HomePage() {
                 E-Rate Funding.
               </h2>
               <p className="text-base sm:text-lg text-slate-600 mb-6 sm:mb-8">
-                Whether you&apos;re a school, library, or consortium — SkyRate AI helps you track applications, recover denied funding, and never miss a deadline.
+                Whether you&apos;re a school, library, or consortium — SkyRate AI walks you through a compliant application, helps you pick the right vendor, and tracks every FRN so you never miss a deadline.
               </p>
               <ul className="space-y-3 sm:space-y-4">
                 {[
-                  { t: "Automatic FRN Tracking", d: "Monitor all your funding requests and their status in real-time" },
-                  { t: "AI-Generated Appeal Letters", d: "Turn denials into approvals with professionally crafted appeal letters" },
-                  { t: "Deadline Alerts", d: "Never miss a filing window, response deadline, or appeal date" },
+                  { t: "Compliant Bid Evaluation", d: "Score your Form 470 bids the compliant way and pick the right vendor with a defensible bid matrix" },
+                  { t: "FRN Management & Tracking", d: "Monitor every funding request, commitment, and disbursement in real time" },
+                  { t: "Guided Compliance Workflow", d: "A step-by-step filing journey with a live readiness checklist for every E-Rate phase" },
+                  { t: "Deadline & Window Alerts", d: "Never miss the 28-day bidding window, a filing date, or an invoice deadline" },
                   { t: "C2 Budget Dashboard", d: "Track your Category 2 budget utilization across all entities" },
-                  { t: "Plain-English Search", d: 'Ask questions like "What\'s my remaining C2 budget for this year?"' },
-                  { t: "Status Change Notifications", d: "Get instant alerts when your FRN status changes" },
+                  { t: "Appeals & PIA Support", d: "If a denial happens, turn it around fast with AI-assisted appeal letters and PIA responses" },
                 ].map((item) => (
                   <li key={item.t} className="flex items-start gap-3">
                     <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0 mt-0.5">
