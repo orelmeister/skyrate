@@ -3871,7 +3871,9 @@ def _warm_frn_cache_background(
                     "denied": 0,
                     "pending": 0,
                     "total_amount": 0,
-                    "frns": school_frns[:10],
+                    # Full FRN list per school (was capped at 10, which hid FRNs
+                    # for entities with more than 10 — Ari bug).
+                    "frns": school_frns,
                 }
                 for frn in school_frns:
                     frn_status = (frn.get("status") or "").lower()
@@ -4082,7 +4084,12 @@ async def get_portfolio_frn_status(
             )
             bucket["total_frns"] += 1
             bucket["total_amount"] += amount
-            if len(bucket["frns"]) < 10:
+            # Return the full FRN list per school (bounded by the `limit` param,
+            # default 500) so the "all years / all statuses" report shows EVERY
+            # FRN for an entity — not a truncated preview. The previous hardcoded
+            # cap of 10 silently hid FRNs for entities with more than 10 (Ari bug:
+            # totals showed ~1977 but each school listed only 10).
+            if len(bucket["frns"]) < limit:
                 bucket["frns"].append(frn_dict)
             if "funded" in status_text or "committed" in status_text:
                 bucket["funded"] += 1

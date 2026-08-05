@@ -284,7 +284,9 @@ class UsacHydrationService:
                 "denied": 0,
                 "pending": 0,
                 "total_amount": 0,
-                "frns": school_frns[:10],
+                # Full FRN list per school (was capped at 10, which hid FRNs for
+                # entities with more than 10 — Ari FRN-visibility bug).
+                "frns": school_frns,
             }
             for frn in school_frns:
                 frn_status = (frn.get("status") or "").lower()

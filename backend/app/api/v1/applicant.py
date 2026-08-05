@@ -1476,7 +1476,9 @@ async def get_live_frn_status(
                     "denied": 0,
                     "pending": 0,
                     "total_amount": 0,
-                    "frns": frns[:20]
+                    # Full FRN list per BEN (was capped at 20, which hid FRNs for
+                    # entities with more than 20 — FRN-visibility bug).
+                    "frns": frns
                 }
                 
                 for frn in frns:
