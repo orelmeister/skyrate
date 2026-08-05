@@ -3,21 +3,21 @@ import Link from "next/link";
 import { Check, ArrowRight, BarChart3, Bell, Shield, Clock, DollarSign, FileText, Search, Zap } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate for Schools & Districts — File 470/471 in Half the Time",
-  description: "SkyRate AI files E-Rate Forms 470 & 471 for K-12 schools, districts, and consortia. Cut filing time 60%, reduce denials, FY2026-ready. Free trial.",
+  title: "E-Rate for Schools & Districts — Compliant Bidding, FRN Tracking & Filing",
+  description: "SkyRate AI helps K-12 schools, districts, and consortia run a compliant E-Rate application: compliant Form 470 bid evaluation, FRN tracking, a guided 470/471 compliance workflow, and deadline alerts. FY2026-ready. Free trial.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/features/applicants" },
   openGraph: {
-    title: "E-Rate for Schools & Districts — File 470/471 in Half the Time",
-    description: "SkyRate AI files E-Rate Forms 470 & 471 for K-12 schools, districts, and consortia. Cut filing time 60%, reduce denials, FY2026-ready. Free trial.",
+    title: "E-Rate for Schools & Districts — Compliant Bidding, FRN Tracking & Filing",
+    description: "Run a compliant E-Rate application: compliant Form 470 bid evaluation, FRN tracking, a guided 470/471 workflow, and deadline alerts. FY2026-ready. Free trial.",
     url: "https://skyrate.ai/features/applicants",
     siteName: "SkyRate AI",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "E-Rate for Schools & Districts — File 470/471 in Half the Time",
-    description: "Cut E-Rate filing time 60% and reduce denials. FY2026-ready. Free trial.",
+    title: "E-Rate for Schools & Districts — Compliant Bidding, FRN Tracking & Filing",
+    description: "Compliant bid evaluation, FRN tracking, and a guided 470/471 compliance workflow. FY2026-ready. Free trial.",
   },
 };
 
@@ -81,14 +81,15 @@ export default function ApplicantsFeaturePage() {
             For Schools &amp; Libraries
           </span>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6">
-            Track Your E-Rate Applications{" "}
+            Run a Compliant E-Rate Application{" "}
             <span className="bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
-              in Real Time
+              Start to Finish
             </span>
           </h1>
           <p className="text-lg sm:text-xl text-slate-300 max-w-3xl mx-auto mb-10 leading-relaxed">
-            Monitor FRN funding status, understand denial reasons, track your Category 2 budget,
-            and get deadline alerts — designed specifically for schools and libraries.
+            Evaluate your Form 470 bids the compliant way, track every FRN, follow a guided
+            470/471 compliance workflow, and never miss a deadline — designed specifically for
+            schools and libraries.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
@@ -134,15 +135,15 @@ export default function ApplicantsFeaturePage() {
               <ul className="space-y-3 text-slate-600">
                 <li className="flex items-start gap-3">
                   <span className="text-red-400 mt-1">•</span>
-                  Manually logging into USAC portals to check FRN status updates
+                  Evaluating Form 470 bids by hand and hoping the pick survives a PIA review
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="text-red-400 mt-1">•</span>
-                  No idea why your application was denied or how to fix it
+                  No clear, step-by-step workflow for the 470 &rarr; 28-day window &rarr; 471 process
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="text-red-400 mt-1">•</span>
-                  Tracking Category 2 budgets in spreadsheets prone to errors
+                  Manually logging into USAC portals to check FRN status and Category 2 budgets
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="text-red-400 mt-1">•</span>
@@ -159,15 +160,15 @@ export default function ApplicantsFeaturePage() {
               <ul className="space-y-3 text-slate-600">
                 <li className="flex items-start gap-3">
                   <Check className="w-5 h-5 text-purple-600 mt-0.5 shrink-0" />
-                  Real-time dashboard showing every application, FRN, and funding amount
+                  Compliant bid evaluation that flags non-responsive bids and builds a defensible bid matrix
                 </li>
                 <li className="flex items-start gap-3">
                   <Check className="w-5 h-5 text-purple-600 mt-0.5 shrink-0" />
-                  AI-powered denial analysis with clear explanations and next steps
+                  A guided 470 &rarr; 471 compliance workflow with a live readiness checklist
                 </li>
                 <li className="flex items-start gap-3">
                   <Check className="w-5 h-5 text-purple-600 mt-0.5 shrink-0" />
-                  Automated Category 2 budget tracking with remaining balance alerts
+                  Real-time FRN tracking and Category 2 budget monitoring in one dashboard
                 </li>
                 <li className="flex items-start gap-3">
                   <Check className="w-5 h-5 text-purple-600 mt-0.5 shrink-0" />
@@ -234,28 +235,21 @@ export default function ApplicantsFeaturePage() {
               </Link>
             </article>
 
-            {/* Feature 3: Denial Analysis */}
+            {/* Feature 3: Compliant Bid Evaluation */}
             <article className="group bg-slate-50 hover:bg-white rounded-2xl p-8 border border-slate-200 hover:border-purple-200 hover:shadow-lg transition-all duration-300">
-              <div className="w-12 h-12 rounded-xl bg-rose-100 flex items-center justify-center mb-5">
-                <Search className="w-6 h-6 text-rose-600" />
+              <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center mb-5">
+                <Shield className="w-6 h-6 text-indigo-600" />
               </div>
               <h3 className="text-xl font-semibold text-slate-900 mb-3">
-                Denial Analysis
+                Compliant Bid Evaluation
               </h3>
               <p className="text-slate-600 mb-4 leading-relaxed">
-                When applications are denied, understand exactly why with AI-powered analysis of
-                denial codes and actionable recommendations. SkyRate AI maps every denial code to
-                the underlying USAC rule, explains what went wrong in plain language, and provides
-                step-by-step guidance on how to correct the issue or file a successful appeal with
-                proper documentation.
+                Upload the bids you receive on your Form 470 and let SkyRate AI score them the
+                compliant way — flagging non-responsive bids, enforcing price as the primary factor,
+                and producing a defensible bid matrix. Choose the right vendor with confidence and a
+                clean, PIA-ready paper trail, so your funding is protected from the start instead of
+                defended after a denial.
               </p>
-              <Link
-                href="/features/denial-analysis"
-                className="inline-flex items-center gap-1.5 text-purple-600 hover:text-purple-700 font-medium text-sm transition-colors"
-              >
-                See denial analysis tool
-                <ArrowRight className="w-4 h-4" />
-              </Link>
             </article>
 
             {/* Feature 4: Category 2 Budget Tracking */}

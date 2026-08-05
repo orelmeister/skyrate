@@ -1,23 +1,23 @@
 import { Metadata } from "next";
 import Link from "next/link";
-import { Check, ArrowRight, Brain, Shield, BarChart3, Bell, Database, FileText, Users, Zap } from "lucide-react";
+import { Check, ArrowRight, Shield, Bell, Database, FileText, Users, Zap } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate Consultant Software — Manage 100+ Clients in One Dashboard",
-  description: "Built for E-Rate consultants. Track every client's 470/471, FRN status, and PIA reviews from one screen. AI denial defense. Try free.",
+  title: "E-Rate Consultant Software — Keep 100+ Clients Compliant in One Dashboard",
+  description: "Built for E-Rate consultants. Run bid analysis, track every client's 470/471 filing journey, FRN status, PIA reviews, and invoicing from one screen. Try free.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/features/consultants" },
   openGraph: {
-    title: "E-Rate Consultant Software — Manage 100+ Clients in One Dashboard",
-    description: "Built for E-Rate consultants. Track every client's 470/471, FRN status, and PIA reviews from one screen. AI denial defense. Try free.",
+    title: "E-Rate Consultant Software — Keep 100+ Clients Compliant in One Dashboard",
+    description: "Built for E-Rate consultants. Run bid analysis, track every client's 470/471 filing journey, FRN status, PIA reviews, and invoicing from one screen. Try free.",
     url: "https://skyrate.ai/features/consultants",
     siteName: "SkyRate AI",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "E-Rate Consultant Software — Manage 100+ Clients in One Dashboard",
-    description: "Track every client's 470/471, FRN status, and PIA reviews from one screen. AI denial defense.",
+    title: "E-Rate Consultant Software — Keep 100+ Clients Compliant in One Dashboard",
+    description: "Run bid analysis, track every client's 470/471 filing journey, FRN status, PIA reviews, and invoicing from one screen.",
   },
 };
 
@@ -87,8 +87,9 @@ export default function ConsultantsFeaturePage() {
             </span>
           </h1>
           <p className="text-lg sm:text-xl text-slate-300 max-w-3xl mx-auto mb-10 leading-relaxed">
-            Manage school portfolios, generate AI-powered appeals, monitor FRN status changes, and
-            analyze denials — all from a single dashboard.
+            Keep every client compliant: run bid analysis, track FRN status, manage PIA reviews and
+            invoicing, and monitor each school&apos;s 470/471 filing journey — all from a single
+            dashboard.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
@@ -192,25 +193,25 @@ export default function ConsultantsFeaturePage() {
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {/* Feature 1: AI Appeal Letter Generator */}
+            {/* Feature 1: Compliant Bid Analysis */}
             <article className="group bg-slate-50 hover:bg-white rounded-2xl p-8 border border-slate-200 hover:border-purple-200 hover:shadow-lg transition-all duration-300">
               <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center mb-5">
-                <Brain className="w-6 h-6 text-purple-600" />
+                <Shield className="w-6 h-6 text-purple-600" />
               </div>
               <h3 className="text-xl font-semibold text-slate-900 mb-3">
-                AI Appeal Letter Generator
+                Compliant Bid Analysis
               </h3>
               <p className="text-slate-600 mb-4 leading-relaxed">
-                Generate compliant, persuasive appeal letters in seconds using AI trained on FCC
-                Order 19-117 and USAC precedent. Each letter cites relevant rules, addresses the
-                specific denial code, and follows the format that USAC reviewers expect. Stop
-                spending hours drafting appeals manually.
+                Evaluate every client&apos;s Form 470 bids the compliant way. SkyRate AI flags
+                non-responsive bids, enforces price as the primary factor, and produces a defensible
+                bid matrix your client can stand behind in a PIA review. Keep your clients compliant
+                from the start — instead of defending a denial after the fact.
               </p>
               <Link
-                href="/features/appeal-generator"
+                href="/compliance/bid-analysis"
                 className="inline-flex items-center gap-1.5 text-purple-600 hover:text-purple-700 font-medium text-sm transition-colors"
               >
-                Try the appeal generator
+                See bid analysis
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </article>
@@ -254,27 +255,21 @@ export default function ConsultantsFeaturePage() {
               </Link>
             </article>
 
-            {/* Feature 4: E-Rate Denial Analysis */}
+            {/* Feature 4: PIA Review & Invoicing */}
             <article className="group bg-slate-50 hover:bg-white rounded-2xl p-8 border border-slate-200 hover:border-purple-200 hover:shadow-lg transition-all duration-300">
-              <div className="w-12 h-12 rounded-xl bg-rose-100 flex items-center justify-center mb-5">
-                <BarChart3 className="w-6 h-6 text-rose-600" />
+              <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center mb-5">
+                <FileText className="w-6 h-6 text-emerald-600" />
               </div>
               <h3 className="text-xl font-semibold text-slate-900 mb-3">
-                E-Rate Denial Analysis
+                PIA Review &amp; Invoicing
               </h3>
               <p className="text-slate-600 mb-4 leading-relaxed">
-                Understand exactly why applications are denied with AI-powered analysis of USAC
-                denial codes and historical patterns. SkyRate AI maps each denial to the underlying
-                rule, identifies common patterns across your portfolio, and suggests the most
-                effective remediation strategy.
+                Respond to PIA (Program Integrity Assurance) requests with confidence and keep
+                invoicing on track. SkyRate AI helps you assemble the documentation USAC asks for,
+                track invoice and disbursement status across every client, and stay ahead of last-
+                dates-to-invoice — the compliance work that keeps funding flowing. And if a denial
+                ever does happen, an AI <Link href="/features/appeal-generator" className="text-purple-600 hover:text-purple-700 font-medium">appeal generator</Link> is there as a backstop.
               </p>
-              <Link
-                href="/features/denial-analysis"
-                className="inline-flex items-center gap-1.5 text-purple-600 hover:text-purple-700 font-medium text-sm transition-colors"
-              >
-                See denial analysis
-                <ArrowRight className="w-4 h-4" />
-              </Link>
             </article>
 
             {/* Feature 5: Real-Time USAC Data */}

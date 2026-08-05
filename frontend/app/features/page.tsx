@@ -14,21 +14,22 @@ import {
 export const metadata: Metadata = {
   title: "SkyRate AI Features — E-Rate Intelligence Platform",
   description:
-    "Explore every feature of the SkyRate AI platform: FRN monitoring, Form 470 tracking, AI appeal generation, denial analysis, and dedicated portals for consultants, vendors, and applicants.",
+    "Explore every feature of the SkyRate AI platform: compliant bid analysis, FRN tracking, a guided 470/471 compliance workflow, PIA review, invoicing, and dedicated portals for consultants, vendors, and applicants.",
   keywords: [
     "e-rate software features",
+    "e-rate bid analysis",
     "frn tracking",
-    "form 470 lead tracking",
-    "e-rate appeal generator",
+    "e-rate compliance workflow",
+    "form 470 471 filing",
+    "e-rate pia review",
     "e-rate consultant portal",
     "e-rate vendor portal",
-    "e-rate denial analysis",
   ],
   alternates: { canonical: "https://skyrate.ai/features" },
   openGraph: {
     title: "SkyRate AI Features — E-Rate Intelligence Platform",
     description:
-      "FRN monitoring, Form 470 tracking, AI appeals, denial analysis — everything you need to win E-Rate funding.",
+      "Compliant bid analysis, FRN tracking, a guided 470/471 compliance workflow, PIA review, and invoicing — everything you need to run E-Rate compliantly.",
     url: "https://skyrate.ai/features",
     type: "website",
     siteName: "SkyRate AI",
