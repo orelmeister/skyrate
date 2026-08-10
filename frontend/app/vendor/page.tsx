@@ -690,6 +690,7 @@ function VendorPortalPage() {
   
   // Table sort states for entity columns
   const [form470Sort, setForm470Sort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
+  const [form470ApplicantType, setForm470ApplicantType] = useState<string>("");
   const [schoolSearchSort, setSchoolSearchSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
   const [servicedEntitiesSort, setServicedEntitiesSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
 
@@ -812,14 +813,26 @@ function VendorPortalPage() {
 
   // Sorted Form 470 leads for table display
   const sortedForm470Leads = useMemo(() => {
-    if (!form470Leads.length || !form470Sort) return form470Leads;
-    return [...form470Leads].sort((a, b) => {
+    let list = form470Leads;
+    // Client-side filter by applicant/school type (Ari #9 - vendor requested)
+    if (form470ApplicantType) {
+      list = list.filter((l) => (l.applicant_type || '') === form470ApplicantType);
+    }
+    if (!list.length || !form470Sort) return list;
+    return [...list].sort((a, b) => {
       const aVal = (a.entity_name || '').toString().toLowerCase();
       const bVal = (b.entity_name || '').toString().toLowerCase();
       const cmp = aVal.localeCompare(bVal);
       return form470Sort.dir === 'asc' ? cmp : -cmp;
     });
-  }, [form470Leads, form470Sort]);
+  }, [form470Leads, form470Sort, form470ApplicantType]);
+
+  // Distinct applicant/school types present in the loaded 470 leads (for the filter dropdown)
+  const form470ApplicantTypes = useMemo(() => {
+    const s = new Set<string>();
+    form470Leads.forEach((l) => { if (l.applicant_type) s.add(l.applicant_type); });
+    return Array.from(s).sort();
+  }, [form470Leads]);
 
   // Sorted search results for table display
   const sortedSearchResults = useMemo(() => {
@@ -2228,7 +2241,7 @@ function VendorPortalPage() {
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                   <div className="p-4 border-b border-slate-200"><h2 className="text-lg font-semibold text-slate-900">Invoices by FRN</h2><p className="text-sm text-slate-500">Click a row to see individual invoice lines</p></div>
                   <div className="divide-y divide-slate-100">
-                    {invoiceData.frns.map((g) => {
+                    {[...invoiceData.frns].sort((a, b) => (a.billed_entity_name || '').localeCompare(b.billed_entity_name || '')).map((g) => {
                       const out = Math.max(0, (g.total_requested || 0) - (g.total_disbursed || 0));
                       const M = (n: number) => n >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(0)}K` : `$${n.toFixed(0)}`;
                       const open = invoiceExpanded.has(g.frn);
@@ -2247,13 +2260,14 @@ function VendorPortalPage() {
                           {open && (
                             <div className="bg-slate-50 px-4 pb-3 overflow-x-auto">
                               <table className="w-full text-sm min-w-[520px]">
-                                <thead><tr className="text-xs text-slate-500 text-left"><th className="py-2 font-medium">Invoice</th><th className="py-2 font-medium">Status</th><th className="py-2 font-medium">Invoice date</th><th className="py-2 font-medium text-right">Requested</th><th className="py-2 font-medium text-right">Disbursed</th></tr></thead>
+                                <thead><tr className="text-xs text-slate-500 text-left"><th className="py-2 font-medium">Invoice</th><th className="py-2 font-medium">Status</th><th className="py-2 font-medium">Invoice date</th><th className="py-2 font-medium">Completed</th><th className="py-2 font-medium text-right">Requested</th><th className="py-2 font-medium text-right">Disbursed</th></tr></thead>
                                 <tbody>
                                   {g.lines.map((ln, i) => (
                                     <tr key={`${ln.invoice_id}-${ln.inv_line_num}-${i}`} className="border-t border-slate-200">
                                       <td className="py-2 text-slate-700">{ln.invoice_id || '—'}{ln.invoice_type ? ` · ${ln.invoice_type}` : ''}</td>
                                       <td className="py-2 text-slate-600">{ln.status || '—'}</td>
                                       <td className="py-2 text-slate-600">{ln.invoice_date || '—'}</td>
+                                      <td className="py-2 text-slate-600">{ln.completion_date || '—'}</td>
                                       <td className="py-2 text-right text-slate-700">{M(ln.requested_amount || 0)}</td>
                                       <td className="py-2 text-right text-emerald-600">{M(ln.disbursed_amount || 0)}</td>
                                     </tr>
@@ -3145,6 +3159,21 @@ function VendorPortalPage() {
                     <option value="">All Categories</option>
                     <option value="1">Category 1 (Internet/WAN)</option>
                     <option value="2">Category 2 (Equipment)</option>
+                  </select>
+                </div>
+
+                {/* School / Applicant Type Filter (Ari #9 - vendor requested) */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">School / Applicant Type</label>
+                  <select
+                    value={form470ApplicantType}
+                    onChange={(e) => setForm470ApplicantType(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    <option value="">All Types</option>
+                    {form470ApplicantTypes.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
                   </select>
                 </div>
 
