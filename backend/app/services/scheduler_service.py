@@ -822,7 +822,8 @@ def send_daily_digests():
     """
     Send daily FRN digest emails to users who opted in.
     Reads from frn_status_changes_queue and groups by user.
-    Runs at 08:00 America/New_York every day.
+    Runs at 18:30 UTC (2:30 PM ET) every day, AFTER the 17:00 UTC admin snapshot that
+    enqueues the day's USAC status changes, so today's changes go out the same day.
 
     Phase 2 V2 rebuild:
     - Window-function dedup: per (user_id, frn) collapse to first old_status -> last new_status
@@ -2131,12 +2132,19 @@ def init_scheduler():
         replace_existing=True,
     )
 
-    # Daily FRN digest - 08:00 America/New_York every day
+    # Daily FRN digest - 18:30 UTC (2:30 PM ET) every day.
+    # MUST run AFTER refresh_admin_frn_snapshot (17:00 UTC), which pulls the day's fresh
+    # USAC data and enqueues status changes into frn_status_changes_queue (via frn_upsert).
+    # The digest drains that queue, so it has to run once the queue is populated.
+    # ROOT-CAUSE FIX (2026-08-10): previously ran 08:00 ET (12:00 UTC) — 5h BEFORE the
+    # snapshot — so every digest drained YESTERDAY's queue and today's FCDL changes waited a
+    # full extra day ("FRN updates show 2 days after the FCDL"). USAC Open Data refreshes
+    # once daily ~9 AM PT (noon ET); snapshot 17:00 UTC (1 PM ET); digest 90 min later.
     scheduler.add_job(
         send_daily_digests,
-        trigger=CronTrigger(hour=8, minute=0, timezone='America/New_York'),
+        trigger=CronTrigger(hour=18, minute=30, timezone='UTC'),
         id='daily_digest',
-        name='Send FRN daily digest emails',
+        name='Send FRN daily digest emails (after daily USAC snapshot)',
         replace_existing=True
     )
 
