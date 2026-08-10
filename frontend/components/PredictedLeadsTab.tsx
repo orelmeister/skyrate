@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { SkeletonRows, SkeletonStatCards } from "@/components/Skeleton";
+import { downloadCsv, csvFilename } from "@/lib/csv-export";
 
 // Types
 interface PredictedLead {
@@ -329,6 +330,36 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
       setF470Result({ filed: false, leads: [] });
     } finally {
       setF470Loading(false);
+    }
+  };
+
+  // Download the underlying Form 471 (contract/line-item data) for this prediction (Ari #1)
+  const [download471Loading, setDownload471Loading] = useState(false);
+  const downloadForm471 = async () => {
+    if (!selectedLead) return;
+    setDownload471Loading(true);
+    try {
+      // Prefer FRN-level line items (full contract detail); fall back to entity 471 records.
+      if (selectedLead.frn) {
+        const res = await api.get471LineItemsByFrn(selectedLead.frn);
+        if (res.success && res.data && res.data.line_items.length > 0) {
+          const columns = ['funding_year', 'funding_request_number', 'line_item_number', 'ben', 'organization_name', 'state', 'function', 'product', 'manufacturer', 'model', 'unit', 'quantity', 'unit_cost', 'extended_cost', 'months_of_service'];
+          downloadCsv(csvFilename(`form471_${selectedLead.frn}`), columns, res.data.line_items.map((li) => ({ ...li })));
+          return;
+        }
+      }
+      if (selectedLead.ben) {
+        const yr = selectedLead.funding_year ? Number(selectedLead.funding_year) : undefined;
+        const res = await api.get471ByEntity(selectedLead.ben, yr);
+        if (res.success && res.data && res.data.records.length > 0) {
+          const columns = ['funding_year', 'frn', 'application_number', 'service_provider_name', 'service_provider_spin', 'service_type', 'category', 'committed_amount', 'pre_discount_amount', 'discount_rate', 'frn_status', 'product_description'];
+          downloadCsv(csvFilename(`form471_ben_${selectedLead.ben}`), columns, res.data.records.map((r) => ({ ...r })));
+        }
+      }
+    } catch {
+      // swallow; button re-enables in finally
+    } finally {
+      setDownload471Loading(false);
     }
   };
 
@@ -953,6 +984,17 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                   className="w-full px-3 py-2 mb-3 bg-white border border-purple-300 text-purple-700 rounded-xl text-sm font-medium hover:bg-purple-50 transition-all"
                 >
                   🔎 View Form 471{selectedLead.funding_year ? ` (FY${selectedLead.funding_year})` : ""}
+                </button>
+              )}
+
+              {/* Download the Form 471 contract data (Ari #1) */}
+              {selectedLead.ben && (
+                <button
+                  onClick={downloadForm471}
+                  disabled={download471Loading}
+                  className="w-full px-3 py-2 mb-3 bg-white border border-emerald-300 text-emerald-700 rounded-xl text-sm font-medium hover:bg-emerald-50 transition-all disabled:opacity-50"
+                >
+                  {download471Loading ? "Preparing…" : "⬇️ Download Form 471 (CSV)"}
                 </button>
               )}
 
