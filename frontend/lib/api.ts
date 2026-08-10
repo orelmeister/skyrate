@@ -1681,7 +1681,7 @@ class ApiClient {
    */
   async updateConsultantSchool(
     ben: string,
-    data: { notes?: string; tags?: string[]; loa_on_file?: boolean; loa_reference?: string; happy_with_current?: boolean }
+    data: { notes?: string; tags?: string[]; loa_on_file?: boolean; loa_reference?: string; happy_with_current?: boolean; sipa_current?: boolean; has_form_498?: boolean; sam_gov_registered?: boolean }
   ): Promise<ApiResponse<{ success: boolean; school: Record<string, unknown> }>> {
     return this.request(`/api/v1/consultant/schools/${ben}`, {
       method: 'PUT',

@@ -145,6 +145,12 @@ class ConsultantSchool(Base):
     # satisfied with existing equipment and is not requesting a refresh this cycle.
     happy_with_current = Column(Boolean, default=False, nullable=False)
 
+    # Additional per-school compliance flags (Ari request) beyond LOA:
+    # SIPA up-to-date, FCC Form 498 on file, and SAM.gov registration.
+    sipa_current = Column(Boolean, default=False, nullable=False)
+    has_form_498 = Column(Boolean, default=False, nullable=False)
+    sam_gov_registered = Column(Boolean, default=False, nullable=False)
+
     # Timestamps
     added_at = Column(DateTime, default=datetime.utcnow)
     last_synced = Column(DateTime)
@@ -176,6 +182,9 @@ class ConsultantSchool(Base):
             "loa_reference": self.loa_reference,
             "loa_marked_at": self.loa_marked_at.isoformat() if self.loa_marked_at else None,
             "happy_with_current": bool(self.happy_with_current),
+            "sipa_current": bool(self.sipa_current),
+            "has_form_498": bool(self.has_form_498),
+            "sam_gov_registered": bool(self.sam_gov_registered),
             "added_at": self.added_at.isoformat() if self.added_at else None,
             "last_synced": self.last_synced.isoformat() if self.last_synced else None,
         }

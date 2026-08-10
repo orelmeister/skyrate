@@ -169,6 +169,9 @@ class SchoolUpdate(BaseModel):
     loa_on_file: Optional[bool] = None
     loa_reference: Optional[str] = None
     happy_with_current: Optional[bool] = None
+    sipa_current: Optional[bool] = None
+    has_form_498: Optional[bool] = None
+    sam_gov_registered: Optional[bool] = None
 
 
 class EquipmentItemPayload(BaseModel):
@@ -3097,6 +3100,12 @@ async def update_school(
         school.loa_reference = data.loa_reference.strip() or None
     if data.happy_with_current is not None:
         school.happy_with_current = bool(data.happy_with_current)
+    if data.sipa_current is not None:
+        school.sipa_current = bool(data.sipa_current)
+    if data.has_form_498 is not None:
+        school.has_form_498 = bool(data.has_form_498)
+    if data.sam_gov_registered is not None:
+        school.sam_gov_registered = bool(data.sam_gov_registered)
 
     db.commit()
     db.refresh(school)

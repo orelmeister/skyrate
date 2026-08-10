@@ -181,6 +181,10 @@ interface EnhancedSchool {
   loa_marked_at?: string | null;
   // Equipment & Wishlist — "happy with current" quick flag
   happy_with_current?: boolean;
+  // Additional per-school compliance flags (Ari): SIPA / FCC Form 498 / SAM.gov
+  sipa_current?: boolean;
+  has_form_498?: boolean;
+  sam_gov_registered?: boolean;
   // Enriched fields from USAC
   entity_type?: string | null;
   address?: string | null;
@@ -2131,6 +2135,26 @@ function ConsultantPortalPage() {
     }
   };
 
+  // Additional per-school compliance flags (SIPA / FCC Form 498 / SAM.gov) quick toggles (Ari #7).
+  const [flagSavingKey, setFlagSavingKey] = useState<string | null>(null);
+  const handleToggleSchoolFlag = async (
+    school: EnhancedSchool,
+    field: 'sipa_current' | 'has_form_498' | 'sam_gov_registered'
+  ) => {
+    const next = !school[field];
+    setFlagSavingKey(`${school.ben}:${field}`);
+    setSchools(prev => prev.map(s => (s.ben === school.ben ? { ...s, [field]: next } : s)));
+    try {
+      const resp = await api.updateConsultantSchool(school.ben, { [field]: next });
+      if (!resp.success) throw new Error(resp.error || 'update failed');
+    } catch (error) {
+      console.error(`Failed to update ${field}:`, error);
+      setSchools(prev => prev.map(s => (s.ben === school.ben ? { ...s, [field]: !next } : s)));
+    } finally {
+      setFlagSavingKey(null);
+    }
+  };
+
   const handleLogout = () => {
     logout();
     router.push("/");
@@ -3228,6 +3252,28 @@ function ConsultantPortalPage() {
                                 <>Mark LOA</>
                               )}
                             </button>
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {([
+                                { key: 'sipa_current', label: 'SIPA' },
+                                { key: 'has_form_498', label: '498' },
+                                { key: 'sam_gov_registered', label: 'SAM.gov' },
+                              ] as const).map(({ key, label }) => (
+                                <button
+                                  key={key}
+                                  type="button"
+                                  onClick={() => handleToggleSchoolFlag(school, key)}
+                                  disabled={flagSavingKey === `${school.ben}:${key}`}
+                                  title={`${label}: ${school[key] ? 'current / on file' : 'not marked'} — click to toggle`}
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors disabled:opacity-50 ${
+                                    school[key]
+                                      ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                                      : 'bg-slate-100 text-slate-500 hover:bg-slate-200 border border-dashed border-slate-300'
+                                  }`}
+                                >
+                                  {school[key] ? '✓ ' : ''}{label}
+                                </button>
+                              ))}
+                            </div>
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
