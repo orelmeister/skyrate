@@ -19,6 +19,7 @@ import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { DisbursementPanel } from "@/components/FRNDetailModal";
 import { ChevronRight, ChevronDown, Target, Clock, Building2, Bell, ArrowUpRight, Zap, BarChart3, Search, TrendingUp, Home, Activity, Shield, Map as MapIcon, Sparkles, FileSearch, Bookmark, Settings as SettingsIcon, HelpCircle, PanelLeft, Sun, Moon, LogOut, Receipt } from "lucide-react";
 import PilotFrns from "./PilotFrns";
+import { FrnSubStatusInfo } from "@/components/FrnSubStatusInfo";
 
 const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "cyber-pilot", "470-leads", "map", "predicted-leads", "competitive", "invoicing", "search", "leads", "settings"] as const;
 type VendorTab = typeof VENDOR_TABS[number];
@@ -2424,7 +2425,7 @@ function VendorPortalPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="text-sm text-slate-600 mb-1 block">Pending Reason</label>
+                      <label className="text-sm text-slate-600 mb-1 flex items-center gap-1">Pending Reason <FrnSubStatusInfo /></label>
                       <input
                         type="text"
                         value={frnPendingReason}

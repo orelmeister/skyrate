@@ -17,7 +17,7 @@ import MissingIdentifierBanner from "@/components/MissingIdentifierBanner";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { useTabParam } from "@/hooks/useTabParam";
 import EquipmentArea from "./EquipmentArea";
-import { Home, Building2, Coins, Activity, Scale, Shield, Search, BarChart3, Settings as SettingsIcon, ChevronRight, Bell, HelpCircle, PanelLeft, Sun, Moon, LogOut, Plus, BadgeCheck, FileText, TrendingUp } from "lucide-react";
+import { FrnSubStatusInfo } from "@/components/FrnSubStatusInfo";
 
 // ==================== MY TEAM (OWNER SEATS) ====================
 // Self-contained panel rendered in the Settings tab. Hidden entirely for team
@@ -255,203 +255,6 @@ interface RecentActivityItem {
   created_at: string | null;
 }
 
-// ---------------------------------------------------------------------------
-// ConsultantCommandCenter
-// Dark/light bento "command center" home for the consultant portal. Mirrors the
-// SkyRate dashboard-revamp concept: greeting, funded-rate ring, funding-at-a-
-// glance bars, portfolio summary, a "needs your attention" queue, recent FRN
-// activity, top schools, and quick actions. Wired to real dashboard data.
-// ---------------------------------------------------------------------------
-function ConsultantCommandCenter({
-  profile, stats, schools, activity, statsLoading, activityLoading,
-  year, setYear, dark, onTab, onAddSchool, onOpenSchool, formatTime,
-}: {
-  profile: ConsultantProfile | null;
-  stats: DashboardStats | null;
-  schools: EnhancedSchool[];
-  activity: RecentActivityItem[];
-  statsLoading: boolean;
-  activityLoading: boolean;
-  year: number;
-  setYear: (y: number) => void;
-  dark: boolean;
-  onTab: (t: ConsultantTab) => void;
-  onAddSchool: () => void;
-  onOpenSchool: (s: EnhancedSchool) => void;
-  formatTime: (s: string | null) => string;
-}) {
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  const company = profile?.company_name || "there";
-  const totalApps = stats?.total_applications || 0;
-  const funded = stats?.funded_count || 0;
-  const pending = stats?.pending_count || 0;
-  const denied = stats?.denied_count || 0;
-  const fundedPct = totalApps > 0 ? Math.round((funded / totalApps) * 100) : 0;
-  const totalFunding = stats?.total_funding || 0;
-  const c1 = stats?.total_c1_funding || 0;
-  const c2c = stats?.total_c2_committed || 0;
-  const c2p = stats?.total_c2_pending || 0;
-  const fundMax = Math.max(c1, c2c, c2p, 1);
-  const money = (n: number) => n >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(0)}K` : `$${n}`;
-
-  const noLoa = schools.filter((s) => s.loa_on_file === false).length;
-  const attention: { key: string; label: string; sub: string; tone: "red" | "amber" | "blue"; tab: ConsultantTab }[] = [];
-  if (denied > 0) attention.push({ key: "den", label: `${denied} denied application${denied !== 1 ? "s" : ""}`, sub: "Review and start appeals", tone: "red", tab: "appeals" });
-  if (noLoa > 0) attention.push({ key: "loa", label: `${noLoa} school${noLoa !== 1 ? "s" : ""} missing an LOA`, sub: "Upload to file on their behalf", tone: "amber", tab: "schools" });
-  if (pending > 0) attention.push({ key: "pen", label: `${pending} application${pending !== 1 ? "s" : ""} pending`, sub: "Monitor USAC review", tone: "blue", tab: "frn-status" });
-
-  const R = 34, CIRC = 2 * Math.PI * R;
-  const ringPct = fundedPct / 100;
-  const ringTrack = dark ? "#1e293b" : "#e2e8f0";
-
-  const container = dark ? "bg-[#0a0a16] border-slate-800/80 text-slate-100" : "bg-white border-slate-200 text-slate-900";
-  const card = dark ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-200 shadow-sm";
-  const muted = dark ? "text-slate-400" : "text-slate-500";
-  const faint = dark ? "text-slate-500" : "text-slate-400";
-  const link = dark ? "text-purple-300 hover:text-purple-200" : "text-purple-600 hover:text-purple-700";
-  const rowHover = dark ? "hover:bg-slate-800/60" : "hover:bg-slate-50";
-  const softRow = dark ? "bg-slate-800/50 border-slate-700/50" : "bg-slate-50 border-slate-200";
-  const track = dark ? "bg-slate-800" : "bg-slate-100";
-  const qaBtn = dark ? "bg-slate-900/60 border-slate-800 hover:border-purple-500/40 hover:bg-slate-800/60 text-slate-300 hover:text-white" : "bg-white border-slate-200 hover:border-purple-300 hover:bg-slate-50 text-slate-600 hover:text-slate-900 shadow-sm";
-  const qaIcon = dark ? "bg-slate-800 text-purple-300" : "bg-slate-100 text-purple-600";
-  const selBg = dark ? "bg-slate-800 border-slate-700 text-slate-200" : "bg-white border-slate-200 text-slate-700";
-  const strong = dark ? "text-slate-200 font-medium" : "text-slate-800 font-medium";
-  const toneCls = (t: string) => t === "red" ? "bg-red-500/20 text-red-500" : t === "amber" ? "bg-amber-500/20 text-amber-600" : "bg-sky-500/20 text-sky-500";
-
-  const years = (() => { const cy = new Date().getFullYear(); const a: number[] = []; for (let y = cy + 1; y >= cy - 6; y--) a.push(y); return a; })();
-
-  return (
-    <div className={`rounded-3xl border p-6 md:p-8 shadow-2xl ${container}`}>
-      {/* Greeting header */}
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold">{greeting}, <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">{company}</span></h1>
-          <p className={`mt-1 text-sm ${muted}`}>You manage <span className={strong}>{schools.length}</span> school{schools.length !== 1 ? "s" : ""} — {statsLoading ? "loading…" : (<><span className={strong}>{funded}</span> funded in FY{year}.</>)}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <select value={year} onChange={(e) => setYear(parseInt(e.target.value, 10))} className={`rounded-lg border px-3 py-2 text-sm font-medium ${selBg}`}>
-            {years.map((y) => (<option key={y} value={y}>FY{y}</option>))}
-          </select>
-          <button onClick={onAddSchool} className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all flex items-center gap-1.5"><Plus className="w-4 h-4" /> Add school</button>
-        </div>
-      </div>
-
-      {/* CRN prompt */}
-      {profile && !profile.crn && (
-        <button onClick={() => onTab("settings")} className="w-full text-left mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 flex items-center gap-3 hover:bg-amber-500/15 transition-colors">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-500"><BadgeCheck className="w-5 h-5" /></div>
-          <div className="flex-1"><div className={`font-semibold ${dark ? "text-amber-200" : "text-amber-700"}`}>Add your CRN to finish onboarding</div><div className={`text-sm ${dark ? "text-amber-200/70" : "text-amber-600"}`}>Unlocks filing on your clients&apos; behalf.</div></div>
-          <ChevronRight className="w-5 h-5 text-amber-500" />
-        </button>
-      )}
-
-      {/* Top bento row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <div className={`rounded-2xl border p-5 ${card}`}>
-          <div className={`flex items-center gap-2 text-sm mb-3 ${muted}`}><BadgeCheck className="w-4 h-4" /> Funded rate · FY{year}</div>
-          <div className="flex items-center gap-4">
-            <div className="relative w-24 h-24 shrink-0">
-              <svg width="96" height="96" viewBox="0 0 96 96">
-                <circle cx="48" cy="48" r={R} fill="none" stroke={ringTrack} strokeWidth="8" />
-                <circle cx="48" cy="48" r={R} fill="none" stroke="url(#ccRing)" strokeWidth="8" strokeLinecap="round" strokeDasharray={CIRC} strokeDashoffset={CIRC * (1 - ringPct)} transform="rotate(-90 48 48)" />
-                <defs><linearGradient id="ccRing" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#a855f7" /><stop offset="1" stopColor="#ec4899" /></linearGradient></defs>
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center"><span className="text-xl font-bold">{fundedPct}%</span></div>
-            </div>
-            <div className="min-w-0 text-sm space-y-1 flex-1">
-              <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-500" /><span className={muted}>Funded</span><span className="font-semibold ml-auto">{funded}</span></div>
-              <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-amber-500" /><span className={muted}>Pending</span><span className="font-semibold ml-auto">{pending}</span></div>
-              <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-red-500" /><span className={muted}>Denied</span><span className="font-semibold ml-auto">{denied}</span></div>
-            </div>
-          </div>
-        </div>
-
-        <div className={`rounded-2xl border p-5 ${card}`}>
-          <div className={`flex items-center gap-2 text-sm mb-3 ${muted}`}><Coins className="w-4 h-4" /> Funding at a glance</div>
-          <div className="text-3xl font-bold">{money(totalFunding)}</div>
-          <div className={`text-xs ${muted}`}>Total across your portfolio (FY{year})</div>
-          <div className="mt-4 space-y-2.5 text-xs">
-            <div><div className="flex justify-between mb-1"><span className={muted}>C1 funded</span><span className="font-semibold">{money(c1)}</span></div><div className={`h-1.5 rounded ${track}`}><div className="h-full rounded bg-gradient-to-r from-purple-500 to-pink-500" style={{ width: `${Math.round(c1 / fundMax * 100)}%` }} /></div></div>
-            <div><div className="flex justify-between mb-1"><span className={muted}>C2 committed</span><span className="font-semibold">{money(c2c)}</span></div><div className={`h-1.5 rounded ${track}`}><div className="h-full rounded bg-gradient-to-r from-emerald-500 to-lime-500" style={{ width: `${Math.round(c2c / fundMax * 100)}%` }} /></div></div>
-            <div><div className="flex justify-between mb-1"><span className={muted}>C2 pending</span><span className="font-semibold">{money(c2p)}</span></div><div className={`h-1.5 rounded ${track}`}><div className="h-full rounded bg-gradient-to-r from-amber-500 to-yellow-500" style={{ width: `${Math.round(c2p / fundMax * 100)}%` }} /></div></div>
-          </div>
-        </div>
-
-        <div className={`rounded-2xl border p-5 ${card}`}>
-          <div className={`flex items-center gap-2 text-sm mb-3 ${muted}`}><Building2 className="w-4 h-4" /> Portfolio</div>
-          <div className="text-3xl font-bold">{schools.length}</div>
-          <div className={`text-xs ${muted}`}>Schools under management</div>
-          <div className="mt-4 space-y-2 text-sm">
-            <div className="flex justify-between"><span className={muted}>Applications (FY{year})</span><span className="font-semibold">{totalApps}</span></div>
-            <div className="flex justify-between"><span className={muted}>Funded apps</span><span className="font-semibold">{funded}</span></div>
-            <div className="flex justify-between"><span className={muted}>Schools with denials</span><span className="font-semibold">{stats?.schools_with_denials ?? 0}</span></div>
-          </div>
-        </div>
-      </div>
-
-      {/* Middle row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
-        <div className={`rounded-2xl border p-5 ${card}`}>
-          <div className="flex items-center justify-between mb-3"><div><div className="font-semibold">Needs your attention</div><div className={`text-xs ${muted}`}>Ranked by risk</div></div><Bell className={`w-4 h-4 ${faint}`} /></div>
-          {attention.length > 0 ? (
-            <div className="space-y-2">{attention.map((a) => (
-              <div key={a.key} className={`flex items-center gap-3 rounded-xl border p-3 ${softRow}`}>
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${toneCls(a.tone)}`}>{a.tone === "red" ? <Scale className="w-4 h-4" /> : a.tone === "amber" ? <FileText className="w-4 h-4" /> : <Activity className="w-4 h-4" />}</div>
-                <div className="flex-1 min-w-0"><div className="font-medium truncate text-sm">{a.label}</div><div className={`text-xs truncate ${muted}`}>{a.sub}</div></div>
-                <button onClick={() => onTab(a.tab)} className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors shrink-0 ${dark ? "bg-slate-700 hover:bg-slate-600 text-slate-100" : "bg-slate-200 hover:bg-slate-300 text-slate-800"}`}>Open</button>
-              </div>
-            ))}</div>
-          ) : (<div className={`text-sm py-8 text-center ${faint}`}>{statsLoading ? "Loading…" : "You're all caught up."}</div>)}
-        </div>
-
-        <div className={`rounded-2xl border p-5 ${card}`}>
-          <div className="flex items-center justify-between mb-3"><div><div className="font-semibold">Recent activity</div><div className={`text-xs ${muted}`}>Latest FRN status changes</div></div><button onClick={() => onTab("frn-status")} className={`text-xs font-medium ${link}`}>View FRNs →</button></div>
-          {activityLoading ? (<div className={`text-sm py-8 text-center ${faint}`}>Loading activity…</div>) : activity.length > 0 ? (
-            <div className="space-y-1.5">{activity.slice(0, 6).map((a) => {
-              const ns = (a.new_status || "").toLowerCase();
-              const dot = ns.includes("denied") ? "bg-red-500" : (ns.includes("funded") || ns.includes("committed")) ? "bg-emerald-500" : (ns.includes("pending") || ns.includes("review")) ? "bg-amber-500" : "bg-slate-400";
-              return (<div key={a.id} className={`flex items-start gap-3 rounded-xl px-3 py-2 ${rowHover}`}>
-                <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${dot}`} />
-                <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{a.entity_name || `BEN ${a.ben || "—"}`}</div><div className={`text-xs truncate ${muted}`}>{a.new_status || "Updated"}{typeof a.new_amount === "number" && a.new_amount > 0 ? ` · $${a.new_amount.toLocaleString()}` : ""}</div></div>
-                <span className={`text-xs shrink-0 whitespace-nowrap ${faint}`}>{formatTime(a.status_change_date || a.created_at || null)}</span>
-              </div>);
-            })}</div>
-          ) : (<div className={`text-sm py-8 text-center ${faint}`}>No recent status changes yet.</div>)}
-        </div>
-      </div>
-
-      {/* Top schools */}
-      {schools.length > 0 && (
-        <div className={`rounded-2xl border p-5 mt-5 ${card}`}>
-          <div className="flex items-center justify-between mb-3"><div><div className="font-semibold">Top schools by E-Rate funding</div><div className={`text-xs ${muted}`}>Your highest-value relationships</div></div><button onClick={() => onTab("schools")} className={`text-xs font-medium ${link}`}>View all →</button></div>
-          <div className="space-y-1.5">{[...schools].sort((a, b) => (b.total_funding_committed || 0) - (a.total_funding_committed || 0)).slice(0, 5).map((s, i) => (
-            <button key={s.id} onClick={() => onOpenSchool(s)} className={`w-full text-left flex items-center gap-3 rounded-xl px-3 py-2 transition-colors ${rowHover}`}>
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${dark ? "bg-gradient-to-br from-purple-500/30 to-pink-500/20 text-purple-200" : "bg-gradient-to-br from-purple-100 to-pink-100 text-purple-600"}`}>{i + 1}</div>
-              <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{s.school_name || s.name || `BEN ${s.ben}`}</div><div className={`text-xs ${muted}`}>{s.state || "Unknown"} · {s.entity_type || "School"}</div></div>
-              <div className={`text-sm font-semibold ${dark ? "text-emerald-400" : "text-emerald-600"}`}>{money(s.total_funding_committed || 0)}</div>
-            </button>
-          ))}</div>
-        </div>
-      )}
-
-      {/* Quick actions */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
-        {([
-          { label: "Add school", icon: <Plus className="w-5 h-5" />, fn: onAddSchool },
-          { label: "FRN status", icon: <Activity className="w-5 h-5" />, fn: () => onTab("frn-status") },
-          { label: "Appeals", icon: <Scale className="w-5 h-5" />, fn: () => onTab("appeals") },
-          { label: "Service search", icon: <Search className="w-5 h-5" />, fn: () => onTab("service-search") },
-        ]).map((a) => (
-          <button key={a.label} onClick={a.fn} className={`rounded-2xl border p-4 flex flex-col items-center gap-2 transition-all ${qaBtn}`}>
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${qaIcon}`}>{a.icon}</div><span className="text-sm font-medium">{a.label}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export default function ConsultantPortalWrapper() {
   return (
     <Suspense fallback={
@@ -520,23 +323,6 @@ function ConsultantPortalPage() {
   const [newBen, setNewBen] = useState("");
   const [newNotes, setNewNotes] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  // Dark / light theme for the whole consultant portal shell. On first load we
-  // honor the visitor's OS preference (prefers-color-scheme); once they toggle,
-  // that explicit choice is remembered per-browser and wins over the OS setting.
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const saved = localStorage.getItem("consultant_theme");
-    if (saved === "light" || saved === "dark") { setTheme(saved); return; }
-    // No saved choice yet -> follow the operating system / browser preference.
-    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) setTheme("light");
-  }, []);
-  const toggleTheme = () => setTheme((p) => {
-    const next = p === "dark" ? "light" : "dark";
-    try { localStorage.setItem("consultant_theme", next); } catch { /* ignore */ }
-    return next;
-  });
-  const dark = theme === "dark";
   const [isRefreshingSchools, setIsRefreshingSchools] = useState(false);
   // Bug C fix 2026-06-08: track add-school state so the modal shows feedback.
   const [isAddingSchool, setIsAddingSchool] = useState(false);
@@ -1656,9 +1442,6 @@ function ConsultantPortalPage() {
   };
 
   const handleAddNewCRN = async () => {
-    // Re-entry guard: prevents double-submit (rapid button clicks or repeated
-    // Enter key presses) from firing multiple /crns/add requests in flight.
-    if (addingCrn) return;
     const crn = newCrnInput.trim();
     if (!crn) {
       setAddCrnError("Please enter a CRN number");
@@ -2505,137 +2288,136 @@ function ConsultantPortalPage() {
   // and each tab handles its own skeleton/"..." placeholders (see isLoadingStats,
   // dashboardStats?, etc. below).
 
-  const navGroups: { label: string; items: { id: ConsultantTab; label: string; Icon: typeof Home }[] }[] = [
-    { label: "Overview", items: [
-      { id: "dashboard", label: "Dashboard", Icon: Home },
-    ]},
-    { label: "Portfolio", items: [
-      { id: "schools", label: "My Schools", Icon: Building2 },
-      { id: "funding", label: "Funding Data", Icon: Coins },
-    ]},
-    { label: "Filings & Compliance", items: [
-      { id: "frn-status", label: "FRN Status", Icon: Activity },
-      { id: "appeals", label: "Appeals", Icon: Scale },
-      { id: "pia", label: "PIA Assistant", Icon: Shield },
-    ]},
-    { label: "Intelligence", items: [
-      { id: "service-search", label: "Service Search", Icon: Search },
-    ]},
+  const navItems = [
+    { id: "dashboard", label: "Dashboard", icon: "📊" },
+    { id: "schools", label: "My Schools", icon: "🏫" },
+    { id: "funding", label: "Funding Data", icon: "💰" },
+    { id: "frn-status", label: "FRN Status", icon: "📈" },
+    { id: "appeals", label: "Appeals", icon: "📋" },
+    { id: "pia", label: "PIA Assistant", icon: "🛡️" },
+    { id: "service-search", label: "Service Search", icon: "🔍" },
     // Settings is account-level (profile + CRN) and owner-only. Hide for seats.
-    ...(isSeat ? [] : [{ label: "Account", items: [{ id: "settings" as ConsultantTab, label: "Settings", Icon: SettingsIcon }] }]),
+    ...(isSeat ? [] : [{ id: "settings", label: "Settings", icon: "⚙️" }]),
   ];
-  const allNav = navGroups.flatMap((g) => g.items);
-  const activeLabel = allNav.find((i) => i.id === activeTab)?.label || "Dashboard";
-
-  // Theme-aware shell class fragments
-  const shellSide = dark ? "bg-[#0f1020] border-slate-800" : "bg-white border-slate-200";
-  const shellMain = dark ? "bg-[#0a0b15]" : "bg-slate-50";
-  const shellTop = dark ? "bg-[#0c0d1a] border-slate-800" : "bg-white border-slate-200";
-  const groupLabelCls = dark ? "text-slate-500" : "text-slate-400";
-  const railText = dark ? "text-slate-300" : "text-slate-600";
-  const railHover = dark ? "hover:bg-slate-800/60 hover:text-white" : "hover:bg-slate-50 hover:text-slate-900";
-  const railActive = dark ? "bg-gradient-to-r from-purple-500/20 to-pink-500/10 text-white" : "bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700";
-  const iconBtnCls = dark ? "border-slate-700 text-slate-300 hover:border-purple-500 hover:text-white" : "border-slate-200 text-slate-600 hover:bg-slate-100";
-  const crumbInk = dark ? "text-slate-100" : "text-slate-900";
-  const crumbFaint = dark ? "text-slate-500" : "text-slate-400";
-  const searchCls = dark ? "bg-slate-900 border-slate-700 text-slate-400" : "bg-slate-50 border-slate-200 text-slate-500";
 
   return (
-    <div className={`min-h-screen ${shellMain}`}>
+    <div className="min-h-screen bg-slate-50">
       {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 border-r transform transition-transform duration-200 ease-in-out ${shellSide} ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 flex flex-col`}>
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transform transition-transform duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
         {/* Logo */}
-        <div className={`h-16 flex items-center gap-3 px-5 border-b ${dark ? 'border-slate-800' : 'border-slate-200'}`}>
+        <div className="h-16 flex items-center gap-3 px-6 border-b border-slate-200">
           <Link href="/" className="flex items-center gap-3">
             <img src="/images/logos/logo-icon-transparent.png" alt="SkyRate AI" width={36} height={36} className="rounded-lg" />
             <div>
-              <span className={`font-bold ${crumbInk}`}>SkyRate AI</span>
-              <span className={`block text-xs ${dark ? 'text-slate-500' : 'text-slate-500'}`}>
+              <span className="font-bold text-slate-900">SkyRate AI</span>
+              <span className="block text-xs text-slate-500">
                 Consultant Portal{(user?.role === 'super' || user?.role === 'admin') ? ` (${user.role})` : ''}
               </span>
             </div>
           </Link>
         </div>
 
-        {/* Grouped navigation */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4">
-          {navGroups.map((group) => (
-            <div key={group.label} className="mb-4">
-              <div className={`px-3 pb-1.5 text-[10.5px] font-bold uppercase tracking-wider ${groupLabelCls}`}>{group.label}</div>
-              {group.items.map((item) => {
-                const active = activeTab === item.id;
-                const Ico = item.Icon;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => { setActiveTab(item.id); setSidebarOpen(false); }}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all mb-0.5 ${active ? `${railActive} font-medium` : `${railText} ${railHover}`}`}
-                  >
-                    <Ico className="w-[18px] h-[18px]" />
-                    <span className="text-sm">{item.label}</span>
-                    {active && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-purple-500" />}
-                  </button>
-                );
-              })}
-              {group.label === 'Filings & Compliance' && (
-                <Link href="/compliance" className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all mb-0.5 ${railText} ${railHover}`}>
-                  <BadgeCheck className="w-[18px] h-[18px]" />
-                  <span className="text-sm">Compliance</span>
-                  <span className="ml-auto text-[10px] font-bold uppercase tracking-wide text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded">Beta</span>
-                </Link>
+        {/* Navigation */}
+        <nav className="p-4 space-y-1">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => { setActiveTab(item.id as ConsultantTab); setSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${
+                activeTab === item.id
+                  ? "bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700 font-medium shadow-sm"
+                  : "text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <span className="text-xl">{item.icon}</span>
+              <span>{item.label}</span>
+              {activeTab === item.id && (
+                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-purple-600"></span>
               )}
-              {group.label === 'Intelligence' && (
-                <Link href="/industry-pulse" className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all mb-0.5 ${railText} ${railHover}`}>
-                  <BarChart3 className="w-[18px] h-[18px]" />
-                  <span className="text-sm">Industry Pulse</span>
-                </Link>
-              )}
-            </div>
+            </button>
           ))}
 
-          {/* Portal Switcher (super/admin only) */}
-          {(user?.role === 'super' || user?.role === 'admin') && (
-            <div className="mb-2">
-              <div className={`px-3 pb-1.5 text-[10.5px] font-bold uppercase tracking-wider ${groupLabelCls}`}>Switch Portal</div>
-              <Link href="/vendor" className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all mb-0.5 ${railText} ${railHover}`}>
-                <TrendingUp className="w-[18px] h-[18px]" /><span className="text-sm">Vendor Portal</span>
-                <ChevronRight className="w-4 h-4 ml-auto opacity-50" />
-              </Link>
-              <Link href="/super" className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all mb-0.5 ${railText} ${railHover}`}>
-                <BadgeCheck className="w-[18px] h-[18px]" /><span className="text-sm">Super Dashboard</span>
-                <ChevronRight className="w-4 h-4 ml-auto opacity-50" />
-              </Link>
-            </div>
-          )}
+          {/* Compliance tool link */}
+          <Link
+            href="/compliance"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all text-slate-600 hover:bg-slate-50"
+          >
+            <span className="text-xl">🛡️</span>
+            <span>Compliance</span>
+            <span className="ml-auto text-[10px] font-bold uppercase tracking-wide text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded">Beta</span>
+          </Link>
+
+          {/* Industry Pulse link */}
+          <Link
+            href="/industry-pulse"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all text-slate-600 hover:bg-slate-50"
+          >
+            <span className="text-xl">📊</span>
+            <span>Industry Pulse</span>
+          </Link>
         </nav>
 
-        {/* Pinned footer: plan card + profile */}
-        <div className={`border-t p-3 ${dark ? 'border-slate-800' : 'border-slate-200'}`}>
-          <div className="rounded-2xl p-3 mb-2 bg-gradient-to-br from-purple-600 to-pink-600 text-white">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium opacity-90">
+        {/* Portal Switcher (super/admin only) */}
+        {(user?.role === 'super' || user?.role === 'admin') && (
+          <div className="px-4 pb-3">
+            <div className="border-t border-slate-200 pt-3">
+              <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold px-4 mb-2">Switch Portal</p>
+              <Link
+                href="/vendor"
+                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-slate-600 hover:bg-purple-50 hover:text-purple-700 transition-all text-sm"
+              >
+                <span className="text-lg">🎯</span>
+                <span>Vendor Portal</span>
+                <svg className="w-4 h-4 ml-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </Link>
+              <Link
+                href="/super"
+                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-slate-600 hover:bg-yellow-50 hover:text-yellow-700 transition-all text-sm"
+              >
+                <span className="text-lg">⭐</span>
+                <span>Super Dashboard</span>
+                <svg className="w-4 h-4 ml-auto text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* Subscription Card */}
+        <div className="absolute bottom-20 left-4 right-4">
+          <div className="bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl p-4 text-white">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium opacity-90">
                 {user?.role === 'super' || user?.role === 'admin' ? 'Full Access' : 'Pro Plan'}
               </span>
-              <span className="px-2 py-0.5 bg-white/20 rounded-full text-[10px] font-semibold">
-                {user?.role === 'super' ? 'Super' : user?.role === 'admin' ? 'Admin' : 'Active'}
+              <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs">
+                {user?.role === 'super' ? '⭐ Super' : user?.role === 'admin' ? '🔑 Admin' : 'Active'}
               </span>
             </div>
-            <div className="text-lg font-bold mt-0.5">{schools.length} Schools</div>
+            <div className="text-2xl font-bold">{schools.length} Schools</div>
+            <div className="text-sm opacity-75 mt-1">
+              {user?.role === 'super' || user?.role === 'admin' ? 'Full platform access' : 'Unlimited access'}
+            </div>
           </div>
-          <div className="flex items-center gap-2.5 px-1">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center text-white font-semibold shrink-0">
+        </div>
+
+        {/* User Profile */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200 bg-white">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center text-purple-700 font-semibold">
               {user?.first_name?.[0] || user?.email?.[0]?.toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <div className={`text-sm font-medium truncate ${crumbInk}`}>{user?.full_name || user?.email}</div>
-              <div className={`text-xs truncate ${dark ? 'text-slate-500' : 'text-slate-500'}`}>{profile?.company_name}</div>
+              <div className="font-medium text-slate-900 truncate">{user?.full_name || user?.email}</div>
+              <div className="text-xs text-slate-500 truncate">{profile?.company_name}</div>
             </div>
             <button
               onClick={handleLogout}
+              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
               title="Logout"
-              className={`p-2 rounded-lg transition-colors ${dark ? 'text-slate-400 hover:text-red-400 hover:bg-red-500/10' : 'text-slate-400 hover:text-red-500 hover:bg-red-50'}`}
             >
-              <LogOut className="w-[18px] h-[18px]" />
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
             </button>
           </div>
         </div>
@@ -2649,57 +2431,47 @@ function ConsultantPortalPage() {
       {/* Main Content */}
       <main className="lg:ml-64">
         {/* Top Bar */}
-        <header className={`h-16 border-b flex items-center justify-between px-5 sticky top-0 z-40 ${shellTop}`}>
-          <div className="flex items-center gap-3 min-w-0">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 sticky top-0 z-40">
+          <div className="flex items-center gap-4">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className={`lg:hidden w-9 h-9 rounded-lg border flex items-center justify-center ${iconBtnCls}`}
+              className="lg:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg"
             >
-              <PanelLeft className="w-5 h-5" />
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
             </button>
-            <div className="text-sm truncate">
-              <span className={crumbFaint}>SkyRate AI</span>
-              <span className={`mx-1.5 ${crumbFaint}`}>·</span>
-              <span className={`font-semibold ${crumbInk}`}>{activeLabel}</span>
-            </div>
+            <h1 className="text-xl font-semibold text-slate-900">
+              {navItems.find(i => i.id === activeTab)?.label}
+            </h1>
           </div>
-          <div className="flex items-center gap-2">
-            <div className={`hidden md:flex items-center gap-2 rounded-lg border px-3 py-2 text-sm w-56 ${searchCls}`}>
-              <Search className="w-4 h-4" />
-              <span className="flex-1 truncate">Search or jump to…</span>
-            </div>
+          <div className="flex items-center gap-3">
+            {/* Persistent portal switcher (super/admin) — mirrors the vendor
+                portal so both views always expose a way to switch (#14). */}
             {(user?.role === 'super' || user?.role === 'admin') && (
               <Link
                 href="/vendor"
                 title="Switch to the Vendor portal"
-                className={`hidden lg:flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors text-sm font-medium ${dark ? 'border-purple-500/40 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100'}`}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors text-sm font-medium"
               >
-                <TrendingUp className="w-4 h-4" />
-                <span className="hidden xl:inline">Vendor</span>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 9l3 3m0 0l-3 3m3-3H8m13 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span className="hidden sm:inline">Vendor</span>
               </Link>
             )}
-            <button
-              onClick={toggleTheme}
-              title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
-              className={`w-9 h-9 rounded-lg border flex items-center justify-center ${iconBtnCls}`}
-            >
-              {dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
-            <button className={`w-9 h-9 rounded-lg border flex items-center justify-center relative ${iconBtnCls}`} title="Notifications">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full"></span>
-            </button>
-            <button className={`hidden sm:flex w-9 h-9 rounded-lg border items-center justify-center ${iconBtnCls}`} title="Help">
-              <HelpCircle className="w-5 h-5" />
+            <button className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg relative">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
             </button>
             <button
               onClick={() => { loadData(); loadDashboardStats(); loadRecentActivity(); }}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${dark ? 'bg-slate-800 hover:bg-slate-700 text-slate-200' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
             >
               <svg className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              <span className="hidden sm:inline">Refresh</span>
+              Refresh
             </button>
           </div>
         </header>
@@ -2746,21 +2518,376 @@ function ConsultantPortalPage() {
         {/* Page Content */}
         <div className="p-6">
           {activeTab === "dashboard" && (
-            <ConsultantCommandCenter
-              profile={profile}
-              stats={dashboardStats}
-              schools={schools}
-              activity={recentActivity}
-              statsLoading={isLoadingStats}
-              activityLoading={isLoadingActivity}
-              year={dashboardYear}
-              setYear={setDashboardYear}
-              dark={dark}
-              onTab={setActiveTab}
-              onAddSchool={() => setShowAddSchool(true)}
-              onOpenSchool={openSchoolDetail}
-              formatTime={formatActivityTime}
-            />
+            <div className="space-y-6">
+              {/* Hero Banner */}
+              <div className="bg-gradient-to-r from-purple-600 via-purple-700 to-pink-600 rounded-2xl p-6 text-white shadow-lg">
+                <div className="flex items-start justify-between flex-wrap gap-3">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
+                      <span className="text-3xl">📋</span>
+                    </div>
+                    <div>
+                      <h1 className="text-2xl font-bold">{profile?.company_name || 'My Consulting Firm'}</h1>
+                      <div className="flex items-center gap-3 mt-1 text-purple-100">
+                        {profile?.crn && (
+                          <span className="font-mono bg-white/20 px-2 py-0.5 rounded text-sm">CRN: {profile.crn}</span>
+                        )}
+                        <span className="flex items-center gap-1 text-sm">
+                          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                          E-Rate Consultant
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="dashboard-year" className="text-sm text-purple-100 font-medium">Funding Year:</label>
+                    <select
+                      id="dashboard-year"
+                      value={dashboardYear}
+                      onChange={(e) => setDashboardYear(parseInt(e.target.value, 10))}
+                      className="bg-white/20 hover:bg-white/30 border border-white/30 rounded-lg px-3 py-1.5 text-sm font-semibold text-white backdrop-blur cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/40"
+                    >
+                      {(() => {
+                        const currentYear = new Date().getFullYear();
+                        const years: number[] = [];
+                        for (let y = currentYear + 1; y >= currentYear - 6; y--) years.push(y);
+                        return years.map((y) => (
+                          <option key={y} value={y} className="text-slate-900">FY{y}</option>
+                        ));
+                      })()}
+                    </select>
+                    <button
+                      onClick={() => setActiveTab("schools")}
+                      className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
+                    >
+                      View All Schools →
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-6 mt-6 pt-6 border-t border-white/20">
+                  <div>
+                    <div className="text-3xl font-bold">{schools.length}</div>
+                    <div className="text-sm text-purple-200 mt-1">Total Schools</div>
+                  </div>
+                  <div>
+                    <div className="text-3xl font-bold">
+                      {isLoadingStats ? '...' : (dashboardStats?.total_applications || 0)}
+                    </div>
+                    <div className="text-sm text-purple-200 mt-1">FY{dashboardYear} Applications</div>
+                    {prevYearStats && !isLoadingStats && (
+                      <div className="text-xs text-purple-200/80 mt-0.5">
+                        {(() => {
+                          const delta = (dashboardStats?.total_applications || 0) - (prevYearStats.total_applications || 0);
+                          const sign = delta > 0 ? '+' : '';
+                          const color = delta > 0 ? 'text-green-300' : delta < 0 ? 'text-red-300' : 'text-purple-200/80';
+                          return <span className={color}>{sign}{delta} vs FY{dashboardYear - 1}</span>;
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-3xl font-bold">
+                      {isLoadingStats ? '...' : `${dashboardStats?.funded_count || 0}`}
+                    </div>
+                    <div className="text-sm text-purple-200 mt-1">Funded Apps</div>
+                  </div>
+                  <div>
+                    <div className="text-3xl font-bold">
+                      {isLoadingStats ? '...' : dashboardStats ? `$${(dashboardStats.total_c1_funding / 1000000).toFixed(1)}M` : '$0'}
+                    </div>
+                    <div className="text-sm text-purple-200 mt-1">C1 Funded (FY{dashboardYear})</div>
+                  </div>
+                  <div>
+                    <div className="text-3xl font-bold">
+                      {isLoadingStats ? '...' : dashboardStats ? `$${(dashboardStats.total_c2_funding / 1000000).toFixed(1)}M` : '$0'}
+                    </div>
+                    <div className="text-sm text-purple-200 mt-1">C2 Budget (5-yr)</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
+                      <span className="text-xl">🏫</span>
+                    </div>
+                    <span className="text-[10px] text-green-600 font-medium px-2 py-0.5 bg-green-50 rounded-full">{schools.length} total</span>
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900">{schools.length}</div>
+                  <div className="text-sm text-slate-500 mt-1">Total Schools</div>
+                </div>
+
+                <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                      <span className="text-xl">📡</span>
+                    </div>
+                    {isLoadingStats ? (
+                      <span className="text-[10px] text-slate-400 font-medium px-2 py-0.5 bg-slate-50 rounded-full">Loading...</span>
+                    ) : (
+                      <span className="text-[10px] text-blue-600 font-medium px-2 py-0.5 bg-blue-50 rounded-full">C1 · FY{dashboardYear}</span>
+                    )}
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900">
+                    {isLoadingStats ? (
+                      <span className="text-slate-400">...</span>
+                    ) : dashboardStats ? (
+                      `$${(dashboardStats.total_c1_funding / 1000000).toFixed(2)}M`
+                    ) : (
+                      "$0"
+                    )}
+                  </div>
+                  <div className="text-sm text-slate-500 mt-1">Category 1 Funded</div>
+                  {prevYearStats && !isLoadingStats && (
+                    <div className="text-xs text-slate-400 mt-1">
+                      {(() => {
+                        const delta = (dashboardStats?.total_c1_funding || 0) - (prevYearStats.total_c1_funding || 0);
+                        const sign = delta > 0 ? '+' : '';
+                        const color = delta > 0 ? 'text-green-600' : delta < 0 ? 'text-red-600' : 'text-slate-400';
+                        return <span className={color}>{sign}${(delta / 1000000).toFixed(2)}M vs FY{dashboardYear - 1}</span>;
+                      })()}
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+                      <span className="text-xl">💰</span>
+                    </div>
+                    {isLoadingStats ? (
+                      <span className="text-[10px] text-slate-400 font-medium px-2 py-0.5 bg-slate-50 rounded-full">Loading...</span>
+                    ) : (
+                      <span className="text-[10px] text-green-600 font-medium px-2 py-0.5 bg-green-50 rounded-full">
+                        C2 · {dashboardStats?.c2_budget_cycle || '5-yr cycle'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900">
+                    {isLoadingStats ? (
+                      <span className="text-slate-400">...</span>
+                    ) : dashboardStats ? (
+                      `$${((dashboardStats.total_c2_committed ?? dashboardStats.total_c2_funding) / 1000000).toFixed(2)}M`
+                    ) : (
+                      "$0"
+                    )}
+                  </div>
+                  <div className="text-sm text-slate-500 mt-1">Category 2 Committed</div>
+                  {!isLoadingStats && dashboardStats && (dashboardStats.total_c2_budget_5yr || 0) > 0 && (
+                    <>
+                      <div className="text-xs text-slate-500 mt-2">
+                        <span className="font-semibold text-green-700">${(dashboardStats.total_c2_available / 1000000).toFixed(2)}M</span>
+                        {' '}left of ${(dashboardStats.total_c2_budget_5yr / 1000000).toFixed(2)}M 5-yr budget
+                      </div>
+                      {(() => {
+                        const used = dashboardStats.total_c2_budget_5yr > 0
+                          ? Math.min(100, Math.max(0, (dashboardStats.total_c2_committed / dashboardStats.total_c2_budget_5yr) * 100))
+                          : 0;
+                        return (
+                          <div className="mt-1.5">
+                            <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                              <div className="h-full rounded-full bg-green-500" style={{ width: `${used}%` }} />
+                            </div>
+                            <div className="text-[11px] text-slate-400 mt-1">{used.toFixed(0)}% of 5-yr budget committed</div>
+                          </div>
+                        );
+                      })()}
+                    </>
+                  )}
+                </div>
+                
+                <div 
+                  className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer hover:border-red-300"
+                  onClick={() => setActiveTab("appeals")}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
+                      <span className="text-xl">⚠️</span>
+                    </div>
+                    {isLoadingStats ? (
+                      <span className="text-[10px] text-slate-400 font-medium px-2 py-0.5 bg-slate-50 rounded-full">Loading...</span>
+                    ) : dashboardStats && dashboardStats.schools_with_denials > 0 ? (
+                      <span className="text-[10px] text-red-600 font-medium px-2 py-0.5 bg-red-50 rounded-full">Action needed</span>
+                    ) : (
+                      <span className="text-[10px] text-green-600 font-medium px-2 py-0.5 bg-green-50 rounded-full">All clear</span>
+                    )}
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900">
+                    {isLoadingStats ? "..." : (dashboardStats?.schools_with_denials || 0)}
+                  </div>
+                  <div className="text-sm text-slate-500 mt-1">Schools with Denials</div>
+                </div>
+                
+                <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
+                      <span className="text-xl">📊</span>
+                    </div>
+                    {isLoadingStats ? (
+                      <span className="text-[10px] text-slate-400 font-medium px-2 py-0.5 bg-slate-50 rounded-full">Loading...</span>
+                    ) : (
+                      <span className="text-[10px] text-indigo-600 font-medium px-2 py-0.5 bg-indigo-50 rounded-full">FY{dashboardYear} · {dashboardStats?.funded_count || 0} funded</span>
+                    )}
+                  </div>
+                  <div className="text-2xl font-bold text-slate-900">
+                    {isLoadingStats ? "..." : (dashboardStats?.total_applications || 0)}
+                  </div>
+                  <div className="text-sm text-slate-500 mt-1">FY{dashboardYear} Applications</div>
+                  {prevYearStats && !isLoadingStats && (
+                    <div className="text-xs text-slate-400 mt-1">
+                      {(() => {
+                        const delta = (dashboardStats?.total_applications || 0) - (prevYearStats.total_applications || 0);
+                        const sign = delta > 0 ? '+' : '';
+                        const color = delta > 0 ? 'text-green-600' : delta < 0 ? 'text-red-600' : 'text-slate-400';
+                        return <span className={color}>{sign}{delta} vs FY{dashboardYear - 1}</span>;
+                      })()}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Recent Activity */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900">Recent Activity</h2>
+                    <p className="text-sm text-slate-500">Latest FRN status changes across your portfolio</p>
+                  </div>
+                  <button onClick={() => setActiveTab("frn-status")} className="text-sm text-purple-600 hover:underline font-medium">View FRNs →</button>
+                </div>
+                {isLoadingActivity ? (
+                  <div className="p-6 text-sm text-slate-400">Loading activity…</div>
+                ) : recentActivity.length > 0 ? (
+                  <div className="divide-y divide-slate-100">
+                    {recentActivity.map((a) => {
+                      const newStatus = (a.new_status || '').toLowerCase();
+                      const dot = newStatus.includes('denied') ? 'bg-red-500'
+                        : (newStatus.includes('funded') || newStatus.includes('committed')) ? 'bg-green-500'
+                        : (newStatus.includes('pending') || newStatus.includes('review')) ? 'bg-yellow-500'
+                        : 'bg-slate-400';
+                      const statusChanged = !!a.old_status && a.old_status !== a.new_status;
+                      return (
+                        <div key={a.id} className="p-4 flex items-start gap-3 hover:bg-slate-50 transition-colors">
+                          <span className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${dot}`}></span>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm text-slate-900 truncate">
+                              <span className="font-medium">{a.entity_name || `BEN ${a.ben || '—'}`}</span>
+                              <span className="text-slate-300"> • </span>
+                              <span className="font-mono text-xs text-slate-500">FRN {a.frn}</span>
+                            </div>
+                            <div className="text-xs text-slate-600 mt-0.5">
+                              {statusChanged ? (
+                                <>Status: {a.old_status} → <span className="font-medium text-slate-800">{a.new_status}</span></>
+                              ) : (
+                                <>Status: <span className="font-medium text-slate-800">{a.new_status || 'Updated'}</span></>
+                              )}
+                              {typeof a.new_amount === 'number' && a.new_amount > 0 && (
+                                <span className="text-slate-500"> · ${a.new_amount.toLocaleString()}</span>
+                              )}
+                            </div>
+                          </div>
+                          <span className="text-xs text-slate-400 flex-shrink-0 whitespace-nowrap">{formatActivityTime(a.status_change_date || a.created_at)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-8 text-center">
+                    <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3 text-xl">🔔</div>
+                    <p className="text-sm text-slate-500">No recent status changes yet. FRN updates will appear here as USAC processes your applications.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Quick Actions */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                <h2 className="text-lg font-semibold text-slate-900 mb-4">Quick Actions</h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <button
+                    onClick={() => setShowAddSchool(true)}
+                    className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-purple-300 hover:bg-purple-50 transition-all text-center group"
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-purple-100 group-hover:bg-purple-200 flex items-center justify-center mx-auto mb-2 transition-colors">
+                      <span className="text-xl">➕</span>
+                    </div>
+                    <span className="text-sm font-medium text-slate-700">Add School</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("funding")}
+                    className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-green-300 hover:bg-green-50 transition-all text-center group"
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-green-100 group-hover:bg-green-200 flex items-center justify-center mx-auto mb-2 transition-colors">
+                      <span className="text-xl">🔍</span>
+                    </div>
+                    <span className="text-sm font-medium text-slate-700">Query Data</span>
+                  </button>
+                  <button className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-amber-300 hover:bg-amber-50 transition-all text-center group">
+                    <div className="w-10 h-10 rounded-lg bg-amber-100 group-hover:bg-amber-200 flex items-center justify-center mx-auto mb-2 transition-colors">
+                      <span className="text-xl">📤</span>
+                    </div>
+                    <span className="text-sm font-medium text-slate-700">Export Report</span>
+                  </button>
+                  <Link
+                    href="/settings/notifications"
+                    className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-rose-300 hover:bg-rose-50 transition-all text-center group block"
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-rose-100 group-hover:bg-rose-200 flex items-center justify-center mx-auto mb-2 transition-colors">
+                      <span className="text-xl">🔔</span>
+                    </div>
+                    <span className="text-sm font-medium text-slate-700">Notifications</span>
+                  </Link>
+                </div>
+              </div>
+
+              {/* Top Schools by Funding */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900">Top Schools by E-Rate Funding</h2>
+                    <p className="text-sm text-slate-500">Your highest-value school relationships</p>
+                  </div>
+                  <button onClick={() => setActiveTab("schools")} className="text-sm text-purple-600 hover:underline font-medium">View All →</button>
+                </div>
+                {schools.length > 0 ? (
+                  <div className="divide-y divide-slate-100">
+                    {schools.slice(0, 5).map((school, idx) => {
+                      const statusColors: Record<string, string> = {
+                        'Funded': 'bg-green-100 text-green-700',
+                        'Has Denials': 'bg-red-100 text-red-700',
+                        'Pending': 'bg-yellow-100 text-yellow-700',
+                        'Active': 'bg-green-100 text-green-700',
+                      };
+                      const statusColor = statusColors[school.status || ''] || 'bg-slate-100 text-slate-600';
+                      return (
+                        <div key={school.id} className="p-4 flex items-center gap-4 hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => openSchoolDetail(school)}>
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center font-bold text-purple-600">
+                            {idx + 1}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-slate-900 truncate">{school.school_name || school.name || `BEN ${school.ben}`}</div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-xs text-slate-500">{school.state || 'Unknown'}</span>
+                              <span className="text-slate-300">•</span>
+                              <span className="text-xs text-slate-500">{school.entity_type || 'School'}</span>
+                            </div>
+                          </div>
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusColor}`}>{school.status || 'Unknown'}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-12 text-center">
+                    <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">🏫</div>
+                    <h3 className="font-medium text-slate-900 mb-1">No schools yet</h3>
+                    <p className="text-sm text-slate-500 mb-4">Add your first school to get started</p>
+                    <button onClick={() => setShowAddSchool(true)} className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">Add School</button>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           {activeTab === "schools" && (
@@ -4147,7 +4274,7 @@ function ConsultantPortalPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-sm text-slate-600 mb-1 block">Pending Reason</label>
+                    <label className="text-sm text-slate-600 mb-1 flex items-center gap-1">Pending Reason <FrnSubStatusInfo /></label>
                     <input
                       type="text"
                       value={portfolioFrnPendingReason}
@@ -5113,7 +5240,7 @@ function ConsultantPortalPage() {
                         placeholder="Enter CRN (e.g., 17026509)"
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono uppercase mb-3"
                         autoFocus
-                        onKeyDown={(e) => e.key === 'Enter' && !addingCrn && handleAddNewCRN()}
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddNewCRN()}
                       />
                       
                       {addCrnError && (
