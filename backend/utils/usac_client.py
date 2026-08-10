@@ -800,6 +800,7 @@ class USACDataClient:
         # Aggregate by unique entities
         entities = {}
         years = set()
+        by_year_totals = {}  # portfolio-wide funding + FRN count per year
         total_amount = 0
         
         for _, record in df.iterrows():
@@ -817,6 +818,10 @@ class USACDataClient:
             # Skip invalid year values
             if year_val and str(year_val) not in ['nan', 'None', '']:
                 years.add(str(year_val))
+                _ys = str(year_val)
+                _yb = by_year_totals.setdefault(_ys, {'total': 0, 'frn_count': 0})
+                _yb['total'] += amount
+                _yb['frn_count'] += 1
             total_amount += amount
             
             if ben not in entities:
@@ -894,6 +899,11 @@ class USACDataClient:
             'total_entities': len(entity_list),
             'total_authorized': total_amount,
             'funding_years': sorted(valid_years, reverse=True),
+            'by_year': [
+                {'year': y, 'total': by_year_totals[y]['total'], 'frn_count': by_year_totals[y]['frn_count']}
+                for y in sorted(by_year_totals.keys(), reverse=True)
+                if y not in ['nan', 'None', '']
+            ],
             'service_provider_name': service_provider_name,
             'entities': entity_list
         }

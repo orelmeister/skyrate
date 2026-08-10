@@ -131,6 +131,7 @@ export interface ServicedEntitiesResponse {
   total_entities: number;
   total_authorized: number;
   funding_years: string[];
+  by_year?: { year: string; total: number; frn_count: number }[];
   entities: ServicedEntity[];
 }
 

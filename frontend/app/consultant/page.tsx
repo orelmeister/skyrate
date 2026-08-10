@@ -399,6 +399,8 @@ function ConsultantPortalPage() {
   const [piaFRNs, setPiaFRNs] = useState<PIAFRNRecord[]>([]);
   const [isLoadingPiaFRNs, setIsLoadingPiaFRNs] = useState(false);
   const [piaError, setPiaError] = useState<string | null>(null);
+  const [piaSort, setPiaSort] = useState<'recent' | 'org_az' | 'type_az'>('recent');
+  const [piaTypeFilter, setPiaTypeFilter] = useState<string>('');
   const [detectedCategory, setDetectedCategory] = useState<{ category: string; name: string } | null>(null);
   const [templatePreview, setTemplatePreview] = useState<PIAPreview | null>(null);
 
@@ -759,6 +761,21 @@ function ConsultantPortalPage() {
     });
     return sorted;
   }, [flattenedFrns, frnTableSort, portfolioFrnStatusFilter, portfolioFrnSearch, portfolioFrnPendingReason]);
+
+  // Sorted + filtered PIA responses (A-Z / by type), Ari request
+  const displayedPiaResponses = useMemo(() => {
+    let list = piaResponses;
+    if (piaTypeFilter) list = list.filter((p) => p.pia_category === piaTypeFilter);
+    const sorted = [...list];
+    if (piaSort === 'org_az') {
+      sorted.sort((a, b) => (a.organization_name || '').localeCompare(b.organization_name || ''));
+    } else if (piaSort === 'type_az') {
+      sorted.sort((a, b) => (a.pia_category || '').localeCompare(b.pia_category || ''));
+    } else {
+      sorted.sort((a, b) => new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime());
+    }
+    return sorted;
+  }, [piaResponses, piaTypeFilter, piaSort]);
 
   // Reset visible count when the underlying dataset/filters change
   useEffect(() => {
@@ -5875,6 +5892,33 @@ function ConsultantPortalPage() {
                 </div>
 
                 <div className="p-6">
+                  {piaResponses.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-3 mb-4">
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-slate-500">Sort</label>
+                        <select value={piaSort} onChange={(e) => setPiaSort(e.target.value as 'recent' | 'org_az' | 'type_az')} className="px-2 py-1.5 border border-slate-200 rounded-lg bg-white text-sm">
+                          <option value="recent">Most recent</option>
+                          <option value="org_az">Organization A–Z</option>
+                          <option value="type_az">PIA type A–Z</option>
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-slate-500">PIA type</label>
+                        <select value={piaTypeFilter} onChange={(e) => setPiaTypeFilter(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded-lg bg-white text-sm">
+                          <option value="">All types</option>
+                          <option value="competitive_bidding">Competitive Bidding</option>
+                          <option value="cost_effectiveness">Cost-Effectiveness</option>
+                          <option value="entity_eligibility">Entity Eligibility</option>
+                          <option value="service_eligibility">Service Eligibility</option>
+                          <option value="discount_rate">Discount Rate</option>
+                          <option value="contracts">Contracts</option>
+                          <option value="cipa">CIPA Compliance</option>
+                          <option value="thirty_percent_rule">30% Rule</option>
+                        </select>
+                      </div>
+                      <span className="text-xs text-slate-400">{displayedPiaResponses.length} of {piaResponses.length}</span>
+                    </div>
+                  )}
                   {isLoadingPiaResponses ? (
                     <div className="text-center py-8">
                       <div className="animate-spin w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full mx-auto mb-4"></div>
@@ -5892,7 +5936,9 @@ function ConsultantPortalPage() {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {piaResponses.map((pia) => {
+                      {displayedPiaResponses.length === 0 ? (
+                        <p className="text-sm text-slate-500 text-center py-4">No PIA responses match your filters.</p>
+                      ) : displayedPiaResponses.map((pia) => {
                         const categoryNames: Record<string, string> = {
                           competitive_bidding: "Competitive Bidding",
                           cost_effectiveness: "Cost-Effectiveness",

@@ -227,6 +227,7 @@ async def get_serviced_entities(
             "total_entities": summary.get('total_entities', 0),
             "total_authorized": summary.get('total_authorized', 0),
             "funding_years": summary.get('funding_years', []),
+            "by_year": summary.get('by_year', []),
             "entities": summary.get('entities', [])
         }
         
@@ -1224,6 +1225,7 @@ async def lookup_spin_details(
             "total_entities": summary.get('total_entities', 0),
             "total_authorized": summary.get('total_authorized', 0),
             "funding_years": summary.get('funding_years', []),
+            "by_year": summary.get('by_year', []),
             "entities": summary.get('entities', [])[:100]  # Limit to first 100 for other SPINs
         }
         

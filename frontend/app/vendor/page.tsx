@@ -94,7 +94,7 @@ function VendorCommandCenter({
   savedCount, savedLoading, user, onTab, onOpenLead, dark,
 }: {
   profile: VendorProfile | null;
-  stats: { total_entities: number; total_authorized: number; funding_years: string[]; service_provider_name: string | null } | null;
+  stats: { total_entities: number; total_authorized: number; funding_years: string[]; by_year?: { year: string; total: number; frn_count: number }[]; service_provider_name: string | null } | null;
   entities: ServicedEntity[];
   leads: Form470Lead[];
   leadsLoading: boolean;
@@ -226,6 +226,19 @@ function VendorCommandCenter({
             <div className="flex items-center justify-between"><span className={muted}>Years active</span><span className="font-semibold">{yearsActive || "—"}</span></div>
             <div className="flex items-center justify-between"><span className={muted}>Saved leads</span><span className="font-semibold">{savedLoading && savedCount === 0 ? "—" : savedCount}</span></div>
           </div>
+          {stats?.by_year && stats.by_year.length > 0 && (
+            <div className="mt-4 pt-3 border-t border-slate-200/60">
+              <div className={`text-xs mb-2 ${muted}`}>Authorized by funding year</div>
+              <div className="space-y-1.5 max-h-44 overflow-y-auto">
+                {stats.by_year.map((y) => (
+                  <div key={y.year} className="flex items-center justify-between text-sm">
+                    <span className={muted}>FY{y.year} <span className="text-xs opacity-70">({y.frn_count.toLocaleString()} FRNs)</span></span>
+                    <span className="font-semibold">${(y.total / 1_000_000).toFixed(2)}M</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -529,6 +542,7 @@ function VendorPortalPage() {
     total_entities: number;
     total_authorized: number;
     funding_years: string[];
+    by_year?: { year: string; total: number; frn_count: number }[];
     service_provider_name: string | null;
   } | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -1076,6 +1090,7 @@ function VendorPortalPage() {
           total_entities: response.data.total_entities,
           total_authorized: response.data.total_authorized,
           funding_years: response.data.funding_years,
+          by_year: response.data.by_year,
           service_provider_name: response.data.service_provider_name,
         });
       }
