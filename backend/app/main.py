@@ -963,6 +963,7 @@ async def lifespan(app: FastAPI):
     from app.models.support_ticket import SupportTicket, TicketMessage
     from app.models.prediction import PredictedLead, PredictionRefreshLog
     from app.models.email_verification import EmailVerificationCode
+    from app.models.consultant_frn_tracking import ConsultantFrnTracking
     
     # Guard: Warn loudly if running on SQLite in non-dev environment
     if settings.ENVIRONMENT != "development":

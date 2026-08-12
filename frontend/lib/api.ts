@@ -229,6 +229,34 @@ export interface Form471LineItemsResponse {
   error?: string;
 }
 
+// Per-FRN consultant working annotations (A4/A5 status, A6 install, A7 co-pay, PIA)
+export interface FrnTracking {
+  id?: number;
+  frn: string;
+  ben?: string | null;
+  working_status?: string | null;
+  installed?: boolean;
+  install_date?: string | null;
+  copay_paid?: boolean;
+  copay_amount?: number | null;
+  pia_status?: string | null;
+  notes?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface FrnTrackingUpdate {
+  frn: string;
+  ben?: string | null;
+  working_status?: string | null;
+  installed?: boolean;
+  install_date?: string | null;
+  copay_paid?: boolean;
+  copay_amount?: number | null;
+  pia_status?: string | null;
+  notes?: string | null;
+}
+
 // ==================== DISBURSEMENT / INVOICING SCHEDULE TYPES ====================
 
 export interface DisbursementLine {
@@ -2688,6 +2716,16 @@ class ApiClient {
   async consultantGet471LineItemsByBen(ben: string, year?: number): Promise<ApiResponse<Form471LineItemsResponse>> {
     const params = year ? `?year=${year}` : '';
     return this.request(`/api/v1/consultant/471/ben/${ben}/line-items${params}`);
+  }
+
+  // ---- Per-FRN consultant working annotations (status/install/co-pay/PIA) ----
+  async consultantGetFrnTracking(frn?: string): Promise<ApiResponse<{ success: boolean; tracking: FrnTracking | Record<string, FrnTracking> | null; count?: number }>> {
+    const params = frn ? `?frn=${encodeURIComponent(frn)}` : '';
+    return this.request(`/api/v1/consultant/frn-tracking${params}`);
+  }
+
+  async consultantUpsertFrnTracking(data: FrnTrackingUpdate): Promise<ApiResponse<{ success: boolean; tracking: FrnTracking }>> {
+    return this.put(`/api/v1/consultant/frn-tracking`, data);
   }
 
   async consultant470Lookup(filters: {

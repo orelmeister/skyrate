@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore, deriveRequiresPaymentSetup } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
-import { api, ConsultantSchool, ConsultantProfile, AppealRecord, PIAResponseRecord, PIAFRNRecord, PIAPreview, FRNWatch, FRNReportHistory, Form471ByEntityResponse, Form471Record, Form471LineItem, DisbursementScheduleResponse } from "@/lib/api";
+import { api, ConsultantSchool, ConsultantProfile, AppealRecord, PIAResponseRecord, PIAFRNRecord, PIAPreview, FRNWatch, FRNReportHistory, Form471ByEntityResponse, Form471Record, Form471LineItem, DisbursementScheduleResponse, FrnTracking } from "@/lib/api";
 import { SearchResultsTable } from "@/components/SearchResultsTable";
 import { AppealChat } from "@/components/AppealChat";
 import { PIAChat } from "@/components/PIAChat";
@@ -686,6 +686,93 @@ function ConsultantPortalPage() {
   const [expanded471Frn, setExpanded471Frn] = useState<string | null>(null);
   const [form471LineItemsCache, setForm471LineItemsCache] = useState<Record<string, Form471LineItem[]>>({});
   const [form471LineItemsLoadingFrn, setForm471LineItemsLoadingFrn] = useState<string | null>(null);
+
+  // Per-FRN consultant working annotations (A4/A5 status, A6 install, A7 co-pay, PIA).
+  const [frnTrackingMap, setFrnTrackingMap] = useState<Record<string, FrnTracking>>({});
+  const [trackingModalFrn, setTrackingModalFrn] = useState<string | null>(null);
+  const [trackingForm, setTrackingForm] = useState<FrnTracking | null>(null);
+  const [trackingLoading, setTrackingLoading] = useState(false);
+  const [trackingSaving, setTrackingSaving] = useState(false);
+
+  // Load all of the account's FRN tracking rows once (drives at-a-glance badges).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await api.consultantGetFrnTracking();
+        if (!cancelled && resp.success && resp.data?.success && resp.data.tracking && typeof resp.data.tracking === 'object') {
+          setFrnTrackingMap(resp.data.tracking as Record<string, FrnTracking>);
+        }
+      } catch { /* non-fatal */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const openTrackingModal = async (frn: string, ben?: string) => {
+    if (!frn) return;
+    setTrackingModalFrn(frn);
+    setTrackingLoading(true);
+    setTrackingForm({ frn, ben: ben || null });
+    try {
+      const resp = await api.consultantGetFrnTracking(frn);
+      const existing = resp.success && resp.data?.success ? (resp.data.tracking as FrnTracking | null) : null;
+      setTrackingForm(existing ? { ...existing, frn, ben: existing.ben || ben || null } : { frn, ben: ben || null, installed: false, copay_paid: false });
+    } catch {
+      setTrackingForm({ frn, ben: ben || null, installed: false, copay_paid: false });
+    } finally {
+      setTrackingLoading(false);
+    }
+  };
+
+  const saveTrackingModal = async () => {
+    if (!trackingForm?.frn) return;
+    setTrackingSaving(true);
+    try {
+      const resp = await api.consultantUpsertFrnTracking({
+        frn: trackingForm.frn,
+        ben: trackingForm.ben ?? null,
+        working_status: trackingForm.working_status ?? null,
+        installed: trackingForm.installed ?? false,
+        install_date: trackingForm.install_date ?? null,
+        copay_paid: trackingForm.copay_paid ?? false,
+        copay_amount: trackingForm.copay_amount ?? null,
+        pia_status: trackingForm.pia_status ?? null,
+        notes: trackingForm.notes ?? null,
+      });
+      if (resp.success && resp.data?.success) {
+        const saved = resp.data.tracking;
+        setFrnTrackingMap(prev => ({ ...prev, [saved.frn]: saved }));
+        setTrackingModalFrn(null);
+        setTrackingForm(null);
+      }
+    } finally {
+      setTrackingSaving(false);
+    }
+  };
+
+  // A4/A5 working sub-status options (kept in sync with the backend allow-list
+  // and the FRN sub-status explainer glossary).
+  const WORKING_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
+    { value: '', label: '— Use USAC status —' },
+    { value: 'initial_review', label: 'Initial Review' },
+    { value: 'final_review', label: 'Final Review' },
+    { value: 'wave_ready', label: 'Wave Ready' },
+    { value: 'fifteen_day_response', label: '15-Day Response Deadline' },
+    { value: 'fcdl_issued', label: 'FCDL Issued' },
+    { value: 'funded', label: 'Funded' },
+    { value: 'denied', label: 'Denied' },
+    { value: 'appeal', label: 'Under Appeal' },
+    { value: 'cancelled', label: 'Cancelled' },
+  ];
+  const PIA_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
+    { value: '', label: '— Not tracked —' },
+    { value: 'not_in_pia', label: 'Not in PIA' },
+    { value: 'outstanding', label: 'Outstanding' },
+    { value: 'in_progress', label: 'In Progress' },
+    { value: 'completed', label: 'Completed' },
+  ];
+  const formatWorkingStatus = (v?: string | null) => WORKING_STATUS_OPTIONS.find(o => o.value === v)?.label || v || '';
+  const formatPiaStatus = (v?: string | null) => PIA_STATUS_OPTIONS.find(o => o.value === v)?.label || v || '';
 
   // A4: the USAC 471 dataset returns one row per line item, so an FRN with N
   // line items appears N times. Collapse to one row per FRN (summing the
@@ -4446,6 +4533,31 @@ function ConsultantPortalPage() {
                               >
                                 View on USAC ↗
                               </a>
+                              <div className="mt-1 flex flex-wrap items-center gap-1">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); openTrackingModal(frn.frn, frn.ben); }}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-slate-600 bg-slate-100 hover:bg-indigo-100 hover:text-indigo-700 border border-slate-200 transition-colors"
+                                  title="Edit working status, install, co-pay, and PIA tracking for this FRN"
+                                >
+                                  <SettingsIcon className="w-3 h-3" /> Track
+                                </button>
+                                {frnTrackingMap[frn.frn]?.working_status && (
+                                  <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-100 text-indigo-700 border border-indigo-200" title="Consultant working status">
+                                    {formatWorkingStatus(frnTrackingMap[frn.frn].working_status)}
+                                  </span>
+                                )}
+                                {frnTrackingMap[frn.frn]?.installed && (
+                                  <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700 border border-green-200" title="Equipment installed">Installed</span>
+                                )}
+                                {frnTrackingMap[frn.frn]?.copay_paid && (
+                                  <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-teal-100 text-teal-700 border border-teal-200" title="Applicant co-pay paid">Co-pay paid</span>
+                                )}
+                                {frnTrackingMap[frn.frn]?.pia_status && frnTrackingMap[frn.frn].pia_status !== 'not_in_pia' && (
+                                  <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold border ${frnTrackingMap[frn.frn].pia_status === 'completed' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-amber-100 text-amber-700 border-amber-200'}`} title="PIA review status">
+                                    PIA: {formatPiaStatus(frnTrackingMap[frn.frn].pia_status)}
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="px-4 py-3">
                               <div className="font-medium text-slate-900 truncate max-w-[200px]">{frn.entity_name}</div>
@@ -7251,6 +7363,81 @@ function ConsultantPortalPage() {
           application_number: selectedFRN.application_number,
         } : undefined}
       />
+
+      {/* FRN Working Tracking Modal (A4/A5 status, A6 install, A7 co-pay, PIA) */}
+      {trackingModalFrn && trackingForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { setTrackingModalFrn(null); setTrackingForm(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+              <div>
+                <h3 className="font-semibold text-slate-900">FRN Tracking</h3>
+                <p className="text-xs font-mono text-slate-500">{trackingModalFrn}</p>
+              </div>
+              <button onClick={() => { setTrackingModalFrn(null); setTrackingForm(null); }} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+            {trackingLoading ? (
+              <div className="p-8 text-center text-sm text-slate-500">Loading…</div>
+            ) : (
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Working status</label>
+                  <select
+                    value={trackingForm.working_status ?? ''}
+                    onChange={(e) => setTrackingForm(f => f ? { ...f, working_status: e.target.value || null } : f)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    {WORKING_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                  <p className="text-[10px] text-slate-400 mt-1">Your working sub-status — overrides the raw USAC status for your team&apos;s view.</p>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <input type="checkbox" className="w-4 h-4 rounded border-slate-300" checked={!!trackingForm.installed} onChange={(e) => setTrackingForm(f => f ? { ...f, installed: e.target.checked } : f)} />
+                    Equipment installed
+                  </label>
+                  {trackingForm.installed && (
+                    <div className="mt-2">
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Install date</label>
+                      <input type="date" value={(trackingForm.install_date ?? '').slice(0, 10)} onChange={(e) => setTrackingForm(f => f ? { ...f, install_date: e.target.value || null } : f)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <input type="checkbox" className="w-4 h-4 rounded border-slate-300" checked={!!trackingForm.copay_paid} onChange={(e) => setTrackingForm(f => f ? { ...f, copay_paid: e.target.checked } : f)} />
+                    Applicant co-pay paid
+                  </label>
+                  <div className="mt-2">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Co-pay amount (non-discounted share)</label>
+                    <input type="number" step="0.01" min="0" value={trackingForm.copay_amount ?? ''} onChange={(e) => setTrackingForm(f => f ? { ...f, copay_amount: e.target.value === '' ? null : parseFloat(e.target.value) } : f)} placeholder="0.00" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">PIA review status</label>
+                  <select value={trackingForm.pia_status ?? ''} onChange={(e) => setTrackingForm(f => f ? { ...f, pia_status: e.target.value || null } : f)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    {PIA_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Notes</label>
+                  <textarea rows={3} value={trackingForm.notes ?? ''} onChange={(e) => setTrackingForm(f => f ? { ...f, notes: e.target.value } : f)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Working notes for this FRN…" />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button onClick={() => { setTrackingModalFrn(null); setTrackingForm(null); }} className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100">Cancel</button>
+                  <button onClick={saveTrackingModal} disabled={trackingSaving} className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50">
+                    {trackingSaving ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Appeal Chat Modal */}
       {showAppealChat && selectedAppeal && (
