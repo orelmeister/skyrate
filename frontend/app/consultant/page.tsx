@@ -4478,6 +4478,20 @@ function ConsultantPortalPage() {
                                   Changed {String(frn.fcdl_date).slice(0, 10)}
                                 </div>
                               )}
+                              {(() => {
+                                if (!frn.service_end) return null;
+                                const end = new Date(String(frn.service_end));
+                                if (isNaN(end.getTime())) return null;
+                                const daysLeft = Math.floor((end.getTime() - Date.now()) / 86400000);
+                                if (daysLeft > 180) return null;
+                                return (
+                                  <div className="mt-1" title={`Contract ${daysLeft < 0 ? 'expired' : 'expires'} ${String(frn.service_end).slice(0, 10)} — a new Form 470 is required before the next Form 471`}>
+                                    <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700 border border-orange-200">
+                                      Needs new 470
+                                    </span>
+                                  </div>
+                                );
+                              })()}
                             </td>
                             <td className="px-4 py-3 text-right font-medium text-slate-900">
                               ${frn.commitment_amount?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
