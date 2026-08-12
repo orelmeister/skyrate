@@ -4431,6 +4431,15 @@ function ConsultantPortalPage() {
                             <td className="px-4 py-3">
                               <div className="font-mono text-xs text-slate-900">{frn.frn}</div>
                               <div className="text-xs text-slate-500">{frn.application_number}</div>
+                              <a
+                                href={`https://opendata.usac.org/E-Rate/FCC-Form-471-FRN-Status/qdmp-ygft/explore?q=${encodeURIComponent(frn.frn || '')}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-block mt-0.5 text-[10px] text-indigo-600 hover:text-indigo-800 hover:underline"
+                              >
+                                View on USAC ↗
+                              </a>
                             </td>
                             <td className="px-4 py-3">
                               <div className="font-medium text-slate-900 truncate max-w-[200px]">{frn.entity_name}</div>
@@ -4457,7 +4466,7 @@ function ConsultantPortalPage() {
                               }`}>
                                 {frn.status || 'Unknown'}
                               </span>
-                              {frn.pending_reason && (
+                              {frn.pending_reason && !(frn.status?.toLowerCase().includes('funded') || frn.status?.toLowerCase().includes('committed') || frn.status?.toLowerCase().includes('denied')) && (
                                 <div className="mt-1">
                                   <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
                                     {frn.pending_reason}
