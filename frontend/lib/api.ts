@@ -1217,6 +1217,7 @@ export interface IndustryStateRow {
 export interface IndustryPulseResponse {
   success: boolean;
   year: number;
+  state?: string | null;
   available_years: number[];
   totals: {
     total_committed: number;
@@ -4335,8 +4336,11 @@ class ApiClient {
   /**
    * Industry-wide E-Rate overview for a funding year (USAC Open Data aggregates).
    */
-  async getIndustryPulse(year?: number): Promise<ApiResponse<IndustryPulseResponse>> {
-    const qs = year ? `?year=${year}` : '';
+  async getIndustryPulse(year?: number, state?: string): Promise<ApiResponse<IndustryPulseResponse>> {
+    const params = new URLSearchParams();
+    if (year) params.set('year', String(year));
+    if (state) params.set('state', state);
+    const qs = params.toString() ? `?${params.toString()}` : '';
     return this.request(`/api/v1/industry/pulse${qs}`, { timeoutMs: 30000 });
   }
 

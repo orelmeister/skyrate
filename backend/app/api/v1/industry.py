@@ -131,8 +131,10 @@ def _resolve_year(year: Optional[int]) -> int:
 # without duplicating it. The endpoints wrap these in get_or_cache with the
 # same namespace/params/ttl they always used, so cache keys never drift.
 
-def _compute_pulse(resolved_year: int) -> Dict[str, Any]:
+def _compute_pulse(resolved_year: int, state: Optional[str] = None) -> Dict[str, Any]:
     base = f"funding_year='{resolved_year}'"
+    if state:
+        base += f" AND state='{state}'"
     funded_where = f"{base} AND form_471_frn_status_name='{_FUNDED}'"
 
     # 1) status breakdown (one call) — counts + committed per status
@@ -208,6 +210,7 @@ def _compute_pulse(resolved_year: int) -> Dict[str, Any]:
     return {
         "success": True,
         "year": resolved_year,
+        "state": state,
         "available_years": _available_years(),
         "totals": {
             "total_committed": total_committed,
@@ -337,22 +340,34 @@ def prewarm_industry_cache() -> Dict[str, Any]:
 @router.get("/pulse")
 async def industry_pulse(
     year: Optional[int] = Query(None, description="Funding year; defaults to the latest available"),
+    state: Optional[str] = Query(None, description="Optional 2-letter state code to scope all metrics (e.g. denial rate by state)"),
     current_user: User = Depends(get_current_user),
 ):
     """
     Current funding-year industry overview: total committed (Funded), FRN and
     applicant counts, funded/denied/pending breakdown with percentages,
     committed by service type, and the top 10 states by committed dollars.
+
+    When ``state`` is supplied, every metric (including the denied percentage)
+    is scoped to that state so consultants can see location-specific denial
+    rates versus the national picture.
     """
     resolved_year = _resolve_year(year)
+    # Sanitize state to a bare 2-letter uppercase code (prevents Socrata $where
+    # injection since it is interpolated into the query string).
+    safe_state: Optional[str] = None
+    if state:
+        letters = "".join(ch for ch in state if ch.isalpha()).upper()
+        if len(letters) == 2:
+            safe_state = letters
     from utils.usac_cache import get_or_cache
 
     try:
         return get_or_cache(
             namespace="industry_pulse",
-            params={"year": resolved_year},
+            params={"year": resolved_year, "state": safe_state or ""},
             ttl_hours=12,
-            fetch_fn=lambda: _compute_pulse(resolved_year),
+            fetch_fn=lambda: _compute_pulse(resolved_year, safe_state),
         )
     except Exception as e:
         logger.exception("industry_pulse failed")

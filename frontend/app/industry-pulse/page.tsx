@@ -48,6 +48,15 @@ const STATUS_STYLES: Record<string, { label: string; badge: string; bar: string 
 
 // ==================== PAGE ====================
 
+const US_STATES = [
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
+  "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+  "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+  "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+  "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+  "DC", "PR", "VI", "GU", "AS", "MP",
+];
+
 function IndustryPulseInner() {
   const router = useRouter();
   const { user, isAuthenticated, logout, _hasHydrated } = useAuthStore();
@@ -63,18 +72,19 @@ function IndustryPulseInner() {
   }, [router]);
 
   const [year, setYear] = useState<number | undefined>(undefined);
+  const [stateFilter, setStateFilter] = useState<string>("");
   const [pulse, setPulse] = useState<IndustryPulseResponse | null>(null);
   const [providers, setProviders] = useState<IndustryProvider[]>([]);
   const [consultants, setConsultants] = useState<IndustryConsultant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async (targetYear?: number) => {
+  const load = useCallback(async (targetYear?: number, targetState?: string) => {
     setLoading(true);
     setError(null);
     try {
       const [pulseRes, provRes, consRes] = await Promise.all([
-        api.getIndustryPulse(targetYear),
+        api.getIndustryPulse(targetYear, targetState || undefined),
         api.getIndustryTopProviders(targetYear, 10),
         api.getIndustryTopConsultants(targetYear, 10),
       ]);
@@ -102,7 +112,12 @@ function IndustryPulseInner() {
 
   const handleYearChange = (newYear: number) => {
     setYear(newYear);
-    load(newYear);
+    load(newYear, stateFilter);
+  };
+
+  const handleStateChange = (newState: string) => {
+    setStateFilter(newState);
+    load(year, newState);
   };
 
   // Auth guard
@@ -200,8 +215,24 @@ function IndustryPulseInner() {
                 </option>
               ))}
             </select>
+            <label htmlFor="state-select" className="text-sm font-medium text-slate-600">
+              State
+            </label>
+            <select
+              id="state-select"
+              value={stateFilter}
+              onChange={(e) => handleStateChange(e.target.value)}
+              disabled={loading}
+              title="Scope every metric (including the denial rate) to one state"
+              className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+            >
+              <option value="">All states (national)</option>
+              {US_STATES.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
             <button
-              onClick={() => load(year)}
+              onClick={() => load(year, stateFilter)}
               disabled={loading}
               className="flex items-center gap-2 px-3 py-2 text-sm text-purple-600 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50"
             >
