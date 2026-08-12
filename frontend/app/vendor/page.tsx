@@ -5509,6 +5509,8 @@ function VendorPortalPage() {
                 {/* Interactive Disbursement Panel */}
                 <DisbursementPanel 
                   frn={selectedFRN.frn} 
+                  entityName={selectedFRN.entity_name || ''}
+                  ben={selectedFRN.ben || ''}
                   isOpen={disbursementOpen} 
                   onClose={() => setDisbursementOpen(false)} 
                 />

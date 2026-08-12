@@ -118,7 +118,7 @@ interface DisbursementRecord {
 
 export type DisbursementFilter = 'all' | 'spi' | 'bear';
 
-export function DisbursementPanel({ frn, isOpen, onClose }: { frn: string; isOpen: boolean; onClose: () => void }) {
+export function DisbursementPanel({ frn, isOpen, onClose, entityName, ben }: { frn: string; isOpen: boolean; onClose: () => void; entityName?: string; ben?: string }) {
   const [records, setRecords] = useState<DisbursementRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -156,8 +156,11 @@ export function DisbursementPanel({ frn, isOpen, onClose }: { frn: string; isOpe
   });
 
   const handleCsvDownload = () => {
-    const headers = ['Invoice ID', 'Type', 'Form', 'Billed Date', 'Completion Date', 'Requested Amount', 'Approved Amount', 'Status'];
+    const headers = ['Entity Name', 'BEN', 'FRN', 'Invoice ID', 'Type', 'Form', 'Billed Date', 'Completion Date', 'Requested Amount', 'Approved Amount', 'Status'];
     const rows = filtered.map(r => [
+      entityName || '',
+      ben || '',
+      frn,
       r.invoice_id,
       r.invoice_type,
       r.form_nickname,
@@ -511,6 +514,8 @@ export default function FRNDetailModal({ isOpen, onClose, frn, ben, onViewInTab,
             {/* Disbursement Schedule Panel */}
             <DisbursementPanel
               frn={display.frn as string || frn}
+              entityName={String(display.organization_name || '')}
+              ben={String(display.ben || ben || '')}
               isOpen={disbursementOpen}
               onClose={() => setDisbursementOpen(false)}
             />
