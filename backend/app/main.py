@@ -681,8 +681,8 @@ def _run_schema_migrations(engine):
         ("consultant_schools", "loa_marked_at", "DATETIME DEFAULT NULL", None),
         # Equipment & Wishlist — "Happy with current" quick flag per school.
         ("consultant_schools", "happy_with_current", "TINYINT(1) NOT NULL DEFAULT 0", None),
-        # Additional per-school compliance flags (Ari): SIPA / FCC Form 498 / SAM.gov.
-        ("consultant_schools", "sipa_current", "TINYINT(1) NOT NULL DEFAULT 0", None),
+        # Additional per-school compliance flags (Ari): CIPA / FCC Form 498 / SAM.gov.
+        ("consultant_schools", "cipa_current", "TINYINT(1) NOT NULL DEFAULT 0", None),
         ("consultant_schools", "has_form_498", "TINYINT(1) NOT NULL DEFAULT 0", None),
         ("consultant_schools", "sam_gov_registered", "TINYINT(1) NOT NULL DEFAULT 0", None),
         # FRN status change queue — true USAC status-change date (FCDL), distinct

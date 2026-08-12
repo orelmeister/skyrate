@@ -146,8 +146,8 @@ class ConsultantSchool(Base):
     happy_with_current = Column(Boolean, default=False, nullable=False)
 
     # Additional per-school compliance flags (Ari request) beyond LOA:
-    # SIPA up-to-date, FCC Form 498 on file, and SAM.gov registration.
-    sipa_current = Column(Boolean, default=False, nullable=False)
+    # CIPA compliance current, FCC Form 498 on file, and SAM.gov registration.
+    cipa_current = Column(Boolean, default=False, nullable=False)
     has_form_498 = Column(Boolean, default=False, nullable=False)
     sam_gov_registered = Column(Boolean, default=False, nullable=False)
 
@@ -182,7 +182,7 @@ class ConsultantSchool(Base):
             "loa_reference": self.loa_reference,
             "loa_marked_at": self.loa_marked_at.isoformat() if self.loa_marked_at else None,
             "happy_with_current": bool(self.happy_with_current),
-            "sipa_current": bool(self.sipa_current),
+            "cipa_current": bool(self.cipa_current),
             "has_form_498": bool(self.has_form_498),
             "sam_gov_registered": bool(self.sam_gov_registered),
             "added_at": self.added_at.isoformat() if self.added_at else None,

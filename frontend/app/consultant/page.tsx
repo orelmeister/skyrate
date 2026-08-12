@@ -182,8 +182,8 @@ interface EnhancedSchool {
   loa_marked_at?: string | null;
   // Equipment & Wishlist — "happy with current" quick flag
   happy_with_current?: boolean;
-  // Additional per-school compliance flags (Ari): SIPA / FCC Form 498 / SAM.gov
-  sipa_current?: boolean;
+  // Additional per-school compliance flags (Ari): CIPA / FCC Form 498 / SAM.gov
+  cipa_current?: boolean;
   has_form_498?: boolean;
   sam_gov_registered?: boolean;
   // Enriched fields from USAC
@@ -2353,11 +2353,11 @@ function ConsultantPortalPage() {
     }
   };
 
-  // Additional per-school compliance flags (SIPA / FCC Form 498 / SAM.gov) quick toggles (Ari #7).
+  // Additional per-school compliance flags (CIPA / FCC Form 498 / SAM.gov) quick toggles (Ari #7).
   const [flagSavingKey, setFlagSavingKey] = useState<string | null>(null);
   const handleToggleSchoolFlag = async (
     school: EnhancedSchool,
-    field: 'sipa_current' | 'has_form_498' | 'sam_gov_registered'
+    field: 'cipa_current' | 'has_form_498' | 'sam_gov_registered'
   ) => {
     const next = !school[field];
     setFlagSavingKey(`${school.ben}:${field}`);
@@ -3128,7 +3128,7 @@ function ConsultantPortalPage() {
                             </button>
                             <div className="flex flex-wrap gap-1 mt-1.5">
                               {([
-                                { key: 'sipa_current', label: 'SIPA' },
+                                { key: 'cipa_current', label: 'CIPA' },
                                 { key: 'has_form_498', label: '498' },
                                 { key: 'sam_gov_registered', label: 'SAM.gov' },
                               ] as const).map(({ key, label }) => (
