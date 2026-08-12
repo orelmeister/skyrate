@@ -65,6 +65,26 @@ const SUB_STATUS_GLOSSARY: SubStatusEntry[] = [
     meaning:
       "USAC has flagged the FRN for outreach — they are attempting to contact the applicant or service provider to resolve an open item.",
   },
+  {
+    term: "Initial Review",
+    meaning:
+      "The application is in the first PIA review stage. USAC is validating the basics before deeper review.",
+  },
+  {
+    term: "Final Review",
+    meaning:
+      "The FRN has cleared earlier checks and is in the last review stage before a funding decision is issued.",
+  },
+  {
+    term: "15-Day Response Deadline",
+    meaning:
+      "USAC has an open information request with a 15-calendar-day clock. Respond before it expires or the FRN risks denial — treat as urgent.",
+  },
+  {
+    term: "FCDL Issued",
+    meaning:
+      "A Funding Commitment Decision Letter has been issued (funded, partially funded, or denied). Check the FCDL for the exact decision and invoicing deadline.",
+  },
 ];
 
 export function FrnSubStatusInfo({ className = "" }: { className?: string }) {
