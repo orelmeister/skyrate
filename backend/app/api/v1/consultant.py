@@ -2049,6 +2049,7 @@ async def get_dashboard_stats(
     total_c2_pending = 0          # pending (also reserves budget)
     total_c2_budget_5yr = 0       # total 5-year C2 budget entitlement (current cycle)
     total_c2_available = 0        # remaining C2 budget (current cycle)
+    total_c2_students = 0         # aggregated full-time student count driving the C2 budget (current cycle)
     c2_budget_cycle_label = None  # e.g. "FY2026-2030"
     total_c2_funding_year = 0
     total_c1_funding = 0
@@ -2096,8 +2097,10 @@ async def get_dashboard_stats(
                 total_c2_pending    += float(record.get("pending_c2_budget_amount") or 0)
                 total_c2_budget_5yr += float(record.get("c2_budget") or 0)
                 total_c2_available  += float(record.get("available_c2_budget_amount") or 0)
+                total_c2_students   += int(float(record.get("full_time_students") or 0))
         print(f"DEBUG dashboard: C2 cycle={active_cycle} committed={total_c2_funding} "
               f"available={total_c2_available} budget={total_c2_budget_5yr} "
+              f"students={total_c2_students} "
               f"(from {len(c2_data)} rows across {len(all_bens)} BENs)")
     except Exception as e:
         print(f"Error fetching C2 Budget data: {e}")
@@ -2172,6 +2175,7 @@ async def get_dashboard_stats(
         "total_c2_pending": total_c2_pending,
         "total_c2_budget_5yr": total_c2_budget_5yr,
         "total_c2_available": total_c2_available,
+        "total_c2_students": total_c2_students,
         "c2_budget_cycle": c2_budget_cycle_label,
         "total_c1_funding": total_c1_funding,
         "total_funding": total_c2_funding + total_c1_funding,

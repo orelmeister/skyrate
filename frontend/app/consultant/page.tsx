@@ -237,6 +237,7 @@ interface DashboardStats {
   total_c2_pending: number;
   total_c2_budget_5yr: number;
   total_c2_available: number;
+  total_c2_students?: number;
   c2_budget_cycle: string | null;
   total_c1_funding: number;
   total_funding: number;
@@ -3459,6 +3460,11 @@ function ConsultantPortalPage() {
                   <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border border-purple-200 p-6">
                     <div className="text-sm text-purple-600 mb-1">Category 2 Funding</div>
                     <div className="text-2xl font-bold text-purple-900">{formatAmount(dashboardStats.total_c2_funding)}</div>
+                    {(dashboardStats.total_c2_students ?? 0) > 0 && (
+                      <div className="text-xs text-purple-500 mt-1" title="Total full-time students aggregated across every school in your portfolio for the current C2 budget cycle — this is the enrollment figure that drives the Category 2 budget threshold.">
+                        {(dashboardStats.total_c2_students ?? 0).toLocaleString()} students{dashboardStats.c2_budget_cycle ? ` · ${dashboardStats.c2_budget_cycle}` : ''}
+                      </div>
+                    )}
                   </div>
                   <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl border border-emerald-200 p-6">
                     <div className="text-sm text-emerald-600 mb-1">Total Portfolio Funding</div>
