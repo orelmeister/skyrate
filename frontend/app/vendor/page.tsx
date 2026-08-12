@@ -2667,7 +2667,7 @@ function VendorPortalPage() {
                                 }`}>
                                   {frn.status || 'Unknown'}
                                 </span>
-                                {frn.pending_reason && (
+                                {frn.pending_reason && !(frn.status?.toLowerCase().includes('funded') || frn.status?.toLowerCase().includes('committed') || frn.status?.toLowerCase().includes('denied')) && (
                                   <div className="text-xs text-slate-500 mt-1">{frn.pending_reason}</div>
                                 )}
                               </td>
