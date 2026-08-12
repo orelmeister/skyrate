@@ -6087,6 +6087,24 @@ function ConsultantPortalPage() {
                                     ) : !lineItems || lineItems.length === 0 ? (
                                       <div className="py-3 text-sm text-slate-500">No line items found for this FRN.</div>
                                     ) : (
+                                      <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                          <span className="text-xs font-medium text-slate-500">{lineItems.length} line item{lineItems.length !== 1 ? 's' : ''}</span>
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              downloadCsv(
+                                                csvFilename(`FRN_${record.frn}_471_line_items`),
+                                                ['line_item_number', 'funding_request_number', 'funding_year', 'ben', 'organization_name', 'state', 'function', 'product', 'manufacturer', 'model', 'unit', 'quantity', 'unit_cost', 'extended_cost', 'months_of_service'],
+                                                lineItems as unknown as Record<string, unknown>[]
+                                              );
+                                            }}
+                                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors"
+                                          >
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                            Download 471 (CSV)
+                                          </button>
+                                        </div>
                                       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
                                         <table className="w-full text-xs">
                                           <thead className="bg-slate-100">
@@ -6116,6 +6134,7 @@ function ConsultantPortalPage() {
                                             ))}
                                           </tbody>
                                         </table>
+                                      </div>
                                       </div>
                                     )}
                                   </td>
