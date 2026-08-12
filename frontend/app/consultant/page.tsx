@@ -632,6 +632,7 @@ function ConsultantPortalPage() {
   const [portfolioFrnStatusFilter, setPortfolioFrnStatusFilter] = useState<string>("");
   const [portfolioFrnPendingReason, setPortfolioFrnPendingReason] = useState<string>("");
   const [portfolioFrnSearch, setPortfolioFrnSearch] = useState<string>("");
+  const [portfolioFrnTrackingFilter, setPortfolioFrnTrackingFilter] = useState<string>("");
   const [portfolioFrnSpinSearch, setPortfolioFrnSpinSearch] = useState<string>("");
   const [portfolioFrnCrnSearch, setPortfolioFrnCrnSearch] = useState<string>("");
   const [expandedSchools, setExpandedSchools] = useState<Set<string>>(new Set());
@@ -1056,6 +1057,22 @@ function ConsultantPortalPage() {
         return true;
       });
     }
+    // Filter by consultant working-tracking (status / install / co-pay / PIA)
+    if (portfolioFrnTrackingFilter) {
+      filtered = filtered.filter(frn => {
+        const t = frnTrackingMap[frn.frn];
+        const f = portfolioFrnTrackingFilter;
+        if (f === 'installed') return !!t?.installed;
+        if (f === 'not_installed') return !t?.installed;
+        if (f === 'copay_paid') return !!t?.copay_paid;
+        if (f === 'copay_unpaid') return !t?.copay_paid;
+        if (f === 'pia_outstanding') return t?.pia_status === 'outstanding' || t?.pia_status === 'in_progress';
+        if (f === 'pia_completed') return t?.pia_status === 'completed';
+        if (f === 'tracked') return !!t;
+        if (f.startsWith('ws:')) return t?.working_status === f.slice(3);
+        return true;
+      });
+    }
     
     // Then sort if sorting is active
     if (!frnTableSort) return filtered;
@@ -1067,7 +1084,7 @@ function ConsultantPortalPage() {
       return frnTableSort.dir === 'asc' ? cmp : -cmp;
     });
     return sorted;
-  }, [flattenedFrns, frnTableSort, portfolioFrnStatusFilter, portfolioFrnSearch, portfolioFrnPendingReason]);
+  }, [flattenedFrns, frnTableSort, portfolioFrnStatusFilter, portfolioFrnSearch, portfolioFrnPendingReason, portfolioFrnTrackingFilter, frnTrackingMap]);
 
   // Sorted + filtered PIA responses (A-Z / by type), Ari request
   const displayedPiaResponses = useMemo(() => {
@@ -4312,6 +4329,35 @@ function ConsultantPortalPage() {
                       placeholder="e.g., PIA Review"
                       className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-48"
                     />
+                  </div>
+                  <div>
+                    <label className="text-sm text-slate-600 mb-1 block">My Tracking</label>
+                    <select
+                      value={portfolioFrnTrackingFilter}
+                      onChange={(e) => setPortfolioFrnTrackingFilter(e.target.value)}
+                      className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm"
+                      title="Filter by your own per-FRN working tracking (status, install, co-pay, PIA)"
+                    >
+                      <option value="">All (my tracking)</option>
+                      <option value="tracked">Has tracking</option>
+                      <optgroup label="Working status">
+                        {WORKING_STATUS_OPTIONS.filter(o => o.value).map(o => (
+                          <option key={o.value} value={`ws:${o.value}`}>{o.label}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Install">
+                        <option value="installed">Installed</option>
+                        <option value="not_installed">Not installed</option>
+                      </optgroup>
+                      <optgroup label="Co-pay">
+                        <option value="copay_paid">Co-pay paid</option>
+                        <option value="copay_unpaid">Co-pay unpaid</option>
+                      </optgroup>
+                      <optgroup label="PIA">
+                        <option value="pia_outstanding">PIA outstanding</option>
+                        <option value="pia_completed">PIA completed</option>
+                      </optgroup>
+                    </select>
                   </div>
                   <div>
                     <label className="text-sm text-slate-600 mb-1 block">Search FRN / Entity / BEN</label>
