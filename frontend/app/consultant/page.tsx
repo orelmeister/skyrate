@@ -306,6 +306,17 @@ function ConsultantCommandCenter({
   if (denied > 0) attention.push({ key: "den", label: `${denied} denied application${denied !== 1 ? "s" : ""}`, sub: "Review and start appeals", tone: "red", tab: "appeals" });
   if (noLoa > 0) attention.push({ key: "loa", label: `${noLoa} school${noLoa !== 1 ? "s" : ""} missing an LOA`, sub: "Upload to file on their behalf", tone: "amber", tab: "schools" });
   if (pending > 0) attention.push({ key: "pen", label: `${pending} application${pending !== 1 ? "s" : ""} pending`, sub: "Monitor USAC review", tone: "blue", tab: "frn-status" });
+  // Compliance readiness (Milan A2): flag schools not yet confirmed for the
+  // reimbursement/eligibility prerequisites. Only surfaces once schools exist so
+  // a brand-new empty portfolio is not noisy.
+  if (schools.length > 0) {
+    const noSam = schools.filter((s) => s.sam_gov_registered === false).length;
+    const no498 = schools.filter((s) => s.has_form_498 === false).length;
+    const noCipa = schools.filter((s) => s.cipa_current === false).length;
+    if (noSam > 0) attention.push({ key: "sam", label: `${noSam} school${noSam !== 1 ? "s" : ""} without SAM.gov confirmed`, sub: "Required for BEAR reimbursement (mandate ~Sept 2026)", tone: "amber", tab: "schools" });
+    if (no498 > 0) attention.push({ key: "f498", label: `${no498} school${no498 !== 1 ? "s" : ""} without Form 498 confirmed`, sub: "Needed to receive E-Rate disbursements", tone: "amber", tab: "schools" });
+    if (noCipa > 0) attention.push({ key: "cipa", label: `${noCipa} school${noCipa !== 1 ? "s" : ""} without CIPA confirmed`, sub: "Required for Category 2 / internal connections", tone: "red", tab: "schools" });
+  }
 
   const R = 34, CIRC = 2 * Math.PI * R;
   const ringPct = fundedPct / 100;
