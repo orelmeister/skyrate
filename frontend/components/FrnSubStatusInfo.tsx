@@ -85,6 +85,31 @@ const SUB_STATUS_GLOSSARY: SubStatusEntry[] = [
     meaning:
       "A Funding Commitment Decision Letter has been issued (funded, partially funded, or denied). Check the FCDL for the exact decision and invoicing deadline.",
   },
+  {
+    term: "First Extension",
+    meaning:
+      "USAC granted the applicant a first extension of time to respond to an open information request. The response clock has been reset to a new deadline.",
+  },
+  {
+    term: "Second Extension",
+    meaning:
+      "USAC granted a second (final) extension to respond. This is typically the last extension available — respond before it expires or the FRN risks denial.",
+  },
+  {
+    term: "Applicant Documentation Received",
+    meaning:
+      "The applicant submitted the requested documentation. USAC is now reviewing the response before continuing the funding decision.",
+  },
+  {
+    term: "Service Provider Documentation Received",
+    meaning:
+      "The service provider submitted the documentation USAC requested. USAC is reviewing the response before continuing.",
+  },
+  {
+    term: "Heightened Scrutiny / Detailed Review",
+    meaning:
+      "The FRN was selected for a more in-depth PIA review (additional documentation and validation). Expect a longer review timeline and possible information requests.",
+  },
 ];
 
 export function FrnSubStatusInfo({ className = "" }: { className?: string }) {
