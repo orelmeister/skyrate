@@ -644,6 +644,7 @@ function ConsultantPortalPage() {
   const [portfolioFrnPendingReason, setPortfolioFrnPendingReason] = useState<string>("");
   const [portfolioFrnSearch, setPortfolioFrnSearch] = useState<string>("");
   const [portfolioFrnTrackingFilter, setPortfolioFrnTrackingFilter] = useState<string>("");
+  const [portfolioFrnServiceType, setPortfolioFrnServiceType] = useState<string>("");
   const [portfolioFrnSpinSearch, setPortfolioFrnSpinSearch] = useState<string>("");
   const [portfolioFrnCrnSearch, setPortfolioFrnCrnSearch] = useState<string>("");
   const [expandedSchools, setExpandedSchools] = useState<Set<string>>(new Set());
@@ -1084,6 +1085,15 @@ function ConsultantPortalPage() {
         return true;
       });
     }
+
+    // Filter by service type (Ari: sift FRNs by a particular service type)
+    if (portfolioFrnServiceType) {
+      const st = portfolioFrnServiceType.toLowerCase();
+      filtered = filtered.filter(frn =>
+        String(frn.service_type || '').toLowerCase() === st ||
+        String(frn.service_category || '').toLowerCase() === st
+      );
+    }
     
     // Then sort if sorting is active
     if (!frnTableSort) return filtered;
@@ -1095,7 +1105,28 @@ function ConsultantPortalPage() {
       return frnTableSort.dir === 'asc' ? cmp : -cmp;
     });
     return sorted;
-  }, [flattenedFrns, frnTableSort, portfolioFrnStatusFilter, portfolioFrnSearch, portfolioFrnPendingReason, portfolioFrnTrackingFilter, frnTrackingMap]);
+  }, [flattenedFrns, frnTableSort, portfolioFrnStatusFilter, portfolioFrnSearch, portfolioFrnPendingReason, portfolioFrnTrackingFilter, frnTrackingMap, portfolioFrnServiceType]);
+
+  // Distinct service types present in the portfolio (drives the service-type filter dropdown).
+  const distinctServiceTypes = useMemo(() => {
+    const set = new Set<string>();
+    for (const frn of flattenedFrns) {
+      const st = String(frn.service_type || '').trim();
+      if (st) set.add(st);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [flattenedFrns]);
+
+  // Distinct sub-status / pending reasons present in the portfolio (drives the pending-reason
+  // dropdown — Ari wants a pull-down of the real choices instead of free text).
+  const distinctPendingReasons = useMemo(() => {
+    const set = new Set<string>();
+    for (const frn of flattenedFrns) {
+      const pr = String(frn.pending_reason || '').trim();
+      if (pr) set.add(pr);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [flattenedFrns]);
 
   // Sorted + filtered PIA responses (A-Z / by type), Ari request
   const displayedPiaResponses = useMemo(() => {
@@ -4380,14 +4411,32 @@ function ConsultantPortalPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-sm text-slate-600 mb-1 flex items-center gap-1">Pending Reason <FrnSubStatusInfo /></label>
-                    <input
-                      type="text"
+                    <label className="text-sm text-slate-600 mb-1 flex items-center gap-1">Sub-status / Pending Reason <FrnSubStatusInfo /></label>
+                    <select
                       value={portfolioFrnPendingReason}
                       onChange={(e) => setPortfolioFrnPendingReason(e.target.value)}
-                      placeholder="e.g., PIA Review"
-                      className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-48"
-                    />
+                      className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-56"
+                      title="Filter by the FRN sub-status / pending reason present in your portfolio"
+                    >
+                      <option value="">All sub-statuses</option>
+                      {distinctPendingReasons.map(pr => (
+                        <option key={pr} value={pr}>{pr}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm text-slate-600 mb-1 block">Service Type</label>
+                    <select
+                      value={portfolioFrnServiceType}
+                      onChange={(e) => setPortfolioFrnServiceType(e.target.value)}
+                      className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm"
+                      title="Sift FRNs by a particular service type"
+                    >
+                      <option value="">All service types</option>
+                      {distinctServiceTypes.map(st => (
+                        <option key={st} value={st}>{st}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="text-sm text-slate-600 mb-1 block">My Tracking</label>
