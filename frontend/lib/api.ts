@@ -268,15 +268,32 @@ export interface SamMatch {
   confidence?: 'high' | 'medium' | 'low';
 }
 
+export interface Form498Result {
+  found: boolean;
+  ben: string;
+  entity_name?: string | null;
+  entity_type?: string | null;
+  form_498_status?: string | null;
+  form_498_approved: boolean;
+  approved_date?: string | null;
+  uei_on_498?: boolean | null;
+  form_number?: string | null;
+  error?: string | null;
+  bear_risk: boolean;
+}
+
 export interface SamCheckResult {
   success: boolean;
   ben: string;
   school_name?: string | null;
-  configured: boolean;
   applied?: boolean;
-  error?: string | null;
-  matches: SamMatch[];
-  best_match?: SamMatch | null;
+  form_498: Form498Result;
+  sam: {
+    configured: boolean;
+    error?: string | null;
+    matches: SamMatch[];
+    best_match?: SamMatch | null;
+  };
 }
 
 // ==================== DISBURSEMENT / INVOICING SCHEDULE TYPES ====================

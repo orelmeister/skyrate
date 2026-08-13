@@ -2497,12 +2497,19 @@ function ConsultantPortalPage() {
   const handleSamCheck = async (school: EnhancedSchool) => {
     setSamCheckBen(school.ben);
     setSamCheckResult(null);
+    const emptyResult = (error: string): SamCheckResult => ({
+      success: false,
+      ben: school.ben,
+      school_name: school.school_name,
+      form_498: { found: false, ben: school.ben, form_498_approved: false, bear_risk: false, error },
+      sam: { configured: false, matches: [] },
+    });
     try {
       const resp = await api.consultantSamCheck(school.ben);
       if (resp.success && resp.data) setSamCheckResult(resp.data);
-      else setSamCheckResult({ success: false, ben: school.ben, configured: true, error: resp.error || 'Lookup failed', matches: [] });
+      else setSamCheckResult(emptyResult(resp.error || 'Lookup failed'));
     } catch {
-      setSamCheckResult({ success: false, ben: school.ben, configured: true, error: 'Lookup failed', matches: [] });
+      setSamCheckResult(emptyResult('Lookup failed'));
     } finally {
       setSamCheckBen(null);
     }
@@ -2510,9 +2517,9 @@ function ConsultantPortalPage() {
 
   const handleSamMarkConfirmed = async (ben: string) => {
     setSamApplying(true);
-    setSchools(prev => prev.map(s => (s.ben === ben ? { ...s, sam_gov_registered: true } : s)));
+    setSchools(prev => prev.map(s => (s.ben === ben ? { ...s, sam_gov_registered: true, has_form_498: true } : s)));
     try {
-      await api.updateConsultantSchool(ben, { sam_gov_registered: true });
+      await api.updateConsultantSchool(ben, { sam_gov_registered: true, has_form_498: true });
       setSamCheckResult(null);
     } catch {
       setSchools(prev => prev.map(s => (s.ben === ben ? { ...s, sam_gov_registered: false } : s)));
@@ -3299,10 +3306,10 @@ function ConsultantPortalPage() {
                                 type="button"
                                 onClick={() => handleSamCheck(school)}
                                 disabled={samCheckBen === school.ben}
-                                title="Look up this entity's SAM.gov registration (UEI + status) from the federal source"
+                                title="Check this applicant's FCC Form 498 status and whether it was filed with a SAM.gov UEI (USAC data)"
                                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200 transition-colors disabled:opacity-50"
                               >
-                                {samCheckBen === school.ben ? 'Checking…' : 'Check SAM.gov'}
+                                {samCheckBen === school.ben ? 'Checking…' : 'Check 498/UEI'}
                               </button>
                             </div>
                           </td>
@@ -7543,48 +7550,71 @@ function ConsultantPortalPage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
               <div>
-                <h3 className="font-semibold text-slate-900">SAM.gov registration</h3>
+                <h3 className="font-semibold text-slate-900">Form 498 / SAM.gov UEI</h3>
                 <p className="text-xs text-slate-500 truncate max-w-[360px]">{samCheckResult.school_name || `BEN ${samCheckResult.ben}`}</p>
               </div>
               <button onClick={() => setSamCheckResult(null)} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600">✕</button>
             </div>
-            <div className="p-5 space-y-3">
-              {!samCheckResult.configured ? (
-                <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  SAM.gov lookups aren&apos;t configured yet. Add a data.gov API key (SAM_GOV_API_KEY) to enable automatic confirmation.
-                </div>
-              ) : samCheckResult.error ? (
-                <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">{samCheckResult.error}</div>
-              ) : samCheckResult.matches.length === 0 ? (
-                <div className="text-sm text-slate-600">
-                  No SAM.gov registration found for this entity name. It may be registered under a different legal name, or not registered yet (required for BEAR reimbursement).
-                </div>
-              ) : (
-                <>
-                  <p className="text-xs text-slate-500">Candidate matches from SAM.gov — confirm the correct one before marking.</p>
-                  {samCheckResult.matches.map((m, i) => (
-                    <div key={i} className={`rounded-lg border p-3 ${m.active ? 'border-green-200 bg-green-50' : 'border-slate-200 bg-slate-50'}`}>
+            <div className="p-5 space-y-4">
+              {/* PRIMARY: USAC Form 498 / UEI */}
+              {(() => {
+                const f = samCheckResult.form_498;
+                if (!f || !f.found) {
+                  return (
+                    <div className="text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-lg p-3">
+                      {f?.error || 'No FCC Form 498 record found for this BEN.'}
+                      <div className="text-xs text-slate-400 mt-1">USAC only lists applicants that filed a BEAR (Form 472) in the last 2 years.</div>
+                    </div>
+                  );
+                }
+                return (
+                  <div className={`rounded-lg border p-3 ${f.bear_risk ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50'}`}>
+                    <div className="text-xs font-semibold text-slate-500 mb-2">USAC FCC Form 498 (source of truth)</div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                      <div className="text-slate-500">498 Status</div>
+                      <div className={`font-medium ${f.form_498_approved ? 'text-green-700' : 'text-amber-700'}`}>{f.form_498_status || '—'}</div>
+                      <div className="text-slate-500">Approved date</div>
+                      <div className="text-slate-800">{f.approved_date ? String(f.approved_date).slice(0, 10) : '—'}</div>
+                      <div className="text-slate-500">UEI on 498</div>
+                      <div className={`font-semibold ${f.uei_on_498 === true ? 'text-green-700' : f.uei_on_498 === false ? 'text-red-600' : 'text-slate-500'}`}>
+                        {f.uei_on_498 === true ? 'Yes' : f.uei_on_498 === false ? 'No' : 'Unknown'}
+                      </div>
+                    </div>
+                    {f.bear_risk && (
+                      <div className="mt-2 text-xs text-amber-800 bg-amber-100 border border-amber-200 rounded p-2">
+                        {f.form_498_approved
+                          ? 'BEAR risk: the 498 is approved but has NO UEI. A UEI on an approved 498 is required to receive BEAR payments starting Aug 2026.'
+                          : 'BEAR risk: the FCC Form 498 is not approved. Required before BEAR reimbursement.'}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* SECONDARY: SAM.gov Entity API (optional) */}
+              {samCheckResult.sam?.configured && !samCheckResult.sam?.error && (samCheckResult.sam?.matches?.length ?? 0) > 0 && (
+                <div>
+                  <div className="text-xs font-semibold text-slate-500 mb-1">SAM.gov entity match (for registration/expiry)</div>
+                  {samCheckResult.sam.matches.slice(0, 2).map((m, i) => (
+                    <div key={i} className={`rounded-lg border p-2.5 mb-1.5 ${m.active ? 'border-green-200 bg-green-50' : 'border-slate-200 bg-slate-50'}`}>
                       <div className="flex items-center justify-between gap-2">
                         <div className="font-medium text-sm text-slate-900 truncate">{m.legal_name || '—'}</div>
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${m.active ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'}`}>
-                          {m.registration_status || 'Unknown'}
-                        </span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${m.active ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'}`}>{m.registration_status || 'Unknown'}</span>
                       </div>
-                      <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-slate-600">
+                      <div className="mt-1 grid grid-cols-2 gap-x-4 text-xs text-slate-600">
                         <div>UEI: <span className="font-mono">{m.uei || '—'}</span></div>
-                        <div>State: {m.physical_state || '—'}</div>
                         <div>Expires: {m.expiration_date ? String(m.expiration_date).slice(0, 10) : '—'}</div>
-                        <div>Match: <span className={m.confidence === 'high' ? 'text-green-700 font-medium' : m.confidence === 'medium' ? 'text-amber-700' : 'text-slate-500'}>{m.confidence}</span></div>
                       </div>
                     </div>
                   ))}
-                </>
+                </div>
               )}
+
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button onClick={() => setSamCheckResult(null)} className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100">Close</button>
-                {samCheckResult.configured && !samCheckResult.error && samCheckResult.matches.some(m => m.active) && (
+                {samCheckResult.form_498?.found && samCheckResult.form_498?.form_498_approved && samCheckResult.form_498?.uei_on_498 === true && (
                   <button onClick={() => handleSamMarkConfirmed(samCheckResult.ben)} disabled={samApplying} className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50">
-                    {samApplying ? 'Saving…' : 'Mark SAM.gov confirmed'}
+                    {samApplying ? 'Saving…' : 'Mark 498 + UEI confirmed'}
                   </button>
                 )}
               </div>

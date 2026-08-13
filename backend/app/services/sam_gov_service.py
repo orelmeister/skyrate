@@ -70,6 +70,106 @@ def is_configured() -> bool:
     return bool(get_settings().SAM_GOV_API_KEY)
 
 
+# ---------------------------------------------------------------------------
+# USAC Form 498 / UEI check (PRIMARY source — reliable, BEN-keyed, no API key)
+# ---------------------------------------------------------------------------
+# The USAC "Applicant UEI Check Tool" (datahub story 34w3-8kyc) is backed by the
+# E-Rate Supplemental Entity Information dataset (7i5i-83qf), which our codebase
+# already uses. It exposes, per applicant BEN (entity_number):
+#   - form498_status                 e.g. "Approved"
+#   - fcc_form_498_status_date_time  when the 498 status was last set (approval)
+#   - fcc_form_498_filed_with_uei    "Yes"/"No" — UEI present on the approved 498
+# Requirement (starting Aug 2026) for BEAR payments: a UEI on an APPROVED 498.
+USAC_ENTITY_SUPPLEMENTAL_URL = "https://opendata.usac.org/resource/7i5i-83qf.json"
+
+
+def check_form_498_uei(ben: str) -> Dict[str, Any]:
+    """Look up an applicant's FCC Form 498 status + UEI flag from USAC by BEN.
+
+    Returns:
+      {
+        "found": bool,
+        "ben": str,
+        "entity_name": Optional[str],
+        "entity_type": Optional[str],
+        "form_498_status": Optional[str],       # e.g. "Approved"
+        "form_498_approved": bool,               # status == Approved
+        "approved_date": Optional[str],          # ISO datetime
+        "uei_on_498": Optional[bool],            # True if filed with a UEI
+        "form_number": Optional[str],
+        "error": Optional[str],
+        # Convenience flag for the "needs attention" UI: approved 498 but NO UEI,
+        # or 498 not approved at all → BEAR reimbursement risk after Aug 2026.
+        "bear_risk": bool,
+      }
+    """
+    result: Dict[str, Any] = {
+        "found": False,
+        "ben": ben,
+        "entity_name": None,
+        "entity_type": None,
+        "form_498_status": None,
+        "form_498_approved": False,
+        "approved_date": None,
+        "uei_on_498": None,
+        "form_number": None,
+        "error": None,
+        "bear_risk": False,
+    }
+    clean_ben = (ben or "").strip()
+    if not clean_ben:
+        result["error"] = "BEN is required"
+        return result
+
+    try:
+        resp = requests.get(
+            USAC_ENTITY_SUPPLEMENTAL_URL,
+            params={"entity_number": clean_ben, "$limit": 5},
+            headers=_REQUEST_HEADERS,
+            timeout=30,
+        )
+    except requests.RequestException as exc:
+        logger.warning("USAC 498 lookup failed for BEN %s: %s", clean_ben, exc)
+        result["error"] = "USAC lookup failed"
+        return result
+
+    if resp.status_code != 200:
+        result["error"] = f"USAC returned HTTP {resp.status_code}"
+        return result
+
+    try:
+        rows = resp.json()
+    except ValueError:
+        result["error"] = "USAC returned a non-JSON response"
+        return result
+
+    if not rows:
+        # Not in the dataset — only applicants who filed a BEAR (472) in the last
+        # 2 years are included, so absence is informative but not conclusive.
+        result["error"] = "No FCC Form 498 record found for this BEN (may not have filed a BEAR in the last 2 years)"
+        return result
+
+    row = rows[0]
+    status = (row.get("form498_status") or "").strip()
+    uei_raw = (row.get("fcc_form_498_filed_with_uei") or "").strip().lower()
+    uei_on_498 = True if uei_raw == "yes" else (False if uei_raw == "no" else None)
+    approved = status.lower() == "approved"
+
+    result.update({
+        "found": True,
+        "entity_name": row.get("entity_name"),
+        "entity_type": row.get("entity_type"),
+        "form_498_status": status or None,
+        "form_498_approved": approved,
+        "approved_date": row.get("fcc_form_498_status_date_time"),
+        "uei_on_498": uei_on_498,
+        "form_number": row.get("fcc_form_498_form_number"),
+        "bear_risk": (not approved) or (uei_on_498 is False),
+    })
+    return result
+
+
+
 def check_entity(name: str, state: Optional[str] = None, limit: int = 5) -> Dict[str, Any]:
     """
     Look up an entity by legal business name (+ optional 2-letter state) in

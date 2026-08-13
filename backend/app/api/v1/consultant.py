@@ -3241,13 +3241,18 @@ async def sam_check_school(
     profile: ConsultantProfile = Depends(get_consultant_profile),
     db: Session = Depends(get_db),
 ):
-    """Look up this school's SAM.gov registration by legal name (+ state) and
-    return candidate matches (UEI, status, expiration, confidence).
+    """Confirm this school's FCC Form 498 / UEI status for BEAR eligibility.
 
-    Read-only by default so a fuzzy name match never silently corrupts data.
-    With ?apply=true a single high-confidence ACTIVE match will set the school's
-    sam_gov_registered flag (still consultant-triggered, one school at a time).
-    ?name= overrides the searched legal name (SAM legal names often differ from EPC).
+    PRIMARY source is USAC Open Data (E-Rate Supplemental Entity Information,
+    keyed by BEN): returns whether the Form 498 is Approved, when, and whether it
+    was filed WITH a UEI (required for BEAR payments starting Aug 2026).
+
+    SECONDARY (optional) is a SAM.gov Entity API name lookup for the UEI/registration
+    record, included only when SAM_GOV_API_KEY is configured.
+
+    Read-only by default. With ?apply=true, an Approved 498 that was filed with a
+    UEI will set the school's has_form_498 (and sam_gov_registered) flags.
+    ?name= overrides the SAM.gov legal-name search (SAM names often differ from EPC).
     """
     from ...services import sam_gov_service
 
@@ -3258,19 +3263,31 @@ async def sam_check_school(
     if not school:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"School with BEN {ben} not found")
 
+    # PRIMARY: USAC Form 498 / UEI check by BEN (reliable, no API key).
+    form498 = sam_gov_service.check_form_498_uei(ben)
+
+    # SECONDARY: SAM.gov Entity API name lookup (optional).
     search_name = (name or school.school_name or "").strip()
-    lookup = sam_gov_service.check_entity(search_name, school.state)
+    sam = sam_gov_service.check_entity(search_name, school.state) if sam_gov_service.is_configured() else {
+        "configured": False, "error": None, "matches": [], "best_match": None,
+    }
 
     applied = False
-    if apply and not lookup.get("error"):
-        best = lookup.get("best_match")
-        if best and best.get("active") and best.get("confidence") == "high":
-            school.sam_gov_registered = True
-            db.commit()
-            db.refresh(school)
-            applied = True
+    if apply and form498.get("found") and form498.get("form_498_approved") and form498.get("uei_on_498") is True:
+        school.has_form_498 = True
+        school.sam_gov_registered = True
+        db.commit()
+        db.refresh(school)
+        applied = True
 
-    return {"success": True, "ben": ben, "school_name": school.school_name, "applied": applied, **lookup}
+    return {
+        "success": True,
+        "ben": ben,
+        "school_name": school.school_name,
+        "applied": applied,
+        "form_498": form498,
+        "sam": sam,
+    }
 
 
 @router.delete("/schools/{ben}")
