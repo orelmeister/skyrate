@@ -32,6 +32,13 @@ SAM_ENTITY_URL = "https://api.sam.gov/entity-information/v3/entities"
 
 _ACTIVE_STATUSES = {"active"}
 
+# api.sam.gov sits behind Akamai, which returns a bodyless 404 to the default
+# python-requests User-Agent. A browser-like UA + explicit Accept fixes it.
+_REQUEST_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; SkyRateAI/1.0; +https://skyrate.ai)",
+    "Accept": "application/json",
+}
+
 
 def _norm(name: str) -> str:
     """Normalize an org name for fuzzy comparison (drop punctuation/casing/common words)."""
@@ -106,7 +113,7 @@ def check_entity(name: str, state: Optional[str] = None, limit: int = 5) -> Dict
         params["physicalAddressProvinceOrStateCode"] = state.upper()
 
     try:
-        resp = requests.get(SAM_ENTITY_URL, params=params, timeout=30)
+        resp = requests.get(SAM_ENTITY_URL, params=params, headers=_REQUEST_HEADERS, timeout=30)
     except requests.RequestException as exc:
         logger.warning("SAM.gov request failed: %s", exc)
         result["error"] = "SAM.gov request failed"
