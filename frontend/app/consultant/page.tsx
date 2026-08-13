@@ -4444,15 +4444,10 @@ function ConsultantPortalPage() {
                       value={portfolioFrnTrackingFilter}
                       onChange={(e) => setPortfolioFrnTrackingFilter(e.target.value)}
                       className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm"
-                      title="Filter by your own per-FRN working tracking (status, install, co-pay, PIA)"
+                      title="Filter by your own per-FRN tracking (installation, applicant co-pay)"
                     >
                       <option value="">All (my tracking)</option>
                       <option value="tracked">Has tracking</option>
-                      <optgroup label="Working status">
-                        {WORKING_STATUS_OPTIONS.filter(o => o.value).map(o => (
-                          <option key={o.value} value={`ws:${o.value}`}>{o.label}</option>
-                        ))}
-                      </optgroup>
                       <optgroup label="Install">
                         <option value="installed">Installed</option>
                         <option value="not_installed">Not installed</option>
@@ -4460,10 +4455,6 @@ function ConsultantPortalPage() {
                       <optgroup label="Co-pay">
                         <option value="copay_paid">Co-pay paid</option>
                         <option value="copay_unpaid">Co-pay unpaid</option>
-                      </optgroup>
-                      <optgroup label="PIA">
-                        <option value="pia_outstanding">PIA outstanding</option>
-                        <option value="pia_completed">PIA completed</option>
                       </optgroup>
                     </select>
                   </div>
@@ -4691,25 +4682,15 @@ function ConsultantPortalPage() {
                                 <button
                                   onClick={(e) => { e.stopPropagation(); openTrackingModal(frn.frn, frn.ben); }}
                                   className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-slate-600 bg-slate-100 hover:bg-indigo-100 hover:text-indigo-700 border border-slate-200 transition-colors"
-                                  title="Edit working status, install, co-pay, and PIA tracking for this FRN"
+                                  title="Track installation, applicant co-pay, and notes for this FRN"
                                 >
                                   <SettingsIcon className="w-3 h-3" /> Track
                                 </button>
-                                {frnTrackingMap[frn.frn]?.working_status && (
-                                  <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-100 text-indigo-700 border border-indigo-200" title="Consultant working status">
-                                    {formatWorkingStatus(frnTrackingMap[frn.frn].working_status)}
-                                  </span>
-                                )}
                                 {frnTrackingMap[frn.frn]?.installed && (
                                   <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700 border border-green-200" title="Equipment installed">Installed</span>
                                 )}
                                 {frnTrackingMap[frn.frn]?.copay_paid && (
                                   <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-teal-100 text-teal-700 border border-teal-200" title="Applicant co-pay paid">Co-pay paid</span>
-                                )}
-                                {frnTrackingMap[frn.frn]?.pia_status && frnTrackingMap[frn.frn].pia_status !== 'not_in_pia' && (
-                                  <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold border ${frnTrackingMap[frn.frn].pia_status === 'completed' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-amber-100 text-amber-700 border-amber-200'}`} title="PIA review status">
-                                    PIA: {formatPiaStatus(frnTrackingMap[frn.frn].pia_status)}
-                                  </span>
                                 )}
                               </div>
                             </td>
@@ -7533,17 +7514,11 @@ function ConsultantPortalPage() {
               <div className="p-8 text-center text-sm text-slate-500">Loading…</div>
             ) : (
               <div className="p-5 space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">Working status</label>
-                  <select
-                    value={trackingForm.working_status ?? ''}
-                    onChange={(e) => setTrackingForm(f => f ? { ...f, working_status: e.target.value || null } : f)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    {WORKING_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                  <p className="text-[10px] text-slate-400 mt-1">Your working sub-status — overrides the raw USAC status for your team&apos;s view.</p>
-                </div>
+                <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+                  Funding status and PIA status come automatically from USAC and are shown in the FRN
+                  table &mdash; no need to set them here. Use this panel for the details USAC doesn&apos;t
+                  track: installation, applicant co-pay, and your notes.
+                </p>
 
                 <div className="rounded-lg border border-slate-200 p-3">
                   <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -7567,13 +7542,6 @@ function ConsultantPortalPage() {
                     <label className="block text-xs font-medium text-slate-600 mb-1">Co-pay amount (non-discounted share)</label>
                     <input type="number" step="0.01" min="0" value={trackingForm.copay_amount ?? ''} onChange={(e) => setTrackingForm(f => f ? { ...f, copay_amount: e.target.value === '' ? null : parseFloat(e.target.value) } : f)} placeholder="0.00" className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">PIA review status</label>
-                  <select value={trackingForm.pia_status ?? ''} onChange={(e) => setTrackingForm(f => f ? { ...f, pia_status: e.target.value || null } : f)} className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    {PIA_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
                 </div>
 
                 <div>
