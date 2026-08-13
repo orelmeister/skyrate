@@ -119,7 +119,12 @@ def check_entity(name: str, state: Optional[str] = None, limit: int = 5) -> Dict
         result["error"] = "SAM.gov API key rejected"
         return result
     if resp.status_code != 200:
-        result["error"] = f"SAM.gov returned HTTP {resp.status_code}"
+        body = ""
+        try:
+            body = resp.text[:300].replace("\n", " ")
+        except Exception:
+            body = ""
+        result["error"] = f"SAM.gov returned HTTP {resp.status_code}: {body}".strip()
         return result
 
     try:

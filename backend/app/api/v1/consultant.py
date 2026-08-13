@@ -3237,6 +3237,7 @@ async def update_school(
 async def sam_check_school(
     ben: str,
     apply: bool = Query(False, description="If true and a single high-confidence ACTIVE match is found, set sam_gov_registered"),
+    name: Optional[str] = Query(None, description="Override the legal name searched (defaults to the school's name)"),
     profile: ConsultantProfile = Depends(get_consultant_profile),
     db: Session = Depends(get_db),
 ):
@@ -3246,6 +3247,7 @@ async def sam_check_school(
     Read-only by default so a fuzzy name match never silently corrupts data.
     With ?apply=true a single high-confidence ACTIVE match will set the school's
     sam_gov_registered flag (still consultant-triggered, one school at a time).
+    ?name= overrides the searched legal name (SAM legal names often differ from EPC).
     """
     from ...services import sam_gov_service
 
@@ -3256,7 +3258,8 @@ async def sam_check_school(
     if not school:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"School with BEN {ben} not found")
 
-    lookup = sam_gov_service.check_entity(school.school_name or "", school.state)
+    search_name = (name or school.school_name or "").strip()
+    lookup = sam_gov_service.check_entity(search_name, school.state)
 
     applied = False
     if apply and not lookup.get("error"):
