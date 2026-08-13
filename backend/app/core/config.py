@@ -79,6 +79,9 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = None
     GOOGLE_API_KEY: Optional[str] = None  # Alias for Gemini
     ANTHROPIC_API_KEY: Optional[str] = None
+
+    # SAM.gov Entity Management API (data.gov key) — applicant SAM/UEI registration lookup
+    SAM_GOV_API_KEY: Optional[str] = None
     
     # AI Model Names
     DEEPSEEK_MODEL: str = "deepseek-chat"

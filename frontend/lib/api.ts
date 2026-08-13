@@ -257,6 +257,28 @@ export interface FrnTrackingUpdate {
   notes?: string | null;
 }
 
+export interface SamMatch {
+  uei?: string | null;
+  legal_name?: string | null;
+  registration_status?: string | null;
+  active?: boolean;
+  expiration_date?: string | null;
+  cage_code?: string | null;
+  physical_state?: string | null;
+  confidence?: 'high' | 'medium' | 'low';
+}
+
+export interface SamCheckResult {
+  success: boolean;
+  ben: string;
+  school_name?: string | null;
+  configured: boolean;
+  applied?: boolean;
+  error?: string | null;
+  matches: SamMatch[];
+  best_match?: SamMatch | null;
+}
+
 // ==================== DISBURSEMENT / INVOICING SCHEDULE TYPES ====================
 
 export interface DisbursementLine {
@@ -2727,6 +2749,12 @@ class ApiClient {
 
   async consultantUpsertFrnTracking(data: FrnTrackingUpdate): Promise<ApiResponse<{ success: boolean; tracking: FrnTracking }>> {
     return this.put(`/api/v1/consultant/frn-tracking`, data);
+  }
+
+  // ---- SAM.gov registration lookup for a school (A2 auto-confirm) ----
+  async consultantSamCheck(ben: string, apply = false): Promise<ApiResponse<SamCheckResult>> {
+    const qs = apply ? '?apply=true' : '';
+    return this.request(`/api/v1/consultant/schools/${encodeURIComponent(ben)}/sam-check${qs}`);
   }
 
   async consultant470Lookup(filters: {

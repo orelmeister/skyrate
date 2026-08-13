@@ -3233,6 +3233,43 @@ async def update_school(
     return {"success": True, "school": school.to_dict()}
 
 
+@router.get("/schools/{ben}/sam-check")
+async def sam_check_school(
+    ben: str,
+    apply: bool = Query(False, description="If true and a single high-confidence ACTIVE match is found, set sam_gov_registered"),
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    db: Session = Depends(get_db),
+):
+    """Look up this school's SAM.gov registration by legal name (+ state) and
+    return candidate matches (UEI, status, expiration, confidence).
+
+    Read-only by default so a fuzzy name match never silently corrupts data.
+    With ?apply=true a single high-confidence ACTIVE match will set the school's
+    sam_gov_registered flag (still consultant-triggered, one school at a time).
+    """
+    from ...services import sam_gov_service
+
+    school = db.query(ConsultantSchool).filter(
+        ConsultantSchool.consultant_profile_id == profile.id,
+        ConsultantSchool.ben == ben,
+    ).first()
+    if not school:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"School with BEN {ben} not found")
+
+    lookup = sam_gov_service.check_entity(school.school_name or "", school.state)
+
+    applied = False
+    if apply and not lookup.get("error"):
+        best = lookup.get("best_match")
+        if best and best.get("active") and best.get("confidence") == "high":
+            school.sam_gov_registered = True
+            db.commit()
+            db.refresh(school)
+            applied = True
+
+    return {"success": True, "ben": ben, "school_name": school.school_name, "applied": applied, **lookup}
+
+
 @router.delete("/schools/{ben}")
 async def remove_school(
     ben: str,
