@@ -171,7 +171,16 @@ function IndustryPulseInner() {
                   <Activity className="w-5 h-5 text-purple-600" />
                   Industry Pulse
                 </h1>
-                <p className="text-sm text-slate-500">Live E-Rate market overview</p>
+                <p className="text-sm text-slate-500">
+                  {stateFilter ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      Scoped to <span className="font-semibold text-indigo-600">{stateFilter}</span>
+                      <button onClick={() => handleStateChange("")} className="text-indigo-500 hover:text-indigo-700 underline">clear</button>
+                    </span>
+                  ) : (
+                    "Live E-Rate market overview"
+                  )}
+                </p>
               </div>
             </div>
           </div>
@@ -388,11 +397,17 @@ function IndustryPulseInner() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
                   {pulse.top_states.map((st, idx) => (
-                    <div key={st.state} className="flex items-center gap-3">
+                    <button
+                      key={st.state}
+                      type="button"
+                      onClick={() => handleStateChange(stateFilter === st.state ? "" : st.state)}
+                      title={stateFilter === st.state ? "Clear state filter" : `Drill into ${st.state} — scope every metric (incl. denial rate) to this state`}
+                      className={`flex items-center gap-3 text-left rounded-lg px-2 py-1 -mx-2 transition-colors ${stateFilter === st.state ? 'bg-indigo-50 ring-1 ring-indigo-200' : 'hover:bg-slate-50'}`}
+                    >
                       <span className="w-6 text-xs font-semibold text-slate-400">
                         {idx + 1}
                       </span>
-                      <span className="w-10 font-semibold text-slate-700">{st.state}</span>
+                      <span className={`w-10 font-semibold ${stateFilter === st.state ? 'text-indigo-700' : 'text-slate-700'}`}>{st.state}</span>
                       <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
                         <div
                           className="h-full rounded-full bg-gradient-to-r from-blue-500 to-indigo-500"
@@ -402,7 +417,7 @@ function IndustryPulseInner() {
                       <span className="w-20 text-right text-sm font-medium text-slate-700">
                         {fmtCompactUSD(st.committed)}
                       </span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
