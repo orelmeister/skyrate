@@ -163,6 +163,43 @@ function MyTeamPanel() {
 const CONSULTANT_TABS = ["dashboard", "schools", "funding", "frn-status", "appeals", "pia", "service-search", "settings"] as const;
 type ConsultantTab = typeof CONSULTANT_TABS[number];
 
+// Force-download a USAC RFP document (the real file the applicant attached to
+// their Form 470). Routes publicdata.usac.org files through the backend proxy
+// `/api/v1/vendor/rfp-download` (no auth required, host-allow-listed) so the
+// browser gets a clean attachment instead of a corrupt HTML wrapper.
+async function forceDownloadFile(url: string, suggestedFilename?: string): Promise<void> {
+  try {
+    let fetchUrl = url;
+    try {
+      const u = new URL(url);
+      if (u.hostname === "publicdata.usac.org") {
+        fetchUrl = `/api/v1/vendor/rfp-download?url=${encodeURIComponent(url)}`;
+      }
+    } catch { /* not a parseable URL — fall through to direct fetch */ }
+
+    const response = await fetch(fetchUrl, { method: "GET", credentials: "same-origin" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+
+    let filename = suggestedFilename || url.split("/").pop() || "document.pdf";
+    try { filename = decodeURIComponent(filename); } catch { /* leave as-is */ }
+    filename = filename.replace(/^\d+-/, "").replace(/\s+/g, " ").trim() || "document";
+
+    const a = document.createElement("a");
+    a.style.display = "none";
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(blobUrl);
+    document.body.removeChild(a);
+  } catch (err) {
+    console.error("forceDownloadFile failed, falling back to new-tab open:", err);
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+}
+
 // Extended school type with USAC data
 interface EnhancedSchool {
   id: number;
@@ -6439,6 +6476,7 @@ function ConsultantPortalPage() {
                               <th className="text-left px-4 py-3 font-medium text-slate-600">Service Types</th>
                               <th className="text-left px-4 py-3 font-medium text-slate-600">Allowable Contract Date</th>
                               <th className="text-center px-4 py-3 font-medium text-slate-600">Status</th>
+                              <th className="text-left px-4 py-3 font-medium text-slate-600">RFP Docs</th>
                               <th className="text-center px-4 py-3 font-medium text-slate-600">USAC</th>
                             </tr>
                           </thead>
@@ -6451,6 +6489,31 @@ function ConsultantPortalPage() {
                                 <td className="px-4 py-3 text-slate-600 text-xs">{Array.isArray(lead.service_types) ? lead.service_types.join(', ') : (lead.service_type || '')}</td>
                                 <td className="px-4 py-3 text-slate-600 text-xs">{lead.allowable_contract_date ? String(lead.allowable_contract_date).slice(0, 10) : '—'}</td>
                                 <td className="px-4 py-3 text-center text-xs text-slate-600">{lead.status || ''}</td>
+                                <td className="px-4 py-3 text-xs">
+                                  {(() => {
+                                    const docs = (Array.isArray(lead.services) ? lead.services : [])
+                                      .map((s: any) => (s && typeof s.rfp_documents === 'string' && s.rfp_documents.startsWith('http')) ? s.rfp_documents : null)
+                                      .filter((u: string | null, i: number, arr: (string | null)[]): u is string => !!u && arr.indexOf(u) === i);
+                                    if (docs.length === 0) return <span className="text-slate-300">—</span>;
+                                    const fileName = (u: string) => { try { return decodeURIComponent(u.split('/').pop() || 'document').replace(/^\d+-/, ''); } catch { return 'document'; } };
+                                    return (
+                                      <div className="flex flex-col gap-1">
+                                        {docs.map((u: string, di: number) => (
+                                          <button
+                                            key={di}
+                                            type="button"
+                                            onClick={() => forceDownloadFile(u, fileName(u))}
+                                            title={fileName(u)}
+                                            className="inline-flex items-center gap-1 text-emerald-700 hover:text-emerald-900 hover:underline text-left"
+                                          >
+                                            <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" /></svg>
+                                            <span className="max-w-[160px] truncate">{fileName(u)}</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    );
+                                  })()}
+                                </td>
                                 <td className="px-4 py-3 text-center">
                                   <a
                                     href={`https://opendata.usac.org/E-Rate/E-Rate-Request-for-Discount-on-Services-FCC-Form-47/jp7a-89nd/explore?q=${encodeURIComponent(lead.application_number || '')}`}
