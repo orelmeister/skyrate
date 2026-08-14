@@ -4253,6 +4253,7 @@ async def get_portfolio_frn_status(
                 "sub_status": sub_status,
                 "spin": getattr(r, 'spin', None) or "",
                 "contract_number": getattr(r, 'contract_number', None) or "",
+                "nickname": getattr(r, 'nickname', None) or "",
             }
             all_frns.append(frn_dict)
             bucket = per_school.setdefault(

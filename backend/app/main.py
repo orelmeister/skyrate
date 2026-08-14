@@ -733,6 +733,8 @@ def _run_schema_migrations(engine):
         ("alert_configs", "alert_on_service_delivery", "TINYINT(1) NOT NULL DEFAULT 1", None),
         # Admin FRN snapshot — USAC PIA sub-status
         ("admin_frn_snapshots", "pending_reason", "VARCHAR(256) DEFAULT NULL", None),
+        # Admin FRN snapshot — applicant-assigned nickname (USAC qdmp-ygft)
+        ("admin_frn_snapshots", "nickname", "VARCHAR(512) DEFAULT NULL", None),
         # Support chat voice notes / attachments + read tracking on ticket messages
         ("ticket_messages", "file_data", "LONGBLOB DEFAULT NULL", None),
         ("ticket_messages", "file_name", "VARCHAR(255) DEFAULT NULL", None),

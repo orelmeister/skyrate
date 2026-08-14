@@ -27,6 +27,7 @@ class AdminFRNSnapshot(Base):
     source = Column(String(32), nullable=True)  # consultant / applicant / vendor
     fcdl_date = Column(String(64), nullable=True)
     pending_reason = Column(String(256), nullable=True)
+    nickname = Column(String(512), nullable=True)
     spin = Column(String(64), nullable=True, index=True)
     spin_name = Column(String(255), nullable=True, index=True)
     contract_number = Column(String(128), nullable=True, index=True)

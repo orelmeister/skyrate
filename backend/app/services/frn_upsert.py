@@ -199,6 +199,10 @@ def upsert_frn_snapshots(
                     ex.spin_name = rec_spin_name
                 if rec_cn and not ex.contract_number:
                     ex.contract_number = rec_cn
+                # Backfill nickname when newly available (older rows predate it).
+                rec_nick = rec.get("nickname") or ""
+                if rec_nick and not getattr(ex, "nickname", None):
+                    ex.nickname = rec_nick
                 updates += 1
         else:
             rec_copy = dict(rec)
@@ -442,6 +446,9 @@ def build_rec_from_usac_frn(
         "source": source,
         "fcdl_date": frn.get("fcdl_date", ""),
         "pending_reason": frn.get("pending_reason", ""),
+        # Applicant-assigned FRN nickname (from USAC qdmp-ygft "nickname"), shown
+        # under the FRN so consultants recognize what the line item is for.
+        "nickname": frn.get("nickname", "") or "",
         # Store SPIN NUMBER and SPIN NAME in separate columns so search can
         # match either. Historically these were collapsed into one column
         # (preferring the name) which broke SPIN-by-number search.

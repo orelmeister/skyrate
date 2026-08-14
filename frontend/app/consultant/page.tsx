@@ -1032,6 +1032,7 @@ function ConsultantPortalPage() {
             wave_number: frn.wave_number || '',
             fcdl_comment: frn.fcdl_comment || frn.fcdl_comment_frn || '',
             contract_number: frn.contract_number || '',
+            nickname: frn.nickname || '',
           });
         }
       }
@@ -4669,6 +4670,9 @@ function ConsultantPortalPage() {
                             <td className="px-4 py-3">
                               <div className="font-mono text-xs text-slate-900">{frn.frn}</div>
                               <div className="text-xs text-slate-500">{frn.application_number}</div>
+                              {frn.nickname && (
+                                <div className="text-[11px] text-slate-600 italic max-w-[220px] truncate" title={frn.nickname}>{frn.nickname}</div>
+                              )}
                               <a
                                 href={`https://opendata.usac.org/E-Rate/FCC-Form-471-FRN-Status/qdmp-ygft/explore?q=${encodeURIComponent(frn.frn || '')}`}
                                 target="_blank"
