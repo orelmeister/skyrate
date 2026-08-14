@@ -632,6 +632,10 @@ function ConsultantPortalPage() {
   const [piaError, setPiaError] = useState<string | null>(null);
   const [piaSort, setPiaSort] = useState<'recent' | 'org_az' | 'type_az'>('recent');
   const [piaTypeFilter, setPiaTypeFilter] = useState<string>('');
+  // Sort/filter for the OUTSTANDING PIAs table (FRNs currently under USAC review). Ari
+  // wants these controls on the active-PIAs section at the top, not just the responses list.
+  const [piaFrnSort, setPiaFrnSort] = useState<'entity_az' | 'reason_az' | 'amount_desc'>('entity_az');
+  const [piaFrnReasonFilter, setPiaFrnReasonFilter] = useState<string>('');
   const [detectedCategory, setDetectedCategory] = useState<{ category: string; name: string } | null>(null);
   const [templatePreview, setTemplatePreview] = useState<PIAPreview | null>(null);
 
@@ -1148,6 +1152,28 @@ function ConsultantPortalPage() {
     }
     return sorted;
   }, [piaResponses, piaTypeFilter, piaSort]);
+
+  // Distinct pending reasons across the outstanding-PIA FRNs (drives the filter dropdown).
+  const piaFrnReasons = useMemo(() => {
+    const set = new Set<string>();
+    for (const f of piaFRNs) { const r = (f.pending_reason || '').trim(); if (r) set.add(r); }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [piaFRNs]);
+
+  // Sorted + filtered outstanding-PIA FRNs (top section). Ari request.
+  const displayedPiaFRNs = useMemo(() => {
+    let list = piaFRNs;
+    if (piaFrnReasonFilter) list = list.filter((f) => (f.pending_reason || '') === piaFrnReasonFilter);
+    const sorted = [...list];
+    if (piaFrnSort === 'reason_az') {
+      sorted.sort((a, b) => (a.pending_reason || '').localeCompare(b.pending_reason || ''));
+    } else if (piaFrnSort === 'amount_desc') {
+      sorted.sort((a, b) => (Number(b.amount_requested) || 0) - (Number(a.amount_requested) || 0));
+    } else {
+      sorted.sort((a, b) => (a.school_name || '').localeCompare(b.school_name || ''));
+    }
+    return sorted;
+  }, [piaFRNs, piaFrnReasonFilter, piaFrnSort]);
 
   // Reset visible count when the underlying dataset/filters change
   useEffect(() => {
@@ -5918,6 +5944,26 @@ function ConsultantPortalPage() {
                   </div>
                 </div>
                 <div className="p-6">
+                  {piaFRNs.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-3 mb-4">
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-slate-500">Sort</label>
+                        <select value={piaFrnSort} onChange={(e) => setPiaFrnSort(e.target.value as 'entity_az' | 'reason_az' | 'amount_desc')} className="px-2 py-1.5 border border-slate-200 rounded-lg bg-white text-sm">
+                          <option value="entity_az">Entity A–Z</option>
+                          <option value="reason_az">Pending reason A–Z</option>
+                          <option value="amount_desc">Amount (high → low)</option>
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-slate-500">Pending reason</label>
+                        <select value={piaFrnReasonFilter} onChange={(e) => setPiaFrnReasonFilter(e.target.value)} className="px-2 py-1.5 border border-slate-200 rounded-lg bg-white text-sm">
+                          <option value="">All reasons</option>
+                          {piaFrnReasons.map((r) => (<option key={r} value={r}>{r}</option>))}
+                        </select>
+                      </div>
+                      <span className="text-xs text-slate-400">{displayedPiaFRNs.length} of {piaFRNs.length}</span>
+                    </div>
+                  )}
                   {isLoadingPiaFRNs ? (
                     <div className="space-y-3">
                       {[1, 2, 3].map((i) => (
@@ -5941,7 +5987,7 @@ function ConsultantPortalPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {piaFRNs.map((item, idx) => (
+                          {displayedPiaFRNs.map((item, idx) => (
                             <tr
                               key={idx}
                               className={`border-b border-slate-50 hover:bg-amber-50 cursor-pointer transition-colors ${item.frn === piaFrn && item.ben === piaBen ? "bg-amber-100" : ""}`}
