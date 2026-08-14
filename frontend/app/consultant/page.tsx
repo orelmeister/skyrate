@@ -458,7 +458,7 @@ function ConsultantCommandCenter({
           { label: "Add school", icon: <Plus className="w-5 h-5" />, fn: onAddSchool },
           { label: "FRN status", icon: <Activity className="w-5 h-5" />, fn: () => onTab("frn-status") },
           { label: "Appeals", icon: <Scale className="w-5 h-5" />, fn: () => onTab("appeals") },
-          { label: "Service search", icon: <Search className="w-5 h-5" />, fn: () => onTab("service-search") },
+          { label: "Form 470/471 Lookup", icon: <Search className="w-5 h-5" />, fn: () => onTab("service-search") },
         ]).map((a) => (
           <button key={a.label} onClick={a.fn} className={`rounded-2xl border p-4 flex flex-col items-center gap-2 transition-all ${qaBtn}`}>
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${qaIcon}`}>{a.icon}</div><span className="text-sm font-medium">{a.label}</span>
@@ -691,6 +691,7 @@ function ConsultantPortalPage() {
   const [serviceSearchLoading, setServiceSearchLoading] = useState(false);
   const [serviceSearchBensSearched, setServiceSearchBensSearched] = useState(0);
   // Form 470 / 471 Lookup state (mirrors the vendor portal's expandable 471 view)
+  const [lookupFormType, setLookupFormType] = useState<'470' | '471'>('471');
   const [form471BenInput, setForm471BenInput] = useState("");
   const [form471Year, setForm471Year] = useState<number | undefined>(undefined);
   const [form471Data, setForm471Data] = useState<Form471ByEntityResponse | null>(null);
@@ -699,6 +700,10 @@ function ConsultantPortalPage() {
   const [expanded471Frn, setExpanded471Frn] = useState<string | null>(null);
   const [form471LineItemsCache, setForm471LineItemsCache] = useState<Record<string, Form471LineItem[]>>({});
   const [form471LineItemsLoadingFrn, setForm471LineItemsLoadingFrn] = useState<string | null>(null);
+  // Form 470 (open service requests / RFPs) lookup — separate result set.
+  const [form470Leads, setForm470Leads] = useState<any[] | null>(null);
+  const [form470Loading, setForm470Loading] = useState(false);
+  const [form470Error, setForm470Error] = useState<string | null>(null);
 
   // Per-FRN consultant working annotations (A4/A5 status, A6 install, A7 co-pay, PIA).
   const [frnTrackingMap, setFrnTrackingMap] = useState<Record<string, FrnTracking>>({});
@@ -2688,6 +2693,37 @@ function ConsultantPortalPage() {
     }
   };
 
+  // Look up open Form 470 postings (service requests / RFPs) for a BEN.
+  const lookupForm470ByBen = async () => {
+    if (!form471BenInput.trim()) {
+      setForm470Error("Please enter a BEN (Billed Entity Number)");
+      return;
+    }
+    setForm470Loading(true);
+    setForm470Error(null);
+    setForm470Leads(null);
+    try {
+      const response = await api.consultant470Lookup({ ben: form471BenInput.trim(), year: form471Year });
+      if (response.success && response.data) {
+        const leads = (response.data.leads || response.data.results || []) as any[];
+        setForm470Leads(Array.isArray(leads) ? leads : []);
+      } else {
+        setForm470Error(response.error || "Failed to fetch 470 data");
+      }
+    } catch (error) {
+      console.error("470 lookup failed:", error);
+      setForm470Error("Failed to look up Form 470 data. Please try again.");
+    } finally {
+      setForm470Loading(false);
+    }
+  };
+
+  // Run whichever lookup the form-type dropdown currently selects.
+  const runLookup = () => {
+    if (lookupFormType === '470') lookupForm470ByBen();
+    else lookupForm471ByBen();
+  };
+
   // Toggle an FRN row's line-item sub-table. Caches results per FRN so
   // re-clicking the same row never refetches.
   const toggleConsultant471LineItems = async (frn: string) => {
@@ -2748,7 +2784,7 @@ function ConsultantPortalPage() {
       { id: "pia", label: "PIA Assistant", Icon: Shield },
     ]},
     { label: "Intelligence", items: [
-      { id: "service-search", label: "Service Search", Icon: Search },
+      { id: "service-search", label: "Form 470/471 Lookup", Icon: Search },
     ]},
     // Settings is account-level (profile + CRN) and owner-only. Hide for seats.
     ...(isSeat ? [] : [{ label: "Account", items: [{ id: "settings" as ConsultantTab, label: "Settings", Icon: SettingsIcon }] }]),
@@ -6227,15 +6263,26 @@ function ConsultantPortalPage() {
               {/* Form 470 / 471 Lookup */}
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
                 <h2 className="text-lg font-semibold text-slate-900 mb-1">Form 470 / 471 Lookup</h2>
-                <p className="text-sm text-slate-500 mb-4">Enter any school&apos;s BEN to see its Form 471 award history — winning vendors and committed amounts. Click any FRN to expand its itemized line items (function, product, manufacturer, model, quantity, unit cost and extended cost).</p>
+                <p className="text-sm text-slate-500 mb-4">Pick a form, then enter any school&apos;s BEN. <strong>Form 471</strong> shows its award history — winning vendors and committed amounts (click any FRN to expand line items). <strong>Form 470</strong> shows its open service requests / RFP postings.</p>
                 <div className="flex flex-col sm:flex-row sm:items-end gap-4">
+                  <div className="w-full sm:w-44">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Form</label>
+                    <select
+                      value={lookupFormType}
+                      onChange={(e) => setLookupFormType(e.target.value as '470' | '471')}
+                      className="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                    >
+                      <option value="471">Form 471 (awards)</option>
+                      <option value="470">Form 470 (requests)</option>
+                    </select>
+                  </div>
                   <div className="flex-1">
                     <label className="block text-sm font-medium text-slate-700 mb-2">Billed Entity Number (BEN)</label>
                     <input
                       type="text"
                       value={form471BenInput}
                       onChange={(e) => setForm471BenInput(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") lookupForm471ByBen(); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") runLookup(); }}
                       placeholder="e.g. 125678"
                       className="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                     />
@@ -6258,11 +6305,11 @@ function ConsultantPortalPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={lookupForm471ByBen}
-                    disabled={form471Loading}
+                    onClick={runLookup}
+                    disabled={form471Loading || form470Loading}
                     className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg hover:shadow-indigo-200 transition-all disabled:opacity-50 font-medium whitespace-nowrap"
                   >
-                    {form471Loading ? (
+                    {(form471Loading || form470Loading) ? (
                       <span className="flex items-center gap-2">
                         <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -6270,17 +6317,74 @@ function ConsultantPortalPage() {
                         </svg>
                         Looking up...
                       </span>
-                    ) : "Look Up 471"}
+                    ) : (lookupFormType === '470' ? "Look Up 470" : "Look Up 471")}
                   </button>
                 </div>
 
-                {form471Error && (
+                {lookupFormType === '470' && form470Error && (
+                  <div className="mt-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">
+                    {form470Error}
+                  </div>
+                )}
+
+                {lookupFormType === '470' && form470Leads && (
+                  <div className="mt-6">
+                    {form470Leads.length === 0 ? (
+                      <div className="px-4 py-6 text-sm text-slate-500 bg-slate-50 rounded-xl border border-slate-200 text-center">No open Form 470 postings found for this BEN{form471Year ? ` in ${form471Year}` : ""}. (Form 470 lookups cover current &amp; recent funding years only.)</div>
+                    ) : (
+                      <div className="overflow-x-auto rounded-xl border border-slate-200">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50 border-b border-slate-200">
+                            <tr>
+                              <th className="text-left px-4 py-3 font-medium text-slate-600">Year</th>
+                              <th className="text-left px-4 py-3 font-medium text-slate-600">Form 470 #</th>
+                              <th className="text-left px-4 py-3 font-medium text-slate-600">Entity</th>
+                              <th className="text-left px-4 py-3 font-medium text-slate-600">Service Types</th>
+                              <th className="text-left px-4 py-3 font-medium text-slate-600">Allowable Contract Date</th>
+                              <th className="text-center px-4 py-3 font-medium text-slate-600">Status</th>
+                              <th className="text-center px-4 py-3 font-medium text-slate-600">USAC</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {form470Leads.slice(0, 50).map((lead, idx) => (
+                              <tr key={idx} className="hover:bg-slate-50">
+                                <td className="px-4 py-3 text-slate-900">{lead.funding_year || ''}</td>
+                                <td className="px-4 py-3 font-mono text-xs text-slate-600">{lead.application_number || ''}</td>
+                                <td className="px-4 py-3 text-slate-700">{lead.entity_name || ''}{lead.state ? <span className="text-xs text-slate-400"> · {lead.state}</span> : null}</td>
+                                <td className="px-4 py-3 text-slate-600 text-xs">{Array.isArray(lead.service_types) ? lead.service_types.join(', ') : (lead.service_type || '')}</td>
+                                <td className="px-4 py-3 text-slate-600 text-xs">{lead.allowable_contract_date ? String(lead.allowable_contract_date).slice(0, 10) : '—'}</td>
+                                <td className="px-4 py-3 text-center text-xs text-slate-600">{lead.status || ''}</td>
+                                <td className="px-4 py-3 text-center">
+                                  <a
+                                    href={`https://opendata.usac.org/E-Rate/E-Rate-Request-for-Discount-on-Services-FCC-Form-47/jp7a-89nd/explore?q=${encodeURIComponent(lead.application_number || '')}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[11px] text-indigo-600 hover:text-indigo-800 hover:underline"
+                                  >
+                                    View ↗
+                                  </a>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {form470Leads.length > 50 && (
+                          <div className="p-4 text-center text-sm text-slate-500 bg-slate-50 border-t border-slate-200">
+                            Showing first 50 of {form470Leads.length} postings
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {lookupFormType === '471' && form471Error && (
                   <div className="mt-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">
                     {form471Error}
                   </div>
                 )}
 
-                {form471Data && (
+                {lookupFormType === '471' && form471Data && (
                   <div className="mt-6">
                     <div className="flex flex-wrap items-center gap-x-6 gap-y-1 mb-4">
                       <div>
