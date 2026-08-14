@@ -1175,6 +1175,23 @@ function ConsultantPortalPage() {
     return sorted;
   }, [piaFRNs, piaFrnReasonFilter, piaFrnSort]);
 
+  // Invoicing & Disbursement roll-up (Ari #12) — computed from the already-loaded
+  // portfolio FRNs so the Funding tab surfaces how much committed money has actually
+  // been invoiced/disbursed vs still outstanding, without an extra USAC round-trip.
+  const disbursementSummary = useMemo(() => {
+    let committed = 0, disbursed = 0, notStarted = 0, fully = 0;
+    for (const f of flattenedFrns) {
+      const c = Number(f.commitment_amount) || 0;
+      const d = Number(f.disbursed_amount) || 0;
+      committed += c;
+      disbursed += d;
+      if (c > 0 && d <= 0) notStarted += 1;
+      if (c > 0 && d >= c) fully += 1;
+    }
+    const pct = committed > 0 ? Math.round((disbursed / committed) * 100) : 0;
+    return { committed, disbursed, outstanding: Math.max(committed - disbursed, 0), pct, notStarted, fully, count: flattenedFrns.length };
+  }, [flattenedFrns]);
+
   // Reset visible count when the underlying dataset/filters change
   useEffect(() => {
     setVisibleFrnCount(25);
@@ -2802,7 +2819,7 @@ function ConsultantPortalPage() {
     ]},
     { label: "Portfolio", items: [
       { id: "schools", label: "My Schools", Icon: Building2 },
-      { id: "funding", label: "Funding Data", Icon: Coins },
+      { id: "funding", label: "Funding & Invoicing", Icon: Coins },
     ]},
     { label: "Filings & Compliance", items: [
       { id: "frn-status", label: "FRN Status", Icon: Activity },
@@ -3601,6 +3618,40 @@ function ConsultantPortalPage() {
                     </div>
                     <div className="text-3xl font-bold text-red-700">{formatAmount(fundingSummary.summary?.denied?.amount || 0)}</div>
                     <div className="text-sm text-red-600 mt-1">Denied</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Invoicing & Disbursement roll-up (Ari #12) */}
+              {flattenedFrns.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="p-6 border-b border-slate-200">
+                    <h3 className="font-semibold text-slate-900">Invoicing &amp; Disbursement</h3>
+                    <p className="text-sm text-slate-500 mt-1">How much of your committed E-Rate funding has actually been invoiced and disbursed by USAC</p>
+                  </div>
+                  <div className="p-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="rounded-xl border border-slate-200 p-4">
+                      <div className="text-2xl font-bold text-slate-900">{formatAmount(disbursementSummary.committed)}</div>
+                      <div className="text-sm text-slate-500 mt-1">Total committed</div>
+                    </div>
+                    <div className="rounded-xl border border-emerald-200 p-4 bg-emerald-50/40">
+                      <div className="text-2xl font-bold text-emerald-700">{formatAmount(disbursementSummary.disbursed)}</div>
+                      <div className="text-sm text-emerald-600 mt-1">Disbursed ({disbursementSummary.pct}%)</div>
+                    </div>
+                    <div className="rounded-xl border border-amber-200 p-4 bg-amber-50/40">
+                      <div className="text-2xl font-bold text-amber-700">{formatAmount(disbursementSummary.outstanding)}</div>
+                      <div className="text-sm text-amber-600 mt-1">Outstanding to invoice</div>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 p-4">
+                      <div className="text-2xl font-bold text-slate-900">{disbursementSummary.notStarted}</div>
+                      <div className="text-sm text-slate-500 mt-1">FRNs not yet invoiced</div>
+                    </div>
+                  </div>
+                  <div className="px-6 pb-6">
+                    <div className="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600" style={{ width: `${Math.min(disbursementSummary.pct, 100)}%` }} />
+                    </div>
+                    <p className="text-xs text-slate-400 mt-2">{disbursementSummary.fully} of {disbursementSummary.count} FRNs fully disbursed. See the FRN Status tab for per-FRN invoicing detail.</p>
                   </div>
                 </div>
               )}
