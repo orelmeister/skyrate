@@ -716,6 +716,30 @@ function VendorPortalPage() {
   const [form470Detail, setForm470Detail] = useState<Form470DetailResponse | null>(null);
   const [form470DetailLoading, setForm470DetailLoading] = useState(false);
   const [showForm470Modal, setShowForm470Modal] = useState(false);
+  // Application number currently resolving a real certified Form 470/471 PDF (per-row spinner).
+  const [pdfBusyApp, setPdfBusyApp] = useState<string | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+
+  // Resolve + download the ACTUAL certified Form 470/471 PDF from USAC Open Data.
+  const downloadFormPdf = async (form: '470' | '471', applicationNumber?: string | null) => {
+    const app = String(applicationNumber || '').trim();
+    if (!app) return;
+    setPdfBusyApp(app);
+    setPdfError(null);
+    try {
+      const resp = await api.vendorFormPdfUrl(form, app);
+      const url = resp.success && resp.data ? resp.data.pdf_url : null;
+      if (url) {
+        await forceDownloadFile(url, `FCC_Form_${form}_${app}_CERTIFIED.pdf`);
+      } else {
+        setPdfError(`No certified Form ${form} PDF is published by USAC for application ${app}${form === '471' ? ' (only original certified versions are available)' : ''}.`);
+      }
+    } catch {
+      setPdfError(`Could not fetch the Form ${form} PDF. Please try again.`);
+    } finally {
+      setPdfBusyApp(null);
+    }
+  };
 
   // Dashboard "Latest Opportunities" — a lightweight, newest-first slice of Form 470
   // leads shown on the landing dashboard. Kept separate from the full 470-leads tab
@@ -3832,6 +3856,19 @@ function VendorPortalPage() {
                                   <svg className={`w-3 h-3 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                                   {record.frn}
                                 </span>
+                                {record.application_number && (
+                                  <div className="mt-1">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); downloadFormPdf('471', record.application_number); }}
+                                      disabled={pdfBusyApp === String(record.application_number)}
+                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-medium hover:bg-emerald-700 disabled:opacity-50"
+                                    >
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" /></svg>
+                                      {pdfBusyApp === String(record.application_number) ? 'Fetching…' : 'Form 471 PDF'}
+                                    </button>
+                                  </div>
+                                )}
                               </td>
                               <td className="px-4 py-3">
                                 <div className="font-medium text-slate-900">{record.service_provider_name}</div>
@@ -5630,6 +5667,14 @@ function VendorPortalPage() {
         </div>
       )}
 
+      {/* Certified-PDF resolve error toast */}
+      {pdfError && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] max-w-md px-4 py-3 rounded-xl bg-red-600 text-white text-sm shadow-lg flex items-start gap-3">
+          <span className="flex-1">{pdfError}</span>
+          <button type="button" onClick={() => setPdfError(null)} className="text-white/80 hover:text-white">✕</button>
+        </div>
+      )}
+
       {/* Form 470 Detail Modal (Sprint 3) */}
       {showForm470Modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -5649,6 +5694,17 @@ function VendorPortalPage() {
                   <p className="text-orange-100 mt-1">
                     Form 470 #{form470Detail?.application_number} • {form470Detail?.funding_year}
                   </p>
+                  {form470Detail?.application_number && (
+                    <button
+                      type="button"
+                      onClick={() => downloadFormPdf('470', form470Detail.application_number)}
+                      disabled={pdfBusyApp === String(form470Detail.application_number)}
+                      className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" /></svg>
+                      {pdfBusyApp === String(form470Detail.application_number) ? 'Fetching…' : 'Download Form 470 PDF'}
+                    </button>
+                  )}
                 </div>
                 <button
                   onClick={closeForm470Modal}

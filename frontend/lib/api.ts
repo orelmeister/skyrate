@@ -2728,6 +2728,12 @@ class ApiClient {
     return this.request(`/api/v1/vendor/471/frn/${frn}/line-items`);
   }
 
+  // Resolve the actual certified Form 470/471 PDF URL from USAC Open Data (vendor side).
+  async vendorFormPdfUrl(form: '470' | '471', applicationNumber: string): Promise<ApiResponse<{ form: string; application_number: string; pdf_url: string | null }>> {
+    const params = new URLSearchParams({ form, application_number: applicationNumber });
+    return this.request(`/api/v1/vendor/form-pdf?${params.toString()}`);
+  }
+
   async get471ByState(state: string, year?: number, category?: string, limit: number = 500): Promise<ApiResponse<Form471ByStateResponse>> {
     const params = new URLSearchParams();
     if (year) params.set('year', String(year));

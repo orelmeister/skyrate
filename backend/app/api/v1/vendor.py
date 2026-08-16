@@ -1903,6 +1903,72 @@ def _rfp_safe_filename(name: str) -> str:
     return name or "document"
 
 
+@router.get("/form-pdf")
+async def vendor_form_pdf_url(
+    form: str,
+    application_number: str,
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
+):
+    """
+    Resolve the URL of the ACTUAL certified FCC Form 470 or 471 PDF for a given
+    application number, straight from USAC Open Data (vendor-side twin of the
+    consultant /form-pdf endpoint).
+
+    - Form 470: dataset jp7a-89nd, column `f470_number` (URL to the submitted PDF).
+    - Form 471: dataset 9s6i-myen, column `file_url` on the Original form version.
+
+    Both PDFs live on publicdata.usac.org, which the /vendor/rfp-download proxy
+    already allow-lists, so the frontend streams the returned URL through it.
+    """
+    import requests as _requests
+    form = (form or "").strip()
+    app_num = (application_number or "").strip()
+    if form not in ("470", "471"):
+        raise HTTPException(status_code=400, detail="form must be '470' or '471'")
+    if not app_num.isdigit():
+        raise HTTPException(status_code=400, detail="application_number must be numeric")
+
+    try:
+        from utils.usac_cache import get_or_cache
+
+        def _fetch():
+            if form == "470":
+                url = (
+                    "https://opendata.usac.org/resource/jp7a-89nd.json"
+                    f"?application_number={app_num}&$select=f470_number&$limit=1"
+                )
+            else:
+                url = (
+                    "https://opendata.usac.org/resource/9s6i-myen.json"
+                    f"?application_number={app_num}&form_version=Original"
+                    "&$select=file_url&$limit=1"
+                )
+            resp = _requests.get(url, timeout=30)
+            resp.raise_for_status()
+            rows = resp.json() or []
+            if not rows:
+                return {"pdf_url": None}
+            row = rows[0]
+            raw = row.get("f470_number") if form == "470" else row.get("file_url")
+            if isinstance(raw, dict):
+                raw = raw.get("url")
+            return {"pdf_url": raw or None}
+
+        result = get_or_cache(
+            namespace="form_pdf_url",
+            params={"form": form, "app": app_num},
+            ttl_hours=168,
+            fetch_fn=_fetch,
+        )
+        return {"form": form, "application_number": app_num, "pdf_url": result.get("pdf_url")}
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to resolve Form {form} PDF: {str(e)}",
+        )
+
+
 @router.get("/rfp-download")
 async def rfp_download_proxy(url: str):
     """
