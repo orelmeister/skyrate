@@ -1277,7 +1277,7 @@ class USACDataClient:
                 records.append({
                     'funding_year': year_val,
                     'frn': frn,
-                    'application_number': record.get('form_471_application_number', ''),
+                    'application_number': record.get('application_number', '') or record.get('form_471_application_number', ''),
                     'service_provider_spin': spin,
                     'service_provider_name': vendor_name,
                     'service_type': service_type,
