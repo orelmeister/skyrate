@@ -639,6 +639,17 @@ function VendorPortalPage() {
     return sorted;
   }, [frnStatusData?.frns, frnTableSort, frnStatusFilter, frnSearch, frnPendingReason]);
 
+  // Distinct pending reasons across the loaded FRNs — drives the Pending Reason
+  // dropdown (Ari: make it a pull-down, not free text, like the consultant side).
+  const frnPendingReasonOptions = useMemo(() => {
+    const set = new Set<string>();
+    (frnStatusData?.frns || []).forEach((f: FRNStatusRecord) => {
+      const r = (f.pending_reason || '').trim();
+      if (r) set.add(r);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [frnStatusData?.frns]);
+
   // Reset the visible window whenever the data set or filters change so a fresh
   // load always starts at the first 100 rows.
   useEffect(() => {
@@ -2479,13 +2490,16 @@ function VendorPortalPage() {
                     </div>
                     <div>
                       <label className="text-sm text-slate-600 mb-1 flex items-center gap-1">Pending Reason <FrnSubStatusInfo /></label>
-                      <input
-                        type="text"
+                      <select
                         value={frnPendingReason}
                         onChange={(e) => setFrnPendingReason(e.target.value)}
-                        placeholder="e.g., PIA Review, Selective Review"
                         className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-56"
-                      />
+                      >
+                        <option value="">All Pending Reasons</option>
+                        {frnPendingReasonOptions.map((r) => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="text-sm text-slate-600 mb-1 block">Search FRN / Entity / BEN</label>
@@ -6649,6 +6663,17 @@ function VendorPortalPage() {
                     {selectedSavedLeadDetail.form_type === 'predicted' ? '🔮 Predicted Lead' : `Form ${selectedSavedLeadDetail.form_type}`} #{selectedSavedLeadDetail.application_number}
                     {selectedSavedLeadDetail.funding_year && ` • FY ${selectedSavedLeadDetail.funding_year}`}
                   </p>
+                  {selectedSavedLeadDetail.application_number && (selectedSavedLeadDetail.form_type === '470' || selectedSavedLeadDetail.form_type === '471') && (
+                    <button
+                      type="button"
+                      onClick={() => downloadFormPdf(selectedSavedLeadDetail.form_type as '470' | '471', selectedSavedLeadDetail.application_number)}
+                      disabled={pdfBusyApp === String(selectedSavedLeadDetail.application_number)}
+                      className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" /></svg>
+                      {pdfBusyApp === String(selectedSavedLeadDetail.application_number) ? 'Fetching…' : `Download Form ${selectedSavedLeadDetail.form_type} PDF`}
+                    </button>
+                  )}
                 </div>
                 <button
                   onClick={() => { setShowSavedLeadDetailModal(false); setSelectedSavedLeadDetail(null); }}
