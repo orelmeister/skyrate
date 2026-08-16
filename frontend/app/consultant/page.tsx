@@ -3455,16 +3455,16 @@ function ConsultantPortalPage() {
                             </button>
                             <div className="flex flex-wrap gap-1 mt-1.5">
                               {([
-                                { key: 'cipa_current', label: 'CIPA' },
-                                { key: 'has_form_498', label: '498' },
-                                { key: 'sam_gov_registered', label: 'SAM.gov' },
-                              ] as const).map(({ key, label }) => (
+                                { key: 'cipa_current', label: 'CIPA', full: "Children's Internet Protection Act (CIPA)" },
+                                { key: 'has_form_498', label: '498', full: 'FCC Form 498 (banking/payment info)' },
+                                { key: 'sam_gov_registered', label: 'SAM.gov', full: 'SAM.gov federal registration' },
+                              ] as const).map(({ key, label, full }) => (
                                 <button
                                   key={key}
                                   type="button"
                                   onClick={() => handleToggleSchoolFlag(school, key)}
                                   disabled={flagSavingKey === `${school.ben}:${key}`}
-                                  title={`${label}: ${school[key] ? 'current / on file' : 'not marked'} — click to toggle`}
+                                  title={`${full}: ${school[key] ? 'current / on file' : 'not marked'} — click to toggle`}
                                   className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors disabled:opacity-50 ${
                                     school[key]
                                       ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
