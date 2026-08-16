@@ -745,6 +745,8 @@ function ConsultantPortalPage() {
   const [form470Leads, setForm470Leads] = useState<any[] | null>(null);
   const [form470Loading, setForm470Loading] = useState(false);
   const [form470Error, setForm470Error] = useState<string | null>(null);
+  // Application number currently resolving a real Form 470/471 PDF (drives per-row spinner).
+  const [pdfBusyApp, setPdfBusyApp] = useState<string | null>(null);
 
   // Per-FRN consultant working annotations (A4/A5 status, A6 install, A7 co-pay, PIA).
   const [frnTrackingMap, setFrnTrackingMap] = useState<Record<string, FrnTracking>>({});
@@ -2804,6 +2806,28 @@ function ConsultantPortalPage() {
     else lookupForm471ByBen();
   };
 
+  // Resolve + download the ACTUAL certified Form 470/471 PDF from USAC Open Data.
+  const downloadFormPdf = async (form: '470' | '471', applicationNumber: string) => {
+    const app = String(applicationNumber || '').trim();
+    if (!app) return;
+    setPdfBusyApp(app);
+    try {
+      const resp = await api.consultantFormPdfUrl(form, app);
+      const url = resp.success && resp.data ? resp.data.pdf_url : null;
+      if (url) {
+        await forceDownloadFile(url, `FCC_Form_${form}_${app}_CERTIFIED.pdf`);
+      } else {
+        const msg = `No certified Form ${form} PDF is published by USAC for application ${app}${form === '471' ? ' (only original certified versions are available)' : ''}.`;
+        if (form === '470') setForm470Error(msg); else setForm471Error(msg);
+      }
+    } catch {
+      const msg = `Could not fetch the Form ${form} PDF. Please try again.`;
+      if (form === '470') setForm470Error(msg); else setForm471Error(msg);
+    } finally {
+      setPdfBusyApp(null);
+    }
+  };
+
   // Toggle an FRN row's line-item sub-table. Caches results per FRN so
   // re-clicking the same row never refetches.
   const toggleConsultant471LineItems = async (frn: string) => {
@@ -4832,6 +4856,20 @@ function ConsultantPortalPage() {
                               >
                                 View on USAC ↗
                               </a>
+                              {frn.application_number && (
+                                <div className="mt-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); downloadFormPdf('471', frn.application_number); }}
+                                    disabled={pdfBusyApp === String(frn.application_number)}
+                                    className="inline-flex items-center gap-1 text-[10px] text-emerald-700 hover:text-emerald-900 hover:underline disabled:opacity-50"
+                                    title="Download the actual certified FCC Form 471 PDF from USAC"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" /></svg>
+                                    {pdfBusyApp === String(frn.application_number) ? 'Fetching…' : 'Form 471 PDF'}
+                                  </button>
+                                </div>
+                              )}
                               <div className="mt-1 flex flex-wrap items-center gap-1">
                                 <button
                                   onClick={(e) => { e.stopPropagation(); openTrackingModal(frn.frn, frn.ben); }}
@@ -6515,14 +6553,24 @@ function ConsultantPortalPage() {
                                   })()}
                                 </td>
                                 <td className="px-4 py-3 text-center">
-                                  <a
-                                    href={`https://opendata.usac.org/E-Rate/E-Rate-Request-for-Discount-on-Services-FCC-Form-47/jp7a-89nd/explore?q=${encodeURIComponent(lead.application_number || '')}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-[11px] text-indigo-600 hover:text-indigo-800 hover:underline"
-                                  >
-                                    View ↗
-                                  </a>
+                                  <div className="flex flex-col items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => downloadFormPdf('470', lead.application_number)}
+                                      disabled={pdfBusyApp === String(lead.application_number)}
+                                      className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-600 text-white text-[11px] font-medium hover:bg-emerald-700 disabled:opacity-50"
+                                    >
+                                      {pdfBusyApp === String(lead.application_number) ? 'Fetching…' : 'Form 470 PDF'}
+                                    </button>
+                                    <a
+                                      href={`https://opendata.usac.org/E-Rate/E-Rate-Request-for-Discount-on-Services-FCC-Form-47/jp7a-89nd/explore?q=${encodeURIComponent(lead.application_number || '')}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-[10px] text-indigo-600 hover:text-indigo-800 hover:underline"
+                                    >
+                                      View on USAC ↗
+                                    </a>
+                                  </div>
                                 </td>
                               </tr>
                             ))}
@@ -6586,6 +6634,19 @@ function ConsultantPortalPage() {
                                     <svg className={`w-3 h-3 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                                     {record.frn}
                                   </span>
+                                  {record.application_number && (
+                                    <div className="mt-1">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); downloadFormPdf('471', record.application_number); }}
+                                        disabled={pdfBusyApp === String(record.application_number)}
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-medium hover:bg-emerald-700 disabled:opacity-50"
+                                      >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" /></svg>
+                                        {pdfBusyApp === String(record.application_number) ? 'Fetching…' : 'Form 471 PDF'}
+                                      </button>
+                                    </div>
+                                  )}
                                 </td>
                                 <td className="px-4 py-3">
                                   <div className="font-medium text-slate-900">{record.service_provider_name}</div>

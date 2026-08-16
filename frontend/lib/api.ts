@@ -2789,6 +2789,12 @@ class ApiClient {
     return this.request(`/api/v1/consultant/470/lookup${queryString}`);
   }
 
+  // Resolve the actual certified Form 470/471 PDF URL from USAC Open Data.
+  async consultantFormPdfUrl(form: '470' | '471', applicationNumber: string): Promise<ApiResponse<{ form: string; application_number: string; pdf_url: string | null }>> {
+    const params = new URLSearchParams({ form, application_number: applicationNumber });
+    return this.request(`/api/v1/consultant/form-pdf?${params.toString()}`);
+  }
+
   async consultantDisbursementSchedule(filters: {
     ben?: string;
     frn?: string;

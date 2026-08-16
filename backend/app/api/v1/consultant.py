@@ -6166,6 +6166,74 @@ async def consultant_470_lookup(
         )
 
 
+@router.get("/form-pdf")
+async def consultant_form_pdf_url(
+    form: str,
+    application_number: str,
+    current_user: User = Depends(require_role("admin", "consultant", "super")),
+):
+    """
+    Resolve the URL of the ACTUAL certified FCC Form 470 or 471 PDF for a given
+    application number, straight from USAC Open Data.
+
+    - Form 470: dataset jp7a-89nd, column `f470_number` (a URL to the original
+      submitted Form 470 PDF).
+    - Form 471: dataset 9s6i-myen, column `file_url` on the Original form version
+      (the certified Form 471 PDF). Current-version PDFs are not published.
+
+    Both PDFs are hosted on publicdata.usac.org, which the existing
+    `/vendor/rfp-download` proxy already allow-lists, so the frontend can stream
+    the returned URL through that proxy to force a clean download.
+    """
+    form = (form or "").strip()
+    app_num = (application_number or "").strip()
+    if form not in ("470", "471"):
+        raise HTTPException(status_code=400, detail="form must be '470' or '471'")
+    if not app_num.isdigit():
+        raise HTTPException(status_code=400, detail="application_number must be numeric")
+
+    try:
+        from utils.usac_cache import get_or_cache
+
+        def _fetch():
+            if form == "470":
+                url = (
+                    "https://opendata.usac.org/resource/jp7a-89nd.json"
+                    f"?application_number={app_num}&$select=f470_number&$limit=1"
+                )
+            else:
+                url = (
+                    "https://opendata.usac.org/resource/9s6i-myen.json"
+                    f"?application_number={app_num}&form_version=Original"
+                    "&$select=file_url&$limit=1"
+                )
+            resp = requests.get(url, timeout=30)
+            resp.raise_for_status()
+            rows = resp.json() or []
+            if not rows:
+                return {"pdf_url": None}
+            row = rows[0]
+            raw = row.get("f470_number") if form == "470" else row.get("file_url")
+            # Socrata URL columns come back as {"url": "..."}; plain columns as str.
+            if isinstance(raw, dict):
+                raw = raw.get("url")
+            return {"pdf_url": raw or None}
+
+        result = get_or_cache(
+            namespace="form_pdf_url",
+            params={"form": form, "app": app_num},
+            ttl_hours=168,
+            fetch_fn=_fetch,
+        )
+        return {"form": form, "application_number": app_num, "pdf_url": result.get("pdf_url")}
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to resolve Form {form} PDF: {str(e)}",
+        )
+
+
 # ==================== DISBURSEMENT / INVOICING SCHEDULE ====================
 # Per-FRN invoice & disbursement history from the USAC Invoice Disbursements
 # dataset (jpiu-tj8h). Lets a consultant see, for a school (BEN) or a single
