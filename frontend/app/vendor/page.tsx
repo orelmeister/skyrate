@@ -849,8 +849,13 @@ function VendorPortalPage() {
   // Sorted Form 470 leads for table display
   const sortedForm470Leads = useMemo(() => {
     let list = form470Leads;
-    // Client-side filter by applicant/school type (Ari #9 - vendor requested)
-    if (form470ApplicantType) {
+    // Client-side filter by applicant/school type (Ari #9 - vendor requested).
+    // USAC has no "Charter School" applicant_type, so "__charter__" matches by name
+    // (charter schools carry "charter" in their entity name) — same approach as
+    // predictive leads.
+    if (form470ApplicantType === '__charter__') {
+      list = list.filter((l) => /charter/i.test(l.entity_name || ''));
+    } else if (form470ApplicantType) {
       list = list.filter((l) => (l.applicant_type || '') === form470ApplicantType);
     }
     if (!list.length || !form470Sort) return list;
@@ -3209,6 +3214,7 @@ function VendorPortalPage() {
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                   >
                     <option value="">All Types</option>
+                    <option value="__charter__">Charter School (by name)</option>
                     {form470ApplicantTypes.map((t) => (
                       <option key={t} value={t}>{t}</option>
                     ))}
