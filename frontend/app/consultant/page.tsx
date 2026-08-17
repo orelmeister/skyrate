@@ -7323,55 +7323,43 @@ function ConsultantPortalPage() {
                     </h3>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Current Cycle */}
-                      {comprehensiveSchoolData.c2_budget['FY2026-2030'] && (
-                        <div className="bg-white/70 rounded-lg p-4">
-                          <div className="text-sm font-medium text-purple-700 mb-2">FY2026-2030 (Current Cycle)</div>
-                          <div className="space-y-2">
-                            <div className="flex justify-between">
-                              <span className="text-slate-600">Total Budget:</span>
-                              <span className="font-semibold text-purple-900">${comprehensiveSchoolData.c2_budget['FY2026-2030'].c2_budget.toLocaleString()}</span>
+                      {(() => {
+                        const budgets = comprehensiveSchoolData.c2_budget || {};
+                        const cycles = Object.keys(budgets).filter((k) => k && k !== 'Unknown').sort().reverse();
+                        if (cycles.length === 0) {
+                          return (
+                            <div className="md:col-span-2 text-sm text-slate-600 bg-white/70 rounded-lg p-4">
+                              No Category 2 budget is published by USAC for this entity. This is normal for entities that only file Category 1 (voice/internet), or if USAC hasn&apos;t assigned a C2 budget to this BEN yet.
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-600">Funded:</span>
-                              <span className="font-medium text-green-700">${comprehensiveSchoolData.c2_budget['FY2026-2030'].funded.toLocaleString()}</span>
+                          );
+                        }
+                        return cycles.map((cycle, idx) => {
+                          const b = budgets[cycle];
+                          return (
+                            <div key={cycle} className="bg-white/70 rounded-lg p-4">
+                              <div className="text-sm font-medium text-purple-700 mb-2">{cycle} {idx === 0 ? '(Current Cycle)' : '(Previous Cycle)'}</div>
+                              <div className="space-y-2">
+                                <div className="flex justify-between">
+                                  <span className="text-slate-600">Total Budget:</span>
+                                  <span className="font-semibold text-purple-900">${(b.c2_budget || 0).toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-slate-600">Funded:</span>
+                                  <span className="font-medium text-green-700">${(b.funded || 0).toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-slate-600">Pending:</span>
+                                  <span className="font-medium text-yellow-700">${(b.pending || 0).toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between border-t pt-2 mt-2">
+                                  <span className="text-slate-600 font-medium">Available:</span>
+                                  <span className="font-bold text-indigo-700">${(b.available || 0).toLocaleString()}</span>
+                                </div>
+                              </div>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-600">Pending:</span>
-                              <span className="font-medium text-yellow-700">${comprehensiveSchoolData.c2_budget['FY2026-2030'].pending.toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between border-t pt-2 mt-2">
-                              <span className="text-slate-600 font-medium">Available:</span>
-                              <span className="font-bold text-indigo-700">${comprehensiveSchoolData.c2_budget['FY2026-2030'].available.toLocaleString()}</span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Previous Cycle */}
-                      {comprehensiveSchoolData.c2_budget['FY2021-2025'] && (
-                        <div className="bg-white/70 rounded-lg p-4">
-                          <div className="text-sm font-medium text-purple-700 mb-2">FY2021-2025 (Previous Cycle)</div>
-                          <div className="space-y-2">
-                            <div className="flex justify-between">
-                              <span className="text-slate-600">Total Budget:</span>
-                              <span className="font-semibold text-purple-900">${comprehensiveSchoolData.c2_budget['FY2021-2025'].c2_budget.toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-600">Funded:</span>
-                              <span className="font-medium text-green-700">${comprehensiveSchoolData.c2_budget['FY2021-2025'].funded.toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-600">Pending:</span>
-                              <span className="font-medium text-yellow-700">${comprehensiveSchoolData.c2_budget['FY2021-2025'].pending.toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between border-t pt-2 mt-2">
-                              <span className="text-slate-600 font-medium">Available:</span>
-                              <span className="font-bold text-indigo-700">${comprehensiveSchoolData.c2_budget['FY2021-2025'].available.toLocaleString()}</span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                          );
+                        });
+                      })()}
                     </div>
                   </div>
 
