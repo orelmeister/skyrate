@@ -112,8 +112,33 @@ const SUB_STATUS_GLOSSARY: SubStatusEntry[] = [
   },
 ];
 
-export function FrnSubStatusInfo({ className = "" }: { className?: string }) {
-  const [open, setOpen] = useState(false);
+/**
+ * Canonical list of filterable USAC FRN sub-statuses / pending reasons, in the
+ * order USAC review typically progresses. Used to seed the Pending Reason filter
+ * dropdowns in BOTH the consultant and vendor portals so neither is ever
+ * "missing" a sub-status just because it happens not to appear in the currently
+ * loaded FRNs. Values are the plain strings USAC uses, so a substring match on
+ * an FRN's pending_reason works.
+ */
+export const FRN_PENDING_REASON_OPTIONS: string[] = [
+  "PIA Review",
+  "Initial Review",
+  "Information Requested",
+  "Applicant Documentation Received",
+  "Service Provider Documentation Received",
+  "15-Day Response Deadline",
+  "First Extension",
+  "Second Extension",
+  "Heightened Scrutiny",
+  "Outreach",
+  "Final Review",
+  "Wave Ready",
+  "FCDL Issued",
+  "MPER",
+  "Appeal Pending",
+];
+
+export function FrnSubStatusInfo({ className = "" }: { className?: string }) {  const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

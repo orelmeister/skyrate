@@ -19,7 +19,7 @@ import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { DisbursementPanel } from "@/components/FRNDetailModal";
 import { ChevronRight, ChevronDown, Target, Clock, Building2, Bell, ArrowUpRight, Zap, BarChart3, Search, TrendingUp, Home, Activity, Shield, Map as MapIcon, Sparkles, FileSearch, Bookmark, Settings as SettingsIcon, HelpCircle, PanelLeft, Sun, Moon, LogOut, Receipt } from "lucide-react";
 import PilotFrns from "./PilotFrns";
-import { FrnSubStatusInfo } from "@/components/FrnSubStatusInfo";
+import { FrnSubStatusInfo, FRN_PENDING_REASON_OPTIONS } from "@/components/FrnSubStatusInfo";
 
 const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "cyber-pilot", "470-leads", "map", "predicted-leads", "competitive", "invoicing", "search", "leads", "settings"] as const;
 type VendorTab = typeof VENDOR_TABS[number];
@@ -639,15 +639,16 @@ function VendorPortalPage() {
     return sorted;
   }, [frnStatusData?.frns, frnTableSort, frnStatusFilter, frnSearch, frnPendingReason]);
 
-  // Distinct pending reasons across the loaded FRNs — drives the Pending Reason
-  // dropdown (Ari: make it a pull-down, not free text, like the consultant side).
+  // Pending Reason dropdown options: the full canonical USAC sub-status list
+  // (so the vendor is never "missing" any relative to the consultant), plus any
+  // extra distinct reasons actually present in the loaded FRNs.
   const frnPendingReasonOptions = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set<string>(FRN_PENDING_REASON_OPTIONS);
     (frnStatusData?.frns || []).forEach((f: FRNStatusRecord) => {
       const r = (f.pending_reason || '').trim();
       if (r) set.add(r);
     });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
+    return Array.from(set);
   }, [frnStatusData?.frns]);
 
   // Reset the visible window whenever the data set or filters change so a fresh

@@ -18,7 +18,7 @@ import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { useTabParam } from "@/hooks/useTabParam";
 import EquipmentArea from "./EquipmentArea";
 import { Home, Building2, Coins, Activity, Scale, Shield, Search, BarChart3, Settings as SettingsIcon, ChevronRight, Bell, HelpCircle, PanelLeft, Sun, Moon, LogOut, Plus, BadgeCheck, FileText, TrendingUp } from "lucide-react";
-import { FrnSubStatusInfo } from "@/components/FrnSubStatusInfo";
+import { FrnSubStatusInfo, FRN_PENDING_REASON_OPTIONS } from "@/components/FrnSubStatusInfo";
 
 // ==================== MY TEAM (OWNER SEATS) ====================
 // Self-contained panel rendered in the Settings tab. Hidden entirely for team
@@ -1169,12 +1169,12 @@ function ConsultantPortalPage() {
   // Distinct sub-status / pending reasons present in the portfolio (drives the pending-reason
   // dropdown — Ari wants a pull-down of the real choices instead of free text).
   const distinctPendingReasons = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set<string>(FRN_PENDING_REASON_OPTIONS);
     for (const frn of flattenedFrns) {
       const pr = String(frn.pending_reason || '').trim();
       if (pr) set.add(pr);
     }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
+    return Array.from(set);
   }, [flattenedFrns]);
 
   // Sorted + filtered PIA responses (A-Z / by type), Ari request
