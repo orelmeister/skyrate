@@ -6435,7 +6435,7 @@ function ConsultantPortalPage() {
               {/* Form 470 / 471 Lookup */}
               <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
                 <h2 className="text-lg font-semibold text-slate-900 mb-1">Form 470 / 471 Lookup</h2>
-                <p className="text-sm text-slate-500 mb-4">Pick a form, then enter any school&apos;s BEN. <strong>Form 471</strong> shows its award history — winning vendors and committed amounts (click any FRN to expand line items). <strong>Form 470</strong> shows its open service requests / RFP postings.</p>
+                <p className="text-sm text-slate-500 mb-4">Pick a form, then enter any school&apos;s BEN. <strong>Form 471</strong> shows its award history — winning vendors and committed amounts (click any FRN to expand line items). <strong>Form 470</strong> shows the school&apos;s Form 470 filings by year, each with a link to download the actual certified Form 470 PDF.</p>
                 <div className="flex flex-col sm:flex-row sm:items-end gap-4">
                   <div className="w-full sm:w-44">
                     <label className="block text-sm font-medium text-slate-700 mb-2">Form</label>
@@ -6502,7 +6502,7 @@ function ConsultantPortalPage() {
                 {lookupFormType === '470' && form470Leads && (
                   <div className="mt-6">
                     {form470Leads.length === 0 ? (
-                      <div className="px-4 py-6 text-sm text-slate-500 bg-slate-50 rounded-xl border border-slate-200 text-center">No open Form 470 postings found for this BEN{form471Year ? ` in ${form471Year}` : ""}. (Form 470 lookups cover current &amp; recent funding years only.)</div>
+                      <div className="px-4 py-6 text-sm text-slate-500 bg-slate-50 rounded-xl border border-slate-200 text-center">No Form 470 filings found for this BEN{form471Year ? ` in ${form471Year}` : ""}. USAC publishes Form 470 data for FY2016 onward.</div>
                     ) : (
                       <div className="overflow-x-auto rounded-xl border border-slate-200">
                         <table className="w-full text-sm">

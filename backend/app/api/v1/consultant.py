@@ -6122,16 +6122,77 @@ async def consultant_470_lookup(
     current_user: User = Depends(require_role("admin", "consultant", "super")),
 ):
     """
-    Look up open Form 470 postings, reusing the same USAC client method the
-    vendor 470 leads endpoint calls (client.get_470_leads). Supports filtering
-    by state, funding year and service function. If a BEN is supplied the
-    results are narrowed to that entity (get_470_leads has no native BEN
-    filter, so we post-filter the returned leads).
+    Look up Form 470s. Two modes:
+
+    - BEN supplied (the "look up a school's 470 and download it" flow): query the
+      Form 470 basic dataset (jp7a-89nd) directly for that entity across ALL years,
+      each row carrying its certified Form 470 PDF link (f470_number). Mirrors the
+      471-by-entity lookup so consultants can pull any school's past 470s + download.
+    - No BEN (browse open postings): reuse client.get_470_leads (current/next-year
+      open postings) filtered by state / funding year / service function.
     """
     try:
         from utils.usac_client import USACDataClient
         from utils.usac_cache import get_or_cache
 
+        ben_str = str(ben).strip() if ben else ""
+
+        # ---- BEN mode: all Form 470s for the entity, with PDF links ----
+        if ben_str:
+            if not ben_str.isdigit():
+                raise HTTPException(status_code=400, detail="BEN must be numeric")
+
+            def _fetch_470_by_ben():
+                url = "https://opendata.usac.org/resource/jp7a-89nd.json"
+                where = f"ben='{ben_str}'"
+                if year:
+                    where += f" AND funding_year='{year}'"
+                params = {"$where": where, "$order": "funding_year DESC", "$limit": 500}
+                resp = requests.get(url, params=params, timeout=40)
+                resp.raise_for_status()
+                rows = resp.json() or []
+                # jp7a-89nd returns one row per form version (Original + Current),
+                # so a 470 appears twice. Dedupe by application_number, preferring
+                # the Current version's PDF.
+                by_app = {}
+                for r in rows:
+                    app = str(r.get("application_number", "") or "")
+                    if not app:
+                        continue
+                    pdf = r.get("f470_number")
+                    if isinstance(pdf, dict):
+                        pdf = pdf.get("url")
+                    pdf = pdf or ""
+                    existing = by_app.get(app)
+                    is_current = "/Current/" in pdf
+                    if existing and not (is_current and "/Current/" not in (existing.get("pdf_url") or "")):
+                        continue
+                    by_app[app] = {
+                        "application_number": app,
+                        "funding_year": r.get("funding_year", ""),
+                        "ben": r.get("ben", ""),
+                        "entity_name": r.get("billed_entity_name", ""),
+                        "state": r.get("billed_entity_state", ""),
+                        "status": r.get("f470_status", ""),
+                        "allowable_contract_date": r.get("allowable_contract_date", ""),
+                        "posting_date": r.get("certified_datetime", ""),
+                        "form_nickname": r.get("form_nickname", ""),
+                        "service_types": [],
+                        "services": [],
+                        "pdf_url": pdf,
+                    }
+                leads = sorted(by_app.values(), key=lambda x: str(x.get("funding_year") or ""), reverse=True)
+                entity_name = leads[0]["entity_name"] if leads else ""
+                return {"leads": leads, "total_leads": len(leads), "entity_name": entity_name, "ben": ben_str}
+
+            return get_or_cache(
+                namespace="470_by_ben",
+                params={"ben": ben_str, "year": year},
+                ttl_hours=24,
+                fetch_fn=_fetch_470_by_ben,
+            )
+
+        # ---- Browse mode: open postings by state / year / service ----
         client = USACDataClient()
         result = get_or_cache(
             namespace="470_lookup",
@@ -6147,18 +6208,10 @@ async def consultant_470_lookup(
                 limit=500,
             ),
         )
-
-        # Narrow to a specific BEN when provided (client has no BEN filter).
-        if ben and isinstance(result, dict) and result.get('leads'):
-            ben_str = str(ben).strip()
-            filtered = [
-                lead for lead in result['leads']
-                if str(lead.get('ben') or '').strip() == ben_str
-            ]
-            result = {**result, "leads": filtered, "total_leads": len(filtered)}
-
         return result
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
