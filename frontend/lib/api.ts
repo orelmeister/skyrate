@@ -2771,7 +2771,7 @@ class ApiClient {
   }
 
   async consultantUpsertFrnTracking(data: FrnTrackingUpdate): Promise<ApiResponse<{ success: boolean; tracking: FrnTracking }>> {
-    return this.put(`/api/v1/consultant/frn-tracking`, data);
+    return this.put(`/consultant/frn-tracking`, data);
   }
 
   // ---- Per-FRN vendor working annotations (status/install/co-pay/PIA) ----
@@ -2781,7 +2781,7 @@ class ApiClient {
   }
 
   async vendorUpsertFrnTracking(data: FrnTrackingUpdate): Promise<ApiResponse<{ success: boolean; tracking: FrnTracking }>> {
-    return this.put(`/api/v1/vendor/frn-tracking`, data);
+    return this.put(`/vendor/frn-tracking`, data);
   }
 
   // ---- SAM.gov registration lookup for a school (A2 auto-confirm) ----
