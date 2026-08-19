@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, 
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List, Dict
 from datetime import datetime, timedelta
@@ -24,10 +25,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..
 
 from ...core.database import get_db
 from ...core.security import get_current_user, require_role
-from ...core.accounts import require_account_owner
+from ...core.accounts import require_account_owner, resolve_vendor_account
 from ...models.user import User
 from ...models.vendor import VendorProfile, VendorSearch
 from ...models.account_seat import AccountSeat
+from ...models.vendor_frn_tracking import VendorFrnTracking, WORKING_STATUS_VALUES, PIA_STATUS_VALUES
 
 router = APIRouter(prefix="/vendor", tags=["Vendor Portal"])
 
@@ -4595,3 +4597,119 @@ async def remove_vendor_my_team_seat(
     db.commit()
     db.refresh(seat)
     return {"success": True, "seat": seat.to_dict()}
+
+
+# ==================== FRN TRACKING (working annotations) ====================
+# Vendor-maintained per-FRN fields USAC does not provide: working sub-status
+# (A4/A5), install tracking (A6), co-pay/applicant-share payment (A7), and PIA
+# review state. Scoped to the ACCOUNT OWNER so all team seats share one view.
+# Mirrors the consultant FRN tracker exactly.
+
+class FrnTrackingUpdate(BaseModel):
+    frn: str
+    ben: Optional[str] = None
+    working_status: Optional[str] = None
+    installed: Optional[bool] = None
+    install_date: Optional[str] = None   # ISO date (YYYY-MM-DD) or null
+    copay_paid: Optional[bool] = None
+    copay_amount: Optional[float] = None
+    pia_status: Optional[str] = None
+    notes: Optional[str] = None
+
+
+def _vendor_account_owner_id(current_user: User, db: Session) -> int:
+    """Resolve the vendor account owner's user id so team seats share tracking rows."""
+    owner, _profile = resolve_vendor_account(current_user, db)
+    return owner.id
+
+
+@router.get("/frn-tracking")
+async def get_vendor_frn_tracking(
+    frn: Optional[str] = None,
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
+    db: Session = Depends(get_db),
+):
+    """Return vendor working annotations for one FRN or the whole account."""
+    owner_id = _vendor_account_owner_id(current_user, db)
+    q = db.query(VendorFrnTracking).filter(
+        VendorFrnTracking.vendor_user_id == owner_id
+    )
+    if frn:
+        row = q.filter(VendorFrnTracking.frn == str(frn)).first()
+        return {"success": True, "tracking": row.to_dict() if row else None}
+    rows = q.all()
+    return {
+        "success": True,
+        "tracking": {r.frn: r.to_dict() for r in rows},
+        "count": len(rows),
+    }
+
+
+@router.put("/frn-tracking")
+async def upsert_vendor_frn_tracking(
+    data: FrnTrackingUpdate,
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
+    db: Session = Depends(get_db),
+):
+    """Create or update the working annotations for a single FRN.
+
+    Only fields present in the request body are changed (partial update). The
+    FRN identity is required. Values are validated against the allowed sets.
+    """
+    frn_value = (data.frn or "").strip()
+    if not frn_value:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="frn is required")
+
+    if data.working_status is not None and data.working_status != "" and data.working_status not in WORKING_STATUS_VALUES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid working_status. Allowed: {', '.join(WORKING_STATUS_VALUES)}",
+        )
+    if data.pia_status is not None and data.pia_status != "" and data.pia_status not in PIA_STATUS_VALUES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid pia_status. Allowed: {', '.join(PIA_STATUS_VALUES)}",
+        )
+
+    parsed_install_date = None
+    if data.install_date:
+        try:
+            parsed_install_date = datetime.strptime(data.install_date[:10], "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="install_date must be YYYY-MM-DD")
+
+    owner_id = _vendor_account_owner_id(current_user, db)
+    row = db.query(VendorFrnTracking).filter(
+        VendorFrnTracking.vendor_user_id == owner_id,
+        VendorFrnTracking.frn == frn_value,
+    ).first()
+
+    if row is None:
+        row = VendorFrnTracking(vendor_user_id=owner_id, frn=frn_value)
+        db.add(row)
+
+    if data.ben is not None:
+        row.ben = data.ben or None
+    if data.working_status is not None:
+        row.working_status = data.working_status or None
+    if data.installed is not None:
+        row.installed = bool(data.installed)
+    if data.install_date is not None:
+        row.install_date = parsed_install_date
+    if data.copay_paid is not None:
+        row.copay_paid = bool(data.copay_paid)
+    if data.copay_amount is not None:
+        row.copay_amount = data.copay_amount
+    if data.pia_status is not None:
+        row.pia_status = data.pia_status or None
+    if data.notes is not None:
+        row.notes = data.notes or None
+
+    try:
+        db.commit()
+        db.refresh(row)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Could not save tracking")
+
+    return {"success": True, "tracking": row.to_dict()}

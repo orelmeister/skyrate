@@ -7,7 +7,7 @@ import { useAuthStore, deriveRequiresPaymentSetup } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
 import { PERF_V2_ENABLED } from "@/lib/featureFlags";
 import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse, FRNStatusResponse, FRNStatusSummaryResponse, FRNStatusRecord, Form470Lead, Form470LeadsResponse, Form470DetailResponse, SavedLead, EnrichedContactData, FRNWatch, CreateWatchRequest, FRNReportHistory, VendorDisbursementResponse } from "@/lib/api";
-import { Form471LineItem } from "@/lib/api";
+import { Form471LineItem, FrnTracking } from "@/lib/api";
 import { useTabParam } from "@/hooks/useTabParam";
 import PredictedLeadsTab from "@/components/PredictedLeadsTab";
 import OpportunityMap from "@/components/OpportunityMap";
@@ -593,6 +593,72 @@ function VendorPortalPage() {
   // data or filters change so we never leave a stale large window mounted.
   const [visibleFrnCount, setVisibleFrnCount] = useState<number>(100);
 
+  // Per-FRN vendor working annotations (A6 install, A7 co-pay, notes) — mirrors
+  // the consultant FRN tracker. Funding status + PIA come from USAC and are
+  // shown in the table, so the modal tracks only what USAC does not provide.
+  const [frnTrackingMap, setFrnTrackingMap] = useState<Record<string, FrnTracking>>({});
+  const [trackingModalFrn, setTrackingModalFrn] = useState<string | null>(null);
+  const [trackingForm, setTrackingForm] = useState<FrnTracking | null>(null);
+  const [trackingLoading, setTrackingLoading] = useState(false);
+  const [trackingSaving, setTrackingSaving] = useState(false);
+  const [vendorFrnTrackingFilter, setVendorFrnTrackingFilter] = useState<string>("");
+
+  // Load all of the account's FRN tracking rows once (drives at-a-glance badges).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await api.vendorGetFrnTracking();
+        if (!cancelled && resp.success && resp.data?.success && resp.data.tracking && typeof resp.data.tracking === 'object') {
+          setFrnTrackingMap(resp.data.tracking as Record<string, FrnTracking>);
+        }
+      } catch { /* non-fatal */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const openTrackingModal = async (frn: string, ben?: string) => {
+    if (!frn) return;
+    setTrackingModalFrn(frn);
+    setTrackingLoading(true);
+    setTrackingForm({ frn, ben: ben || null });
+    try {
+      const resp = await api.vendorGetFrnTracking(frn);
+      const existing = resp.success && resp.data?.success ? (resp.data.tracking as FrnTracking | null) : null;
+      setTrackingForm(existing ? { ...existing, frn, ben: existing.ben || ben || null } : { frn, ben: ben || null, installed: false, copay_paid: false });
+    } catch {
+      setTrackingForm({ frn, ben: ben || null, installed: false, copay_paid: false });
+    } finally {
+      setTrackingLoading(false);
+    }
+  };
+
+  const saveTrackingModal = async () => {
+    if (!trackingForm?.frn) return;
+    setTrackingSaving(true);
+    try {
+      const resp = await api.vendorUpsertFrnTracking({
+        frn: trackingForm.frn,
+        ben: trackingForm.ben ?? null,
+        working_status: trackingForm.working_status ?? null,
+        installed: trackingForm.installed ?? false,
+        install_date: trackingForm.install_date ?? null,
+        copay_paid: trackingForm.copay_paid ?? false,
+        copay_amount: trackingForm.copay_amount ?? null,
+        pia_status: trackingForm.pia_status ?? null,
+        notes: trackingForm.notes ?? null,
+      });
+      if (resp.success && resp.data?.success) {
+        const saved = resp.data.tracking;
+        setFrnTrackingMap(prev => ({ ...prev, [saved.frn]: saved }));
+        setTrackingModalFrn(null);
+        setTrackingForm(null);
+      }
+    } finally {
+      setTrackingSaving(false);
+    }
+  };
+
   // Sorted and filtered FRN data for table display
   const sortedFrnData = useMemo(() => {
     if (!frnStatusData?.frns?.length) return [];
@@ -626,7 +692,21 @@ function VendorPortalPage() {
         return true;
       });
     }
-    
+
+    // Client-side filter by the vendor's own per-FRN tracking (install / co-pay).
+    if (vendorFrnTrackingFilter) {
+      filtered = filtered.filter(frn => {
+        const t = frnTrackingMap[frn.frn];
+        const f = vendorFrnTrackingFilter;
+        if (f === 'tracked') return !!t;
+        if (f === 'installed') return !!t?.installed;
+        if (f === 'not_installed') return !t?.installed;
+        if (f === 'copay_paid') return !!t?.copay_paid;
+        if (f === 'copay_unpaid') return !t?.copay_paid;
+        return true;
+      });
+    }
+
     // Then sort if sorting is active
     if (!frnTableSort) return filtered;
     
@@ -637,7 +717,7 @@ function VendorPortalPage() {
       return frnTableSort.dir === 'asc' ? cmp : -cmp;
     });
     return sorted;
-  }, [frnStatusData?.frns, frnTableSort, frnStatusFilter, frnSearch, frnPendingReason]);
+  }, [frnStatusData?.frns, frnTableSort, frnStatusFilter, frnSearch, frnPendingReason, vendorFrnTrackingFilter, frnTrackingMap]);
 
   // Pending Reason dropdown options: the full canonical USAC sub-status list
   // (so the vendor is never "missing" any relative to the consultant), plus any
@@ -655,7 +735,7 @@ function VendorPortalPage() {
   // load always starts at the first 100 rows.
   useEffect(() => {
     setVisibleFrnCount(100);
-  }, [frnStatusData?.frns, frnStatusFilter, frnSearch, frnPendingReason]);
+  }, [frnStatusData?.frns, frnStatusFilter, frnSearch, frnPendingReason, vendorFrnTrackingFilter]);
 
   // Toggle FRN table sort
   const toggleFrnTableSort = (field: string) => {
@@ -2538,6 +2618,26 @@ function VendorPortalPage() {
                         className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm w-56"
                       />
                     </div>
+                    <div>
+                      <label className="text-sm text-slate-600 mb-1 block">My Tracking</label>
+                      <select
+                        value={vendorFrnTrackingFilter}
+                        onChange={(e) => setVendorFrnTrackingFilter(e.target.value)}
+                        className="px-3 py-2 border border-slate-200 rounded-lg bg-white text-sm"
+                        title="Filter by your own per-FRN tracking (installation, applicant co-pay)"
+                      >
+                        <option value="">All (my tracking)</option>
+                        <option value="tracked">Has tracking</option>
+                        <optgroup label="Install">
+                          <option value="installed">Installed</option>
+                          <option value="not_installed">Not installed</option>
+                        </optgroup>
+                        <optgroup label="Co-pay">
+                          <option value="copay_paid">Co-pay paid</option>
+                          <option value="copay_unpaid">Co-pay unpaid</option>
+                        </optgroup>
+                      </select>
+                    </div>
                     <button
                       onClick={() => {
                         const searchTerm = frnSearch.trim();
@@ -2694,6 +2794,21 @@ function VendorPortalPage() {
                               <td className="px-4 py-3">
                                 <div className="font-mono text-xs text-slate-900">{frn.frn}</div>
                                 <div className="text-xs text-slate-500">{frn.application_number}</div>
+                                <div className="mt-1 flex flex-wrap items-center gap-1">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); openTrackingModal(frn.frn, frn.ben); }}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-slate-600 bg-slate-100 hover:bg-teal-100 hover:text-teal-700 border border-slate-200 transition-colors"
+                                    title="Track installation, applicant co-pay, and notes for this FRN"
+                                  >
+                                    <SettingsIcon className="w-3 h-3" /> Track
+                                  </button>
+                                  {frnTrackingMap[frn.frn]?.installed && (
+                                    <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700 border border-green-200" title="Equipment installed">Installed</span>
+                                  )}
+                                  {frnTrackingMap[frn.frn]?.copay_paid && (
+                                    <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-teal-100 text-teal-700 border border-teal-200" title="Applicant co-pay paid">Co-pay paid</span>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-4 py-3">
                                 <div className="font-medium text-slate-900 truncate max-w-[200px]">{frn.entity_name}</div>
@@ -5416,6 +5531,68 @@ function VendorPortalPage() {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* FRN Working Tracking Modal (A6 install, A7 co-pay, notes) */}
+      {trackingModalFrn && trackingForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { setTrackingModalFrn(null); setTrackingForm(null); }}>
+          <div className={`rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto ${dark ? 'bg-slate-900 border border-slate-700' : 'bg-white'}`} onClick={(e) => e.stopPropagation()}>
+            <div className={`flex items-center justify-between px-5 py-4 border-b ${dark ? 'border-slate-700' : 'border-slate-200'}`}>
+              <div>
+                <h3 className={`font-semibold ${dark ? 'text-white' : 'text-slate-900'}`}>FRN Tracking</h3>
+                <p className={`text-xs font-mono ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{trackingModalFrn}</p>
+              </div>
+              <button onClick={() => { setTrackingModalFrn(null); setTrackingForm(null); }} className={`p-1 rounded ${dark ? 'hover:bg-slate-800 text-slate-500 hover:text-slate-300' : 'hover:bg-slate-100 text-slate-400 hover:text-slate-600'}`}>✕</button>
+            </div>
+            {trackingLoading ? (
+              <div className={`p-8 text-center text-sm ${dark ? 'text-slate-400' : 'text-slate-500'}`}>Loading…</div>
+            ) : (
+              <div className="p-5 space-y-4">
+                <p className={`text-[11px] rounded-lg p-2.5 border ${dark ? 'text-slate-400 bg-slate-800 border-slate-700' : 'text-slate-500 bg-slate-50 border-slate-200'}`}>
+                  Funding status and PIA status come automatically from USAC and are shown in the FRN
+                  table &mdash; no need to set them here. Use this panel for the details USAC doesn&apos;t
+                  track: installation, applicant co-pay, and your notes.
+                </p>
+
+                <div className={`rounded-lg border p-3 ${dark ? 'border-slate-700' : 'border-slate-200'}`}>
+                  <label className={`flex items-center gap-2 text-sm ${dark ? 'text-slate-200' : 'text-slate-700'}`}>
+                    <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" checked={!!trackingForm.installed} onChange={(e) => setTrackingForm(f => f ? { ...f, installed: e.target.checked } : f)} />
+                    Equipment installed
+                  </label>
+                  {trackingForm.installed && (
+                    <div className="mt-2">
+                      <label className={`block text-xs font-medium mb-1 ${dark ? 'text-slate-400' : 'text-slate-600'}`}>Install date</label>
+                      <input type="date" value={(trackingForm.install_date ?? '').slice(0, 10)} onChange={(e) => setTrackingForm(f => f ? { ...f, install_date: e.target.value || null } : f)} className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 ${dark ? 'bg-slate-800 border-slate-700 text-white' : 'border-slate-300'}`} />
+                    </div>
+                  )}
+                </div>
+
+                <div className={`rounded-lg border p-3 ${dark ? 'border-slate-700' : 'border-slate-200'}`}>
+                  <label className={`flex items-center gap-2 text-sm ${dark ? 'text-slate-200' : 'text-slate-700'}`}>
+                    <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" checked={!!trackingForm.copay_paid} onChange={(e) => setTrackingForm(f => f ? { ...f, copay_paid: e.target.checked } : f)} />
+                    Applicant co-pay paid
+                  </label>
+                  <div className="mt-2">
+                    <label className={`block text-xs font-medium mb-1 ${dark ? 'text-slate-400' : 'text-slate-600'}`}>Co-pay amount (non-discounted share)</label>
+                    <input type="number" step="0.01" min="0" value={trackingForm.copay_amount ?? ''} onChange={(e) => setTrackingForm(f => f ? { ...f, copay_amount: e.target.value === '' ? null : parseFloat(e.target.value) } : f)} placeholder="0.00" className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 ${dark ? 'bg-slate-800 border-slate-700 text-white' : 'border-slate-300'}`} />
+                  </div>
+                </div>
+
+                <div>
+                  <label className={`block text-xs font-medium mb-1 ${dark ? 'text-slate-400' : 'text-slate-600'}`}>Notes</label>
+                  <textarea rows={3} value={trackingForm.notes ?? ''} onChange={(e) => setTrackingForm(f => f ? { ...f, notes: e.target.value } : f)} className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 ${dark ? 'bg-slate-800 border-slate-700 text-white' : 'border-slate-300'}`} placeholder="Working notes for this FRN…" />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button onClick={() => { setTrackingModalFrn(null); setTrackingForm(null); }} className={`px-4 py-2 rounded-lg text-sm font-medium ${dark ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100'}`}>Cancel</button>
+                  <button onClick={saveTrackingModal} disabled={trackingSaving} className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-50">
+                    {trackingSaving ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
