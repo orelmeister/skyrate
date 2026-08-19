@@ -3,13 +3,13 @@ import Link from "next/link";
 import { Check, ArrowRight, Brain, FileText, Scale, Zap, Shield, Clock, Sparkles, BookOpen } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "E-Rate Appeal Letter Generator | SkyRate AI",
-  description: "Generate winning E-Rate appeal letters with AI. Trained on FCC Order 19-117 and USAC precedent. Analyze denial reasons and create compliant, persuasive appeals in seconds.",
+  title: "Free AI Appeal Letter Generator for E-Rate | SkyRate AI",
+  description: "Generate a winning E-Rate appeal letter free with SkyRate AI. Analyzes your USAC denial and drafts a compliant appeal citing FCC Order 19-117 in seconds.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/features/appeal-generator" },
   openGraph: {
-    title: "E-Rate Appeal Letter Generator | SkyRate AI",
-    description: "Generate winning E-Rate appeal letters with AI trained on FCC precedent.",
+    title: "Free AI Appeal Letter Generator for E-Rate | SkyRate AI",
+    description: "Generate a winning E-Rate appeal letter free with SkyRate AI. Analyzes your USAC denial and drafts a compliant appeal citing FCC Order 19-117 in seconds.",
     url: "https://skyrate.ai/features/appeal-generator",
     siteName: "SkyRate AI",
     type: "website",

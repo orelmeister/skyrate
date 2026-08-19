@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { Check, ArrowRight, Bell, Activity, Clock, Mail, BarChart3, Shield, Database, History } from "lucide-react";
+import FrnLookupClient from "@/app/tools/frn-tracker/FrnLookupClient";
 
 export const metadata: Metadata = {
   title: "FRN Tracker & Status Checker 2026 — Free E-Rate FRN Lookup | SkyRate",
@@ -119,6 +120,29 @@ export default function FRNMonitoringFeaturePage() {
             <Link href="/tools/frn-tracker" className="text-purple-300 hover:text-purple-200 underline font-medium">
               Try our free FRN tracker — no signup
             </Link>
+          </p>
+        </div>
+      </section>
+
+      {/* Inline FRN Lookup Widget */}
+      <section className="relative bg-slate-950 border-t border-white/10 py-16 sm:py-20">
+        <div className="absolute inset-0 bg-gradient-to-b from-purple-900/10 via-transparent to-transparent" />
+        <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">
+              Check any E-Rate FRN&apos;s status{" "}
+              <span className="bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
+                free, right now
+              </span>
+            </h2>
+            <p className="text-slate-400 max-w-2xl mx-auto">
+              Enter a Funding Request Number to pull its latest status straight from USAC&apos;s public
+              Open Data — no account, no signup. Then let SkyRate AI watch it for you automatically.
+            </p>
+          </div>
+          <FrnLookupClient />
+          <p className="text-xs text-slate-500 text-center mt-6">
+            Results reflect public USAC Open Data records and may lag the official USAC portal.
           </p>
         </div>
       </section>
