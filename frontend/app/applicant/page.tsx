@@ -10,6 +10,7 @@ import { useTabParam } from "@/hooks/useTabParam";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { TableExportBar } from "@/components/TableExportBar";
 import MissingIdentifierBanner from "@/components/MissingIdentifierBanner";
+import { Home, FileText, Activity, Coins, Scale, Bell, Search, PanelLeft, Sun, Moon, LogOut, HelpCircle, ChevronRight, BadgeCheck, Building2 } from "lucide-react";
 
 const APPLICANT_TABS = ["overview", "frns", "appeals", "changes", "frn-status", "disbursements"] as const;
 type ApplicantTab = typeof APPLICANT_TABS[number];
@@ -136,6 +137,207 @@ function getStatusColor(statusType: string): string {
   }
 }
 
+// ---------------------------------------------------------------------------
+// ApplicantCommandCenter
+// Dark/light bento "command center" home for the applicant portal. Mirrors the
+// consultant/vendor dashboard-revamp concept: greeting, funded-rate ring,
+// funding-at-a-glance bars, applications summary, a "needs your attention"
+// queue, recent activity, denials & appeals, and quick actions. Wired entirely
+// to the applicant's real dashboard data (no placeholder metrics).
+// ---------------------------------------------------------------------------
+function ApplicantCommandCenter({
+  profile, summary, frns, appeals, changes, dark,
+  isDemoAccount, onReplaceBen, onTab, onOpenAppeal, formatCurrency, formatDate,
+}: {
+  profile: DashboardData["profile"];
+  summary: DashboardData["summary"];
+  frns: FRN[];
+  appeals: Appeal[];
+  changes: StatusChange[];
+  dark: boolean;
+  isDemoAccount: boolean;
+  onReplaceBen: () => void;
+  onTab: (t: ApplicantTab) => void;
+  onOpenAppeal: (a: Appeal) => void;
+  formatCurrency: (n: number) => string;
+  formatDate: (s: string) => string;
+}) {
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const org = profile.organization_name || "there";
+  const totalFrns = summary.total_frns || 0;
+  const funded = summary.funded_count || 0;
+  const pending = summary.pending_count || 0;
+  const denied = summary.denied_count || 0;
+  const fundedPct = totalFrns > 0 ? Math.round((funded / totalFrns) * 100) : 0;
+  const fundedAmt = summary.total_funded_amount || 0;
+  const pendingAmt = summary.total_pending_amount || 0;
+  const deniedAmt = summary.total_denied_amount || 0;
+  const amtMax = Math.max(fundedAmt, pendingAmt, deniedAmt, 1);
+
+  const attention: { key: string; label: string; sub: string; tone: "red" | "amber" | "blue"; tab: ApplicantTab }[] = [];
+  if (denied > 0) attention.push({ key: "den", label: `${denied} denied FRN${denied !== 1 ? "s" : ""}`, sub: "Review and submit appeals", tone: "red", tab: "appeals" });
+  if (summary.urgent_deadlines > 0) attention.push({ key: "urg", label: `${summary.urgent_deadlines} appeal deadline${summary.urgent_deadlines !== 1 ? "s" : ""} approaching`, sub: "File before the window closes", tone: "red", tab: "appeals" });
+  if (summary.appeals_ready > 0) attention.push({ key: "rdy", label: `${summary.appeals_ready} appeal${summary.appeals_ready !== 1 ? "s" : ""} ready to send`, sub: "AI-drafted and waiting for review", tone: "amber", tab: "appeals" });
+  if (pending > 0) attention.push({ key: "pen", label: `${pending} application${pending !== 1 ? "s" : ""} pending`, sub: "Monitor USAC review status", tone: "blue", tab: "frn-status" });
+  if (summary.unread_changes > 0) attention.push({ key: "upd", label: `${summary.unread_changes} new update${summary.unread_changes !== 1 ? "s" : ""}`, sub: "Changes since your last visit", tone: "blue", tab: "changes" });
+
+  const R = 34, CIRC = 2 * Math.PI * R;
+  const ringPct = fundedPct / 100;
+  const ringTrack = dark ? "#1e293b" : "#e2e8f0";
+
+  const container = dark ? "bg-[#0a0a16] border-slate-800/80 text-slate-100" : "bg-white border-slate-200 text-slate-900";
+  const card = dark ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-200 shadow-sm";
+  const muted = dark ? "text-slate-400" : "text-slate-500";
+  const faint = dark ? "text-slate-500" : "text-slate-400";
+  const link = dark ? "text-purple-300 hover:text-purple-200" : "text-purple-600 hover:text-purple-700";
+  const rowHover = dark ? "hover:bg-slate-800/60" : "hover:bg-slate-50";
+  const softRow = dark ? "bg-slate-800/50 border-slate-700/50" : "bg-slate-50 border-slate-200";
+  const track = dark ? "bg-slate-800" : "bg-slate-100";
+  const qaBtn = dark ? "bg-slate-900/60 border-slate-800 hover:border-purple-500/40 hover:bg-slate-800/60 text-slate-300 hover:text-white" : "bg-white border-slate-200 hover:border-purple-300 hover:bg-slate-50 text-slate-600 hover:text-slate-900 shadow-sm";
+  const qaIcon = dark ? "bg-slate-800 text-purple-300" : "bg-slate-100 text-purple-600";
+  const strong = dark ? "text-slate-200 font-medium" : "text-slate-800 font-medium";
+  const toneCls = (t: string) => t === "red" ? "bg-red-500/20 text-red-500" : t === "amber" ? "bg-amber-500/20 text-amber-600" : "bg-sky-500/20 text-sky-500";
+
+  const topFrns = [...frns]
+    .sort((a, b) => (b.amount_funded || b.amount_requested || 0) - (a.amount_funded || a.amount_requested || 0))
+    .slice(0, 5);
+
+  return (
+    <div className={`rounded-3xl border p-6 md:p-8 shadow-2xl ${container}`}>
+      {/* Greeting header */}
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+        <div className="min-w-0">
+          <h1 className="text-2xl md:text-3xl font-bold">{greeting}, <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">{org}</span></h1>
+          <div className={`mt-2 flex flex-wrap items-center gap-2 text-sm ${muted}`}>
+            <span className={`font-mono rounded px-2 py-0.5 ${dark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600"}`}>BEN: {profile.ben}</span>
+            {isDemoAccount && (
+              <button onClick={onReplaceBen} className={`px-2 py-0.5 text-[11px] font-medium rounded-md border transition ${dark ? "text-amber-300 border-amber-400/40 hover:bg-amber-500/10" : "text-amber-600 border-amber-300 hover:bg-amber-50"}`} title="Replace this BEN with a different one (test/demo accounts only)">Replace</button>
+            )}
+            <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />{profile.state || "—"} · E-Rate Applicant</span>
+          </div>
+          <p className={`mt-2 text-sm ${muted}`}>You track <span className={strong}>{totalFrns}</span> FRN{totalFrns !== 1 ? "s" : ""} — <span className={strong}>{funded}</span> funded, <span className={strong}>{formatCurrency(fundedAmt)}</span> committed.</p>
+        </div>
+        <Link href="/settings/bens" className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all flex items-center gap-1.5">Manage BENs <ChevronRight className="w-4 h-4" /></Link>
+      </div>
+
+      {/* Top bento row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className={`rounded-2xl border p-5 ${card}`}>
+          <div className={`flex items-center gap-2 text-sm mb-3 ${muted}`}><BadgeCheck className="w-4 h-4" /> Funded rate</div>
+          <div className="flex items-center gap-4">
+            <div className="relative w-24 h-24 shrink-0">
+              <svg width="96" height="96" viewBox="0 0 96 96">
+                <circle cx="48" cy="48" r={R} fill="none" stroke={ringTrack} strokeWidth="8" />
+                <circle cx="48" cy="48" r={R} fill="none" stroke="url(#acRing)" strokeWidth="8" strokeLinecap="round" strokeDasharray={CIRC} strokeDashoffset={CIRC * (1 - ringPct)} transform="rotate(-90 48 48)" />
+                <defs><linearGradient id="acRing" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#a855f7" /><stop offset="1" stopColor="#ec4899" /></linearGradient></defs>
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center"><span className="text-xl font-bold">{fundedPct}%</span></div>
+            </div>
+            <div className="min-w-0 text-sm space-y-1 flex-1">
+              <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-500" /><span className={muted}>Funded</span><span className="font-semibold ml-auto">{funded}</span></div>
+              <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-amber-500" /><span className={muted}>Pending</span><span className="font-semibold ml-auto">{pending}</span></div>
+              <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-red-500" /><span className={muted}>Denied</span><span className="font-semibold ml-auto">{denied}</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div className={`rounded-2xl border p-5 ${card}`}>
+          <div className={`flex items-center gap-2 text-sm mb-3 ${muted}`}><Coins className="w-4 h-4" /> Funding at a glance</div>
+          <div className="text-3xl font-bold">{formatCurrency(fundedAmt)}</div>
+          <div className={`text-xs ${muted}`}>Total funded across your FRNs</div>
+          <div className="mt-4 space-y-2.5 text-xs">
+            <div><div className="flex justify-between mb-1"><span className={muted}>Funded</span><span className="font-semibold">{formatCurrency(fundedAmt)}</span></div><div className={`h-1.5 rounded ${track}`}><div className="h-full rounded bg-gradient-to-r from-emerald-500 to-lime-500" style={{ width: `${Math.round(fundedAmt / amtMax * 100)}%` }} /></div></div>
+            <div><div className="flex justify-between mb-1"><span className={muted}>Pending</span><span className="font-semibold">{formatCurrency(pendingAmt)}</span></div><div className={`h-1.5 rounded ${track}`}><div className="h-full rounded bg-gradient-to-r from-amber-500 to-yellow-500" style={{ width: `${Math.round(pendingAmt / amtMax * 100)}%` }} /></div></div>
+            <div><div className="flex justify-between mb-1"><span className={muted}>Denied</span><span className="font-semibold">{formatCurrency(deniedAmt)}</span></div><div className={`h-1.5 rounded ${track}`}><div className="h-full rounded bg-gradient-to-r from-red-500 to-rose-500" style={{ width: `${Math.round(deniedAmt / amtMax * 100)}%` }} /></div></div>
+          </div>
+        </div>
+
+        <div className={`rounded-2xl border p-5 ${card}`}>
+          <div className={`flex items-center gap-2 text-sm mb-3 ${muted}`}><Building2 className="w-4 h-4" /> Applications</div>
+          <div className="text-3xl font-bold">{totalFrns}</div>
+          <div className={`text-xs ${muted}`}>Total FRNs tracked</div>
+          <div className="mt-4 space-y-2 text-sm">
+            <div className="flex justify-between"><span className={muted}>Funded</span><span className="font-semibold">{funded}</span></div>
+            <div className="flex justify-between"><span className={muted}>Pending review</span><span className="font-semibold">{pending}</span></div>
+            <div className="flex justify-between"><span className={muted}>Denied</span><span className="font-semibold">{denied}</span></div>
+          </div>
+        </div>
+      </div>
+
+      {/* Middle row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
+        <div className={`rounded-2xl border p-5 ${card}`}>
+          <div className="flex items-center justify-between mb-3"><div><div className="font-semibold">Needs your attention</div><div className={`text-xs ${muted}`}>Ranked by risk</div></div><Bell className={`w-4 h-4 ${faint}`} /></div>
+          {attention.length > 0 ? (
+            <div className="space-y-2">{attention.map((a) => (
+              <div key={a.key} className={`flex items-center gap-3 rounded-xl border p-3 ${softRow}`}>
+                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${toneCls(a.tone)}`}>{a.tone === "red" ? <Scale className="w-4 h-4" /> : a.tone === "amber" ? <FileText className="w-4 h-4" /> : <Activity className="w-4 h-4" />}</div>
+                <div className="flex-1 min-w-0"><div className="font-medium truncate text-sm">{a.label}</div><div className={`text-xs truncate ${muted}`}>{a.sub}</div></div>
+                <button onClick={() => onTab(a.tab)} className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors shrink-0 ${dark ? "bg-slate-700 hover:bg-slate-600 text-slate-100" : "bg-slate-200 hover:bg-slate-300 text-slate-800"}`}>Open</button>
+              </div>
+            ))}</div>
+          ) : (<div className={`text-sm py-8 text-center ${faint}`}>You&apos;re all caught up.</div>)}
+        </div>
+
+        <div className={`rounded-2xl border p-5 ${card}`}>
+          <div className="flex items-center justify-between mb-3"><div><div className="font-semibold">Recent activity</div><div className={`text-xs ${muted}`}>Latest changes to your applications</div></div><button onClick={() => onTab("changes")} className={`text-xs font-medium ${link}`}>View all →</button></div>
+          {changes.length > 0 ? (
+            <div className="space-y-1.5">{changes.slice(0, 6).map((c) => {
+              const dot = c.change_type === "new_denial" ? "bg-red-500" : c.change_type === "appeal_generated" ? "bg-purple-500" : c.change_type === "status_change" ? "bg-amber-500" : "bg-slate-400";
+              return (<div key={c.id} className={`flex items-start gap-3 rounded-xl px-3 py-2 ${rowHover}`}>
+                <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${dot}`} />
+                <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{c.description}</div><div className={`text-xs truncate ${muted}`}>FRN {c.frn}</div></div>
+                <span className={`text-xs shrink-0 whitespace-nowrap ${faint}`}>{formatDate(c.changed_at)}</span>
+              </div>);
+            })}</div>
+          ) : (<div className={`text-sm py-8 text-center ${faint}`}>No recent updates yet.</div>)}
+        </div>
+      </div>
+
+      {/* Denials & appeals, or top FRNs by funding */}
+      {appeals.length > 0 ? (
+        <div className={`rounded-2xl border p-5 mt-5 ${card}`}>
+          <div className="flex items-center justify-between mb-3"><div><div className="font-semibold">Denials &amp; auto-generated appeals</div><div className={`text-xs ${muted}`}>AI-drafted, ready for your review</div></div><button onClick={() => onTab("appeals")} className={`text-xs font-medium ${link}`}>View all →</button></div>
+          <div className="space-y-1.5">{appeals.slice(0, 5).map((a) => (
+            <button key={a.id} onClick={() => onOpenAppeal(a)} className={`w-full text-left flex items-center gap-3 rounded-xl px-3 py-2 transition-colors ${rowHover}`}>
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${dark ? "bg-red-500/20 text-red-400" : "bg-red-100 text-red-600"}`}><Scale className="w-4 h-4" /></div>
+              <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">FRN {a.frn}</div><div className={`text-xs truncate ${muted}`}>{a.denial_category}: {a.denial_reason}</div></div>
+              {typeof a.success_probability === "number" && (<span className={`text-sm font-semibold shrink-0 ${a.success_probability >= 70 ? "text-emerald-500" : a.success_probability >= 40 ? "text-amber-500" : "text-red-500"}`}>{a.success_probability}%</span>)}
+              {a.days_until_deadline !== null && a.days_until_deadline <= 14 && (<span className="text-xs text-red-500 shrink-0 whitespace-nowrap">{a.days_until_deadline}d left</span>)}
+            </button>
+          ))}</div>
+        </div>
+      ) : topFrns.length > 0 ? (
+        <div className={`rounded-2xl border p-5 mt-5 ${card}`}>
+          <div className="flex items-center justify-between mb-3"><div><div className="font-semibold">Top FRNs by funding</div><div className={`text-xs ${muted}`}>Your highest-value requests</div></div><button onClick={() => onTab("frns")} className={`text-xs font-medium ${link}`}>View all →</button></div>
+          <div className="space-y-1.5">{topFrns.map((f, i) => (
+            <button key={f.id} onClick={() => onTab("frns")} className={`w-full text-left flex items-center gap-3 rounded-xl px-3 py-2 transition-colors ${rowHover}`}>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${dark ? "bg-gradient-to-br from-purple-500/30 to-pink-500/20 text-purple-200" : "bg-gradient-to-br from-purple-100 to-pink-100 text-purple-600"}`}>{i + 1}</div>
+              <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">FRN {f.frn}</div><div className={`text-xs ${muted}`}>FY{f.funding_year} · {f.service_type || "Service"}</div></div>
+              <div className={`text-sm font-semibold ${dark ? "text-emerald-400" : "text-emerald-600"}`}>{formatCurrency(f.amount_funded || f.amount_requested || 0)}</div>
+            </button>
+          ))}</div>
+        </div>
+      ) : null}
+
+      {/* Quick actions */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
+        {([
+          { label: "All FRNs", icon: <FileText className="w-5 h-5" />, fn: () => onTab("frns") },
+          { label: "Live Status", icon: <Activity className="w-5 h-5" />, fn: () => onTab("frn-status") },
+          { label: "Disbursements", icon: <Coins className="w-5 h-5" />, fn: () => onTab("disbursements") },
+          { label: "Appeals", icon: <Scale className="w-5 h-5" />, fn: () => onTab("appeals") },
+        ]).map((a) => (
+          <button key={a.label} onClick={a.fn} className={`rounded-2xl border p-4 flex flex-col items-center gap-2 transition-all ${qaBtn}`}>
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${qaIcon}`}>{a.icon}</div><span className="text-sm font-medium">{a.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function ApplicantDashboardWrapper() {
   return (
     <Suspense fallback={
@@ -160,6 +362,22 @@ function ApplicantDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [selectedTab, setSelectedTab] = useTabParam<ApplicantTab>("overview", APPLICANT_TABS);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Dark / light theme for the whole applicant portal shell. On first load we
+  // honor the visitor's OS preference (prefers-color-scheme); once they toggle,
+  // that explicit choice is remembered per-browser and wins over the OS setting.
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = localStorage.getItem("applicant_theme");
+    if (saved === "light" || saved === "dark") { setTheme(saved); return; }
+    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) setTheme("light");
+  }, []);
+  const toggleTheme = () => setTheme((p) => {
+    const next = p === "dark" ? "light" : "dark";
+    try { localStorage.setItem("applicant_theme", next); } catch { /* ignore */ }
+    return next;
+  });
+  const dark = theme === "dark";
   const [selectedAppeal, setSelectedAppeal] = useState<Appeal | null>(null);
   const [selectedFrnId, setSelectedFrnId] = useState<number | null>(null);
   const [frnDetail, setFrnDetail] = useState<any | null>(null);
@@ -437,97 +655,115 @@ function ApplicantDashboard() {
     downloadCsv(csvFilename('my_frns'), columns, rowsToExport as unknown as Record<string, unknown>[]);
   };
 
-  const navItems = [
-    { id: 'overview', label: 'Dashboard', icon: '📊' },
-    { id: 'frns', label: 'All FRNs', icon: '📋', count: frns.length },
-    { id: 'frn-status', label: 'Live Status', icon: '📈' },
-    { id: 'disbursements', label: 'Disbursements', icon: '💰' },
-    { id: 'appeals', label: 'Appeals', icon: '⚖️', count: appeals.length },
-    { id: 'changes', label: 'Updates', icon: '🔔', count: summary.unread_changes },
+  const navGroups: { label: string; items: { id: ApplicantTab; label: string; Icon: typeof Home; count?: number }[] }[] = [
+    { label: "Overview", items: [
+      { id: "overview", label: "Dashboard", Icon: Home },
+    ]},
+    { label: "Applications", items: [
+      { id: "frns", label: "All FRNs", Icon: FileText, count: frns.length },
+      { id: "frn-status", label: "Live Status", Icon: Activity },
+    ]},
+    { label: "Funding & Compliance", items: [
+      { id: "disbursements", label: "Disbursements", Icon: Coins },
+      { id: "appeals", label: "Appeals", Icon: Scale, count: appeals.length },
+    ]},
+    { label: "Activity", items: [
+      { id: "changes", label: "Updates", Icon: Bell, count: summary.unread_changes },
+    ]},
   ];
-
-  const activeTabLabel = navItems.find(item => item.id === selectedTab)?.label || 'Dashboard';
+  const allNav = navGroups.flatMap((g) => g.items);
+  const activeLabel = allNav.find((i) => i.id === selectedTab)?.label || "Dashboard";
 
   const handleLogout = () => {
     logout();
     router.push('/sign-in');
   };
 
+  // Theme-aware shell class fragments
+  const shellSide = dark ? "bg-[#0f1020] border-slate-800" : "bg-white border-slate-200";
+  const shellMain = dark ? "bg-[#0a0b15]" : "bg-slate-50";
+  const shellTop = dark ? "bg-[#0c0d1a] border-slate-800" : "bg-white border-slate-200";
+  const groupLabelCls = dark ? "text-slate-500" : "text-slate-400";
+  const railText = dark ? "text-slate-300" : "text-slate-600";
+  const railHover = dark ? "hover:bg-slate-800/60 hover:text-white" : "hover:bg-slate-50 hover:text-slate-900";
+  const railActive = dark ? "bg-gradient-to-r from-purple-500/20 to-pink-500/10 text-white" : "bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700";
+  const iconBtnCls = dark ? "border-slate-700 text-slate-300 hover:border-purple-500 hover:text-white" : "border-slate-200 text-slate-600 hover:bg-slate-100";
+  const crumbInk = dark ? "text-slate-100" : "text-slate-900";
+  const crumbFaint = dark ? "text-slate-500" : "text-slate-400";
+  const searchCls = dark ? "bg-slate-900 border-slate-700 text-slate-400" : "bg-slate-50 border-slate-200 text-slate-500";
+
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className={`min-h-screen ${shellMain}`}>
       {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 transform transition-transform duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}>
-        <div className="h-16 flex items-center gap-3 px-6 border-b border-slate-200">
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 border-r transform transition-transform duration-200 ease-in-out ${shellSide} ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 flex flex-col`}>
+        {/* Logo */}
+        <div className={`h-16 flex items-center gap-3 px-5 border-b ${dark ? 'border-slate-800' : 'border-slate-200'}`}>
           <Link href="/" className="flex items-center gap-3">
             <img src="/images/logos/logo-icon-transparent.png" alt="SkyRate AI" width={36} height={36} className="rounded-lg" />
             <div>
-              <span className="font-bold text-slate-900">SkyRate AI</span>
-              <span className="block text-xs text-slate-500">Applicant Portal</span>
+              <span className={`font-bold ${crumbInk}`}>SkyRate AI</span>
+              <span className={`block text-xs ${dark ? 'text-slate-500' : 'text-slate-500'}`}>
+                Applicant Portal{(user?.role === 'super' || user?.role === 'admin') ? ` (${user.role})` : ''}
+              </span>
             </div>
           </Link>
         </div>
 
-        <nav className="p-4 space-y-1">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => { setSelectedTab(item.id as ApplicantTab); setSidebarOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${
-                selectedTab === item.id
-                  ? "bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700 font-medium shadow-sm"
-                  : "text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              <span className="text-xl">{item.icon}</span>
-              <span>{item.label}</span>
-              {item.count !== undefined && item.count > 0 && (
-                <span className={`ml-auto px-2 py-0.5 rounded-full text-xs font-medium ${
-                  selectedTab === item.id ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  {item.count}
-                </span>
-              )}
-              {selectedTab === item.id && !item.count && (
-                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-purple-600"></span>
-              )}
-            </button>
+        {/* Grouped navigation */}
+        <nav className="flex-1 overflow-y-auto px-3 py-4">
+          {navGroups.map((group) => (
+            <div key={group.label} className="mb-4">
+              <div className={`px-3 pb-1.5 text-[10.5px] font-bold uppercase tracking-wider ${groupLabelCls}`}>{group.label}</div>
+              {group.items.map((item) => {
+                const active = selectedTab === item.id;
+                const Ico = item.Icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => { setSelectedTab(item.id); setSidebarOpen(false); }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all mb-0.5 ${active ? `${railActive} font-medium` : `${railText} ${railHover}`}`}
+                  >
+                    <Ico className="w-[18px] h-[18px]" />
+                    <span className="text-sm">{item.label}</span>
+                    {item.count !== undefined && item.count > 0 ? (
+                      <span className={`ml-auto px-2 py-0.5 rounded-full text-xs font-medium ${active ? (dark ? 'bg-purple-500/30 text-purple-100' : 'bg-purple-100 text-purple-700') : (dark ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-600')}`}>{item.count}</span>
+                    ) : active ? (
+                      <span className="ml-auto w-1.5 h-1.5 rounded-full bg-purple-500" />
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
           ))}
         </nav>
 
-        {/* Subscription Card */}
-        <div className="absolute bottom-20 left-4 right-4">
-          <div className="bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl p-4 text-white">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium opacity-90">
+        {/* Pinned footer: plan card + profile */}
+        <div className={`border-t p-3 ${dark ? 'border-slate-800' : 'border-slate-200'}`}>
+          <div className="rounded-2xl p-3 mb-2 bg-gradient-to-br from-purple-600 to-pink-600 text-white">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium opacity-90">
                 {user?.role === 'super' || user?.role === 'admin' ? 'Full Access' : 'Pro Plan'}
               </span>
-              <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs">
-                {user?.role === 'super' ? '⭐ Super' : user?.role === 'admin' ? '🔑 Admin' : 'Active'}
+              <span className="px-2 py-0.5 bg-white/20 rounded-full text-[10px] font-semibold">
+                {user?.role === 'super' ? 'Super' : user?.role === 'admin' ? 'Admin' : 'Active'}
               </span>
             </div>
-            <div className="text-2xl font-bold">{frns.length} FRNs</div>
-            <div className="text-sm opacity-75 mt-1">Tracked applications</div>
+            <div className="text-lg font-bold mt-0.5">{frns.length} FRNs</div>
           </div>
-        </div>
-
-        {/* User Profile */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200 bg-white">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center text-purple-700 font-semibold">
+          <div className="flex items-center gap-2.5 px-1">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center text-white font-semibold shrink-0">
               {user?.first_name?.[0] || user?.email?.[0]?.toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="font-medium text-slate-900 truncate">{user?.full_name || user?.email}</div>
-              <div className="text-xs text-slate-500 truncate">{profile.organization_name}</div>
+              <div className={`text-sm font-medium truncate ${crumbInk}`}>{user?.full_name || user?.email}</div>
+              <div className={`text-xs truncate ${dark ? 'text-slate-500' : 'text-slate-500'}`}>{profile.organization_name}</div>
             </div>
             <button
               onClick={handleLogout}
-              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-              title="Sign Out"
+              title="Logout"
+              className={`p-2 rounded-lg transition-colors ${dark ? 'text-slate-400 hover:text-red-400 hover:bg-red-500/10' : 'text-slate-400 hover:text-red-500 hover:bg-red-50'}`}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
+              <LogOut className="w-[18px] h-[18px]" />
             </button>
           </div>
         </div>
@@ -541,356 +777,86 @@ function ApplicantDashboard() {
       {/* Main Content */}
       <main className="lg:ml-64">
         {/* Top Bar */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 sticky top-0 z-40">
-          <div className="flex items-center gap-4">
+        <header className={`h-16 border-b flex items-center justify-between px-5 sticky top-0 z-40 ${shellTop}`}>
+          <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+              className={`lg:hidden w-9 h-9 rounded-lg border flex items-center justify-center ${iconBtnCls}`}
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
+              <PanelLeft className="w-5 h-5" />
             </button>
-            <h1 className="text-xl font-semibold text-slate-900">{activeTabLabel}</h1>
+            <div className="text-sm truncate">
+              <span className={crumbFaint}>SkyRate AI</span>
+              <span className={`mx-1.5 ${crumbFaint}`}>·</span>
+              <span className={`font-semibold ${crumbInk}`}>{activeLabel}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div className={`hidden md:flex items-center gap-2 rounded-lg border px-3 py-2 text-sm w-56 ${searchCls}`}>
+              <Search className="w-4 h-4" />
+              <span className="flex-1 truncate">Search or jump to…</span>
+            </div>
+            <button
+              onClick={toggleTheme}
+              title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+              className={`w-9 h-9 rounded-lg border flex items-center justify-center ${iconBtnCls}`}
+            >
+              {dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
             <Link
               href="/settings/notifications"
-              className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg relative"
+              className={`w-9 h-9 rounded-lg border flex items-center justify-center relative ${iconBtnCls}`}
               title="Notifications"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
+              <Bell className="w-5 h-5" />
               {summary.unread_changes > 0 && (
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full"></span>
               )}
             </Link>
+            <button className={`hidden sm:flex w-9 h-9 rounded-lg border items-center justify-center ${iconBtnCls}`} title="Help">
+              <HelpCircle className="w-5 h-5" />
+            </button>
             {summary.sync_status === 'syncing' ? (
-              <div className="flex items-center gap-2 text-sm text-purple-600">
+              <div className="flex items-center gap-2 text-sm text-purple-400 px-2">
                 <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
-                Syncing...
+                <span className="hidden sm:inline">Syncing…</span>
               </div>
             ) : (
               <button
                 onClick={triggerSync}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-sm"
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${dark ? 'bg-slate-800 hover:bg-slate-700 text-slate-200' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                Refresh
+                <span className="hidden sm:inline">Refresh</span>
               </button>
             )}
           </div>
         </header>
+
 
         {/* Soft-gate: prompt applicants without a BEN to finish onboarding */}
         <MissingIdentifierBanner />
 
         {/* Page Content */}
         <div className="p-6">
-        {/* Overview / Dashboard */}
+        {/* Overview / Dashboard - dark/light bento command center */}
         {selectedTab === 'overview' && (
-          <div className="space-y-6">
-            {/* Hero Banner */}
-            <div className="bg-gradient-to-r from-purple-600 via-purple-700 to-pink-600 rounded-2xl p-6 text-white shadow-lg">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
-                    <span className="text-3xl">🏫</span>
-                  </div>
-                  <div>
-                    <h1 className="text-2xl font-bold">{profile.organization_name}</h1>
-                    <div className="flex items-center gap-3 mt-1 text-purple-100">
-                      <span className="font-mono bg-white/20 px-2 py-0.5 rounded text-sm">BEN: {profile.ben}</span>
-                      {isDemoAccount && (
-                        <button
-                          onClick={() => {
-                            setReplaceBenInput("");
-                            setReplaceBenError(null);
-                            setShowReplaceBenModal(true);
-                          }}
-                          className="px-2 py-0.5 text-[11px] font-medium text-amber-200 hover:text-white hover:bg-amber-600 border border-amber-300/50 hover:border-amber-600 rounded-md transition"
-                          title="Replace this BEN with a different one (test/demo accounts only)"
-                        >
-                          Replace
-                        </button>
-                      )}
-                      <span className="flex items-center gap-1 text-sm">
-                        <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                        {profile.state} • E-Rate Applicant
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <Link
-                  href="/settings/bens"
-                  className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
-                >
-                  Manage BENs →
-                </Link>
-              </div>
-              <div className="grid grid-cols-4 gap-6 mt-6 pt-6 border-t border-white/20">
-                <div>
-                  <div className="text-3xl font-bold">{formatCurrency(summary.total_funded_amount)}</div>
-                  <div className="text-sm text-purple-200 mt-1">Total Funded</div>
-                </div>
-                <div>
-                  <div className="text-3xl font-bold">{summary.total_frns}</div>
-                  <div className="text-sm text-purple-200 mt-1">Total FRNs</div>
-                </div>
-                <div>
-                  <div className="text-3xl font-bold">{summary.funded_count}</div>
-                  <div className="text-sm text-purple-200 mt-1">Funded</div>
-                </div>
-                <div>
-                  <div className="text-3xl font-bold">{summary.pending_count}</div>
-                  <div className="text-sm text-purple-200 mt-1">Pending</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Stat Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
-                    <span className="text-2xl">💰</span>
-                  </div>
-                  <span className="text-xs text-green-600 font-medium px-2 py-1 bg-green-50 rounded-full">{summary.funded_count} FRNs</span>
-                </div>
-                <div className="text-3xl font-bold text-slate-900">{formatCurrency(summary.total_funded_amount)}</div>
-                <div className="text-sm text-slate-500 mt-1">Total Funded</div>
-              </div>
-              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
-                    <span className="text-2xl">⏳</span>
-                  </div>
-                  <span className="text-xs text-amber-600 font-medium px-2 py-1 bg-amber-50 rounded-full">{summary.pending_count} FRNs</span>
-                </div>
-                <div className="text-3xl font-bold text-slate-900">{formatCurrency(summary.total_pending_amount)}</div>
-                <div className="text-sm text-slate-500 mt-1">Pending Review</div>
-              </div>
-              <div 
-                className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow cursor-pointer hover:border-red-300"
-                onClick={() => setSelectedTab('appeals')}
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center">
-                    <span className="text-2xl">⚠️</span>
-                  </div>
-                  {summary.denied_count > 0 ? (
-                    <span className="text-xs text-red-600 font-medium px-2 py-1 bg-red-50 rounded-full">Action needed</span>
-                  ) : (
-                    <span className="text-xs text-green-600 font-medium px-2 py-1 bg-green-50 rounded-full">All clear</span>
-                  )}
-                </div>
-                <div className="text-3xl font-bold text-slate-900">{formatCurrency(summary.total_denied_amount)}</div>
-                <div className="text-sm text-slate-500 mt-1">Denied ({summary.denied_count} FRNs)</div>
-              </div>
-              <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
-                    <span className="text-2xl">⚖️</span>
-                  </div>
-                  {summary.urgent_deadlines > 0 ? (
-                    <span className="text-xs text-red-600 font-medium px-2 py-1 bg-red-50 rounded-full">{summary.urgent_deadlines} urgent</span>
-                  ) : (
-                    <span className="text-xs text-purple-600 font-medium px-2 py-1 bg-purple-50 rounded-full">Ready</span>
-                  )}
-                </div>
-                <div className="text-3xl font-bold text-slate-900">{summary.appeals_ready}</div>
-                <div className="text-sm text-slate-500 mt-1">Appeals Ready</div>
-              </div>
-            </div>
-
-            {/* Alerts */}
-            {summary.urgent_deadlines > 0 && (
-              <div className="bg-gradient-to-r from-red-50 to-orange-50 rounded-2xl border border-red-200 p-6">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center">
-                    <span className="text-2xl">⏰</span>
-                  </div>
-                  <div className="flex-1">
-                    <h2 className="text-lg font-semibold text-slate-900">
-                      {summary.urgent_deadlines} appeal deadline{summary.urgent_deadlines > 1 ? 's' : ''} approaching!
-                    </h2>
-                    <p className="text-sm text-slate-600 mt-1">Review and submit your appeals before the deadline passes.</p>
-                  </div>
-                  <button
-                    onClick={() => setSelectedTab('appeals')}
-                    className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors text-sm font-medium"
-                  >
-                    View Appeals →
-                  </button>
-                </div>
-              </div>
-            )}
-            {summary.unread_changes > 0 && (
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-200 p-6">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-                    <span className="text-2xl">🔔</span>
-                  </div>
-                  <div className="flex-1">
-                    <h2 className="text-lg font-semibold text-slate-900">
-                      {summary.unread_changes} new update{summary.unread_changes > 1 ? 's' : ''} since your last visit
-                    </h2>
-                    <p className="text-sm text-slate-600 mt-1">Check what changed with your applications.</p>
-                  </div>
-                  <button
-                    onClick={() => setSelectedTab('changes')}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors text-sm font-medium"
-                  >
-                    View Updates →
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Quick Actions */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-6">
-              <h2 className="text-lg font-semibold text-slate-900 mb-4">Quick Actions</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <button
-                  onClick={() => setSelectedTab('frns')}
-                  className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-purple-300 hover:bg-purple-50 transition-all text-center group"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-purple-100 group-hover:bg-purple-200 flex items-center justify-center mx-auto mb-2 transition-colors">
-                    <span className="text-xl">📋</span>
-                  </div>
-                  <span className="text-sm font-medium text-slate-700">View All FRNs</span>
-                </button>
-                <button
-                  onClick={() => setSelectedTab('frn-status')}
-                  className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-green-300 hover:bg-green-50 transition-all text-center group"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-green-100 group-hover:bg-green-200 flex items-center justify-center mx-auto mb-2 transition-colors">
-                    <span className="text-xl">📈</span>
-                  </div>
-                  <span className="text-sm font-medium text-slate-700">Live Status</span>
-                </button>
-                <button
-                  onClick={() => setSelectedTab('disbursements')}
-                  className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-amber-300 hover:bg-amber-50 transition-all text-center group"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-amber-100 group-hover:bg-amber-200 flex items-center justify-center mx-auto mb-2 transition-colors">
-                    <span className="text-xl">💰</span>
-                  </div>
-                  <span className="text-sm font-medium text-slate-700">Disbursements</span>
-                </button>
-                <Link
-                  href="/settings/notifications"
-                  className="p-4 rounded-xl border-2 border-dashed border-slate-200 hover:border-rose-300 hover:bg-rose-50 transition-all text-center group block"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-rose-100 group-hover:bg-rose-200 flex items-center justify-center mx-auto mb-2 transition-colors">
-                    <span className="text-xl">🔔</span>
-                  </div>
-                  <span className="text-sm font-medium text-slate-700">Notifications</span>
-                </Link>
-              </div>
-            </div>
-
-            {/* Two-column: Appeals + Updates */}
-            <div className="grid md:grid-cols-2 gap-6">
-            {/* Recent Denials with Appeals */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="p-4 border-b border-slate-200">
-                <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-                  ⚖️ Auto-Generated Appeals
-                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
-                    AI Ready
-                  </span>
-                </h3>
-              </div>
-              <div className="divide-y divide-slate-100">
-                {appeals.slice(0, 5).map((appeal) => (
-                  <div
-                    key={appeal.id}
-                    className="p-4 hover:bg-slate-50 cursor-pointer transition-colors"
-                    onClick={() => setSelectedAppeal(appeal)}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="font-medium text-slate-900">FRN {appeal.frn}</div>
-                        <div className="text-sm text-slate-500 line-clamp-1">
-                          {appeal.denial_category}: {appeal.denial_reason}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        {appeal.success_probability && (
-                          <div className={`text-sm font-medium ${
-                            appeal.success_probability >= 70 ? 'text-green-600' :
-                            appeal.success_probability >= 40 ? 'text-yellow-600' : 'text-red-600'
-                          }`}>
-                            {appeal.success_probability}% success
-                          </div>
-                        )}
-                        {appeal.days_until_deadline !== null && appeal.days_until_deadline <= 14 && (
-                          <div className="text-xs text-red-600">
-                            {appeal.days_until_deadline} days left
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {appeals.length === 0 && (
-                  <div className="p-8 text-center text-slate-500">
-                    🎉 No denials - great work!
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Recent Changes */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-              <div className="p-4 border-b border-slate-200">
-                <h3 className="font-semibold text-slate-900">🔔 Recent Updates</h3>
-              </div>
-              <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
-                {recent_changes.slice(0, 10).map((change) => (
-                  <div
-                    key={change.id}
-                    className={`p-4 ${!change.is_read ? 'bg-blue-50' : ''}`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
-                        change.change_type === 'status_change' ? 'bg-yellow-100' :
-                        change.change_type === 'new_denial' ? 'bg-red-100' :
-                        change.change_type === 'appeal_generated' ? 'bg-purple-100' :
-                        'bg-slate-100'
-                      }`}>
-                        {change.change_type === 'status_change' ? '🔄' :
-                         change.change_type === 'new_denial' ? '❌' :
-                         change.change_type === 'appeal_generated' ? '⚖️' :
-                         '📋'}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm text-slate-900">{change.description}</div>
-                        <div className="text-xs text-slate-500 mt-1">
-                          {formatDate(change.changed_at)}
-                        </div>
-                      </div>
-                      {change.is_important && (
-                        <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">
-                          Important
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {recent_changes.length === 0 && (
-                  <div className="p-8 text-center text-slate-500">
-                    No recent updates
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          </div>
+          <ApplicantCommandCenter
+            profile={profile}
+            summary={summary}
+            frns={frns}
+            appeals={appeals}
+            changes={recent_changes}
+            dark={dark}
+            isDemoAccount={isDemoAccount}
+            onReplaceBen={() => { setReplaceBenInput(""); setReplaceBenError(null); setShowReplaceBenModal(true); }}
+            onTab={setSelectedTab}
+            onOpenAppeal={setSelectedAppeal}
+            formatCurrency={formatCurrency}
+            formatDate={formatDate}
+          />
         )}
 
         {selectedTab === 'frns' && (
