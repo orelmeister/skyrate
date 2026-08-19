@@ -2784,6 +2784,16 @@ class ApiClient {
     return this.put(`/vendor/frn-tracking`, data);
   }
 
+  // ---- Per-FRN applicant working annotations (status/install/co-pay/PIA) ----
+  async applicantGetFrnTracking(frn?: string): Promise<ApiResponse<{ success: boolean; tracking: FrnTracking | Record<string, FrnTracking> | null; count?: number }>> {
+    const params = frn ? `?frn=${encodeURIComponent(frn)}` : '';
+    return this.request(`/api/v1/applicant/frn-tracking${params}`);
+  }
+
+  async applicantUpsertFrnTracking(data: FrnTrackingUpdate): Promise<ApiResponse<{ success: boolean; tracking: FrnTracking }>> {
+    return this.put(`/applicant/frn-tracking`, data);
+  }
+
   // ---- SAM.gov registration lookup for a school (A2 auto-confirm) ----
   async consultantSamCheck(ben: string, apply = false): Promise<ApiResponse<SamCheckResult>> {
     const qs = apply ? '?apply=true' : '';

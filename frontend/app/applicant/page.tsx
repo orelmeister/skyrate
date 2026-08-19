@@ -1,16 +1,17 @@
 "use client";
 
-import React, { useState, useEffect, Suspense, useRef } from "react";
+import React, { useState, useEffect, useMemo, Suspense, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
-import { api } from "@/lib/api";
+import { api, FrnTracking } from "@/lib/api";
 import { useTabParam } from "@/hooks/useTabParam";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { TableExportBar } from "@/components/TableExportBar";
+import { FrnSubStatusInfo, FRN_PENDING_REASON_OPTIONS } from "@/components/FrnSubStatusInfo";
 import MissingIdentifierBanner from "@/components/MissingIdentifierBanner";
-import { Home, FileText, Activity, Coins, Scale, Bell, Search, PanelLeft, Sun, Moon, LogOut, HelpCircle, ChevronRight, BadgeCheck, Building2 } from "lucide-react";
+import { Home, FileText, Activity, Coins, Scale, Bell, Search, PanelLeft, Sun, Moon, LogOut, HelpCircle, ChevronRight, BadgeCheck, Building2, Settings } from "lucide-react";
 
 const APPLICANT_TABS = ["overview", "frns", "appeals", "changes", "frn-status", "disbursements"] as const;
 type ApplicantTab = typeof APPLICANT_TABS[number];
@@ -37,10 +38,15 @@ interface FRN {
   status: string;
   status_type: string;
   service_type: string;
+  service_description?: string | null;
   amount_requested: number | null;
   amount_funded: number | null;
+  amount_disbursed?: number | null;
+  discount_rate?: number | null;
   is_denied: boolean;
   denial_reason: string | null;
+  review_stage?: string | null;
+  disbursement_status?: string | null;
   appeal_deadline: string | null;
   days_in_review: number | null;
 }
@@ -121,20 +127,6 @@ function formatDate(dateStr: string): string {
     day: 'numeric',
     year: 'numeric',
   });
-}
-
-function getStatusColor(statusType: string): string {
-  switch (statusType) {
-    case 'funded':
-      return 'bg-green-100 text-green-800';
-    case 'denied':
-      return 'bg-red-100 text-red-800';
-    case 'pending_review':
-    case 'in_review':
-      return 'bg-yellow-100 text-yellow-800';
-    default:
-      return 'bg-slate-100 text-slate-800';
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -402,6 +394,26 @@ function ApplicantDashboard() {
   const [replacingBenLoading, setReplacingBenLoading] = useState(false);
   const [replaceBenError, setReplaceBenError] = useState<string | null>(null);
 
+  // ----- "All FRNs" tab: filters, sort, and per-FRN working tracking -----
+  // The frns data is already loaded from the dashboard, so all filtering is
+  // client-side. Mirrors the consultant / vendor FRN-status experience.
+  const [frnsYear, setFrnsYear] = useState<string>("");
+  const [frnsStatus, setFrnsStatus] = useState<string>("");
+  const [frnsPendingReason, setFrnsPendingReason] = useState<string>("");
+  const [frnsService, setFrnsService] = useState<string>("");
+  const [frnsSearch, setFrnsSearch] = useState<string>("");
+  const [frnsTrackingFilter, setFrnsTrackingFilter] = useState<string>("");
+  const [frnsSort, setFrnsSort] = useState<{ field: string; dir: "asc" | "desc" } | null>(null);
+
+  // Per-FRN working annotations (A6 install, A7 co-pay, notes). Funding status
+  // and PIA come from USAC automatically and are shown in the table, so the
+  // modal only tracks what USAC does not provide.
+  const [frnTrackingMap, setFrnTrackingMap] = useState<Record<string, FrnTracking>>({});
+  const [trackingModalFrn, setTrackingModalFrn] = useState<string | null>(null);
+  const [trackingForm, setTrackingForm] = useState<FrnTracking | null>(null);
+  const [trackingLoading, setTrackingLoading] = useState(false);
+  const [trackingSaving, setTrackingSaving] = useState(false);
+
   const isDemoAccount = user?.email?.includes('test_') || user?.email?.includes('demo') || user?.role === 'admin' || user?.role === 'super';
 
   useEffect(() => {
@@ -602,6 +614,167 @@ function ApplicantDashboard() {
     }
   };
 
+  // Load all of the account's FRN tracking rows once (drives at-a-glance badges).
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await api.applicantGetFrnTracking();
+        if (!cancelled && resp.success && resp.data?.success && resp.data.tracking && typeof resp.data.tracking === "object") {
+          setFrnTrackingMap(resp.data.tracking as Record<string, FrnTracking>);
+        }
+      } catch { /* non-fatal */ }
+    })();
+    return () => { cancelled = true; };
+  }, [token]);
+
+  const openTrackingModal = async (frn: string, ben?: string | null) => {
+    if (!frn) return;
+    setTrackingModalFrn(frn);
+    setTrackingLoading(true);
+    setTrackingForm({ frn, ben: ben || null });
+    try {
+      const resp = await api.applicantGetFrnTracking(frn);
+      const existing = resp.success && resp.data?.success ? (resp.data.tracking as FrnTracking | null) : null;
+      setTrackingForm(existing ? { ...existing, frn, ben: existing.ben || ben || null } : { frn, ben: ben || null, installed: false, copay_paid: false });
+    } catch {
+      setTrackingForm({ frn, ben: ben || null, installed: false, copay_paid: false });
+    } finally {
+      setTrackingLoading(false);
+    }
+  };
+
+  const saveTrackingModal = async () => {
+    if (!trackingForm?.frn) return;
+    setTrackingSaving(true);
+    try {
+      const resp = await api.applicantUpsertFrnTracking({
+        frn: trackingForm.frn,
+        ben: trackingForm.ben ?? null,
+        working_status: trackingForm.working_status ?? null,
+        installed: trackingForm.installed ?? false,
+        install_date: trackingForm.install_date ?? null,
+        copay_paid: trackingForm.copay_paid ?? false,
+        copay_amount: trackingForm.copay_amount ?? null,
+        pia_status: trackingForm.pia_status ?? null,
+        notes: trackingForm.notes ?? null,
+      });
+      if (resp.success && resp.data?.success) {
+        const saved = resp.data.tracking;
+        setFrnTrackingMap(prev => ({ ...prev, [saved.frn]: saved }));
+        setTrackingModalFrn(null);
+        setTrackingForm(null);
+      }
+    } finally {
+      setTrackingSaving(false);
+    }
+  };
+
+  const toggleFrnsSort = (field: string) => {
+    setFrnsSort(prev => {
+      if (!prev || prev.field !== field) return { field, dir: "asc" };
+      if (prev.dir === "asc") return { field, dir: "desc" };
+      return null;
+    });
+  };
+
+  // Distinct dropdown options derived from the loaded FRNs.
+  const frnsAll = data?.frns || [];
+  const frnsYearOptions = useMemo(() => {
+    const set = new Set<number>();
+    frnsAll.forEach(f => { if (f.funding_year) set.add(f.funding_year); });
+    return Array.from(set).sort((a, b) => b - a);
+  }, [data?.frns]);
+  const frnsServiceOptions = useMemo(() => {
+    const set = new Set<string>();
+    frnsAll.forEach(f => { const s = (f.service_type || "").trim(); if (s) set.add(s); });
+    return Array.from(set).sort();
+  }, [data?.frns]);
+  const frnsPendingReasonOptions = useMemo(() => {
+    const set = new Set<string>(FRN_PENDING_REASON_OPTIONS);
+    frnsAll.forEach(f => { const r = (f.review_stage || "").trim(); if (r) set.add(r); });
+    return Array.from(set);
+  }, [data?.frns]);
+
+  // Filtered + sorted FRNs for the "All FRNs" table.
+  const sortedFrns = useMemo(() => {
+    let filtered = [...frnsAll];
+
+    if (frnsYear) filtered = filtered.filter(f => String(f.funding_year) === frnsYear);
+
+    if (frnsStatus) {
+      filtered = filtered.filter(f => {
+        const st = (f.status_type || "").toLowerCase();
+        const raw = (f.status || "").toLowerCase();
+        if (frnsStatus === "funded") return st === "funded" || raw.includes("funded") || raw.includes("committed");
+        if (frnsStatus === "denied") return f.is_denied || st === "denied" || raw.includes("denied");
+        if (frnsStatus === "pending") return !f.is_denied && st !== "funded" && st !== "denied";
+        return true;
+      });
+    }
+
+    if (frnsPendingReason.trim()) {
+      const pr = frnsPendingReason.trim().toLowerCase();
+      filtered = filtered.filter(f => (f.review_stage || "").toLowerCase().includes(pr));
+    }
+
+    if (frnsService) filtered = filtered.filter(f => (f.service_type || "") === frnsService);
+
+    if (frnsSearch.trim()) {
+      const s = frnsSearch.trim().toLowerCase();
+      const benLower = (data?.profile?.ben || "").toLowerCase();
+      const orgLower = (data?.profile?.organization_name || "").toLowerCase();
+      filtered = filtered.filter(f =>
+        (f.frn || "").toLowerCase().includes(s) ||
+        (f.application_number || "").toLowerCase().includes(s) ||
+        benLower.includes(s) ||
+        orgLower.includes(s)
+      );
+    }
+
+    if (frnsTrackingFilter) {
+      filtered = filtered.filter(f => {
+        const t = frnTrackingMap[f.frn];
+        const flt = frnsTrackingFilter;
+        if (flt === "tracked") return !!t;
+        if (flt === "installed") return !!t?.installed;
+        if (flt === "not_installed") return !t?.installed;
+        if (flt === "copay_paid") return !!t?.copay_paid;
+        if (flt === "copay_unpaid") return !t?.copay_paid;
+        return true;
+      });
+    }
+
+    if (!frnsSort) return filtered;
+    const dir = frnsSort.dir === "asc" ? 1 : -1;
+    const numeric = frnsSort.field === "funding_year" || frnsSort.field === "amount_funded" || frnsSort.field === "amount_disbursed";
+    return [...filtered].sort((a, b) => {
+      if (numeric) {
+        const av = Number((a as any)[frnsSort.field] ?? 0);
+        const bv = Number((b as any)[frnsSort.field] ?? 0);
+        return (av - bv) * dir;
+      }
+      const av = ((a as any)[frnsSort.field] ?? "").toString().toLowerCase();
+      const bv = ((b as any)[frnsSort.field] ?? "").toString().toLowerCase();
+      return av.localeCompare(bv) * dir;
+    });
+  }, [data?.frns, data?.profile, frnsYear, frnsStatus, frnsPendingReason, frnsService, frnsSearch, frnsTrackingFilter, frnsSort, frnTrackingMap]);
+
+  // At-a-glance stat totals for the "All FRNs" tab (computed from frns data).
+  const frnStats = useMemo(() => {
+    let funded = 0, fundedAmt = 0, denied = 0, deniedAmt = 0, pending = 0, pendingAmt = 0;
+    frnsAll.forEach(f => {
+      const st = (f.status_type || "").toLowerCase();
+      const isFunded = st === "funded";
+      const isDenied = f.is_denied || st === "denied";
+      if (isFunded) { funded += 1; fundedAmt += f.amount_funded || 0; }
+      else if (isDenied) { denied += 1; deniedAmt += f.amount_requested || 0; }
+      else { pending += 1; pendingAmt += f.amount_requested || 0; }
+    });
+    return { total: frnsAll.length, funded, fundedAmt, denied, deniedAmt, pending, pendingAmt };
+  }, [data?.frns]);
+
   // Show loading spinner while store hydrates from localStorage
   if (!_hasHydrated) {
     return (
@@ -648,10 +821,21 @@ function ApplicantDashboard() {
   const { profile, frns, appeals, recent_changes, summary } = data;
 
   const handleExportFrns = () => {
-    const rowsToExport = selectedFrnIds.size > 0
-      ? frns.filter(f => selectedFrnIds.has(f.id))
-      : frns;
-    const columns = ['frn', 'application_number', 'funding_year', 'status', 'service_type', 'amount_requested', 'amount_funded', 'is_denied', 'denial_reason', 'appeal_deadline'];
+    const base = selectedFrnIds.size > 0
+      ? sortedFrns.filter(f => selectedFrnIds.has(f.id))
+      : sortedFrns;
+    const rowsToExport = base.map(f => {
+      const t = frnTrackingMap[f.frn];
+      return {
+        ...f,
+        installed: t?.installed ? "Yes" : "",
+        install_date: t?.install_date ?? "",
+        copay_paid: t?.copay_paid ? "Yes" : "",
+        copay_amount: t?.copay_amount ?? "",
+        tracking_notes: t?.notes ?? "",
+      };
+    });
+    const columns = ['frn', 'application_number', 'funding_year', 'status', 'service_type', 'amount_requested', 'amount_funded', 'amount_disbursed', 'is_denied', 'denial_reason', 'appeal_deadline', 'installed', 'install_date', 'copay_paid', 'copay_amount', 'tracking_notes'];
     downloadCsv(csvFilename('my_frns'), columns, rowsToExport as unknown as Record<string, unknown>[]);
   };
 
@@ -691,6 +875,26 @@ function ApplicantDashboard() {
   const crumbInk = dark ? "text-slate-100" : "text-slate-900";
   const crumbFaint = dark ? "text-slate-500" : "text-slate-400";
   const searchCls = dark ? "bg-slate-900 border-slate-700 text-slate-400" : "bg-slate-50 border-slate-200 text-slate-500";
+
+  // Theme fragments for the "All FRNs" tab (stat cards, filter bar, table).
+  const tCard = dark ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-200 shadow-sm";
+  const tInk = dark ? "text-slate-100" : "text-slate-900";
+  const tMuted = dark ? "text-slate-400" : "text-slate-500";
+  const tFaint = dark ? "text-slate-500" : "text-slate-400";
+  const tBorder = dark ? "border-slate-800" : "border-slate-200";
+  const tRowHover = dark ? "hover:bg-slate-800/60" : "hover:bg-slate-50";
+  const tInput = dark ? "bg-slate-900 border-slate-700 text-slate-200" : "bg-white border-slate-300 text-slate-900";
+  const tTheadBg = dark ? "bg-slate-900/40" : "bg-slate-50";
+  const tThLabel = dark ? "text-slate-400" : "text-slate-600";
+  const tInnerCard = dark ? "bg-slate-900/60 border-slate-800" : "bg-white border-slate-200";
+  const frnStatusBadgeCls = (f: FRN) => {
+    const st = (f.status_type || "").toLowerCase();
+    const denied = f.is_denied || st === "denied";
+    if (st === "funded") return dark ? "bg-green-500/15 text-green-300" : "bg-green-100 text-green-800";
+    if (denied) return dark ? "bg-red-500/15 text-red-300" : "bg-red-100 text-red-800";
+    return dark ? "bg-amber-500/15 text-amber-300" : "bg-amber-100 text-amber-800";
+  };
+  const sortArrow = (field: string) => frnsSort?.field === field ? (frnsSort.dir === "asc" ? " ▲" : " ▼") : "";
 
   return (
     <div className={`min-h-screen ${shellMain}`}>
@@ -860,24 +1064,113 @@ function ApplicantDashboard() {
         )}
 
         {selectedTab === 'frns' && (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="space-y-4">
+            {/* Summary stat cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className={`rounded-xl border p-4 ${tCard}`}>
+                <div className={`text-xs font-medium ${tMuted}`}>Total FRNs</div>
+                <div className={`text-2xl font-bold mt-1 ${tInk}`}>{frnStats.total}</div>
+              </div>
+              <div className={`rounded-xl border p-4 ${tCard}`}>
+                <div className={`text-xs font-medium ${tMuted}`}>Funded</div>
+                <div className="text-2xl font-bold mt-1 text-green-500">{frnStats.funded}</div>
+                <div className={`text-xs mt-0.5 ${tFaint}`}>{formatCurrency(frnStats.fundedAmt)} committed</div>
+              </div>
+              <div className={`rounded-xl border p-4 ${tCard}`}>
+                <div className={`text-xs font-medium ${tMuted}`}>Denied</div>
+                <div className="text-2xl font-bold mt-1 text-red-500">{frnStats.denied}</div>
+                <div className={`text-xs mt-0.5 ${tFaint}`}>{formatCurrency(frnStats.deniedAmt)} requested</div>
+              </div>
+              <div className={`rounded-xl border p-4 ${tCard}`}>
+                <div className={`text-xs font-medium ${tMuted}`}>Pending</div>
+                <div className="text-2xl font-bold mt-1 text-amber-500">{frnStats.pending}</div>
+                <div className={`text-xs mt-0.5 ${tFaint}`}>{formatCurrency(frnStats.pendingAmt)} requested</div>
+              </div>
+            </div>
+
+            {/* Filter bar */}
+            <div className={`rounded-xl border p-4 ${tCard}`}>
+              <div className="flex flex-wrap items-end gap-3">
+                <div>
+                  <label className={`text-xs mb-1 block ${tMuted}`}>Funding Year</label>
+                  <select value={frnsYear} onChange={(e) => setFrnsYear(e.target.value)} className={`px-3 py-2 border rounded-lg text-sm ${tInput}`}>
+                    <option value="">All Years</option>
+                    {frnsYearOptions.map((y) => <option key={y} value={String(y)}>{y}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={`text-xs mb-1 block ${tMuted}`}>Status</label>
+                  <select value={frnsStatus} onChange={(e) => setFrnsStatus(e.target.value)} className={`px-3 py-2 border rounded-lg text-sm ${tInput}`}>
+                    <option value="">All Statuses</option>
+                    <option value="funded">Funded</option>
+                    <option value="denied">Denied</option>
+                    <option value="pending">Pending</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={`text-xs mb-1 flex items-center gap-1 ${tMuted}`}>Sub-status / Pending Reason <FrnSubStatusInfo /></label>
+                  <select value={frnsPendingReason} onChange={(e) => setFrnsPendingReason(e.target.value)} className={`px-3 py-2 border rounded-lg text-sm w-56 ${tInput}`} title="Filter by the FRN sub-status / pending reason (review stage)">
+                    <option value="">All sub-statuses</option>
+                    {frnsPendingReasonOptions.map((pr) => <option key={pr} value={pr}>{pr}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={`text-xs mb-1 block ${tMuted}`}>Service Type</label>
+                  <select value={frnsService} onChange={(e) => setFrnsService(e.target.value)} className={`px-3 py-2 border rounded-lg text-sm ${tInput}`} title="Sift FRNs by a particular service type">
+                    <option value="">All service types</option>
+                    {frnsServiceOptions.map((st) => <option key={st} value={st}>{st}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={`text-xs mb-1 block ${tMuted}`}>My Tracking</label>
+                  <select value={frnsTrackingFilter} onChange={(e) => setFrnsTrackingFilter(e.target.value)} className={`px-3 py-2 border rounded-lg text-sm ${tInput}`} title="Filter by your own per-FRN tracking (installation, applicant co-pay)">
+                    <option value="">All (my tracking)</option>
+                    <option value="tracked">Has tracking</option>
+                    <optgroup label="Install">
+                      <option value="installed">Installed</option>
+                      <option value="not_installed">Not installed</option>
+                    </optgroup>
+                    <optgroup label="Co-pay">
+                      <option value="copay_paid">Co-pay paid</option>
+                      <option value="copay_unpaid">Co-pay unpaid</option>
+                    </optgroup>
+                  </select>
+                </div>
+                <div>
+                  <label className={`text-xs mb-1 block ${tMuted}`}>Search FRN / Entity / BEN</label>
+                  <input type="text" value={frnsSearch} onChange={(e) => setFrnsSearch(e.target.value)} placeholder="e.g., 2699061470" className={`px-3 py-2 border rounded-lg text-sm w-56 ${tInput}`} />
+                </div>
+                {(frnsYear || frnsStatus || frnsPendingReason || frnsService || frnsSearch || frnsTrackingFilter) && (
+                  <button
+                    onClick={() => { setFrnsYear(""); setFrnsStatus(""); setFrnsPendingReason(""); setFrnsService(""); setFrnsSearch(""); setFrnsTrackingFilter(""); }}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium ${dark ? 'text-slate-300 hover:bg-slate-800 border border-slate-700' : 'text-slate-600 hover:bg-slate-100 border border-slate-200'}`}
+                  >
+                    Clear filters
+                  </button>
+                )}
+                <div className={`ml-auto text-xs self-center ${tFaint}`}>{sortedFrns.length} of {frnStats.total} FRNs</div>
+              </div>
+            </div>
+
+            {/* FRN table */}
+            <div className={`rounded-xl border overflow-hidden ${tCard}`}>
             <TableExportBar
               selectedCount={selectedFrnIds.size}
-              totalCount={frns.length}
+              totalCount={sortedFrns.length}
               onExportCsv={handleExportFrns}
               onClearSelection={() => setSelectedFrnIds(new Set())}
             />
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-slate-50 border-b border-slate-200">
+                <thead className={`${tTheadBg} border-b ${tBorder}`}>
                   <tr>
                     <th className="px-4 py-3 w-12">
                       <input
                         type="checkbox"
-                        checked={selectedFrnIds.size === frns.length && frns.length > 0}
+                        checked={sortedFrns.length > 0 && sortedFrns.every(f => selectedFrnIds.has(f.id))}
                         onChange={(e) => {
                           if (e.target.checked) {
-                            setSelectedFrnIds(new Set(frns.map(f => f.id)));
+                            setSelectedFrnIds(new Set(sortedFrns.map(f => f.id)));
                           } else {
                             setSelectedFrnIds(new Set());
                           }
@@ -885,21 +1178,23 @@ function ApplicantDashboard() {
                         className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
                       />
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">FRN</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Year</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Service</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600 uppercase">Amount</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase">Appeal</th>
+                    <th onClick={() => toggleFrnsSort('frn')} className={`px-4 py-3 text-left text-xs font-semibold uppercase cursor-pointer select-none ${tThLabel} ${tRowHover}`}>FRN{sortArrow('frn')}</th>
+                    <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${tThLabel}`}>Entity / BEN</th>
+                    <th onClick={() => toggleFrnsSort('funding_year')} className={`px-4 py-3 text-left text-xs font-semibold uppercase cursor-pointer select-none ${tThLabel} ${tRowHover}`}>Year{sortArrow('funding_year')}</th>
+                    <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${tThLabel}`}>Service</th>
+                    <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${tThLabel}`}>Status</th>
+                    <th onClick={() => toggleFrnsSort('amount_funded')} className={`px-4 py-3 text-right text-xs font-semibold uppercase cursor-pointer select-none ${tThLabel} ${tRowHover}`}>Commitment{sortArrow('amount_funded')}</th>
+                    <th onClick={() => toggleFrnsSort('amount_disbursed')} className={`px-4 py-3 text-right text-xs font-semibold uppercase cursor-pointer select-none ${tThLabel} ${tRowHover}`}>Disbursed{sortArrow('amount_disbursed')}</th>
+                    <th className={`px-4 py-3 text-center text-xs font-semibold uppercase ${tThLabel}`}>Track</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {frns.map((frn) => (
+                <tbody className={`divide-y ${dark ? 'divide-slate-800' : 'divide-slate-100'}`}>
+                  {sortedFrns.map((frn) => (
                     <React.Fragment key={frn.id}>
                     <tr 
                       key={frn.id} 
                       onClick={() => fetchFrnDetail(frn.id)}
-                      className={`hover:bg-slate-50 cursor-pointer transition-colors ${selectedFrnId === frn.id ? 'bg-purple-50 border-l-4 border-l-purple-500' : ''}`}
+                      className={`cursor-pointer transition-colors ${tRowHover} ${selectedFrnId === frn.id ? (dark ? 'bg-purple-500/10 border-l-4 border-l-purple-500' : 'bg-purple-50 border-l-4 border-l-purple-500') : ''}`}
                     >
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <input
@@ -918,197 +1213,229 @@ function ApplicantDashboard() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <span className={`text-xs transition-transform ${selectedFrnId === frn.id ? 'rotate-90' : ''}`}>▶</span>
+                          <span className={`text-xs transition-transform ${tFaint} ${selectedFrnId === frn.id ? 'rotate-90' : ''}`}>▶</span>
                           <div>
-                            <div className="font-medium text-slate-900">{frn.frn}</div>
-                            <div className="text-xs text-slate-500">{frn.application_number}</div>
+                            <div className={`font-medium ${tInk}`}>{frn.frn}</div>
+                            <div className={`text-xs ${tFaint}`}>{frn.application_number}</div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{frn.funding_year}</td>
                       <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(frn.status_type)}`}>
-                          {frn.status}
-                        </span>
+                        <div className={`text-sm ${tInk} max-w-[180px] truncate`} title={profile.organization_name}>{profile.organization_name || '—'}</div>
+                        <div className={`text-xs ${tFaint}`}>BEN {profile.ben || '—'}</div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">{frn.service_type}</td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="font-medium text-slate-900">
-                          {frn.amount_funded ? formatCurrency(frn.amount_funded) : '-'}
+                      <td className={`px-4 py-3 ${tMuted}`}>{frn.funding_year}</td>
+                      <td className={`px-4 py-3 text-sm ${tMuted}`}>{frn.service_type || '—'}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col items-start gap-1">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${frnStatusBadgeCls(frn)}`}>
+                            {frn.status}
+                          </span>
+                          {frn.review_stage && !frn.is_denied && (frn.status_type || '').toLowerCase() !== 'funded' && (
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${dark ? 'bg-slate-800 text-slate-300 border border-slate-700' : 'bg-slate-100 text-slate-600 border border-slate-200'}`} title="FRN sub-status / review stage">
+                              {frn.review_stage}
+                            </span>
+                          )}
+                          {frn.is_denied && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const appeal = appeals.find(a => a.frn === frn.frn);
+                                if (appeal) setSelectedAppeal(appeal);
+                              }}
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${dark ? 'bg-purple-500/20 text-purple-200 hover:bg-purple-500/30' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'} transition-colors`}
+                            >
+                              View Appeal
+                            </button>
+                          )}
                         </div>
-                        {frn.amount_requested && frn.amount_funded !== frn.amount_requested && (
-                          <div className="text-xs text-slate-500">
-                            Requested: {formatCurrency(frn.amount_requested)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className={`font-medium ${frn.amount_funded ? (dark ? 'text-green-300' : 'text-green-700') : tFaint}`}>
+                          {frn.amount_funded ? formatCurrency(frn.amount_funded) : '—'}
+                        </div>
+                        {frn.amount_requested != null && frn.amount_funded !== frn.amount_requested && (
+                          <div className={`text-xs ${tFaint}`}>
+                            Req: {formatCurrency(frn.amount_requested)}
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        {frn.is_denied && (
+                      <td className="px-4 py-3 text-right">
+                        <div className={`font-medium ${frn.amount_disbursed ? (dark ? 'text-blue-300' : 'text-blue-700') : tFaint}`}>
+                          {frn.amount_disbursed ? formatCurrency(frn.amount_disbursed) : '—'}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-2">
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const appeal = appeals.find(a => a.frn === frn.frn);
-                              if (appeal) setSelectedAppeal(appeal);
-                            }}
-                            className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium hover:bg-purple-200 transition-colors"
+                            onClick={() => openTrackingModal(frn.frn, profile.ben)}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${dark ? 'border-slate-700 text-slate-300 hover:bg-slate-800' : 'border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+                            title="Track installation, applicant co-pay, and notes for this FRN"
                           >
-                            View Appeal
+                            <Settings className="w-3 h-3" /> Track
                           </button>
-                        )}
+                          {frnTrackingMap[frn.frn]?.installed && (
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${dark ? 'bg-green-500/15 text-green-300' : 'bg-green-100 text-green-700'}`} title="Equipment installed">Installed</span>
+                          )}
+                          {frnTrackingMap[frn.frn]?.copay_paid && (
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${dark ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-100 text-blue-700'}`} title="Applicant co-pay paid">Co-pay</span>
+                          )}
+                        </div>
                       </td>
                     </tr>
+
                     {/* FRN Detail Panel */}
                     {selectedFrnId === frn.id && (
                       <tr key={`detail-${frn.id}`}>
-                        <td colSpan={7} className="px-0 py-0">
-                          <div className="bg-gradient-to-br from-purple-50 to-slate-50 border-t border-b border-purple-200 px-6 py-5">
+                        <td colSpan={9} className="px-0 py-0">
+                          <div className={`border-t border-b px-6 py-5 ${dark ? 'bg-slate-950/40 border-purple-500/20' : 'bg-gradient-to-br from-purple-50 to-slate-50 border-purple-200'}`}>
                             {loadingFrnDetail ? (
                               <div className="flex items-center justify-center py-8">
                                 <div className="w-8 h-8 border-3 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
-                                <span className="ml-3 text-slate-500">Loading FRN details...</span>
+                                <span className={`ml-3 ${tMuted}`}>Loading FRN details...</span>
                               </div>
                             ) : frnDetail ? (
                               <div className="space-y-5">
                                 {/* Header */}
                                 <div className="flex items-center justify-between">
                                   <div>
-                                    <h3 className="text-lg font-semibold text-slate-900">
+                                    <h3 className={`text-lg font-semibold ${tInk}`}>
                                       FRN {frnDetail.frn} — {frnDetail.raw_data?.organization_name || 'Detailed View'}
                                     </h3>
-                                    <p className="text-sm text-slate-500 mt-1">
+                                    <p className={`text-sm mt-1 ${tMuted}`}>
                                       Application #{frnDetail.application_number} • FY{frnDetail.funding_year}
                                     </p>
                                   </div>
-                                  <button onClick={() => { setSelectedFrnId(null); setFrnDetail(null); }} className="text-slate-400 hover:text-slate-600 text-sm">✕ Close</button>
+                                  <button onClick={() => { setSelectedFrnId(null); setFrnDetail(null); }} className={`text-sm ${dark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600'}`}>✕ Close</button>
                                 </div>
 
                                 {/* Key Metrics Grid - 5 columns */}
                                 <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                                  <div className="bg-white rounded-lg p-3 border border-slate-200">
-                                    <div className="text-xs text-slate-500 mb-1">Requested</div>
-                                    <div className="font-semibold text-slate-900">{frnDetail.amount_requested ? formatCurrency(frnDetail.amount_requested) : '—'}</div>
+                                  <div className={`rounded-lg p-3 border ${tInnerCard}`}>
+                                    <div className={`text-xs mb-1 ${tMuted}`}>Requested</div>
+                                    <div className={`font-semibold ${tInk}`}>{frnDetail.amount_requested ? formatCurrency(frnDetail.amount_requested) : '—'}</div>
                                   </div>
-                                  <div className="bg-white rounded-lg p-3 border border-slate-200">
-                                    <div className="text-xs text-slate-500 mb-1">Committed</div>
-                                    <div className="font-semibold text-green-700">{frnDetail.amount_funded ? formatCurrency(frnDetail.amount_funded) : '—'}</div>
+                                  <div className={`rounded-lg p-3 border ${tInnerCard}`}>
+                                    <div className={`text-xs mb-1 ${tMuted}`}>Committed</div>
+                                    <div className={`font-semibold ${dark ? 'text-green-300' : 'text-green-700'}`}>{frnDetail.amount_funded ? formatCurrency(frnDetail.amount_funded) : '—'}</div>
                                   </div>
-                                  <div className="bg-white rounded-lg p-3 border border-slate-200">
-                                    <div className="text-xs text-slate-500 mb-1">Disbursed</div>
-                                    <div className="font-semibold text-blue-700">{frnDetail.amount_disbursed ? formatCurrency(frnDetail.amount_disbursed) : '—'}</div>
+                                  <div className={`rounded-lg p-3 border ${tInnerCard}`}>
+                                    <div className={`text-xs mb-1 ${tMuted}`}>Disbursed</div>
+                                    <div className={`font-semibold ${dark ? 'text-blue-300' : 'text-blue-700'}`}>{frnDetail.amount_disbursed ? formatCurrency(frnDetail.amount_disbursed) : '—'}</div>
                                   </div>
-                                  <div className="bg-white rounded-lg p-3 border border-slate-200">
-                                    <div className="text-xs text-slate-500 mb-1">Discount</div>
-                                    <div className="font-semibold text-slate-900">{frnDetail.discount_rate ? `${frnDetail.discount_rate}%` : (frnDetail.raw_data?.discount_pct ? `${frnDetail.raw_data.discount_pct}%` : '—')}</div>
+                                  <div className={`rounded-lg p-3 border ${tInnerCard}`}>
+                                    <div className={`text-xs mb-1 ${tMuted}`}>Discount</div>
+                                    <div className={`font-semibold ${tInk}`}>{frnDetail.discount_rate ? `${frnDetail.discount_rate}%` : (frnDetail.raw_data?.discount_pct ? `${frnDetail.raw_data.discount_pct}%` : '—')}</div>
                                   </div>
-                                  <div className="bg-white rounded-lg p-3 border border-slate-200">
-                                    <div className="text-xs text-slate-500 mb-1">Category</div>
-                                    <div className="font-semibold text-purple-700">{frnDetail.service_type || frnDetail.raw_data?.form_471_service_type_name || '—'}</div>
+                                  <div className={`rounded-lg p-3 border ${tInnerCard}`}>
+                                    <div className={`text-xs mb-1 ${tMuted}`}>Category</div>
+                                    <div className={`font-semibold ${dark ? 'text-purple-300' : 'text-purple-700'}`}>{frnDetail.service_type || frnDetail.raw_data?.form_471_service_type_name || '—'}</div>
                                   </div>
                                 </div>
 
                                 {/* Three-column info grid */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                   {/* Status & Review */}
-                                  <div className="bg-white rounded-lg p-4 border border-slate-200">
-                                    <h4 className="font-medium text-slate-900 mb-3 text-sm flex items-center gap-2">📊 Status & Review</h4>
+                                  <div className={`rounded-lg p-4 border ${tInnerCard}`}>
+                                    <h4 className={`font-medium mb-3 text-sm flex items-center gap-2 ${tInk}`}>📊 Status & Review</h4>
                                     <div className="space-y-2 text-sm">
                                       <div className="flex justify-between">
-                                        <span className="text-slate-500">Status</span>
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(frnDetail.status_type)}`}>{frnDetail.status || frnDetail.raw_data?.form_471_frn_status_name}</span>
+                                        <span className={tMuted}>Status</span>
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${frnStatusBadgeCls(frnDetail as FRN)}`}>{frnDetail.status || frnDetail.raw_data?.form_471_frn_status_name}</span>
                                       </div>
                                       {(frnDetail.review_stage || frnDetail.raw_data?.frn_complete_review_flag) && (
                                         <div className="flex justify-between">
-                                          <span className="text-slate-500">Review Stage</span>
-                                          <span className="text-slate-900">{frnDetail.review_stage || (frnDetail.raw_data?.frn_complete_review_flag === 'Y' ? 'Complete' : 'In Progress')}</span>
+                                          <span className={tMuted}>Review Stage</span>
+                                          <span className={tInk}>{frnDetail.review_stage || (frnDetail.raw_data?.frn_complete_review_flag === 'Y' ? 'Complete' : 'In Progress')}</span>
                                         </div>
                                       )}
                                       {(frnDetail.days_in_review != null || frnDetail.raw_data?.wave_number) && (
                                         <div className="flex justify-between">
-                                          <span className="text-slate-500">{frnDetail.days_in_review != null ? 'Days in Review' : 'Wave'}</span>
-                                          <span className="text-slate-900">{frnDetail.days_in_review ?? frnDetail.raw_data?.wave_number}</span>
+                                          <span className={tMuted}>{frnDetail.days_in_review != null ? 'Days in Review' : 'Wave'}</span>
+                                          <span className={tInk}>{frnDetail.days_in_review ?? frnDetail.raw_data?.wave_number}</span>
                                         </div>
                                       )}
                                       {(frnDetail.disbursement_status || frnDetail.raw_data?.disbursement_status) && (
                                         <div className="flex justify-between">
-                                          <span className="text-slate-500">Disbursement</span>
-                                          <span className="text-slate-900">{frnDetail.disbursement_status || frnDetail.raw_data?.disbursement_status}</span>
+                                          <span className={tMuted}>Disbursement</span>
+                                          <span className={tInk}>{frnDetail.disbursement_status || frnDetail.raw_data?.disbursement_status}</span>
                                         </div>
                                       )}
                                       {frnDetail.raw_data?.funding_commitment_request && (
                                         <div className="flex justify-between">
-                                          <span className="text-slate-500">FCR Amount</span>
-                                          <span className="text-slate-900">{formatCurrency(parseFloat(frnDetail.raw_data.funding_commitment_request))}</span>
+                                          <span className={tMuted}>FCR Amount</span>
+                                          <span className={tInk}>{formatCurrency(parseFloat(frnDetail.raw_data.funding_commitment_request))}</span>
                                         </div>
                                       )}
                                     </div>
                                   </div>
 
                                   {/* Service Provider */}
-                                  <div className="bg-white rounded-lg p-4 border border-slate-200">
-                                    <h4 className="font-medium text-slate-900 mb-3 text-sm flex items-center gap-2">🏢 Service Provider</h4>
+                                  <div className={`rounded-lg p-4 border ${tInnerCard}`}>
+                                    <h4 className={`font-medium mb-3 text-sm flex items-center gap-2 ${tInk}`}>🏢 Service Provider</h4>
                                     <div className="space-y-2 text-sm">
                                       {(frnDetail.raw_data?.spin || frnDetail.raw_data?.service_provider_number) && (
                                         <div className="flex justify-between">
-                                          <span className="text-slate-500">SPIN</span>
-                                          <span className="text-slate-900 font-mono">{frnDetail.raw_data?.spin || frnDetail.raw_data?.service_provider_number}</span>
+                                          <span className={tMuted}>SPIN</span>
+                                          <span className={`font-mono ${tInk}`}>{frnDetail.raw_data?.spin || frnDetail.raw_data?.service_provider_number}</span>
                                         </div>
                                       )}
                                       {frnDetail.raw_data?.service_provider_name && (
                                         <div className="flex justify-between">
-                                          <span className="text-slate-500">Provider</span>
-                                          <span className="text-slate-900 text-right max-w-[150px] truncate" title={frnDetail.raw_data.service_provider_name}>{frnDetail.raw_data.service_provider_name}</span>
+                                          <span className={tMuted}>Provider</span>
+                                          <span className={`text-right max-w-[150px] truncate ${tInk}`} title={frnDetail.raw_data.service_provider_name}>{frnDetail.raw_data.service_provider_name}</span>
                                         </div>
                                       )}
                                       {frnDetail.raw_data?.establishing_fcc_form_470 && (
                                         <div className="flex justify-between">
-                                          <span className="text-slate-500">Form 470</span>
-                                          <span className="text-slate-900 font-mono">{frnDetail.raw_data.establishing_fcc_form_470}</span>
+                                          <span className={tMuted}>Form 470</span>
+                                          <span className={`font-mono ${tInk}`}>{frnDetail.raw_data.establishing_fcc_form_470}</span>
                                         </div>
                                       )}
                                       {frnDetail.raw_data?.contract_expiration_date && (
                                         <div className="flex justify-between">
-                                          <span className="text-slate-500">Contract Expires</span>
-                                          <span className="text-slate-900">{formatDate(frnDetail.raw_data.contract_expiration_date)}</span>
+                                          <span className={tMuted}>Contract Expires</span>
+                                          <span className={tInk}>{formatDate(frnDetail.raw_data.contract_expiration_date)}</span>
                                         </div>
                                       )}
                                       {!frnDetail.raw_data?.spin && !frnDetail.raw_data?.service_provider_name && (
-                                        <div className="text-slate-400 text-xs">Provider info not available</div>
+                                        <div className={`text-xs ${tFaint}`}>Provider info not available</div>
                                       )}
                                     </div>
                                   </div>
 
                                   {/* Service & Dates */}
-                                  <div className="bg-white rounded-lg p-4 border border-slate-200">
-                                    <h4 className="font-medium text-slate-900 mb-3 text-sm flex items-center gap-2">📅 Service & Dates</h4>
+                                  <div className={`rounded-lg p-4 border ${tInnerCard}`}>
+                                    <h4 className={`font-medium mb-3 text-sm flex items-center gap-2 ${tInk}`}>📅 Service & Dates</h4>
                                     <div className="space-y-2 text-sm">
                                       {frnDetail.service_description && (
                                         <div className="flex justify-between">
-                                          <span className="text-slate-500">Service</span>
-                                          <span className="text-slate-900 text-right max-w-[150px] truncate" title={frnDetail.service_description}>{frnDetail.service_description}</span>
+                                          <span className={tMuted}>Service</span>
+                                          <span className={`text-right max-w-[150px] truncate ${tInk}`} title={frnDetail.service_description}>{frnDetail.service_description}</span>
                                         </div>
                                       )}
                                       {frnDetail.raw_data?.ros_service_start_date && (
                                         <div className="flex justify-between">
-                                          <span className="text-slate-500">Service Start</span>
-                                          <span className="text-slate-900">{formatDate(frnDetail.raw_data.ros_service_start_date)}</span>
+                                          <span className={tMuted}>Service Start</span>
+                                          <span className={tInk}>{formatDate(frnDetail.raw_data.ros_service_start_date)}</span>
                                         </div>
                                       )}
                                       {frnDetail.raw_data?.ros_service_end_date && (
                                         <div className="flex justify-between">
-                                          <span className="text-slate-500">Service End</span>
-                                          <span className="text-slate-900">{formatDate(frnDetail.raw_data.ros_service_end_date)}</span>
+                                          <span className={tMuted}>Service End</span>
+                                          <span className={tInk}>{formatDate(frnDetail.raw_data.ros_service_end_date)}</span>
                                         </div>
                                       )}
                                       {frnDetail.invoice_deadline && (
                                         <div className="flex justify-between">
-                                          <span className="text-slate-500">Invoice Deadline</span>
-                                          <span className="text-orange-600 font-medium">{formatDate(frnDetail.invoice_deadline)}</span>
+                                          <span className={tMuted}>Invoice Deadline</span>
+                                          <span className={`font-medium ${dark ? 'text-orange-300' : 'text-orange-600'}`}>{formatDate(frnDetail.invoice_deadline)}</span>
                                         </div>
                                       )}
                                       {frnDetail.fetched_at && (
                                         <div className="flex justify-between">
-                                          <span className="text-slate-500">Last Synced</span>
-                                          <span className="text-slate-900">{formatDate(frnDetail.fetched_at)}</span>
+                                          <span className={tMuted}>Last Synced</span>
+                                          <span className={tInk}>{formatDate(frnDetail.fetched_at)}</span>
                                         </div>
                                       )}
                                     </div>
@@ -1117,85 +1444,85 @@ function ApplicantDashboard() {
 
                                 {/* Additional Details Row */}
                                 {(frnDetail.raw_data?.product_type || frnDetail.raw_data?.fiber_type || frnDetail.raw_data?.purpose || frnDetail.raw_data?.function_text || frnDetail.raw_data?.bandwidth_speed || frnDetail.raw_data?.make || frnDetail.raw_data?.connection_type || frnDetail.raw_data?.quantity) && (
-                                  <div className="bg-white rounded-lg p-4 border border-slate-200">
-                                    <h4 className="font-medium text-slate-900 mb-3 text-sm flex items-center gap-2">📋 Additional Details</h4>
+                                  <div className={`rounded-lg p-4 border ${tInnerCard}`}>
+                                    <h4 className={`font-medium mb-3 text-sm flex items-center gap-2 ${tInk}`}>📋 Additional Details</h4>
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                                       {frnDetail.raw_data?.product_type && (
                                         <div>
-                                          <span className="text-slate-500 block text-xs">Product Type</span>
-                                          <span className="text-slate-900">{frnDetail.raw_data.product_type}</span>
+                                          <span className={`block text-xs ${tMuted}`}>Product Type</span>
+                                          <span className={tInk}>{frnDetail.raw_data.product_type}</span>
                                         </div>
                                       )}
                                       {frnDetail.raw_data?.make && (
                                         <div>
-                                          <span className="text-slate-500 block text-xs">Make/Brand</span>
-                                          <span className="text-slate-900">{frnDetail.raw_data.make}</span>
+                                          <span className={`block text-xs ${tMuted}`}>Make/Brand</span>
+                                          <span className={tInk}>{frnDetail.raw_data.make}</span>
                                         </div>
                                       )}
                                       {frnDetail.raw_data?.bandwidth_speed && (
                                         <div>
-                                          <span className="text-slate-500 block text-xs">Bandwidth</span>
-                                          <span className="text-slate-900">{frnDetail.raw_data.bandwidth_speed}</span>
+                                          <span className={`block text-xs ${tMuted}`}>Bandwidth</span>
+                                          <span className={tInk}>{frnDetail.raw_data.bandwidth_speed}</span>
                                         </div>
                                       )}
                                       {frnDetail.raw_data?.connection_type && (
                                         <div>
-                                          <span className="text-slate-500 block text-xs">Connection</span>
-                                          <span className="text-slate-900">{frnDetail.raw_data.connection_type}</span>
+                                          <span className={`block text-xs ${tMuted}`}>Connection</span>
+                                          <span className={tInk}>{frnDetail.raw_data.connection_type}</span>
                                         </div>
                                       )}
                                       {frnDetail.raw_data?.fiber_type && (
                                         <div>
-                                          <span className="text-slate-500 block text-xs">Fiber Type</span>
-                                          <span className="text-slate-900">{frnDetail.raw_data.fiber_type}</span>
+                                          <span className={`block text-xs ${tMuted}`}>Fiber Type</span>
+                                          <span className={tInk}>{frnDetail.raw_data.fiber_type}</span>
                                         </div>
                                       )}
                                       {(frnDetail.raw_data?.quantity || frnDetail.raw_data?.num_lines) && (
                                         <div>
-                                          <span className="text-slate-500 block text-xs">Quantity</span>
-                                          <span className="text-slate-900">{frnDetail.raw_data.quantity || frnDetail.raw_data.num_lines}</span>
+                                          <span className={`block text-xs ${tMuted}`}>Quantity</span>
+                                          <span className={tInk}>{frnDetail.raw_data.quantity || frnDetail.raw_data.num_lines}</span>
                                         </div>
                                       )}
                                       {frnDetail.raw_data?.purpose && (
                                         <div>
-                                          <span className="text-slate-500 block text-xs">Purpose</span>
-                                          <span className="text-slate-900">{frnDetail.raw_data.purpose}</span>
+                                          <span className={`block text-xs ${tMuted}`}>Purpose</span>
+                                          <span className={tInk}>{frnDetail.raw_data.purpose}</span>
                                         </div>
                                       )}
                                       {frnDetail.raw_data?.function_text && (
                                         <div>
-                                          <span className="text-slate-500 block text-xs">Function</span>
-                                          <span className="text-slate-900">{frnDetail.raw_data.function_text}</span>
+                                          <span className={`block text-xs ${tMuted}`}>Function</span>
+                                          <span className={tInk}>{frnDetail.raw_data.function_text}</span>
                                         </div>
                                       )}
                                       {(frnDetail.raw_data?.total_monthly_cost || frnDetail.raw_data?.unit_cost) && (
                                         <div>
-                                          <span className="text-slate-500 block text-xs">Monthly Cost</span>
-                                          <span className="text-slate-900">{formatCurrency(parseFloat(frnDetail.raw_data.total_monthly_cost || frnDetail.raw_data.unit_cost))}</span>
+                                          <span className={`block text-xs ${tMuted}`}>Monthly Cost</span>
+                                          <span className={tInk}>{formatCurrency(parseFloat(frnDetail.raw_data.total_monthly_cost || frnDetail.raw_data.unit_cost))}</span>
                                         </div>
                                       )}
                                       {frnDetail.raw_data?.total_eligible_monthly_recurring_charges && (
                                         <div>
-                                          <span className="text-slate-500 block text-xs">Eligible Monthly</span>
-                                          <span className="text-slate-900">{formatCurrency(parseFloat(frnDetail.raw_data.total_eligible_monthly_recurring_charges))}</span>
+                                          <span className={`block text-xs ${tMuted}`}>Eligible Monthly</span>
+                                          <span className={tInk}>{formatCurrency(parseFloat(frnDetail.raw_data.total_eligible_monthly_recurring_charges))}</span>
                                         </div>
                                       )}
                                       {(frnDetail.raw_data?.total_eligible_one_time_charges || frnDetail.raw_data?.one_time_cost) && (
                                         <div>
-                                          <span className="text-slate-500 block text-xs">One-time Charges</span>
-                                          <span className="text-slate-900">{formatCurrency(parseFloat(frnDetail.raw_data.total_eligible_one_time_charges || frnDetail.raw_data.one_time_cost))}</span>
+                                          <span className={`block text-xs ${tMuted}`}>One-time Charges</span>
+                                          <span className={tInk}>{formatCurrency(parseFloat(frnDetail.raw_data.total_eligible_one_time_charges || frnDetail.raw_data.one_time_cost))}</span>
                                         </div>
                                       )}
                                       {frnDetail.raw_data?.contract_number && (
                                         <div>
-                                          <span className="text-slate-500 block text-xs">Contract #</span>
-                                          <span className="text-slate-900 font-mono text-xs">{frnDetail.raw_data.contract_number}</span>
+                                          <span className={`block text-xs ${tMuted}`}>Contract #</span>
+                                          <span className={`font-mono text-xs ${tInk}`}>{frnDetail.raw_data.contract_number}</span>
                                         </div>
                                       )}
                                       {frnDetail.raw_data?.invoice_count && (
                                         <div>
-                                          <span className="text-slate-500 block text-xs">Invoices Filed</span>
-                                          <span className="text-slate-900">{frnDetail.raw_data.invoice_count}</span>
+                                          <span className={`block text-xs ${tMuted}`}>Invoices Filed</span>
+                                          <span className={tInk}>{frnDetail.raw_data.invoice_count}</span>
                                         </div>
                                       )}
                                     </div>
@@ -1204,22 +1531,22 @@ function ApplicantDashboard() {
 
                                 {/* Denial Info (if applicable) */}
                                 {frnDetail.is_denied && (
-                                  <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-                                    <h4 className="font-medium text-red-800 mb-3 text-sm flex items-center gap-2">🚨 Denial Information</h4>
+                                  <div className={`rounded-lg p-4 border ${dark ? 'bg-red-500/10 border-red-500/30' : 'bg-red-50 border-red-200'}`}>
+                                    <h4 className={`font-medium mb-3 text-sm flex items-center gap-2 ${dark ? 'text-red-300' : 'text-red-800'}`}>🚨 Denial Information</h4>
                                     <div className="space-y-2 text-sm">
                                       {frnDetail.denial_reason && (
                                         <div>
-                                          <span className="text-red-600 font-medium">Reason: </span>
-                                          <span className="text-red-800">{frnDetail.denial_reason}</span>
+                                          <span className={`font-medium ${dark ? 'text-red-400' : 'text-red-600'}`}>Reason: </span>
+                                          <span className={dark ? 'text-red-200' : 'text-red-800'}>{frnDetail.denial_reason}</span>
                                         </div>
                                       )}
                                       {frnDetail.fcdl_comment && (
                                         <div>
-                                          <span className="text-red-600 font-medium">FCDL Comment: </span>
-                                          <span className="text-red-800">{frnDetail.fcdl_comment}</span>
+                                          <span className={`font-medium ${dark ? 'text-red-400' : 'text-red-600'}`}>FCDL Comment: </span>
+                                          <span className={dark ? 'text-red-200' : 'text-red-800'}>{frnDetail.fcdl_comment}</span>
                                         </div>
                                       )}
-                                      <div className="flex gap-4 text-xs text-red-600 mt-2">
+                                      <div className={`flex gap-4 text-xs mt-2 ${dark ? 'text-red-400' : 'text-red-600'}`}>
                                         {frnDetail.fcdl_date && <span>FCDL Date: {formatDate(frnDetail.fcdl_date)}</span>}
                                         {frnDetail.appeal_deadline && <span className="font-semibold">⏰ Appeal Deadline: {formatDate(frnDetail.appeal_deadline)}</span>}
                                       </div>
@@ -1229,24 +1556,24 @@ function ApplicantDashboard() {
 
                                 {/* Appeal Info (if exists) */}
                                 {frnDetail.appeal && (
-                                  <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-                                    <h4 className="font-medium text-purple-800 mb-2 text-sm flex items-center gap-2">📄 Auto-Generated Appeal Ready</h4>
+                                  <div className={`rounded-lg p-4 border ${dark ? 'bg-purple-500/10 border-purple-500/30' : 'bg-purple-50 border-purple-200'}`}>
+                                    <h4 className={`font-medium mb-2 text-sm flex items-center gap-2 ${dark ? 'text-purple-200' : 'text-purple-800'}`}>📄 Auto-Generated Appeal Ready</h4>
                                     <div className="flex items-center gap-3 text-sm mb-2">
                                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                                        frnDetail.appeal.status === 'ready' ? 'bg-purple-100 text-purple-700' :
-                                        frnDetail.appeal.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
-                                        'bg-slate-100 text-slate-600'
+                                        frnDetail.appeal.status === 'ready' ? (dark ? 'bg-purple-500/20 text-purple-200' : 'bg-purple-100 text-purple-700') :
+                                        frnDetail.appeal.status === 'submitted' ? (dark ? 'bg-blue-500/20 text-blue-200' : 'bg-blue-100 text-blue-700') :
+                                        (dark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600')
                                       }`}>{frnDetail.appeal.status?.toUpperCase()}</span>
                                       {frnDetail.appeal.success_probability != null && (
-                                        <span className="text-purple-700 font-medium">✓ {frnDetail.appeal.success_probability}% Success Rate</span>
+                                        <span className={`font-medium ${dark ? 'text-purple-300' : 'text-purple-700'}`}>✓ {frnDetail.appeal.success_probability}% Success Rate</span>
                                       )}
                                     </div>
-                                    <p className="text-xs text-purple-600 line-clamp-2">{frnDetail.appeal.appeal_letter?.substring(0, 200)}...</p>
+                                    <p className={`text-xs line-clamp-2 ${dark ? 'text-purple-300' : 'text-purple-600'}`}>{frnDetail.appeal.appeal_letter?.substring(0, 200)}...</p>
                                   </div>
                                 )}
                               </div>
                             ) : (
-                              <div className="text-center py-4 text-slate-500">Failed to load details</div>
+                              <div className={`text-center py-4 ${tMuted}`}>Failed to load details</div>
                             )}
                           </div>
                         </td>
@@ -1254,8 +1581,16 @@ function ApplicantDashboard() {
                     )}
                     </React.Fragment>
                   ))}
+                  {sortedFrns.length === 0 && (
+                    <tr>
+                      <td colSpan={9} className={`px-4 py-10 text-center text-sm ${tMuted}`}>
+                        No FRNs match your filters.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
+            </div>
             </div>
           </div>
         )}
@@ -1750,6 +2085,68 @@ function ApplicantDashboard() {
                 ) : 'Verify & Replace'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* FRN Working Tracking Modal (A6 install, A7 co-pay, notes) */}
+      {trackingModalFrn && trackingForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => { setTrackingModalFrn(null); setTrackingForm(null); }}>
+          <div className={`rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto ${dark ? 'bg-slate-900 border border-slate-700' : 'bg-white'}`} onClick={(e) => e.stopPropagation()}>
+            <div className={`flex items-center justify-between px-5 py-4 border-b ${dark ? 'border-slate-700' : 'border-slate-200'}`}>
+              <div>
+                <h3 className={`font-semibold ${dark ? 'text-white' : 'text-slate-900'}`}>FRN Tracking</h3>
+                <p className={`text-xs font-mono ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{trackingModalFrn}</p>
+              </div>
+              <button onClick={() => { setTrackingModalFrn(null); setTrackingForm(null); }} className={`p-1 rounded ${dark ? 'hover:bg-slate-800 text-slate-500 hover:text-slate-300' : 'hover:bg-slate-100 text-slate-400 hover:text-slate-600'}`}>✕</button>
+            </div>
+            {trackingLoading ? (
+              <div className={`p-8 text-center text-sm ${dark ? 'text-slate-400' : 'text-slate-500'}`}>Loading…</div>
+            ) : (
+              <div className="p-5 space-y-4">
+                <p className={`text-[11px] rounded-lg p-2.5 border ${dark ? 'text-slate-400 bg-slate-800 border-slate-700' : 'text-slate-500 bg-slate-50 border-slate-200'}`}>
+                  Funding status and PIA status come automatically from USAC and are shown in the FRN
+                  table &mdash; no need to set them here. Use this panel for the details USAC doesn&apos;t
+                  track: installation, applicant co-pay, and your notes.
+                </p>
+
+                <div className={`rounded-lg border p-3 ${dark ? 'border-slate-700' : 'border-slate-200'}`}>
+                  <label className={`flex items-center gap-2 text-sm ${dark ? 'text-slate-200' : 'text-slate-700'}`}>
+                    <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500" checked={!!trackingForm.installed} onChange={(e) => setTrackingForm(f => f ? { ...f, installed: e.target.checked } : f)} />
+                    Equipment installed
+                  </label>
+                  {trackingForm.installed && (
+                    <div className="mt-2">
+                      <label className={`block text-xs font-medium mb-1 ${dark ? 'text-slate-400' : 'text-slate-600'}`}>Install date</label>
+                      <input type="date" value={(trackingForm.install_date ?? '').slice(0, 10)} onChange={(e) => setTrackingForm(f => f ? { ...f, install_date: e.target.value || null } : f)} className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 ${dark ? 'bg-slate-800 border-slate-700 text-white' : 'border-slate-300'}`} />
+                    </div>
+                  )}
+                </div>
+
+                <div className={`rounded-lg border p-3 ${dark ? 'border-slate-700' : 'border-slate-200'}`}>
+                  <label className={`flex items-center gap-2 text-sm ${dark ? 'text-slate-200' : 'text-slate-700'}`}>
+                    <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500" checked={!!trackingForm.copay_paid} onChange={(e) => setTrackingForm(f => f ? { ...f, copay_paid: e.target.checked } : f)} />
+                    Applicant co-pay paid
+                  </label>
+                  <div className="mt-2">
+                    <label className={`block text-xs font-medium mb-1 ${dark ? 'text-slate-400' : 'text-slate-600'}`}>Co-pay amount (non-discounted share)</label>
+                    <input type="number" step="0.01" min="0" value={trackingForm.copay_amount ?? ''} onChange={(e) => setTrackingForm(f => f ? { ...f, copay_amount: e.target.value === '' ? null : parseFloat(e.target.value) } : f)} placeholder="0.00" className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 ${dark ? 'bg-slate-800 border-slate-700 text-white' : 'border-slate-300'}`} />
+                  </div>
+                </div>
+
+                <div>
+                  <label className={`block text-xs font-medium mb-1 ${dark ? 'text-slate-400' : 'text-slate-600'}`}>Notes</label>
+                  <textarea rows={3} value={trackingForm.notes ?? ''} onChange={(e) => setTrackingForm(f => f ? { ...f, notes: e.target.value } : f)} className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 ${dark ? 'bg-slate-800 border-slate-700 text-white' : 'border-slate-300'}`} placeholder="Working notes for this FRN…" />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button onClick={() => { setTrackingModalFrn(null); setTrackingForm(null); }} className={`px-4 py-2 rounded-lg text-sm font-medium ${dark ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100'}`}>Cancel</button>
+                  <button onClick={saveTrackingModal} disabled={trackingSaving} className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50">
+                    {trackingSaving ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

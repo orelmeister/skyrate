@@ -967,6 +967,7 @@ async def lifespan(app: FastAPI):
     from app.models.email_verification import EmailVerificationCode
     from app.models.consultant_frn_tracking import ConsultantFrnTracking
     from app.models.vendor_frn_tracking import VendorFrnTracking
+    from app.models.applicant_frn_tracking import ApplicantFrnTracking
     
     # Guard: Warn loudly if running on SQLite in non-dev environment
     if settings.ENVIRONMENT != "development":

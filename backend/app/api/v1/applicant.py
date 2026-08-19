@@ -9,6 +9,7 @@ Backend does all the heavy lifting - applicants just need to provide their BEN.
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
@@ -29,6 +30,9 @@ from ...models.subscription import Subscription, SubscriptionStatus
 from ...models.applicant import (
     ApplicantProfile, ApplicantFRN, ApplicantAutoAppeal, 
     ApplicantStatusHistory, DataSyncStatus, FRNStatusType
+)
+from ...models.applicant_frn_tracking import (
+    ApplicantFrnTracking, WORKING_STATUS_VALUES, PIA_STATUS_VALUES
 )
 from ...services.usac_service import get_usac_service
 
@@ -1628,3 +1632,117 @@ async def get_disbursements(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch disbursement data: {str(e)}"
         )
+
+
+# ==================== FRN TRACKING (working annotations) ====================
+# Applicant-maintained per-FRN fields USAC does not provide: working sub-status
+# (A4/A5), install tracking (A6), co-pay/applicant-share payment (A7), and PIA
+# review state. Scoped to the applicant account owner. Mirrors the vendor and
+# consultant FRN trackers exactly.
+
+class FrnTrackingUpdate(BaseModel):
+    frn: str
+    ben: Optional[str] = None
+    working_status: Optional[str] = None
+    installed: Optional[bool] = None
+    install_date: Optional[str] = None   # ISO date (YYYY-MM-DD) or null
+    copay_paid: Optional[bool] = None
+    copay_amount: Optional[float] = None
+    pia_status: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@router.get("/frn-tracking")
+async def get_applicant_frn_tracking(
+    frn: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return applicant working annotations for one FRN or the whole account."""
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
+
+    q = db.query(ApplicantFrnTracking).filter(
+        ApplicantFrnTracking.applicant_user_id == current_user.id
+    )
+    if frn:
+        row = q.filter(ApplicantFrnTracking.frn == str(frn)).first()
+        return {"success": True, "tracking": row.to_dict() if row else None}
+    rows = q.all()
+    return {
+        "success": True,
+        "tracking": {r.frn: r.to_dict() for r in rows},
+        "count": len(rows),
+    }
+
+
+@router.put("/frn-tracking")
+async def upsert_applicant_frn_tracking(
+    data: FrnTrackingUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create or update the working annotations for a single FRN.
+
+    Only fields present in the request body are changed (partial update). The
+    FRN identity is required. Values are validated against the allowed sets.
+    """
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
+
+    frn_value = (data.frn or "").strip()
+    if not frn_value:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="frn is required")
+
+    if data.working_status is not None and data.working_status != "" and data.working_status not in WORKING_STATUS_VALUES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid working_status. Allowed: {', '.join(WORKING_STATUS_VALUES)}",
+        )
+    if data.pia_status is not None and data.pia_status != "" and data.pia_status not in PIA_STATUS_VALUES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid pia_status. Allowed: {', '.join(PIA_STATUS_VALUES)}",
+        )
+
+    parsed_install_date = None
+    if data.install_date:
+        try:
+            parsed_install_date = datetime.strptime(data.install_date[:10], "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="install_date must be YYYY-MM-DD")
+
+    row = db.query(ApplicantFrnTracking).filter(
+        ApplicantFrnTracking.applicant_user_id == current_user.id,
+        ApplicantFrnTracking.frn == frn_value,
+    ).first()
+
+    if row is None:
+        row = ApplicantFrnTracking(applicant_user_id=current_user.id, frn=frn_value)
+        db.add(row)
+
+    if data.ben is not None:
+        row.ben = data.ben or None
+    if data.working_status is not None:
+        row.working_status = data.working_status or None
+    if data.installed is not None:
+        row.installed = bool(data.installed)
+    if data.install_date is not None:
+        row.install_date = parsed_install_date
+    if data.copay_paid is not None:
+        row.copay_paid = bool(data.copay_paid)
+    if data.copay_amount is not None:
+        row.copay_amount = data.copay_amount
+    if data.pia_status is not None:
+        row.pia_status = data.pia_status or None
+    if data.notes is not None:
+        row.notes = data.notes or None
+
+    try:
+        db.commit()
+        db.refresh(row)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Could not save tracking")
+
+    return {"success": True, "tracking": row.to_dict()}
