@@ -5,13 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
-import { api, FrnTracking } from "@/lib/api";
+import { api, FrnTracking, FRNWatch } from "@/lib/api";
 import { useTabParam } from "@/hooks/useTabParam";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { TableExportBar } from "@/components/TableExportBar";
 import { FrnSubStatusInfo, FRN_PENDING_REASON_OPTIONS } from "@/components/FrnSubStatusInfo";
 import MissingIdentifierBanner from "@/components/MissingIdentifierBanner";
-import { Home, FileText, Activity, Coins, Scale, Bell, Search, PanelLeft, Sun, Moon, LogOut, HelpCircle, ChevronRight, BadgeCheck, Building2, Settings } from "lucide-react";
+import { Home, FileText, Activity, Coins, Scale, Bell, Search, PanelLeft, Sun, Moon, LogOut, HelpCircle, ChevronRight, BadgeCheck, Building2, Settings, Send, PauseCircle, PlayCircle, Trash2 } from "lucide-react";
 
 const APPLICANT_TABS = ["overview", "frns", "appeals", "changes", "frn-status", "disbursements"] as const;
 type ApplicantTab = typeof APPLICANT_TABS[number];
@@ -375,12 +375,11 @@ function ApplicantDashboard() {
   const [frnDetail, setFrnDetail] = useState<any | null>(null);
   const [loadingFrnDetail, setLoadingFrnDetail] = useState(false);
   
-  // Live FRN Status state
-  const [liveFrnData, setLiveFrnData] = useState<any>(null);
-  const [liveFrnLoading, setLiveFrnLoading] = useState(false);
-  const [liveFrnYear, setLiveFrnYear] = useState<number | undefined>(undefined);
-  const [liveFrnStatusFilter, setLiveFrnStatusFilter] = useState<string>("");
-  const [liveFrnPendingReason, setLiveFrnPendingReason] = useState<string>("");
+  // Report Monitors (automated FRN email reports) — global /frn-reports API,
+  // scoped to the logged-in applicant. Mirrors the consultant FRN Status panel.
+  const [frnWatches, setFrnWatches] = useState<FRNWatch[]>([]);
+  const [showCreateWatch, setShowCreateWatch] = useState(false);
+  const [watchLoading, setWatchLoading] = useState(false);
   
   // Disbursement state
   const [disbursementData, setDisbursementData] = useState<any>(null);
@@ -444,12 +443,7 @@ function ApplicantDashboard() {
   useEffect(() => {
     if (frnParam && !isLoading && !deepLinkHandled.current) {
       deepLinkHandled.current = true;
-      setSelectedTab("frn-status");
-      // Auto-load live FRN data if not already loaded so the row to scroll
-      // to actually exists in the DOM.
-      if (!liveFrnData) {
-        loadLiveFrnStatus(liveFrnYear, liveFrnStatusFilter, liveFrnPendingReason);
-      }
+      setSelectedTab("frns");
       const tryScroll = () => {
         const el = document.querySelector(`[data-frn="${frnParam}"]`);
         if (el) {
@@ -464,11 +458,10 @@ function ApplicantDashboard() {
     }
   }, [frnParam, isLoading]);
 
-  // Auto-load data when switching to live tabs
+  // Back-compat: old email deep links used ?tab=frn-status ("Live Status").
+  // That sparse tab was merged into "FRN Status" (id "frns"); redirect there.
   useEffect(() => {
-    // FRN status is NOT auto-loaded — user must click "Load Live Status"
-    // Disbursements is NOT auto-loaded — user must click "Load Disbursements"
-    // Both make expensive USAC API calls
+    if (selectedTab === 'frn-status') setSelectedTab('frns');
   }, [selectedTab]);
 
   const fetchDashboard = async () => {
@@ -503,6 +496,7 @@ function ApplicantDashboard() {
 
       const dashboardData = await response.json();
       setData(dashboardData);
+      loadFRNWatches();
     } catch (e) {
       console.error('Dashboard error:', e);
       setError('Failed to load dashboard. Please try again.');
@@ -584,18 +578,12 @@ function ApplicantDashboard() {
     }
   };
 
-  // Live FRN Status from USAC
-  const loadLiveFrnStatus = async (year?: number, statusFilter?: string, pendingReason?: string) => {
-    setLiveFrnLoading(true);
+  const loadFRNWatches = async () => {
     try {
-      const response = await api.getApplicantLiveFRNStatus(year, statusFilter || undefined, pendingReason || undefined);
-      if (response.success && response.data) {
-        setLiveFrnData(response.data);
-      }
+      const response = await api.getFRNWatches();
+      if (response.data?.success) setFrnWatches(response.data.watches || []);
     } catch (error) {
-      console.error("Failed to load live FRN status:", error);
-    } finally {
-      setLiveFrnLoading(false);
+      console.error("Failed to load report monitors:", error);
     }
   };
 
@@ -844,8 +832,7 @@ function ApplicantDashboard() {
       { id: "overview", label: "Dashboard", Icon: Home },
     ]},
     { label: "Applications", items: [
-      { id: "frns", label: "All FRNs", Icon: FileText, count: frns.length },
-      { id: "frn-status", label: "Live Status", Icon: Activity },
+      { id: "frns", label: "FRN Status", Icon: Activity, count: frns.length },
     ]},
     { label: "Funding & Compliance", items: [
       { id: "disbursements", label: "Disbursements", Icon: Coins },
@@ -1193,6 +1180,7 @@ function ApplicantDashboard() {
                     <React.Fragment key={frn.id}>
                     <tr 
                       key={frn.id} 
+                      data-frn={frn.frn}
                       onClick={() => fetchFrnDetail(frn.id)}
                       className={`cursor-pointer transition-colors ${tRowHover} ${selectedFrnId === frn.id ? (dark ? 'bg-purple-500/10 border-l-4 border-l-purple-500' : 'bg-purple-50 border-l-4 border-l-purple-500') : ''}`}
                     >
@@ -1592,6 +1580,139 @@ function ApplicantDashboard() {
               </table>
             </div>
             </div>
+
+            {/* Report Monitors — automated FRN email reports (mirrors consultant FRN Status) */}
+            <div className={`rounded-xl border p-6 ${tCard}`}>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className={`text-lg font-semibold ${tInk}`}>Report Monitors</h3>
+                  <p className={`text-sm ${tMuted}`}>Set up automated email reports for your FRN portfolio</p>
+                </div>
+                <button
+                  onClick={() => setShowCreateWatch(!showCreateWatch)}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  {showCreateWatch ? 'Cancel' : '+ Create Monitor'}
+                </button>
+              </div>
+
+              {showCreateWatch && (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setWatchLoading(true);
+                    const formData = new FormData(e.currentTarget);
+                    try {
+                      const response = await api.createFRNWatch({
+                        name: formData.get('name') as string,
+                        watch_type: (formData.get('watch_type') as any) || 'portfolio',
+                        target_id: (formData.get('target_id') as string) || undefined,
+                        frequency: (formData.get('frequency') as any) || 'weekly',
+                        recipient_email: formData.get('recipient_email') as string,
+                        include_funded: formData.get('include_funded') === 'on',
+                        include_pending: formData.get('include_pending') === 'on',
+                        include_denied: formData.get('include_denied') === 'on',
+                        include_changes: formData.get('include_changes') === 'on',
+                        delivery_mode: (formData.get('delivery_mode') as any) || 'full_email',
+                      });
+                      if (response?.data?.success) {
+                        setShowCreateWatch(false);
+                        loadFRNWatches();
+                      }
+                    } catch (error) {
+                      console.error('Failed to create monitor:', error);
+                    } finally {
+                      setWatchLoading(false);
+                    }
+                  }}
+                  className={`mb-6 p-4 rounded-lg border space-y-4 ${dark ? 'bg-slate-900/60 border-slate-800' : 'bg-slate-50 border-slate-200'}`}
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${tMuted}`}>Monitor Name</label>
+                      <input name="name" required placeholder="e.g., Weekly FRN Report" className={`w-full px-3 py-2 border rounded-lg text-sm ${tInput}`} />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${tMuted}`}>Recipient Email</label>
+                      <input name="recipient_email" type="email" required defaultValue={user?.email || ''} placeholder="you@example.com" className={`w-full px-3 py-2 border rounded-lg text-sm ${tInput}`} />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${tMuted}`}>Watch Type</label>
+                      <select name="watch_type" className={`w-full px-3 py-2 border rounded-lg text-sm ${tInput}`}>
+                        <option value="portfolio">Entire Portfolio</option>
+                        <option value="ben">Specific BEN</option>
+                        <option value="frn">Specific FRN</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${tMuted}`}>Frequency</label>
+                      <select name="frequency" className={`w-full px-3 py-2 border rounded-lg text-sm ${tInput}`}>
+                        <option value="weekly">Weekly</option>
+                        <option value="daily">Daily</option>
+                        <option value="biweekly">Bi-Weekly</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${tMuted}`}>BEN or FRN (if applicable)</label>
+                      <input name="target_id" placeholder="e.g., 123456" className={`w-full px-3 py-2 border rounded-lg text-sm ${tInput}`} />
+                    </div>
+                    <div>
+                      <label className={`block text-sm font-medium mb-1 ${tMuted}`}>Delivery Mode</label>
+                      <select name="delivery_mode" className={`w-full px-3 py-2 border rounded-lg text-sm ${tInput}`}>
+                        <option value="full_email">Full Email Report</option>
+                        <option value="notification_only">Notification Only</option>
+                        <option value="in_app_only">In-App Only</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-4">
+                    <label className={`flex items-center gap-2 text-sm ${tMuted}`}><input type="checkbox" name="include_funded" defaultChecked className="rounded" /> Include Funded</label>
+                    <label className={`flex items-center gap-2 text-sm ${tMuted}`}><input type="checkbox" name="include_pending" defaultChecked className="rounded" /> Include Pending</label>
+                    <label className={`flex items-center gap-2 text-sm ${tMuted}`}><input type="checkbox" name="include_denied" defaultChecked className="rounded" /> Include Denied</label>
+                    <label className={`flex items-center gap-2 text-sm ${tMuted}`}><input type="checkbox" name="include_changes" defaultChecked className="rounded" /> Highlight Changes</label>
+                  </div>
+                  <div className="flex justify-end gap-3">
+                    <button type="button" onClick={() => setShowCreateWatch(false)} className={`px-4 py-2 text-sm rounded-lg ${dark ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-700 hover:bg-slate-100'}`}>Cancel</button>
+                    <button type="submit" disabled={watchLoading} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium">{watchLoading ? 'Creating...' : 'Create Monitor'}</button>
+                  </div>
+                </form>
+              )}
+
+              {frnWatches.length > 0 ? (
+                <div className="space-y-3">
+                  {frnWatches.map((watch) => (
+                    <div key={watch.id} className={`flex items-center justify-between p-4 rounded-lg border ${watch.is_active ? (dark ? 'border-purple-800 bg-purple-900/20' : 'border-purple-200 bg-purple-50') : (dark ? 'border-slate-800 bg-slate-900/40 opacity-60' : 'border-slate-200 bg-slate-50 opacity-60')}`}>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`font-medium text-sm truncate ${tInk}`}>{watch.name}</span>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${watch.is_active ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'}`}>{watch.is_active ? 'Active' : 'Paused'}</span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">{watch.frequency}</span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">{watch.watch_type}</span>
+                        </div>
+                        <div className={`flex items-center gap-4 mt-1 text-xs ${tFaint}`}>
+                          <span>To: {watch.recipient_email}</span>
+                          {watch.send_count > 0 && <span>Sent: {watch.send_count}x</span>}
+                          {watch.next_send_at && <span>Next: {new Date(watch.next_send_at).toLocaleDateString()}</span>}
+                          {watch.last_error && <span className="text-red-500">Error: {watch.last_error}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 ml-4">
+                        <button onClick={async () => { try { await api.sendFRNWatchNow(watch.id); loadFRNWatches(); } catch (err) { console.error(err); } }} className={`p-1.5 rounded-lg ${tMuted} hover:text-purple-600`} title="Send report now"><Send className="w-4 h-4" /></button>
+                        <button onClick={async () => { try { await api.toggleFRNWatch(watch.id); loadFRNWatches(); } catch (err) { console.error(err); } }} className={`p-1.5 rounded-lg ${tMuted} hover:text-amber-600`} title={watch.is_active ? 'Pause' : 'Resume'}>{watch.is_active ? <PauseCircle className="w-4 h-4" /> : <PlayCircle className="w-4 h-4" />}</button>
+                        <button onClick={async () => { if (confirm('Delete this monitor?')) { try { await api.deleteFRNWatch(watch.id); loadFRNWatches(); } catch (err) { console.error(err); } } }} className={`p-1.5 rounded-lg ${tMuted} hover:text-red-600`} title="Delete"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : !showCreateWatch ? (
+                <div className={`text-center py-8 ${tMuted}`}>
+                  <Bell className={`h-10 w-10 mx-auto mb-3 ${tFaint}`} />
+                  <p className="text-sm font-medium">No report monitors yet</p>
+                  <p className="text-xs mt-1">Create a monitor to receive periodic FRN status reports via email</p>
+                </div>
+              ) : null}
+            </div>
           </div>
         )}
 
@@ -1681,150 +1802,6 @@ function ApplicantDashboard() {
                 <p className="text-slate-600">
                   All your funding requests are in good standing. Great work!
                 </p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {selectedTab === 'frn-status' && (
-          <div className="space-y-6">
-            {/* Filters */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-              <div className="flex flex-wrap items-end gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Year</label>
-                  <select
-                    value={liveFrnYear || ''}
-                    onChange={(e) => setLiveFrnYear(e.target.value ? parseInt(e.target.value) : undefined)}
-                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="">All Years</option>
-                    {Array.from({ length: 10 }, (_, i) => 2025 - i).map(y => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
-                  <select
-                    value={liveFrnStatusFilter}
-                    onChange={(e) => setLiveFrnStatusFilter(e.target.value)}
-                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="">All Statuses</option>
-                    <option value="Funded">Funded</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Denied">Denied</option>
-                    <option value="Committed">Committed</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Pending Reason</label>
-                  <input
-                    type="text"
-                    value={liveFrnPendingReason}
-                    onChange={(e) => setLiveFrnPendingReason(e.target.value)}
-                    placeholder="Filter by reason..."
-                    className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-                <button
-                  onClick={() => loadLiveFrnStatus(liveFrnYear, liveFrnStatusFilter, liveFrnPendingReason)}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium"
-                >
-                  Apply Filters
-                </button>
-              </div>
-            </div>
-
-            {liveFrnLoading ? (
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center">
-                <div className="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-                <p className="text-slate-500">Loading live FRN status from USAC...</p>
-              </div>
-            ) : liveFrnData ? (
-              <>
-                {/* Summary Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-                    <div className="text-sm text-slate-500">Total FRNs</div>
-                    <div className="text-2xl font-bold text-slate-900">{liveFrnData.summary?.total_frns || 0}</div>
-                    <div className="text-xs text-slate-400 mt-1">${(liveFrnData.summary?.total_amount || 0).toLocaleString()}</div>
-                  </div>
-                  <div className="bg-white rounded-xl border border-green-200 shadow-sm p-4">
-                    <div className="text-sm text-green-600">Funded</div>
-                    <div className="text-2xl font-bold text-green-700">{liveFrnData.summary?.funded || 0}</div>
-                    <div className="text-xs text-green-500 mt-1">${(liveFrnData.summary?.funded_amount || 0).toLocaleString()}</div>
-                  </div>
-                  <div className="bg-white rounded-xl border border-yellow-200 shadow-sm p-4">
-                    <div className="text-sm text-yellow-600">Pending</div>
-                    <div className="text-2xl font-bold text-yellow-700">{liveFrnData.summary?.pending || 0}</div>
-                    <div className="text-xs text-yellow-500 mt-1">${(liveFrnData.summary?.pending_amount || 0).toLocaleString()}</div>
-                  </div>
-                  <div className="bg-white rounded-xl border border-red-200 shadow-sm p-4">
-                    <div className="text-sm text-red-600">Denied</div>
-                    <div className="text-2xl font-bold text-red-700">{liveFrnData.summary?.denied || 0}</div>
-                    <div className="text-xs text-red-500 mt-1">${(liveFrnData.summary?.denied_amount || 0).toLocaleString()}</div>
-                  </div>
-                </div>
-
-                {/* Per-BEN Breakdown */}
-                {liveFrnData.schools && liveFrnData.schools.length > 0 ? (
-                  <div className="space-y-4">
-                    {liveFrnData.schools.map((school: any, idx: number) => (
-                      <div key={idx} className="bg-white rounded-xl border border-slate-200 shadow-sm">
-                        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-                          <div>
-                            <div className="font-semibold text-slate-900">{school.entity_name || `BEN ${school.ben}`}</div>
-                            <div className="text-sm text-slate-500">BEN: {school.ben} • {school.frn_count || 0} FRNs</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-sm font-medium text-slate-900">${(school.total_amount || 0).toLocaleString()}</div>
-                          </div>
-                        </div>
-                        <div className="divide-y divide-slate-50">
-                          {(school.frns || []).map((frn: any, fIdx: number) => (
-                            <div key={fIdx} className="px-4 py-3 flex items-center justify-between">
-                              <div>
-                                <span className="font-mono text-sm text-slate-700">FRN {frn.frn}</span>
-                                <span className="text-sm text-slate-500 ml-2">— {frn.narrative || 'No description'}</span>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                  frn.frn_status === 'Funded' ? 'bg-green-100 text-green-700' :
-                                  frn.frn_status === 'Pending' ? 'bg-yellow-100 text-yellow-700' :
-                                  frn.frn_status === 'Denied' ? 'bg-red-100 text-red-700' :
-                                  frn.frn_status === 'Committed' ? 'bg-blue-100 text-blue-700' :
-                                  'bg-slate-100 text-slate-700'
-                                }`}>
-                                  {frn.frn_status || 'Unknown'}
-                                </span>
-                                <span className="text-sm font-medium text-slate-700">${(frn.funded_amount || frn.original_amount || 0).toLocaleString()}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center">
-                    <div className="text-4xl mb-3">📋</div>
-                    <p className="text-slate-500">No FRN data found for your registered BENs.</p>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center">
-                <div className="text-4xl mb-3">📈</div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">Live FRN Status</h3>
-                <p className="text-slate-500 mb-4">Query USAC directly for real-time FRN status across your BENs.</p>
-                <button
-                  onClick={() => loadLiveFrnStatus(liveFrnYear, liveFrnStatusFilter, liveFrnPendingReason)}
-                  className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
-                >
-                  Load Live Status
-                </button>
               </div>
             )}
           </div>
