@@ -405,7 +405,7 @@ async def get_competitors(
         
         client = USACDataClient()
         result = get_or_cache(
-            namespace="471_competitors",
+            namespace="471_competitors_v2",
             params={"spin": profile.spin, "year": year},
             ttl_hours=6,
             fetch_fn=lambda: client.get_471_competitors_for_spin(profile.spin, year),
