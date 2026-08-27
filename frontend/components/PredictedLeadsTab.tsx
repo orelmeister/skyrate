@@ -165,6 +165,23 @@ function formatDate(dateStr: string | null): string {
   });
 }
 
+// Estimated inflation-adjusted replacement cost for aging equipment (Ari loom-1
+// #3). The lead only carries the ORIGINAL one-time cost from the funding year it
+// was purchased; vendors want a defensible "what would it cost to replace today"
+// figure. Simple rule: compound the original cost ~3%/yr over the years since
+// purchase. This is a rough ESTIMATE for selling context, not an authoritative
+// quote. Returns null when we can't compute it (missing original cost).
+const EQUIPMENT_INFLATION_RATE = 0.03;
+function estReplacementCost(lead: PredictedLead): number | null {
+  if (lead.prediction_type !== "equipment_refresh") return null;
+  const original = lead.estimated_deal_value;
+  if (original === null || original === undefined || original <= 0) return null;
+  if (!lead.funding_year) return null;
+  const years = new Date().getFullYear() - Number(lead.funding_year);
+  if (!isFinite(years) || years <= 0) return original; // already current-year
+  return original * Math.pow(1 + EQUIPMENT_INFLATION_RATE, years);
+}
+
 // Compute an ALWAYS-CURRENT expiry status from the contract date. The backend
 // bakes "expiring in N months" into prediction_reason at generation time and
 // never refreshes it, so a lead created in April still reads "in 3 months" in
@@ -229,6 +246,10 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
   // Form 470 filing check for the selected entity (Ari request): did they post a 470?
   const [f470Loading, setF470Loading] = useState(false);
   const [f470Result, setF470Result] = useState<{ filed: boolean; leads: { application_number: string; funding_year: string; entity_name: string }[] } | null>(null);
+  // Entity's current C2 budget, fetched on-demand when a lead is opened (Ari
+  // loom-1 #2/#3): estimated need vs available Category 2 budget shown inline.
+  const [c2Budget, setC2Budget] = useState<{ remaining: number | null; total: number | null; cycle: string | null; found: boolean } | null>(null);
+  const [c2BudgetLoading, setC2BudgetLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
 
@@ -336,6 +357,26 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
     }
   };
 
+  // Fetch the entity's current Category 2 budget on-demand (Ari loom-1 #2/#3)
+  // so the lead detail can show estimated need vs available C2 budget inline.
+  const fetchEntityC2Budget = async (ben: string) => {
+    setC2Budget(null);
+    setC2BudgetLoading(true);
+    try {
+      const res = await api.getEntityC2Budget(ben);
+      const d = res.data;
+      if (d && d.success && d.found) {
+        setC2Budget({ remaining: d.c2_budget_remaining ?? null, total: d.c2_budget_total ?? null, cycle: d.c2_budget_cycle ?? null, found: true });
+      } else {
+        setC2Budget({ remaining: null, total: null, cycle: null, found: false });
+      }
+    } catch {
+      setC2Budget({ remaining: null, total: null, cycle: null, found: false });
+    } finally {
+      setC2BudgetLoading(false);
+    }
+  };
+
   // Reset save/enrich state when selecting a new lead
   const handleSelectLead = (lead: PredictedLead) => {
     setSelectedLead(lead);
@@ -345,6 +386,9 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
     setEnrichError(null);
     setF470Result(null);
     setF470Loading(false);
+    // Look up the entity's current C2 budget for the estimated-need context.
+    if (lead.ben) fetchEntityC2Budget(lead.ben);
+    else setC2Budget(null);
   };
 
   // Check whether the selected entity has posted a Form 470 this cycle.
@@ -988,7 +1032,75 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                         {formatCurrency(selectedLead.c2_budget_remaining)} / {formatCurrency(selectedLead.c2_budget_total)}
                       </span>
                     </div>
+                    {selectedLead.c2_budget_remaining ? (
+                      <p className="text-[11px] text-green-600 -mt-1">
+                        ≈ up to {formatCurrency(selectedLead.c2_budget_remaining)} available to spend this cycle
+                      </p>
+                    ) : null}
                   </>
+                )}
+
+                {/* Equipment refresh: estimated inflation-adjusted replacement
+                    cost (Ari loom-1 #3 - the lead only shows the ORIGINAL cost). */}
+                {selectedLead.prediction_type === "equipment_refresh" && (() => {
+                  const repl = estReplacementCost(selectedLead);
+                  const original = selectedLead.estimated_deal_value;
+                  const years = selectedLead.funding_year ? new Date().getFullYear() - Number(selectedLead.funding_year) : null;
+                  if (!original && repl === null) return null;
+                  return (
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-blue-700">Replacement estimate</span>
+                        <span className="text-[10px] uppercase tracking-wide text-blue-400 font-semibold">Estimate</span>
+                      </div>
+                      {original ? (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-500">Original cost{selectedLead.funding_year ? ` (FY${selectedLead.funding_year})` : ""}</span>
+                          <span className="font-medium text-slate-700">{formatCurrency(original)}</span>
+                        </div>
+                      ) : null}
+                      {repl !== null ? (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-500">Est. replacement (inflation-adjusted)</span>
+                          <span className="font-bold text-blue-700">{formatCurrency(repl)}</span>
+                        </div>
+                      ) : null}
+                      {repl !== null && years && years > 0 ? (
+                        <p className="text-[11px] text-slate-400">~3%/yr over {years} yr{years === 1 ? "" : "s"} since purchase. Rough estimate, not a quote.</p>
+                      ) : null}
+                    </div>
+                  );
+                })()}
+
+                {/* Inline Category 2 budget fetched on-demand for leads that
+                    don't already carry it (equipment refresh / contract expiry).
+                    Ari loom-1 #2/#3: estimated need vs available C2 budget. */}
+                {!selectedLead.c2_budget_cycle && (
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-semibold text-green-700">💰 Category 2 Budget (this entity)</span>
+                      {c2Budget?.cycle ? <span className="text-[10px] text-green-500 font-semibold">{c2Budget.cycle}</span> : null}
+                    </div>
+                    {c2BudgetLoading ? (
+                      <p className="text-xs text-slate-400">Looking up C2 budget…</p>
+                    ) : c2Budget?.found ? (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-500">Remaining / Total</span>
+                          <span className="font-medium text-green-700">
+                            {formatCurrency(c2Budget.remaining)} / {formatCurrency(c2Budget.total)}
+                          </span>
+                        </div>
+                        {c2Budget.remaining ? (
+                          <p className="text-[11px] text-green-600 mt-1">
+                            ≈ up to {formatCurrency(c2Budget.remaining)} available to spend this cycle
+                          </p>
+                        ) : null}
+                      </>
+                    ) : (
+                      <p className="text-xs text-slate-400">No current C2 budget on file for this entity.</p>
+                    )}
+                  </div>
                 )}
                 {selectedLead.contact_email && (
                   <div className="flex justify-between text-sm">

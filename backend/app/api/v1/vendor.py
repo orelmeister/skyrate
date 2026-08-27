@@ -2129,6 +2129,75 @@ async def get_470_by_ben(
         )
 
 
+@router.get("/entity-c2-budget")
+async def get_entity_c2_budget(
+    ben: str,
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
+):
+    """
+    Look up the current Category 2 budget for a single entity (BEN) from the
+    USAC C2 Budget Tool (dataset 6brt-5pbv). Powers the inline C2-budget context
+    on predicted-lead details (Ari loom-1 #2/#3) so a vendor sees estimated need
+    vs available budget without leaving the lead. Returns the entity's latest
+    budget cycle. `found=false` means USAC has no C2 budget row for this BEN.
+    Non-fatal by design: on any error the lead detail still renders.
+    """
+    ben_clean = (ben or "").strip()
+    if not ben_clean:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="BEN is required")
+
+    try:
+        from utils.usac_client import USACDataClient, USAC_ENDPOINTS
+    except ImportError:
+        from ...utils.usac_client import USACDataClient, USAC_ENDPOINTS
+
+    def _f(v):
+        try:
+            return float(v) if v not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+
+    try:
+        client = USACDataClient()
+        params = {
+            "$where": f"ben = '{ben_clean}'",
+            "$order": "c2_budget_cycle DESC",
+            "$limit": 10,
+            "$select": (
+                "ben, billed_entity_name, state, c2_budget, "
+                "available_c2_budget_amount, funded_c2_budget_amount, "
+                "pending_c2_budget_amount, c2_budget_cycle, full_time_students"
+            ),
+        }
+        if getattr(client, "app_token", None):
+            params["$$app_token"] = client.app_token
+        resp = await run_in_threadpool(
+            lambda: client.session.get(USAC_ENDPOINTS["c2_budget"], params=params, timeout=30)
+        )
+        resp.raise_for_status()
+        rows = resp.json() or []
+        if not rows:
+            return {"success": True, "found": False, "ben": ben_clean}
+        row = rows[0]  # latest cycle (DESC-ordered)
+        return {
+            "success": True,
+            "found": True,
+            "ben": ben_clean,
+            "entity_name": row.get("billed_entity_name"),
+            "state": row.get("state"),
+            "c2_budget_total": _f(row.get("c2_budget")),
+            "c2_budget_remaining": _f(row.get("available_c2_budget_amount")),
+            "c2_budget_funded": _f(row.get("funded_c2_budget_amount")),
+            "c2_budget_pending": _f(row.get("pending_c2_budget_amount")),
+            "c2_budget_cycle": row.get("c2_budget_cycle"),
+            "full_time_students": _f(row.get("full_time_students")),
+        }
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"entity-c2-budget lookup failed for BEN {ben_clean}: {e}")
+        return {"success": False, "found": False, "ben": ben_clean, "error": str(e)}
+
+
 @router.post("/470/search")
 async def search_470(
     data: Form470SearchRequest,

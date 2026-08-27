@@ -849,6 +849,23 @@ export interface Form470DetailResponse {
   error?: string;
 }
 
+// Current Category 2 budget for one entity (USAC dataset 6brt-5pbv), shown
+// inline on a predicted lead. found=false -> USAC has no C2 row for this BEN.
+export interface EntityC2BudgetResponse {
+  success: boolean;
+  found: boolean;
+  ben: string;
+  entity_name?: string | null;
+  state?: string | null;
+  c2_budget_total?: number | null;
+  c2_budget_remaining?: number | null;
+  c2_budget_funded?: number | null;
+  c2_budget_pending?: number | null;
+  c2_budget_cycle?: string | null;
+  full_time_students?: number | null;
+  error?: string;
+}
+
 // 28-day competitive bidding window check for a Form 470 (bid-evaluation lock).
 export interface Form470WindowResponse {
   success: boolean;
@@ -2980,6 +2997,15 @@ class ApiClient {
   async get470ByBen(ben: string, year?: number): Promise<ApiResponse<Form470LeadsResponse>> {
     const qs = year ? `?year=${year}` : '';
     return this.request(`/api/v1/vendor/470/entity/${encodeURIComponent(ben)}${qs}`);
+  }
+
+  /**
+   * Current Category 2 budget for a single entity (BEN) from USAC dataset
+   * 6brt-5pbv. Used to show estimated need vs available C2 budget inline on a
+   * predicted lead (Ari loom-1 #2/#3). found=false -> no C2 row for this BEN.
+   */
+  async getEntityC2Budget(ben: string): Promise<ApiResponse<EntityC2BudgetResponse>> {
+    return this.request(`/api/v1/vendor/entity-c2-budget?ben=${encodeURIComponent(ben)}`);
   }
 
   /**
