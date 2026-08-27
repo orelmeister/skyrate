@@ -171,7 +171,7 @@ function ApplicantCommandCenter({
   if (denied > 0) attention.push({ key: "den", label: `${denied} denied FRN${denied !== 1 ? "s" : ""}`, sub: "Review and submit appeals", tone: "red", tab: "appeals" });
   if (summary.urgent_deadlines > 0) attention.push({ key: "urg", label: `${summary.urgent_deadlines} appeal deadline${summary.urgent_deadlines !== 1 ? "s" : ""} approaching`, sub: "File before the window closes", tone: "red", tab: "appeals" });
   if (summary.appeals_ready > 0) attention.push({ key: "rdy", label: `${summary.appeals_ready} appeal${summary.appeals_ready !== 1 ? "s" : ""} ready to send`, sub: "AI-drafted and waiting for review", tone: "amber", tab: "appeals" });
-  if (pending > 0) attention.push({ key: "pen", label: `${pending} application${pending !== 1 ? "s" : ""} pending`, sub: "Monitor USAC review status", tone: "blue", tab: "frn-status" });
+  if (pending > 0) attention.push({ key: "pen", label: `${pending} application${pending !== 1 ? "s" : ""} pending`, sub: "Monitor USAC review status", tone: "blue", tab: "frns" });
   if (summary.unread_changes > 0) attention.push({ key: "upd", label: `${summary.unread_changes} new update${summary.unread_changes !== 1 ? "s" : ""}`, sub: "Changes since your last visit", tone: "blue", tab: "changes" });
 
   const R = 34, CIRC = 2 * Math.PI * R;
@@ -194,6 +194,26 @@ function ApplicantCommandCenter({
   const topFrns = [...frns]
     .sort((a, b) => (b.amount_funded || b.amount_requested || 0) - (a.amount_funded || a.amount_requested || 0))
     .slice(0, 5);
+
+  // Funding-by-year breakdown (Ari loom-2 #1). Computed client-side from the
+  // applicant's own FRNs — committed dollars + status counts per funding year.
+  const fundingByYear = (() => {
+    const map = new Map<number, { year: number; total: number; funded: number; pending: number; denied: number; fundedAmt: number }>();
+    frns.forEach((f) => {
+      const y = f.funding_year || 0;
+      if (!y) return;
+      if (!map.has(y)) map.set(y, { year: y, total: 0, funded: 0, pending: 0, denied: 0, fundedAmt: 0 });
+      const e = map.get(y)!;
+      e.total += 1;
+      const st = (f.status_type || "").toLowerCase();
+      const isDenied = f.is_denied || st === "denied";
+      if (st === "funded") { e.funded += 1; e.fundedAmt += f.amount_funded || 0; }
+      else if (isDenied) { e.denied += 1; }
+      else { e.pending += 1; }
+    });
+    return Array.from(map.values()).sort((a, b) => b.year - a.year);
+  })();
+  const fundingByYearMax = Math.max(...fundingByYear.map((e) => e.fundedAmt), 1);
 
   return (
     <div className={`rounded-3xl border p-6 md:p-8 shadow-2xl ${container}`}>
@@ -257,6 +277,38 @@ function ApplicantCommandCenter({
         </div>
       </div>
 
+      {/* Authorized by funding year (Ari loom-2 #1) */}
+      {fundingByYear.length > 0 && (
+        <div className={`rounded-2xl border p-5 mt-5 ${card}`}>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <div className="font-semibold">Authorized by funding year</div>
+              <div className={`text-xs ${muted}`}>Committed funding and FRN counts per E-Rate funding year</div>
+            </div>
+            <Coins className={`w-4 h-4 ${faint}`} />
+          </div>
+          <div className="space-y-3">
+            {fundingByYear.map((y) => (
+              <div key={y.year}>
+                <div className="flex items-center justify-between text-sm mb-1 gap-2">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <span className="font-semibold">FY{y.year}</span>
+                    <span className={`text-xs ${muted}`}>{y.total} FRN{y.total !== 1 ? "s" : ""}</span>
+                    <span className="text-xs text-emerald-500">{y.funded} funded</span>
+                    {y.pending > 0 && <span className="text-xs text-amber-500">{y.pending} pending</span>}
+                    {y.denied > 0 && <span className="text-xs text-red-500">{y.denied} denied</span>}
+                  </div>
+                  <span className="font-semibold shrink-0">{formatCurrency(y.fundedAmt)}</span>
+                </div>
+                <div className={`h-2 rounded ${track}`}>
+                  <div className="h-full rounded bg-gradient-to-r from-purple-500 to-pink-500" style={{ width: `${Math.round(y.fundedAmt / fundingByYearMax * 100)}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Middle row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
         <div className={`rounded-2xl border p-5 ${card}`}>
@@ -316,10 +368,10 @@ function ApplicantCommandCenter({
       {/* Quick actions */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
         {([
-          { label: "All FRNs", icon: <FileText className="w-5 h-5" />, fn: () => onTab("frns") },
-          { label: "Live Status", icon: <Activity className="w-5 h-5" />, fn: () => onTab("frn-status") },
+          { label: "FRN Status", icon: <Activity className="w-5 h-5" />, fn: () => onTab("frns") },
           { label: "Disbursements", icon: <Coins className="w-5 h-5" />, fn: () => onTab("disbursements") },
           { label: "Appeals", icon: <Scale className="w-5 h-5" />, fn: () => onTab("appeals") },
+          { label: "Updates", icon: <Bell className="w-5 h-5" />, fn: () => onTab("changes") },
         ]).map((a) => (
           <button key={a.label} onClick={a.fn} className={`rounded-2xl border p-4 flex flex-col items-center gap-2 transition-all ${qaBtn}`}>
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${qaIcon}`}>{a.icon}</div><span className="text-sm font-medium">{a.label}</span>
@@ -835,7 +887,7 @@ function ApplicantDashboard() {
       { id: "frns", label: "FRN Status", Icon: Activity, count: frns.length },
     ]},
     { label: "Funding & Compliance", items: [
-      { id: "disbursements", label: "Disbursements", Icon: Coins },
+      { id: "disbursements", label: "Funding & Invoicing", Icon: Coins },
       { id: "appeals", label: "Appeals", Icon: Scale, count: appeals.length },
     ]},
     { label: "Activity", items: [
@@ -1809,6 +1861,11 @@ function ApplicantDashboard() {
 
         {selectedTab === 'disbursements' && (
           <div className="space-y-6">
+            {/* Header */}
+            <div>
+              <h1 className={`text-xl font-bold ${tInk}`}>Funding &amp; Invoicing</h1>
+              <p className={`text-sm ${tMuted}`}>Disbursements and invoicing detail for your registered BENs, straight from USAC.</p>
+            </div>
             {/* Filters */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
               <div className="flex items-end gap-4">
@@ -1900,12 +1957,18 @@ function ApplicantDashboard() {
                         </div>
                         <div className="divide-y divide-slate-50">
                           {(ben.disbursements || []).slice(0, 10).map((rec: any, rIdx: number) => (
-                            <div key={rIdx} className="px-4 py-3 flex items-center justify-between text-sm">
-                              <div>
-                                <span className="font-mono text-slate-700">FRN {rec.funding_request_number}</span>
-                                <span className="text-slate-400 ml-2">• {rec.service_type || 'N/A'}</span>
+                            <div key={rIdx} className="px-4 py-3 flex items-center justify-between text-sm gap-4">
+                              <div className="min-w-0">
+                                <div>
+                                  <span className="font-mono text-slate-700">FRN {rec.funding_request_number}</span>
+                                  <span className="text-slate-400 ml-2">• {rec.service_type || 'N/A'}</span>
+                                </div>
+                                <div className="text-xs text-slate-400 mt-0.5 truncate">
+                                  {rec.service_provider_name ? `${rec.service_provider_name} • ` : ''}
+                                  {rec.last_date_to_invoice ? `Invoice by ${rec.last_date_to_invoice}` : 'No invoice deadline on file'}
+                                </div>
                               </div>
-                              <div className="flex items-center gap-4 text-right">
+                              <div className="flex items-center gap-4 text-right shrink-0">
                                 <div>
                                   <div className="text-slate-500">Authorized</div>
                                   <div className="font-medium">${(rec.total_authorized_amount || 0).toLocaleString()}</div>
@@ -1913,6 +1976,10 @@ function ApplicantDashboard() {
                                 <div>
                                   <div className="text-green-500">Disbursed</div>
                                   <div className="font-medium text-green-700">${(rec.total_authorized_disbursement || 0).toLocaleString()}</div>
+                                </div>
+                                <div>
+                                  <div className="text-slate-400">Remaining</div>
+                                  <div className="font-medium text-slate-600">${(rec.remaining || 0).toLocaleString()}</div>
                                 </div>
                               </div>
                             </div>
