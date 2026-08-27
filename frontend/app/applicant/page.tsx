@@ -11,9 +11,9 @@ import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { TableExportBar } from "@/components/TableExportBar";
 import { FrnSubStatusInfo, FRN_PENDING_REASON_OPTIONS } from "@/components/FrnSubStatusInfo";
 import MissingIdentifierBanner from "@/components/MissingIdentifierBanner";
-import { Home, FileText, Activity, Coins, Scale, Bell, Search, PanelLeft, Sun, Moon, LogOut, HelpCircle, ChevronRight, BadgeCheck, Building2, Settings, Send, PauseCircle, PlayCircle, Trash2 } from "lucide-react";
+import { Home, FileText, Activity, Coins, Scale, Bell, Search, PanelLeft, Sun, Moon, LogOut, HelpCircle, ChevronRight, BadgeCheck, Building2, Settings, Send, PauseCircle, PlayCircle, Trash2, Shield, Download, ExternalLink } from "lucide-react";
 
-const APPLICANT_TABS = ["overview", "frns", "appeals", "changes", "frn-status", "disbursements"] as const;
+const APPLICANT_TABS = ["overview", "frns", "appeals", "changes", "frn-status", "disbursements", "compliance", "settings"] as const;
 type ApplicantTab = typeof APPLICANT_TABS[number];
 
 /**
@@ -137,6 +137,42 @@ function formatDate(dateStr: string): string {
 // queue, recent activity, denials & appeals, and quick actions. Wired entirely
 // to the applicant's real dashboard data (no placeholder metrics).
 // ---------------------------------------------------------------------------
+// Force-download a certified USAC form PDF. publicdata.usac.org files are routed
+// through the backend proxy /api/v1/vendor/rfp-download (host-allow-listed) so the
+// browser gets a clean attachment. Mirrors the consultant/vendor helper.
+async function forceDownloadFile(url: string, suggestedFilename?: string): Promise<void> {
+  try {
+    let fetchUrl = url;
+    try {
+      const u = new URL(url);
+      if (u.hostname === "publicdata.usac.org") {
+        fetchUrl = `/api/v1/vendor/rfp-download?url=${encodeURIComponent(url)}`;
+      }
+    } catch { /* not a parseable URL — fall through to direct fetch */ }
+
+    const response = await fetch(fetchUrl, { method: "GET", credentials: "same-origin" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+
+    let filename = suggestedFilename || url.split("/").pop() || "document.pdf";
+    try { filename = decodeURIComponent(filename); } catch { /* leave as-is */ }
+    filename = filename.replace(/^\d+-/, "").replace(/\s+/g, " ").trim() || "document";
+
+    const a = document.createElement("a");
+    a.style.display = "none";
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(blobUrl);
+    document.body.removeChild(a);
+  } catch (err) {
+    console.error("forceDownloadFile failed, falling back to new-tab open:", err);
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+}
+
 function ApplicantCommandCenter({
   profile, summary, frns, appeals, changes, dark,
   isDemoAccount, onReplaceBen, onTab, onOpenAppeal, formatCurrency, formatDate,
@@ -439,6 +475,10 @@ function ApplicantDashboard() {
   const [disbursementYear, setDisbursementYear] = useState<number | undefined>(undefined);
   const [selectedFrnIds, setSelectedFrnIds] = useState<Set<number>>(new Set());
 
+  // Compliance: certified Form 470/471 PDF download state.
+  const [pdfBusyApp, setPdfBusyApp] = useState<string | null>(null);
+  const [formPdfError, setFormPdfError] = useState<string | null>(null);
+
   // Replace BEN modal state (demo/test accounts)
   const [showReplaceBenModal, setShowReplaceBenModal] = useState(false);
   const [replaceBenInput, setReplaceBenInput] = useState("");
@@ -639,6 +679,27 @@ function ApplicantDashboard() {
     }
   };
 
+  // Compliance: resolve + download the actual certified Form 470/471 PDF from USAC.
+  const downloadFormPdf = async (form: '470' | '471', applicationNumber: string) => {
+    const app = String(applicationNumber || '').trim();
+    if (!app) return;
+    setPdfBusyApp(`${form}-${app}`);
+    setFormPdfError(null);
+    try {
+      const resp = await api.applicantFormPdfUrl(form, app);
+      const url = resp.success && resp.data ? resp.data.pdf_url : null;
+      if (url) {
+        await forceDownloadFile(url, `FCC_Form_${form}_${app}_CERTIFIED.pdf`);
+      } else {
+        setFormPdfError(`No certified Form ${form} PDF is published by USAC for application ${app}${form === '471' ? ' (only original certified versions are available)' : ''}.`);
+      }
+    } catch {
+      setFormPdfError(`Could not fetch the Form ${form} PDF. Please try again.`);
+    } finally {
+      setPdfBusyApp(null);
+    }
+  };
+
   // Disbursement Data
   const loadDisbursements = async (year?: number, forceRefresh?: boolean) => {
     setDisbursementLoading(true);
@@ -815,6 +876,22 @@ function ApplicantDashboard() {
     return { total: frnsAll.length, funded, fundedAmt, denied, deniedAmt, pending, pendingAmt };
   }, [data?.frns]);
 
+  // Compliance: distinct FCC applications (for Form 470/471 PDF download) and
+  // the FRNs USAC has flagged for PIA (Program Integrity Assurance) review.
+  const applicationList = useMemo(() => {
+    const map = new Map<string, { application_number: string; funding_year: number; frn_count: number }>();
+    (data?.frns || []).forEach((f) => {
+      const app = (f.application_number || "").trim();
+      if (!app) return;
+      if (!map.has(app)) map.set(app, { application_number: app, funding_year: f.funding_year, frn_count: 0 });
+      map.get(app)!.frn_count += 1;
+    });
+    return Array.from(map.values()).sort((a, b) => b.funding_year - a.funding_year || a.application_number.localeCompare(b.application_number));
+  }, [data?.frns]);
+  const piaFrns = useMemo(() => {
+    return (data?.frns || []).filter((f) => /pia|program integrity|information requested|selected for review/i.test(f.review_stage || ""));
+  }, [data?.frns]);
+
   // Show loading spinner while store hydrates from localStorage
   if (!_hasHydrated) {
     return (
@@ -888,10 +965,14 @@ function ApplicantDashboard() {
     ]},
     { label: "Funding & Compliance", items: [
       { id: "disbursements", label: "Funding & Invoicing", Icon: Coins },
+      { id: "compliance", label: "Compliance", Icon: Shield },
       { id: "appeals", label: "Appeals", Icon: Scale, count: appeals.length },
     ]},
     { label: "Activity", items: [
       { id: "changes", label: "Updates", Icon: Bell, count: summary.unread_changes },
+    ]},
+    { label: "Account", items: [
+      { id: "settings", label: "Settings", Icon: Settings },
     ]},
   ];
   const allNav = navGroups.flatMap((g) => g.items);
@@ -2013,6 +2094,135 @@ function ApplicantDashboard() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {selectedTab === 'compliance' && (
+          <div className="space-y-6">
+            {/* Header */}
+            <div>
+              <h1 className={`text-xl font-bold ${tInk}`}>Compliance</h1>
+              <p className={`text-sm ${tMuted}`}>Download your certified FCC forms, track PIA reviews, and manage appeals.</p>
+            </div>
+
+            {formPdfError && (
+              <div className={`rounded-xl border p-4 text-sm ${dark ? 'border-amber-500/40 bg-amber-500/10 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>{formPdfError}</div>
+            )}
+
+            {/* Certified FCC Forms */}
+            <div className={`rounded-xl border ${tCard}`}>
+              <div className={`px-5 py-4 border-b ${tBorder} flex items-center gap-2`}>
+                <FileText className={`w-4 h-4 ${tMuted}`} />
+                <div>
+                  <h2 className={`font-semibold ${tInk}`}>Certified FCC Forms</h2>
+                  <p className={`text-xs ${tMuted}`}>Download the actual certified Form 470 &amp; Form 471 PDFs straight from USAC.</p>
+                </div>
+              </div>
+              {applicationList.length > 0 ? (
+                <div className={`divide-y ${dark ? 'divide-slate-800' : 'divide-slate-100'}`}>
+                  {applicationList.map((app) => (
+                    <div key={app.application_number} className="px-5 py-3 flex items-center justify-between gap-4 flex-wrap">
+                      <div className="min-w-0">
+                        <div className={`font-mono text-sm ${tInk}`}>Application {app.application_number}</div>
+                        <div className={`text-xs ${tMuted}`}>FY{app.funding_year} · {app.frn_count} FRN{app.frn_count !== 1 ? 's' : ''}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => downloadFormPdf('470', app.application_number)} disabled={pdfBusyApp === `470-${app.application_number}`} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white">
+                          {pdfBusyApp === `470-${app.application_number}` ? <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Download className="w-3.5 h-3.5" />} Form 470 PDF
+                        </button>
+                        <button onClick={() => downloadFormPdf('471', app.application_number)} disabled={pdfBusyApp === `471-${app.application_number}`} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border disabled:opacity-50 ${dark ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-300 text-slate-700 hover:bg-slate-100'}`}>
+                          {pdfBusyApp === `471-${app.application_number}` ? <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Download className="w-3.5 h-3.5" />} Form 471 PDF
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className={`px-5 py-8 text-center text-sm ${tMuted}`}>No applications found for your registered BENs yet.</div>
+              )}
+            </div>
+
+            {/* FRNs under USAC review (PIA) */}
+            <div className={`rounded-xl border ${tCard}`}>
+              <div className={`px-5 py-4 border-b ${tBorder} flex items-center gap-2`}>
+                <Shield className={`w-4 h-4 ${tMuted}`} />
+                <div>
+                  <h2 className={`font-semibold ${tInk}`}>FRNs under USAC review (PIA)</h2>
+                  <p className={`text-xs ${tMuted}`}>Funding requests USAC has flagged for Program Integrity Assurance review.</p>
+                </div>
+              </div>
+              {piaFrns.length > 0 ? (
+                <div className={`divide-y ${dark ? 'divide-slate-800' : 'divide-slate-100'}`}>
+                  {piaFrns.map((f) => (
+                    <div key={f.id} className="px-5 py-3 flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className={`font-mono text-sm ${tInk}`}>FRN {f.frn}</div>
+                        <div className={`text-xs ${tMuted} truncate`}>FY{f.funding_year} · {f.service_type || 'Service'}</div>
+                      </div>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${dark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>{f.review_stage || 'In review'}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className={`px-5 py-8 text-center text-sm ${tMuted}`}>None of your FRNs are currently flagged for PIA review.</div>
+              )}
+            </div>
+
+            {/* Appeals */}
+            <div className={`rounded-xl border p-5 ${tCard} flex items-center justify-between gap-4 flex-wrap`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${dark ? 'bg-red-500/15 text-red-300' : 'bg-red-100 text-red-600'}`}><Scale className="w-5 h-5" /></div>
+                <div>
+                  <h2 className={`font-semibold ${tInk}`}>Appeals</h2>
+                  <p className={`text-xs ${tMuted}`}>{appeals.length > 0 ? `${appeals.length} AI-drafted appeal${appeals.length !== 1 ? 's' : ''} ready to review.` : 'No denials to appeal right now.'}</p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedTab('appeals')} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white">Open Appeals <ChevronRight className="w-4 h-4" /></button>
+            </div>
+          </div>
+        )}
+
+        {selectedTab === 'settings' && (
+          <div className="space-y-6">
+            <div>
+              <h1 className={`text-xl font-bold ${tInk}`}>Settings</h1>
+              <p className={`text-sm ${tMuted}`}>Manage your notification preferences and the E-Rate entities you track.</p>
+            </div>
+
+            {/* Notification preferences */}
+            <div className={`rounded-xl border p-5 ${tCard} flex items-center justify-between gap-4 flex-wrap`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${dark ? 'bg-purple-500/15 text-purple-300' : 'bg-purple-100 text-purple-600'}`}><Bell className="w-5 h-5" /></div>
+                <div>
+                  <h2 className={`font-semibold ${tInk}`}>Notification preferences</h2>
+                  <p className={`text-xs ${tMuted}`}>Choose which alerts you receive by email, SMS, and in-app — denials, status changes, deadlines, disbursements, and more.</p>
+                </div>
+              </div>
+              <button onClick={() => router.push('/settings/notifications')} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white">Manage notifications <ExternalLink className="w-4 h-4" /></button>
+            </div>
+
+            {/* Manage entities (BENs) */}
+            <div className={`rounded-xl border p-5 ${tCard} flex items-center justify-between gap-4 flex-wrap`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${dark ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-100 text-emerald-600'}`}><Building2 className="w-5 h-5" /></div>
+                <div>
+                  <h2 className={`font-semibold ${tInk}`}>Entities (BENs)</h2>
+                  <p className={`text-xs ${tMuted}`}>Add or remove the Billed Entity Numbers you track. SkyRate syncs each new entity&apos;s FRNs, funding, and disbursements automatically.</p>
+                </div>
+              </div>
+              <button onClick={() => router.push('/settings/bens')} className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border ${dark ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-300 text-slate-700 hover:bg-slate-100'}`}>Manage &amp; add entities <ExternalLink className="w-4 h-4" /></button>
+            </div>
+
+            {/* Account */}
+            <div className={`rounded-xl border p-5 ${tCard}`}>
+              <h2 className={`font-semibold mb-2 ${tInk}`}>Account</h2>
+              <div className={`text-sm space-y-1 ${tMuted}`}>
+                <div>Signed in as <span className={tInk}>{user?.email}</span></div>
+                {profile?.organization_name && <div>Organization: <span className={tInk}>{profile.organization_name}</span></div>}
+                {profile?.ben && <div>Primary BEN: <span className={`font-mono ${tInk}`}>{profile.ben}</span></div>}
+              </div>
+              <button onClick={handleLogout} className={`mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border ${dark ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-300 text-slate-700 hover:bg-slate-100'}`}><LogOut className="w-4 h-4" /> Sign out</button>
+            </div>
           </div>
         )}
 

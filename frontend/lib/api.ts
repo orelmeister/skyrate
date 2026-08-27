@@ -4321,6 +4321,15 @@ class ApiClient {
     return this.request(`/api/v1/applicant/disbursements${queryString}`);
   }
 
+  /**
+   * Resolve the actual certified Form 470/471 PDF URL from USAC Open Data
+   * (applicant portal Compliance). Mirrors consultantFormPdfUrl/vendorFormPdfUrl.
+   */
+  async applicantFormPdfUrl(form: '470' | '471', applicationNumber: string): Promise<ApiResponse<{ form: string; application_number: string; pdf_url: string | null }>> {
+    const params = new URLSearchParams({ form, application_number: applicationNumber });
+    return this.request(`/api/v1/applicant/form-pdf?${params.toString()}`);
+  }
+
   // ==================== ERATEAPP PORTAL (Phase-1 embed/SSO) ====================
 
   /**

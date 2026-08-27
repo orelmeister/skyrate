@@ -1746,3 +1746,75 @@ async def upsert_applicant_frn_tracking(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Could not save tracking")
 
     return {"success": True, "tracking": row.to_dict()}
+
+
+# ==================== COMPLIANCE: CERTIFIED FORM 470/471 PDF ====================
+# Resolve the actual certified FCC Form 470/471 PDF URL from USAC Open Data.
+# Mirrors the consultant/vendor form-pdf resolver exactly; the applicant portal
+# only passes application numbers from the applicant's OWN FRNs and the resolved
+# PDF is public USAC data hosted on publicdata.usac.org.
+
+@router.get("/form-pdf")
+async def applicant_form_pdf_url(
+    form: str,
+    application_number: str,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    - Form 470: dataset jp7a-89nd, column f470_number (URL to the submitted PDF).
+    - Form 471: dataset 9s6i-myen, column file_url on the Original form version
+      (the certified Form 471 PDF). Current-version PDFs are not published.
+    """
+    if current_user.role not in [UserRole.APPLICANT.value, "admin", "super"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants only")
+
+    form = (form or "").strip()
+    app_num = (application_number or "").strip()
+    if form not in ("470", "471"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="form must be '470' or '471'")
+    if not app_num.isdigit():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="application_number must be numeric")
+
+    try:
+        import requests
+        from utils.usac_cache import get_or_cache
+
+        def _fetch():
+            if form == "470":
+                url = (
+                    "https://opendata.usac.org/resource/jp7a-89nd.json"
+                    f"?application_number={app_num}&$select=f470_number&$limit=1"
+                )
+            else:
+                url = (
+                    "https://opendata.usac.org/resource/9s6i-myen.json"
+                    f"?application_number={app_num}&form_version=Original"
+                    "&$select=file_url&$limit=1"
+                )
+            resp = requests.get(url, timeout=30)
+            resp.raise_for_status()
+            rows = resp.json() or []
+            if not rows:
+                return {"pdf_url": None}
+            row = rows[0]
+            raw = row.get("f470_number") if form == "470" else row.get("file_url")
+            # Socrata URL columns come back as {"url": "..."}; plain columns as str.
+            if isinstance(raw, dict):
+                raw = raw.get("url")
+            return {"pdf_url": raw or None}
+
+        result = get_or_cache(
+            namespace="form_pdf_url",
+            params={"form": form, "app": app_num},
+            ttl_hours=168,
+            fetch_fn=_fetch,
+        )
+        return {"form": form, "application_number": app_num, "pdf_url": result.get("pdf_url")}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to resolve Form {form} PDF: {str(e)}",
+        )
