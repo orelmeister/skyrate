@@ -1415,7 +1415,7 @@ class USACDataClient:
         self,
         spin: str,
         year: Optional[int] = None,
-        limit: int = 2000
+        limit: int = 5000
     ) -> Dict[str, Any]:
         """
         Find competing vendors at entities that this SPIN has serviced.
@@ -1445,76 +1445,98 @@ class USACDataClient:
             # Get list of BENs
             bens = [e['ben'] for e in entities_data['entities'][:50]]  # Limit to top 50
             
-            # Fetch 471 data for these entities
+            # Fetch 471 line-item data for these entities from the Recipient
+            # Details & Commitments dataset (avi8-svp9).
             url = "https://opendata.usac.org/resource/avi8-svp9.json"
-            
-            # Build query for multiple BENs
+
+            # Match BOTH columns: entities appear as billed_entity_number (direct
+            # applicants) or ros_entity_number (consortium recipients). Matching
+            # only ros_entity_number silently dropped direct-applicant entities.
             ben_list = "', '".join(bens)
-            where_clause = f"ros_entity_number IN ('{ben_list}')"
-            
+            where_clause = (
+                f"(billed_entity_number IN ('{ben_list}') "
+                f"OR ros_entity_number IN ('{ben_list}'))"
+            )
+
             if year:
                 where_clause += f" AND funding_year = '{year}'"
-            
+
             params = {
                 '$where': where_clause,
                 '$limit': limit,
                 '$order': 'funding_year DESC'
             }
-            
+
             logger.info(f"Fetching competitor data for SPIN {spin} across {len(bens)} entities")
-            response = self.session.get(url, params=params, timeout=90)
+            response = self.session.get(url, params=params, timeout=45)
             response.raise_for_status()
-            
+
             data = response.json()
-            
-            # Track competitors (excluding self)
-            competitors = {}
-            my_frns = 0
-            competitor_frns = 0
-            
+
+            # avi8-svp9 is line-item level, so dedupe FRNs per vendor. The service
+            # provider is identified by spin_number / spin_name (NOT
+            # service_provider_number/name, which do not exist on this dataset).
+            # There is no committed-amount column; post-discount extended eligible
+            # line-item cost is the funded-dollar proxy.
+            competitors: Dict[str, Any] = {}
+            my_frn_set = set()
+            competitor_frn_set = set()
+
             for record in data:
-                vendor_spin = record.get('service_provider_number', '')
-                vendor_name = record.get('service_provider_name', '')
-                committed = float(record.get('total_committed_amount', 0) or 0)
-                
-                if vendor_spin == spin:
-                    my_frns += 1
-                    continue
-                
+                vendor_spin = str(record.get('spin_number', '') or record.get('service_provider_number', '') or '')
+                vendor_name = record.get('spin_name', '') or record.get('service_provider_name', '') or ''
+                frn = str(record.get('funding_request_number', '') or '')
+                entity = str(record.get('billed_entity_number', '') or record.get('ros_entity_number', '') or '')
+                committed = float(
+                    record.get('post_discount_extended_eligible_line_item_costs', 0)
+                    or record.get('pre_discount_extended_eligible_line_item_costs', 0)
+                    or 0
+                )
+
                 if not vendor_spin:
                     continue
-                
-                competitor_frns += 1
-                
+
+                if vendor_spin == spin:
+                    my_frn_set.add(frn)
+                    continue
+
+                competitor_frn_set.add(frn)
+
                 if vendor_spin not in competitors:
                     competitors[vendor_spin] = {
                         'spin': vendor_spin,
                         'name': vendor_name,
-                        'frn_count': 0,
-                        'total_committed': 0,
+                        'frns': set(),
+                        'total_committed': 0.0,
                         'entities': set()
                     }
-                
-                competitors[vendor_spin]['frn_count'] += 1
-                competitors[vendor_spin]['total_committed'] += committed
-                competitors[vendor_spin]['entities'].add(record.get('ros_entity_number', ''))
-            
+
+                comp = competitors[vendor_spin]
+                if vendor_name and not comp['name']:
+                    comp['name'] = vendor_name
+                comp['frns'].add(frn)
+                comp['total_committed'] += committed
+                if entity:
+                    comp['entities'].add(entity)
+
             # Convert sets to counts
             competitor_list = []
             for comp in competitors.values():
+                comp['frn_count'] = len(comp['frns'])
                 comp['entity_count'] = len(comp['entities'])
+                del comp['frns']
                 del comp['entities']
                 competitor_list.append(comp)
-            
-            # Sort by total committed
+
+            # Sort by funded dollars
             competitor_list.sort(key=lambda x: x['total_committed'], reverse=True)
-            
+
             return {
                 'success': True,
                 'spin': spin,
                 'entities_analyzed': len(bens),
-                'my_frn_count': my_frns,
-                'competitor_frn_count': competitor_frns,
+                'my_frn_count': len(my_frn_set),
+                'competitor_frn_count': len(competitor_frn_set),
                 'competitors': competitor_list[:20]  # Top 20 competitors
             }
             
