@@ -5,6 +5,39 @@ import { api } from "@/lib/api";
 import { SkeletonRows, SkeletonStatCards } from "@/components/Skeleton";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 
+// Resolve + download a file (used for the certified Form 471 PDF from USAC).
+// USAC certified PDFs live on publicdata.usac.org and block cross-origin fetch,
+// so route those through the backend proxy; fall back to opening in a new tab.
+async function forceDownloadFile(url: string, suggestedFilename?: string): Promise<void> {
+  try {
+    let fetchUrl = url;
+    try {
+      const u = new URL(url);
+      if (u.hostname === "publicdata.usac.org") {
+        fetchUrl = `/api/v1/vendor/rfp-download?url=${encodeURIComponent(url)}`;
+      }
+    } catch { /* not a parseable URL - direct fetch */ }
+    const response = await fetch(fetchUrl, { method: "GET", credentials: "same-origin" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    let filename = suggestedFilename || url.split("/").pop() || "document.pdf";
+    try { filename = decodeURIComponent(filename); } catch { /* leave as-is */ }
+    filename = filename.replace(/^\d+-/, "").replace(/\s+/g, " ").trim() || "document";
+    const a = document.createElement("a");
+    a.style.display = "none";
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(blobUrl);
+    document.body.removeChild(a);
+  } catch (err) {
+    console.error("forceDownloadFile failed, falling back to new-tab open:", err);
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+}
+
 // Types
 interface PredictedLead {
   id: number;
@@ -360,6 +393,45 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
       // swallow; button re-enables in finally
     } finally {
       setDownload471Loading(false);
+    }
+  };
+
+  // Download the REAL certified Form 471 PDF from USAC (Ari loom-1 #4 - the CSV
+  // "isn't real"). Resolve the 471 application number, then the certified file.
+  const [pdf471Loading, setPdf471Loading] = useState(false);
+  const [pdf471Error, setPdf471Error] = useState<string | null>(null);
+  const downloadForm471PDF = async () => {
+    if (!selectedLead) return;
+    setPdf471Loading(true);
+    setPdf471Error(null);
+    try {
+      const yr = selectedLead.funding_year ? Number(selectedLead.funding_year) : undefined;
+      // The certified PDF is keyed by the 471 application number. Prefer the one
+      // on the prediction; otherwise resolve it from the entity's 471 records.
+      let appNum = (selectedLead.application_number || "").trim();
+      if (!appNum && selectedLead.ben) {
+        const rec = await api.get471ByEntity(selectedLead.ben, yr);
+        if (rec.success && rec.data && rec.data.records.length > 0) {
+          const records = rec.data.records;
+          const match = selectedLead.frn ? records.find((r) => r.frn === selectedLead.frn) : undefined;
+          appNum = (match?.application_number || records[0].application_number || "").trim();
+        }
+      }
+      if (!appNum) {
+        setPdf471Error("No certified Form 471 application found for this entity yet.");
+        return;
+      }
+      const resp = await api.vendorFormPdfUrl('471', appNum);
+      const url = resp.success && resp.data ? resp.data.pdf_url : null;
+      if (url) {
+        await forceDownloadFile(url, `FCC_Form_471_${appNum}_CERTIFIED.pdf`);
+      } else {
+        setPdf471Error("USAC has not published a certified Form 471 PDF for this application yet.");
+      }
+    } catch {
+      setPdf471Error("Could not fetch the Form 471 PDF. Please try again.");
+    } finally {
+      setPdf471Loading(false);
     }
   };
 
@@ -987,15 +1059,25 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                 </button>
               )}
 
-              {/* Download the Form 471 contract data (Ari #1) */}
+              {/* Download the REAL certified Form 471 PDF (Ari loom-1 #4) + line-item CSV */}
               {selectedLead.ben && (
-                <button
-                  onClick={downloadForm471}
-                  disabled={download471Loading}
-                  className="w-full px-3 py-2 mb-3 bg-white border border-emerald-300 text-emerald-700 rounded-xl text-sm font-medium hover:bg-emerald-50 transition-all disabled:opacity-50"
-                >
-                  {download471Loading ? "Preparing…" : "⬇️ Download Form 471 (CSV)"}
-                </button>
+                <div className="mb-3 space-y-2">
+                  <button
+                    onClick={downloadForm471PDF}
+                    disabled={pdf471Loading}
+                    className="w-full px-3 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-all disabled:opacity-50"
+                  >
+                    {pdf471Loading ? "Preparing…" : `⬇️ Download Form 471 PDF${selectedLead.funding_year ? ` (FY${selectedLead.funding_year})` : ""}`}
+                  </button>
+                  <button
+                    onClick={downloadForm471}
+                    disabled={download471Loading}
+                    className="w-full px-3 py-1.5 bg-white border border-emerald-300 text-emerald-700 rounded-xl text-xs font-medium hover:bg-emerald-50 transition-all disabled:opacity-50"
+                  >
+                    {download471Loading ? "Preparing…" : "Line items (CSV)"}
+                  </button>
+                  {pdf471Error && <p className="text-xs text-amber-700">{pdf471Error}</p>}
+                </div>
               )}
 
               {/* Form 470 filing status — has this entity posted a 470 this cycle? */}
