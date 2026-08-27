@@ -1787,6 +1787,33 @@ function VendorPortalPage() {
     return `https://www.linkedin.com/search/results/people/?keywords=${encodedKeywords}`;
   };
 
+  // Build a reliable "Contact Entity" mailto (Ari loom-1 #8) with a useful
+  // prefilled subject + short professional body. Returns null when there is no
+  // recipient email so callers can disable the button instead of producing a
+  // broken mailto: link.
+  const buildEntityMailto = (opts: { email?: string | null; entityName?: string | null; appNumber?: string | null; contactName?: string | null; service?: string | null }): string | null => {
+    const email = (opts.email || '').trim();
+    if (!email) return null;
+    const app = (opts.appNumber || '').trim();
+    const subject = app ? `Regarding Form 470 #${app}` : 'Regarding your E-Rate services';
+    const firstName = (opts.contactName || '').trim().split(/\s+/)[0] || '';
+    const greeting = firstName ? `Hello ${firstName},` : 'Hello,';
+    const entity = (opts.entityName || 'your organization').trim();
+    const svc = (opts.service || '').trim();
+    const svcPhrase = svc ? ` for your ${svc} needs` : '';
+    const projectRef = app ? `Form 470 (#${app})` : 'E-Rate procurement';
+    const body = [
+      greeting,
+      '',
+      `I'm reaching out regarding ${entity}'s ${projectRef}${svcPhrase}. We'd welcome the opportunity to submit a competitive bid and support your E-Rate project.`,
+      '',
+      'Would you have time for a brief call to discuss your requirements and timeline?',
+      '',
+      'Thank you,',
+    ].join('\n');
+    return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  };
+
   const handleSearch = async (e: React.FormEvent | null, opts?: { page?: number }) => {
     if (e && 'preventDefault' in e) e.preventDefault();
     setIsLoading(true);
@@ -6415,16 +6442,39 @@ function VendorPortalPage() {
                 </button>
               )}
               
-              {/* Contact Email Button */}
-              {form470Detail?.contact?.email && (
-                <a
-                  href={`mailto:${form470Detail.contact.email}?subject=Regarding Form 470 ${form470Detail.application_number}`}
-                  className="px-4 py-2 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors flex items-center gap-2"
-                >
-                  <span>📧</span>
-                  Contact Entity
-                </a>
-              )}
+              {/* Contact Entity (Ari loom-1 #8): prefilled subject + body; when
+                  there's no contact email, disable with an explanatory tooltip
+                  instead of producing a broken mailto: link. */}
+              {(() => {
+                const svc = form470Detail?.category_two_description || form470Detail?.category_one_description
+                  || (form470Detail?.service_types && form470Detail.service_types.length ? form470Detail.service_types.join(', ') : '');
+                const href = buildEntityMailto({
+                  email: form470Detail?.contact?.email,
+                  entityName: form470Detail?.entity?.name,
+                  appNumber: form470Detail?.application_number,
+                  contactName: form470Detail?.contact?.name,
+                  service: svc,
+                });
+                return href ? (
+                  <a
+                    href={href}
+                    className="px-4 py-2 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors flex items-center gap-2"
+                  >
+                    <span>📧</span>
+                    Contact Entity
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    title="No contact email on file for this Form 470 — try Find Staff to locate a contact."
+                    className="px-4 py-2 bg-slate-200 text-slate-400 rounded-xl flex items-center gap-2 cursor-not-allowed"
+                  >
+                    <span>📧</span>
+                    Contact Entity
+                  </button>
+                );
+              })()}
               
               {/* LinkedIn Search for Organization */}
               {form470Detail?.entity?.name && (
@@ -7095,14 +7145,30 @@ function VendorPortalPage() {
             
             {/* Modal Footer */}
             <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center gap-3">
-              {selectedSavedLeadDetail.contact_email && (
-                <a
-                  href={`mailto:${selectedSavedLeadDetail.contact_email}?subject=Regarding E-Rate Services for ${selectedSavedLeadDetail.entity_name || selectedSavedLeadDetail.ben}`}
-                  className="px-4 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-2"
-                >
-                  📧 Contact Entity
-                </a>
-              )}
+              {(() => {
+                const href = buildEntityMailto({
+                  email: selectedSavedLeadDetail.contact_email,
+                  entityName: selectedSavedLeadDetail.entity_name,
+                  contactName: selectedSavedLeadDetail.contact_name,
+                });
+                return href ? (
+                  <a
+                    href={href}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors flex items-center gap-2"
+                  >
+                    📧 Contact Entity
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    title="No contact email on file for this lead."
+                    className="px-4 py-2 bg-slate-200 text-slate-400 rounded-xl flex items-center gap-2 cursor-not-allowed"
+                  >
+                    📧 Contact Entity
+                  </button>
+                );
+              })()}
               {selectedSavedLeadDetail.entity_name && (
                 <a
                   href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(selectedSavedLeadDetail.entity_name)}`}
