@@ -81,6 +81,13 @@ async function forceDownloadFile(url: string, suggestedFilename?: string): Promi
   }
 }
 
+// Upcoming E-Rate funding year using the USAC July-1 cutover: from July onward
+// the active filing cycle is next calendar year's FY (e.g. Aug 2026 -> FY2027).
+function getUpcomingFundingYear(): number {
+  const now = new Date();
+  return now.getMonth() + 1 >= 7 ? now.getFullYear() + 1 : now.getFullYear();
+}
+
 // ---------------------------------------------------------------------------
 // VendorCommandCenter
 // Dark, bento-style "command center" home for the vendor portal. Mirrors the
@@ -803,7 +810,8 @@ function VendorPortalPage() {
     sort_by?: string;
     min_deal_value?: number;
     max_deal_value?: number;
-  }>({});
+    name?: string;
+  }>({ year: getUpcomingFundingYear() });
   const [form470TotalLeads, setForm470TotalLeads] = useState(0);
   const [form470Detail, setForm470Detail] = useState<Form470DetailResponse | null>(null);
   const [form470DetailLoading, setForm470DetailLoading] = useState(false);
@@ -1421,6 +1429,7 @@ function VendorPortalPage() {
     sort_by?: string;
     min_deal_value?: number;
     max_deal_value?: number;
+    name?: string;
   }) => {
     setForm470Loading(true);
     setForm470Error(null);
@@ -2068,9 +2077,9 @@ function VendorPortalPage() {
       { id: "dashboard", label: "Dashboard", Icon: Home },
     ]},
     { label: "Opportunities", items: [
+      { id: "predicted-leads", label: "Predicted Leads", Icon: Sparkles },
       { id: "470-leads", label: "Form 470 Leads", Icon: Target },
       { id: "map", label: "Opportunity Map", Icon: MapIcon },
-      { id: "predicted-leads", label: "Predicted Leads", Icon: Sparkles },
       { id: "leads", label: "Saved Leads", Icon: Bookmark },
     ]},
     { label: "Your Customers", items: [
@@ -3277,19 +3286,32 @@ function VendorPortalPage() {
             <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-900 mb-4">Search Filters</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Year Filter */}
+                {/* Year Filter - defaults to the upcoming funding year (Ari loom-1 #4/#7) */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">Funding Year</label>
                   <select
-                    value={form470Filters.year || ""}
+                    value={form470Filters.year ?? ""}
                     onChange={(e) => setForm470Filters({ ...form470Filters, year: e.target.value ? parseInt(e.target.value) : undefined })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                   >
-                    <option value="">Current/Next Year</option>
-                    {[2026, 2025, 2024, 2023, 2022].map((year) => (
-                      <option key={year} value={year}>{year}</option>
+                    <option value="">All Years</option>
+                    {(() => { const uy = getUpcomingFundingYear(); return [uy, uy - 1, uy - 2, uy - 3, uy - 4, uy - 5]; })().map((year) => (
+                      <option key={year} value={year}>FY{year}{year === getUpcomingFundingYear() ? " (upcoming)" : ""}</option>
                     ))}
                   </select>
+                </div>
+
+                {/* Applicant Name search - search by name, not just BEN (Ari loom-1 #6) */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Applicant Name</label>
+                  <input
+                    type="text"
+                    value={form470Filters.name || ""}
+                    onChange={(e) => setForm470Filters({ ...form470Filters, name: e.target.value || undefined })}
+                    onKeyDown={(e) => { if (e.key === 'Enter') load470Leads(form470Filters); }}
+                    placeholder="e.g., Lincoln, Battalion"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  />
                 </div>
 
                 {/* State Filter */}
@@ -3480,7 +3502,7 @@ function VendorPortalPage() {
                   )}
                 </button>
                 <button
-                  onClick={() => { setForm470Filters({}); load470Leads({}); }}
+                  onClick={() => { const f = { year: getUpcomingFundingYear() }; setForm470Filters(f); load470Leads(f); }}
                   className="px-4 py-2 text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors text-sm"
                 >
                   Clear Filters
