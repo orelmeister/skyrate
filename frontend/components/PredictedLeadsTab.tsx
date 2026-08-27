@@ -1032,9 +1032,13 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                         {formatCurrency(selectedLead.c2_budget_remaining)} / {formatCurrency(selectedLead.c2_budget_total)}
                       </span>
                     </div>
-                    {selectedLead.c2_budget_remaining ? (
+                    {typeof selectedLead.c2_budget_remaining === "number" && selectedLead.c2_budget_remaining > 0 ? (
                       <p className="text-[11px] text-green-600 -mt-1">
                         ≈ up to {formatCurrency(selectedLead.c2_budget_remaining)} available to spend this cycle
+                      </p>
+                    ) : typeof selectedLead.c2_budget_remaining === "number" && selectedLead.c2_budget_remaining <= 0 ? (
+                      <p className="text-[11px] text-amber-600 -mt-1">
+                        C2 budget fully committed this cycle
                       </p>
                     ) : null}
                   </>
@@ -1091,9 +1095,13 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                             {formatCurrency(c2Budget.remaining)} / {formatCurrency(c2Budget.total)}
                           </span>
                         </div>
-                        {c2Budget.remaining ? (
+                        {typeof c2Budget.remaining === "number" && c2Budget.remaining > 0 ? (
                           <p className="text-[11px] text-green-600 mt-1">
                             ≈ up to {formatCurrency(c2Budget.remaining)} available to spend this cycle
+                          </p>
+                        ) : typeof c2Budget.remaining === "number" && c2Budget.remaining <= 0 ? (
+                          <p className="text-[11px] text-amber-600 mt-1">
+                            C2 budget fully committed this cycle
                           </p>
                         ) : null}
                       </>
