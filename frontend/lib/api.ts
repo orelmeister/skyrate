@@ -2920,6 +2920,7 @@ class ApiClient {
     offset?: number;
     min_deal_value?: number;
     max_deal_value?: number;
+    name?: string;
   }): Promise<ApiResponse<Form470LeadsResponse>> {
     const params = new URLSearchParams();
     if (filters.year) params.append('year', filters.year.toString());
@@ -2936,6 +2937,7 @@ class ApiClient {
     if (filters.offset) params.append('offset', filters.offset.toString());
     if (filters.min_deal_value != null) params.append('min_deal_value', filters.min_deal_value.toString());
     if (filters.max_deal_value != null) params.append('max_deal_value', filters.max_deal_value.toString());
+    if (filters.name) params.append('name', filters.name);
     const queryString = params.toString();
     return this.request(`/api/v1/vendor/470/leads${queryString ? '?' + queryString : ''}`);
   }

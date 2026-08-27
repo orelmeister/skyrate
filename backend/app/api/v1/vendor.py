@@ -1437,6 +1437,7 @@ async def get_470_leads(
     year: Optional[int] = None,
     state: Optional[str] = None,
     category: Optional[str] = None,
+    name: Optional[str] = None,
     service_type: Optional[str] = None,
     manufacturer: Optional[str] = None,
     equipment_type: Optional[str] = None,
@@ -1485,6 +1486,8 @@ async def get_470_leads(
     def _build_query(q):
         if year:
             q = q.filter(VendorForm470Snapshot.funding_year == str(year))
+        if name:
+            q = q.filter(VendorForm470Snapshot.entity_name.ilike(f'%{name.strip()}%'))
         if state:
             q = q.filter(VendorForm470Snapshot.state == state.upper())
         if category:
@@ -1595,6 +1598,7 @@ async def get_470_leads(
                 "last_refreshed": last_refreshed.isoformat() if last_refreshed else None,
                 "filters_applied": {
                     "year": year, "state": state, "category": category,
+                    "name": name,
                     "service_type": service_type, "manufacturer": manufacturer,
                     "equipment_type": equipment_type, "service_function": service_function,
                     "min_speed": min_speed, "max_speed": max_speed,
@@ -1650,6 +1654,7 @@ async def get_470_leads(
                 "message": "Live USAC fetch timed out or failed. Showing cached data.",
                 "filters_applied": {
                     "year": year, "state": state, "category": category,
+                    "name": name,
                     "service_type": service_type, "manufacturer": manufacturer,
                 },
             }
