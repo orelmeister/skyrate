@@ -4,21 +4,21 @@ import { Check, ArrowRight, Bell, Activity, Clock, Mail, BarChart3, Shield, Data
 import FrnLookupClient from "@/app/tools/frn-tracker/FrnLookupClient";
 
 export const metadata: Metadata = {
-  title: "FRN Tracker & Status Checker 2026 — Free E-Rate FRN Lookup | SkyRate",
-  description: "Check any E-Rate FRN's status free in seconds — no signup. Or automate it: real-time USAC alerts the moment your funding is committed, denied, or flagged. Updated July 2026.",
+  title: "FRN Status Checker 2026 — Free E-Rate FRN Tracker & Lookup | SkyRate",
+  description: "Check your E-Rate FRN status free in seconds — no signup. See if funding is committed, pending, denied, or flagged, then get real-time USAC alerts on every status change. Updated August 2026.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/features/frn-monitoring" },
   openGraph: {
-    title: "FRN Tracker & Status Checker 2026 — Free E-Rate FRN Lookup | SkyRate",
-    description: "Check any E-Rate FRN's status free in seconds — no signup. Or automate it: real-time USAC alerts when funding is committed, denied, or flagged. Updated July 2026.",
+    title: "FRN Status Checker 2026 — Free E-Rate FRN Tracker & Lookup | SkyRate",
+    description: "Check your E-Rate FRN status free in seconds — no signup. See if funding is committed, pending, denied, or flagged, then get real-time USAC alerts on every status change. Updated August 2026.",
     url: "https://skyrate.ai/features/frn-monitoring",
     siteName: "SkyRate AI",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "FRN Tracker & Status Checker 2026 — Free E-Rate FRN Lookup | SkyRate",
-    description: "Check any E-Rate FRN's status free in seconds — no signup. Or automate real-time USAC alerts when funding is committed, denied, or flagged. Updated July 2026.",
+    title: "FRN Status Checker 2026 — Free E-Rate FRN Tracker & Lookup | SkyRate",
+    description: "Check your E-Rate FRN status free in seconds — no signup. See if funding is committed, pending, denied, or flagged, then get real-time USAC alerts on every status change. Updated August 2026.",
   },
 };
 
