@@ -258,7 +258,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
   const [c2BudgetLoading, setC2BudgetLoading] = useState(false);
   // AI "today's equivalent equipment cost" estimate (Ari loom Q1c), fetched
   // on-demand for equipment_refresh leads. Cached server-side; hidden on failure.
-  const [equipEstimate, setEquipEstimate] = useState<{ estimate: number; rationale: string } | null>(null);
+  const [equipEstimate, setEquipEstimate] = useState<{ estimate: number; rationale: string; qty: number | null; deploymentTotal: number | null } | null>(null);
   const [equipEstimateLoading, setEquipEstimateLoading] = useState(false);
   // Switching signals inferred from USAC filing history (Ari loom Q2).
   const [switchSignals, setSwitchSignals] = useState<SwitchingSignalsResponse["signals"] | null>(null);
@@ -400,10 +400,15 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
     if (lead.prediction_type !== "equipment_refresh" || (!mfr && !mdl)) return;
     setEquipEstimateLoading(true);
     try {
-      const res = await api.getEquipmentEstimate(mfr, mdl, undefined, lead.funding_year ?? undefined, lead.estimated_deal_value ?? undefined);
+      const res = await api.getEquipmentEstimate(mfr, mdl, undefined, lead.funding_year ?? undefined, lead.estimated_deal_value ?? undefined, lead.frn ?? undefined);
       const d = res.data;
       if (d && d.success && d.found && typeof d.estimate_usd === "number" && d.estimate_usd > 0) {
-        setEquipEstimate({ estimate: d.estimate_usd, rationale: d.rationale || "" });
+        setEquipEstimate({
+          estimate: d.estimate_usd,
+          rationale: d.rationale || "",
+          qty: typeof d.qty === "number" && d.qty > 0 ? d.qty : null,
+          deploymentTotal: typeof d.deployment_total === "number" && d.deployment_total > 0 ? d.deployment_total : null,
+        });
       } else {
         setEquipEstimate(null);
       }
@@ -1158,14 +1163,29 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                         </div>
                       ) : equipEstimate ? (
                         <div className="pt-1.5 border-t border-blue-200/60">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-slate-500">AI: current unit price (equivalent gear)</span>
-                            <span className="font-bold text-purple-700">{formatCurrency(equipEstimate.estimate)}</span>
-                          </div>
-                          {equipEstimate.rationale ? (
-                            <p className="text-[11px] text-slate-500 mt-0.5">{equipEstimate.rationale}</p>
-                          ) : null}
-                          <p className="text-[11px] text-slate-400">Per-unit street price. Rough AI estimate, not a quote.</p>
+                          {equipEstimate.deploymentTotal && equipEstimate.qty ? (
+                            <>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-slate-500">AI deployment estimate (equivalent gear)</span>
+                                <span className="font-bold text-purple-700">{formatCurrency(equipEstimate.deploymentTotal)}</span>
+                              </div>
+                              {equipEstimate.rationale ? (
+                                <p className="text-[11px] text-slate-500 mt-0.5">{equipEstimate.rationale}</p>
+                              ) : null}
+                              <p className="text-[11px] text-slate-400">&asymp; {equipEstimate.qty.toLocaleString()} unit{equipEstimate.qty === 1 ? "" : "s"} &times; {formatCurrency(equipEstimate.estimate)} each &mdash; rough AI estimate, not a quote.</p>
+                            </>
+                          ) : (
+                            <>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-slate-500">AI: current unit price (equivalent gear)</span>
+                                <span className="font-bold text-purple-700">{formatCurrency(equipEstimate.estimate)}</span>
+                              </div>
+                              {equipEstimate.rationale ? (
+                                <p className="text-[11px] text-slate-500 mt-0.5">{equipEstimate.rationale}</p>
+                              ) : null}
+                              <p className="text-[11px] text-slate-400">Per-unit street price. Rough AI estimate, not a quote.</p>
+                            </>
+                          )}
                         </div>
                       ) : null}
                     </div>

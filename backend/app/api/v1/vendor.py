@@ -2205,18 +2205,22 @@ async def get_equipment_estimate(
     qty: Optional[int] = None,
     year: Optional[int] = None,
     original_cost: Optional[float] = None,
+    frn: str = "",
     current_user: User = Depends(require_role("admin", "vendor", "super")),
 ):
     """
-    AI "today's equivalent equipment cost" estimate for an equipment-refresh
-    predicted lead (Ari loom answers Q1c). The lead carries the ORIGINAL cost
-    from years ago; a vendor wants to know what it costs to buy the equivalent
-    current-generation gear TODAY. Calls Gemini for a single JSON estimate and
-    caches it (7d) keyed by manufacturer+model+qty so we never hammer the LLM.
+    AI equipment estimate for an equipment-refresh predicted lead (Ari loom
+    answers Q1c). The lead carries the ORIGINAL cost from years ago; a vendor
+    wants to know what it costs to buy the equivalent current-generation gear
+    TODAY. We ask Gemini for a dependable CURRENT PER-UNIT street price (cached
+    7d by manufacturer+model), then multiply by the deployment QUANTITY pulled
+    from the Form 471 line-item data for the lead's FRN to produce a true
+    DEPLOYMENT TOTAL (Ari 0827: the 471 data carries make/model AND quantity).
 
-    Returns {success:True, found:True, estimate_usd, rationale} on a good
-    estimate, or {success:False, found:False} on any failure/junk so the caller
-    hides the line (never crashes, never shows $0). Only successes are cached.
+    Returns {success, found, estimate_usd (per-unit), qty, deployment_total}.
+    If the quantity can't be resolved the per-unit price is still returned and
+    deployment_total is omitted, so nothing breaks. Failure/junk -> found:False
+    so the caller hides the line (never crashes, never shows $0).
     """
     mfr = (manufacturer or "").strip()
     mdl = (model or "").strip()
@@ -2225,6 +2229,7 @@ async def get_equipment_estimate(
 
     qty_val = qty if (isinstance(qty, int) and qty > 0) else None
     orig_cost = original_cost if (isinstance(original_cost, (int, float)) and original_cost > 0) else None
+    frn_clean = (frn or "").strip()
 
     def _fetch() -> Dict[str, Any]:
         from app.core.config import settings
@@ -2302,14 +2307,80 @@ async def get_equipment_estimate(
     except ImportError:
         from ...utils.usac_cache import get_or_cache
 
-    return await run_in_threadpool(
-        lambda: get_or_cache(
-            "vendor_equipment_estimate_v3",
+    def _resolve_qty() -> Optional[int]:
+        """Deployment quantity for this equipment. Prefer an explicit qty param;
+        otherwise sum the Form 471 line-item quantities for the lead's FRN that
+        match this model (fallback: all line items on the FRN). Cached 7d by
+        FRN+model since historical 471 filings never change."""
+        if qty_val:
+            return qty_val
+        if not frn_clean:
+            return None
+
+        def _fetch_qty() -> Dict[str, Any]:
+            try:
+                from utils.usac_client import USACDataClient
+            except ImportError:
+                from ...utils.usac_client import USACDataClient
+            try:
+                client = USACDataClient()
+                res = client.get_471_line_items(frn=frn_clean, limit=200)
+                items = (res or {}).get("line_items") or []
+                mdl_l = mdl.lower()
+                mfr_l = mfr.lower()
+                matched_total = 0
+                all_total = 0
+                for it in items:
+                    try:
+                        q = int(float(it.get("quantity") or 0))
+                    except (TypeError, ValueError):
+                        q = 0
+                    if q <= 0:
+                        continue
+                    all_total += q
+                    it_mdl = str(it.get("model") or "").lower()
+                    it_mfr = str(it.get("manufacturer") or "").lower()
+                    if (mdl_l and mdl_l in it_mdl) or (mfr_l and mfr_l in it_mfr):
+                        matched_total += q
+                total = matched_total or all_total
+                return {"success": True, "qty": total}
+            except Exception as ex:
+                import logging as _lg
+                _lg.getLogger(__name__).warning(f"equipment-estimate qty lookup failed (FRN {frn_clean}): {ex}")
+                return {"success": False, "qty": 0}
+
+        try:
+            qres = get_or_cache(
+                "vendor_equipment_qty_v1",
+                {"frn": frn_clean, "mdl": mdl.lower()},
+                ttl_hours=168,
+                fetch_fn=_fetch_qty,
+            )
+        except Exception:
+            qres = _fetch_qty()
+        q = int((qres or {}).get("qty") or 0)
+        # Sanity guard: quantity must be a positive int within a believable range.
+        return q if 0 < q <= 1_000_000 else None
+
+    def _build() -> Dict[str, Any]:
+        result = get_or_cache(
+            "vendor_equipment_estimate_v4",
             {"mfr": mfr.lower(), "mdl": mdl.lower()},
             ttl_hours=168,  # 7 days; current-gen equivalent pricing moves slowly
             fetch_fn=_fetch,
         )
-    )
+        if not result or not result.get("success") or not result.get("found"):
+            return result
+        unit_price = result.get("estimate_usd")
+        deployment_qty = _resolve_qty()
+        result["qty"] = deployment_qty
+        if isinstance(unit_price, (int, float)) and unit_price > 0 and deployment_qty:
+            deployment_total = round(unit_price * deployment_qty)
+            if 0 < deployment_total <= 1_000_000_000:
+                result["deployment_total"] = deployment_total
+        return result
+
+    return await run_in_threadpool(_build)
 
 
 @router.get("/switching-signals")

@@ -876,6 +876,7 @@ export interface EquipmentEstimateResponse {
   manufacturer?: string | null;
   model?: string | null;
   qty?: number | null;
+  deployment_total?: number | null;
   error?: string;
 }
 
@@ -3036,16 +3037,18 @@ class ApiClient {
 
   /**
    * AI "today's equivalent equipment cost" estimate for an equipment-refresh
-   * predicted lead (Ari loom Q1c). Cached server-side by manufacturer+model+qty.
-   * found=false -> hide the line (LLM failed / junk); never shows $0.
+   * predicted lead (Ari loom Q1c). Returns a current per-unit price AND, when
+   * the FRN's Form 471 line-item quantity is available, a deployment_total
+   * (qty x unit). Cached server-side. found=false -> hide the line.
    */
-  async getEquipmentEstimate(manufacturer: string, model: string, qty?: number, year?: number, originalCost?: number): Promise<ApiResponse<EquipmentEstimateResponse>> {
+  async getEquipmentEstimate(manufacturer: string, model: string, qty?: number, year?: number, originalCost?: number, frn?: string): Promise<ApiResponse<EquipmentEstimateResponse>> {
     const params = new URLSearchParams();
     if (manufacturer) params.append('manufacturer', manufacturer);
     if (model) params.append('model', model);
     if (qty && qty > 0) params.append('qty', String(qty));
     if (year) params.append('year', String(year));
     if (originalCost && originalCost > 0) params.append('original_cost', String(originalCost));
+    if (frn) params.append('frn', frn);
     return this.request(`/api/v1/vendor/equipment-estimate?${params.toString()}`);
   }
 
