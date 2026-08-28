@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
+import type { SwitchingSignalsResponse } from "@/lib/api";
 import { SkeletonRows, SkeletonStatCards } from "@/components/Skeleton";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 
@@ -182,6 +183,11 @@ function estReplacementCost(lead: PredictedLead): number | null {
   return original * Math.pow(1 + EQUIPMENT_INFLATION_RATE, years);
 }
 
+// E-Rate Category 2 per-student budget multiplier for the current 5-yr cycle
+// (~$167/student). Used for a "budget-based sizing" estimate: N students x $167
+// (Ari loom Q1b). A rough allowance-based figure, clearly labeled an estimate.
+const C2_PER_STUDENT = 167;
+
 // Compute an ALWAYS-CURRENT expiry status from the contract date. The backend
 // bakes "expiring in N months" into prediction_reason at generation time and
 // never refreshes it, so a lead created in April still reads "in 3 months" in
@@ -248,8 +254,15 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
   const [f470Result, setF470Result] = useState<{ filed: boolean; leads: { application_number: string; funding_year: string; entity_name: string }[] } | null>(null);
   // Entity's current C2 budget, fetched on-demand when a lead is opened (Ari
   // loom-1 #2/#3): estimated need vs available Category 2 budget shown inline.
-  const [c2Budget, setC2Budget] = useState<{ remaining: number | null; total: number | null; cycle: string | null; found: boolean } | null>(null);
+  const [c2Budget, setC2Budget] = useState<{ remaining: number | null; total: number | null; cycle: string | null; students: number | null; found: boolean } | null>(null);
   const [c2BudgetLoading, setC2BudgetLoading] = useState(false);
+  // AI "today's equivalent equipment cost" estimate (Ari loom Q1c), fetched
+  // on-demand for equipment_refresh leads. Cached server-side; hidden on failure.
+  const [equipEstimate, setEquipEstimate] = useState<{ estimate: number; rationale: string } | null>(null);
+  const [equipEstimateLoading, setEquipEstimateLoading] = useState(false);
+  // Switching signals inferred from USAC filing history (Ari loom Q2).
+  const [switchSignals, setSwitchSignals] = useState<SwitchingSignalsResponse["signals"] | null>(null);
+  const [switchSignalsLoading, setSwitchSignalsLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
 
@@ -366,14 +379,57 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
       const res = await api.getEntityC2Budget(ben);
       const d = res.data;
       if (d && d.success && d.found) {
-        setC2Budget({ remaining: d.c2_budget_remaining ?? null, total: d.c2_budget_total ?? null, cycle: d.c2_budget_cycle ?? null, found: true });
+        setC2Budget({ remaining: d.c2_budget_remaining ?? null, total: d.c2_budget_total ?? null, cycle: d.c2_budget_cycle ?? null, students: d.full_time_students ?? null, found: true });
       } else {
-        setC2Budget({ remaining: null, total: null, cycle: null, found: false });
+        setC2Budget({ remaining: null, total: null, cycle: null, students: null, found: false });
       }
     } catch {
-      setC2Budget({ remaining: null, total: null, cycle: null, found: false });
+      setC2Budget({ remaining: null, total: null, cycle: null, students: null, found: false });
     } finally {
       setC2BudgetLoading(false);
+    }
+  };
+
+  // Fetch the AI "today's equivalent equipment cost" estimate on-demand for an
+  // equipment_refresh lead (Ari loom Q1c). Non-blocking: rendered separately and
+  // hidden entirely on failure so a junk/missing estimate never breaks the view.
+  const fetchEquipmentEstimate = async (lead: PredictedLead) => {
+    setEquipEstimate(null);
+    const mfr = lead.manufacturer || "";
+    const mdl = lead.equipment_model || "";
+    if (lead.prediction_type !== "equipment_refresh" || (!mfr && !mdl)) return;
+    setEquipEstimateLoading(true);
+    try {
+      const res = await api.getEquipmentEstimate(mfr, mdl, undefined, lead.funding_year ?? undefined);
+      const d = res.data;
+      if (d && d.success && d.found && typeof d.estimate_usd === "number" && d.estimate_usd > 0) {
+        setEquipEstimate({ estimate: d.estimate_usd, rationale: d.rationale || "" });
+      } else {
+        setEquipEstimate(null);
+      }
+    } catch {
+      setEquipEstimate(null);
+    } finally {
+      setEquipEstimateLoading(false);
+    }
+  };
+
+  // Fetch inferred "switching signals" from USAC filing history (Ari loom Q2).
+  const fetchSwitchingSignals = async (ben: string) => {
+    setSwitchSignals(null);
+    setSwitchSignalsLoading(true);
+    try {
+      const res = await api.getSwitchingSignals(ben);
+      const d = res.data;
+      if (d && d.success && d.signals) {
+        setSwitchSignals(d.signals);
+      } else {
+        setSwitchSignals(null);
+      }
+    } catch {
+      setSwitchSignals(null);
+    } finally {
+      setSwitchSignalsLoading(false);
     }
   };
 
@@ -389,6 +445,11 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
     // Look up the entity's current C2 budget for the estimated-need context.
     if (lead.ben) fetchEntityC2Budget(lead.ben);
     else setC2Budget(null);
+    // AI current-equivalent equipment estimate (equipment_refresh only) + the
+    // entity's inferred switching signals (Ari loom Q1c / Q2).
+    fetchEquipmentEstimate(lead);
+    if (lead.ben) fetchSwitchingSignals(lead.ben);
+    else setSwitchSignals(null);
   };
 
   // Check whether the selected entity has posted a Form 470 this cycle.
@@ -1045,12 +1106,18 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                 )}
 
                 {/* Equipment refresh: estimated inflation-adjusted replacement
-                    cost (Ari loom-1 #3 - the lead only shows the ORIGINAL cost). */}
+                    cost (Ari loom-1 #3 - the lead only shows the ORIGINAL cost).
+                    Three estimates shown together (Ari loom Q1): (a) inflation-
+                    adjusted original, (b) student-based sizing, (c) AI current-
+                    equivalent equipment cost. All clearly labeled as estimates. */}
                 {selectedLead.prediction_type === "equipment_refresh" && (() => {
                   const repl = estReplacementCost(selectedLead);
                   const original = selectedLead.estimated_deal_value;
                   const years = selectedLead.funding_year ? new Date().getFullYear() - Number(selectedLead.funding_year) : null;
-                  if (!original && repl === null) return null;
+                  const students = c2Budget?.students && c2Budget.students > 0 ? c2Budget.students : null;
+                  const studentEst = students ? students * C2_PER_STUDENT : null;
+                  const hasAnything = original || repl !== null || studentEst !== null || equipEstimate || equipEstimateLoading;
+                  if (!hasAnything) return null;
                   return (
                     <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-1.5">
                       <div className="flex items-center justify-between">
@@ -1071,6 +1138,35 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                       ) : null}
                       {repl !== null && years && years > 0 ? (
                         <p className="text-[11px] text-slate-400">~3%/yr over {years} yr{years === 1 ? "" : "s"} since purchase. Rough estimate, not a quote.</p>
+                      ) : null}
+
+                      {/* (b) Student-based sizing: N students x ~$167 C2 allowance. */}
+                      {studentEst !== null ? (
+                        <div className="pt-1.5 border-t border-blue-200/60">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-500">Budget-based sizing</span>
+                            <span className="font-medium text-indigo-700">{formatCurrency(studentEst)}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-400">{students!.toLocaleString()} students &times; ${C2_PER_STUDENT}/student (C2 5-yr allowance). Rough estimate.</p>
+                        </div>
+                      ) : null}
+
+                      {/* (c) AI "today's equivalent equipment cost" (Ari loom Q1c). */}
+                      {equipEstimateLoading ? (
+                        <div className="pt-1.5 border-t border-blue-200/60">
+                          <p className="text-[11px] text-slate-400">Estimating current-equivalent equipment cost&hellip;</p>
+                        </div>
+                      ) : equipEstimate ? (
+                        <div className="pt-1.5 border-t border-blue-200/60">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-500">AI market estimate (equivalent gear today)</span>
+                            <span className="font-bold text-purple-700">{formatCurrency(equipEstimate.estimate)}</span>
+                          </div>
+                          {equipEstimate.rationale ? (
+                            <p className="text-[11px] text-slate-500 mt-0.5">{equipEstimate.rationale}</p>
+                          ) : null}
+                          <p className="text-[11px] text-slate-400">AI estimate, rough &mdash; not a quote.</p>
+                        </div>
                       ) : null}
                     </div>
                   );
@@ -1110,6 +1206,60 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                     )}
                   </div>
                 )}
+
+                {/* Switching signals (Ari loom Q2): inferred hints from filing
+                    history + the lead's own contract-expiry. Explicitly labeled
+                    as signals inferred from filing history, NOT a satisfaction
+                    score. Each signal is omitted when the data doesn't support it. */}
+                {(() => {
+                  const exp = selectedLead.contract_expiration_date ? expiryStatus(selectedLead.contract_expiration_date) : null;
+                  // Only surface contract-expiry as a "switching signal" when it's
+                  // expired or within ~12 months (a real rebid window).
+                  const expDays = selectedLead.contract_expiration_date
+                    ? Math.round((new Date(selectedLead.contract_expiration_date).getTime() - Date.now()) / 86400000)
+                    : null;
+                  const showExpiry = !!(exp && expDays !== null && expDays <= 366);
+                  const tenure = switchSignals?.provider_tenure;
+                  const switched = switchSignals?.recently_switched;
+                  const hasSignal = showExpiry || !!tenure || !!switched;
+                  if (!hasSignal && !switchSignalsLoading) return null;
+                  return (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-semibold text-amber-700">📡 Switching signals</span>
+                        <span className="text-[10px] uppercase tracking-wide text-amber-400 font-semibold">Inferred</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {showExpiry && exp ? (
+                          <div className="flex items-start gap-1.5 text-sm">
+                            <span className="text-amber-500">•</span>
+                            <span className="text-slate-700">
+                              {exp.label}
+                              {selectedLead.current_provider_name ? <span className="text-slate-500"> — current provider {selectedLead.current_provider_name}</span> : null}
+                            </span>
+                          </div>
+                        ) : null}
+                        {tenure ? (
+                          <div className="flex items-start gap-1.5 text-sm">
+                            <span className="text-amber-500">•</span>
+                            <span className="text-slate-700">{tenure.years} years with {tenure.provider}</span>
+                          </div>
+                        ) : null}
+                        {switched ? (
+                          <div className="flex items-start gap-1.5 text-sm">
+                            <span className="text-amber-500">•</span>
+                            <span className="text-slate-700">Switched providers recently ({switched.old} &rarr; {switched.new})</span>
+                          </div>
+                        ) : null}
+                        {switchSignalsLoading && !hasSignal ? (
+                          <p className="text-[11px] text-slate-400">Checking filing history&hellip;</p>
+                        ) : null}
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1.5">Signals inferred from USAC filing history — not a satisfaction score.</p>
+                    </div>
+                  );
+                })()}
+
                 {selectedLead.contact_email && (
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500">Contact</span>

@@ -9,7 +9,7 @@ from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from urllib.parse import urlparse, unquote
 import asyncio
@@ -2196,6 +2196,238 @@ async def get_entity_c2_budget(
         import logging
         logging.getLogger(__name__).warning(f"entity-c2-budget lookup failed for BEN {ben_clean}: {e}")
         return {"success": False, "found": False, "ben": ben_clean, "error": str(e)}
+
+
+@router.get("/equipment-estimate")
+async def get_equipment_estimate(
+    manufacturer: str = "",
+    model: str = "",
+    qty: Optional[int] = None,
+    year: Optional[int] = None,
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
+):
+    """
+    AI "today's equivalent equipment cost" estimate for an equipment-refresh
+    predicted lead (Ari loom answers Q1c). The lead carries the ORIGINAL cost
+    from years ago; a vendor wants to know what it costs to buy the equivalent
+    current-generation gear TODAY. Calls Gemini for a single JSON estimate and
+    caches it (7d) keyed by manufacturer+model+qty so we never hammer the LLM.
+
+    Returns {success:True, found:True, estimate_usd, rationale} on a good
+    estimate, or {success:False, found:False} on any failure/junk so the caller
+    hides the line (never crashes, never shows $0). Only successes are cached.
+    """
+    mfr = (manufacturer or "").strip()
+    mdl = (model or "").strip()
+    if not mfr and not mdl:
+        return {"success": False, "found": False, "error": "manufacturer or model required"}
+
+    qty_val = qty if (isinstance(qty, int) and qty > 0) else None
+
+    def _fetch() -> Dict[str, Any]:
+        from app.core.config import settings
+        api_key = getattr(settings, "GEMINI_API_KEY", None) or getattr(settings, "GOOGLE_API_KEY", None)
+        if not api_key:
+            return {"success": False, "found": False, "error": "no AI key"}
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=api_key)
+            gmodel = genai.GenerativeModel(
+                model_name=(getattr(settings, "GEMINI_MODEL", None) or "gemini-2.5-flash"),
+            )
+            qty_str = f"{qty_val} x " if qty_val else ""
+            gear = " ".join(p for p in [mfr, mdl] if p).strip()
+            prompt = (
+                "You are an E-Rate equipment procurement analyst. Estimate the current "
+                f"2026 US market cost to replace {qty_str}{gear} (or the equivalent "
+                "current-generation equipment) for a K-12 school or library network. "
+                "Base it on typical current street/reseller pricing for equivalent "
+                "current-gen hardware. Respond with ONLY a JSON object of the form "
+                '{"estimate_usd": <number>, "rationale": "<=25 words"}. '
+                "estimate_usd must be a plain number in US dollars (no symbols, no commas). "
+                "If you cannot form a reasonable estimate, return "
+                '{"estimate_usd": 0, "rationale": "insufficient info"}.'
+            )
+            resp = gmodel.generate_content(
+                prompt,
+                generation_config=genai.GenerationConfig(
+                    temperature=0.2,
+                    response_mime_type="application/json",
+                ),
+            )
+            raw = (resp.text or "").strip()
+            if not raw:
+                return {"success": False, "found": False, "error": "empty AI response"}
+            # Robust JSON parse: strip code fences / extract the first {...} block.
+            import json as _json
+            import re as _re
+            txt = raw
+            if txt.startswith("```"):
+                txt = _re.sub(r"^```[a-zA-Z]*\s*", "", txt).rstrip("`").strip()
+            try:
+                parsed = _json.loads(txt)
+            except Exception:
+                m = _re.search(r"\{.*\}", txt, _re.DOTALL)
+                if not m:
+                    return {"success": False, "found": False, "error": "unparseable AI response"}
+                parsed = _json.loads(m.group(0))
+            est = parsed.get("estimate_usd")
+            try:
+                est = float(str(est).replace("$", "").replace(",", "").strip())
+            except (TypeError, ValueError):
+                return {"success": False, "found": False, "error": "non-numeric estimate"}
+            if not est or est <= 0 or est > 50_000_000:
+                return {"success": False, "found": False, "error": "estimate out of range"}
+            rationale = str(parsed.get("rationale") or "").strip()[:180]
+            return {
+                "success": True,
+                "found": True,
+                "estimate_usd": round(est, 2),
+                "rationale": rationale,
+                "manufacturer": mfr,
+                "model": mdl,
+                "qty": qty_val,
+            }
+        except ImportError:
+            return {"success": False, "found": False, "error": "genai not installed"}
+        except Exception as ex:
+            import logging as _lg
+            _lg.getLogger(__name__).warning(f"equipment-estimate LLM failed ({mfr}/{mdl}): {ex}")
+            return {"success": False, "found": False, "error": str(ex)[:160]}
+
+    try:
+        from utils.usac_cache import get_or_cache
+    except ImportError:
+        from ...utils.usac_cache import get_or_cache
+
+    return await run_in_threadpool(
+        lambda: get_or_cache(
+            "vendor_equipment_estimate_v1",
+            {"mfr": mfr.lower(), "mdl": mdl.lower(), "qty": qty_val or 0},
+            ttl_hours=168,  # 7 days; current-gen equivalent pricing moves slowly
+            fetch_fn=_fetch,
+        )
+    )
+
+
+@router.get("/switching-signals")
+async def get_switching_signals(
+    ben: str,
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
+):
+    """
+    "Switching signals" for a vendor lead (Ari loom answers Q2 = A). Inferred
+    HINTS from the entity's USAC FRN/funding history -- explicitly NOT a
+    satisfaction score. Computes up to two signals from the FRN commitment
+    history of this BEN across recent funding years:
+
+      - provider_tenure: consecutive most-recent years the entity used the same
+        dominant service provider (SPIN name).
+      - recently_switched: primary provider changed within the last ~2 funding
+        years (old -> new).
+
+    The contract-expiry signal is computed on the frontend from the lead's own
+    contract_expiration_date (reuses existing predicted-lead logic), so it is
+    not duplicated here. Omits any signal the data does not support. Cached 24h.
+    """
+    ben_clean = (ben or "").strip()
+    if not ben_clean:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="BEN is required")
+
+    def _fetch() -> Dict[str, Any]:
+        try:
+            from utils.usac_client import USACDataClient
+        except ImportError:
+            from ...utils.usac_client import USACDataClient
+        try:
+            client = USACDataClient()
+            hist = client.get_frn_status_by_ben(ben_clean, limit=500)
+        except Exception as ex:
+            import logging as _lg
+            _lg.getLogger(__name__).warning(f"switching-signals history fetch failed for BEN {ben_clean}: {ex}")
+            return {"success": False, "ben": ben_clean, "error": str(ex)[:160]}
+
+        frns = (hist or {}).get("frns", []) or []
+        # Dominant provider per funding year = SPIN with the most committed $
+        # (fallback: most FRNs). Ignore rows with no provider name.
+        by_year: Dict[int, Dict[str, float]] = {}
+        for f in frns:
+            spin = (f.get("spin_name") or "").strip()
+            if not spin:
+                continue
+            try:
+                yr = int(str(f.get("funding_year") or "").strip())
+            except (TypeError, ValueError):
+                continue
+            amt = 0.0
+            try:
+                amt = float(f.get("commitment_amount") or 0) or 0.0
+            except (TypeError, ValueError):
+                amt = 0.0
+            slot = by_year.setdefault(yr, {})
+            slot[spin] = slot.get(spin, 0.0) + (amt if amt > 0 else 0.0001)
+
+        if not by_year:
+            return {"success": True, "ben": ben_clean, "signals": {}}
+
+        dominant: Dict[int, str] = {}
+        for yr, provs in by_year.items():
+            dominant[yr] = max(provs.items(), key=lambda kv: kv[1])[0]
+
+        years_desc = sorted(dominant.keys(), reverse=True)
+        latest_year = years_desc[0]
+        latest_provider = dominant[latest_year]
+
+        signals: Dict[str, Any] = {}
+
+        # Provider tenure: consecutive most-recent years with the same dominant
+        # provider (counting contiguous funding years only).
+        tenure_years = 1
+        prev_yr = latest_year
+        for yr in years_desc[1:]:
+            if yr == prev_yr - 1 and dominant[yr] == latest_provider:
+                tenure_years += 1
+                prev_yr = yr
+            else:
+                break
+        if tenure_years >= 2:
+            signals["provider_tenure"] = {
+                "provider": latest_provider,
+                "years": tenure_years,
+            }
+
+        # Recently switched: the prior funding year on record had a different
+        # dominant provider, and that change is within the last ~2 funding years.
+        if len(years_desc) >= 2:
+            prior_year = years_desc[1]
+            prior_provider = dominant[prior_year]
+            if prior_provider != latest_provider and (latest_year - prior_year) <= 2:
+                signals["recently_switched"] = {
+                    "old": prior_provider,
+                    "new": latest_provider,
+                    "year": latest_year,
+                }
+
+        return {
+            "success": True,
+            "ben": ben_clean,
+            "entity_name": (hist or {}).get("entity_name"),
+            "signals": signals,
+        }
+
+    try:
+        from utils.usac_cache import get_or_cache
+    except ImportError:
+        from ...utils.usac_cache import get_or_cache
+
+    return await run_in_threadpool(
+        lambda: get_or_cache(
+            "vendor_switching_signals_v1",
+            {"ben": ben_clean},
+            ttl_hours=24,
+            fetch_fn=_fetch,
+        )
+    )
 
 
 @router.post("/470/search")

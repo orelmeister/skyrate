@@ -866,6 +866,32 @@ export interface EntityC2BudgetResponse {
   error?: string;
 }
 
+// AI "today's equivalent equipment cost" estimate for an equipment-refresh
+// predicted lead (Ari loom Q1c). found=false -> hide (LLM failed / junk).
+export interface EquipmentEstimateResponse {
+  success: boolean;
+  found: boolean;
+  estimate_usd?: number | null;
+  rationale?: string | null;
+  manufacturer?: string | null;
+  model?: string | null;
+  qty?: number | null;
+  error?: string;
+}
+
+// "Switching signals" inferred from USAC filing history (Ari loom Q2). Signals
+// are inference hints, NOT a satisfaction score. Any signal may be absent.
+export interface SwitchingSignalsResponse {
+  success: boolean;
+  ben: string;
+  entity_name?: string | null;
+  signals?: {
+    provider_tenure?: { provider: string; years: number };
+    recently_switched?: { old: string; new: string; year: number };
+  };
+  error?: string;
+}
+
 // 28-day competitive bidding window check for a Form 470 (bid-evaluation lock).
 export interface Form470WindowResponse {
   success: boolean;
@@ -3006,6 +3032,29 @@ class ApiClient {
    */
   async getEntityC2Budget(ben: string): Promise<ApiResponse<EntityC2BudgetResponse>> {
     return this.request(`/api/v1/vendor/entity-c2-budget?ben=${encodeURIComponent(ben)}`);
+  }
+
+  /**
+   * AI "today's equivalent equipment cost" estimate for an equipment-refresh
+   * predicted lead (Ari loom Q1c). Cached server-side by manufacturer+model+qty.
+   * found=false -> hide the line (LLM failed / junk); never shows $0.
+   */
+  async getEquipmentEstimate(manufacturer: string, model: string, qty?: number, year?: number): Promise<ApiResponse<EquipmentEstimateResponse>> {
+    const params = new URLSearchParams();
+    if (manufacturer) params.append('manufacturer', manufacturer);
+    if (model) params.append('model', model);
+    if (qty && qty > 0) params.append('qty', String(qty));
+    if (year) params.append('year', String(year));
+    return this.request(`/api/v1/vendor/equipment-estimate?${params.toString()}`);
+  }
+
+  /**
+   * "Switching signals" for a vendor lead entity (Ari loom Q2). Inferred hints
+   * from USAC filing history (provider tenure, recently switched) - explicitly
+   * NOT a satisfaction score. Omits any signal the data doesn't support.
+   */
+  async getSwitchingSignals(ben: string): Promise<ApiResponse<SwitchingSignalsResponse>> {
+    return this.request(`/api/v1/vendor/switching-signals?ben=${encodeURIComponent(ben)}`);
   }
 
   /**
