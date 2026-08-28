@@ -1159,13 +1159,13 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                       ) : equipEstimate ? (
                         <div className="pt-1.5 border-t border-blue-200/60">
                           <div className="flex justify-between text-sm">
-                            <span className="text-slate-500">AI market estimate (equivalent gear today)</span>
+                            <span className="text-slate-500">AI: current unit price (equivalent gear)</span>
                             <span className="font-bold text-purple-700">{formatCurrency(equipEstimate.estimate)}</span>
                           </div>
                           {equipEstimate.rationale ? (
                             <p className="text-[11px] text-slate-500 mt-0.5">{equipEstimate.rationale}</p>
                           ) : null}
-                          <p className="text-[11px] text-slate-400">AI estimate, rough &mdash; not a quote.</p>
+                          <p className="text-[11px] text-slate-400">Per-unit street price. Rough AI estimate, not a quote.</p>
                         </div>
                       ) : null}
                     </div>

@@ -2237,30 +2237,18 @@ async def get_equipment_estimate(
             gmodel = genai.GenerativeModel(
                 model_name=(getattr(settings, "GEMINI_MODEL", None) or "gemini-2.5-flash"),
             )
-            qty_str = f"{qty_val} x " if qty_val else ""
             gear = " ".join(p for p in [mfr, mdl] if p).strip()
-            # Anchor on the ORIGINAL purchase scale so the AI prices replacing the
-            # WHOLE deployment (Ari: "cost to revamp ALL my equipment"), not one unit.
-            if orig_cost:
-                scale = (
-                    f"A K-12 school/library originally paid about ${orig_cost:,.0f} in total for "
-                    f"{qty_str}{gear}{f' in FY{year}' if year else ''}. Estimate the current 2026 US "
-                    "market cost to replace that SAME deployment (same overall scale/quantity) with "
-                    "equivalent current-generation equipment."
-                )
-            else:
-                scale = (
-                    f"Estimate the current 2026 US market cost to replace {qty_str}{gear} (or the "
-                    "equivalent current-generation equipment) for a K-12 school or library network."
-                )
+            # A single equipment-model line can't be reliably scaled to a deployment
+            # total by the LLM, so we ask for a dependable CURRENT PER-UNIT street
+            # price of the equivalent current-gen gear (the inflation-adjusted figure
+            # already provides the deployment-scale total).
             prompt = (
-                "You are an E-Rate equipment procurement analyst. " + scale + " "
-                "Base it on typical current street/reseller pricing for equivalent "
-                "current-gen hardware. Respond with ONLY a JSON object of the form "
-                '{"estimate_usd": <number>, "rationale": "<=25 words"}. '
-                "estimate_usd must be a plain number in US dollars (no symbols, no commas). "
-                "If you cannot form a reasonable estimate, return "
-                '{"estimate_usd": 0, "rationale": "insufficient info"}.'
+                "You are an E-Rate equipment procurement analyst. Estimate the CURRENT (2026) US "
+                f"street/reseller price for ONE unit of {gear} (or the closest equivalent "
+                "current-generation replacement). Give a single realistic per-unit price. Respond with "
+                'ONLY a JSON object of the form {"estimate_usd": <number>, "rationale": "<=20 words"}. '
+                "estimate_usd must be a plain number of US dollars (no symbols, no commas). "
+                'If you cannot form a reasonable estimate, return {"estimate_usd": 0, "rationale": "insufficient info"}.'
             )
             resp = gmodel.generate_content(
                 prompt,
@@ -2316,8 +2304,8 @@ async def get_equipment_estimate(
 
     return await run_in_threadpool(
         lambda: get_or_cache(
-            "vendor_equipment_estimate_v2",
-            {"mfr": mfr.lower(), "mdl": mdl.lower(), "qty": qty_val or 0, "oc": int(orig_cost or 0)},
+            "vendor_equipment_estimate_v3",
+            {"mfr": mfr.lower(), "mdl": mdl.lower()},
             ttl_hours=168,  # 7 days; current-gen equivalent pricing moves slowly
             fetch_fn=_fetch,
         )
