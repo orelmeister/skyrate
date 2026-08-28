@@ -2204,6 +2204,7 @@ async def get_equipment_estimate(
     model: str = "",
     qty: Optional[int] = None,
     year: Optional[int] = None,
+    original_cost: Optional[float] = None,
     current_user: User = Depends(require_role("admin", "vendor", "super")),
 ):
     """
@@ -2223,6 +2224,7 @@ async def get_equipment_estimate(
         return {"success": False, "found": False, "error": "manufacturer or model required"}
 
     qty_val = qty if (isinstance(qty, int) and qty > 0) else None
+    orig_cost = original_cost if (isinstance(original_cost, (int, float)) and original_cost > 0) else None
 
     def _fetch() -> Dict[str, Any]:
         from app.core.config import settings
@@ -2237,10 +2239,22 @@ async def get_equipment_estimate(
             )
             qty_str = f"{qty_val} x " if qty_val else ""
             gear = " ".join(p for p in [mfr, mdl] if p).strip()
+            # Anchor on the ORIGINAL purchase scale so the AI prices replacing the
+            # WHOLE deployment (Ari: "cost to revamp ALL my equipment"), not one unit.
+            if orig_cost:
+                scale = (
+                    f"A K-12 school/library originally paid about ${orig_cost:,.0f} in total for "
+                    f"{qty_str}{gear}{f' in FY{year}' if year else ''}. Estimate the current 2026 US "
+                    "market cost to replace that SAME deployment (same overall scale/quantity) with "
+                    "equivalent current-generation equipment."
+                )
+            else:
+                scale = (
+                    f"Estimate the current 2026 US market cost to replace {qty_str}{gear} (or the "
+                    "equivalent current-generation equipment) for a K-12 school or library network."
+                )
             prompt = (
-                "You are an E-Rate equipment procurement analyst. Estimate the current "
-                f"2026 US market cost to replace {qty_str}{gear} (or the equivalent "
-                "current-generation equipment) for a K-12 school or library network. "
+                "You are an E-Rate equipment procurement analyst. " + scale + " "
                 "Base it on typical current street/reseller pricing for equivalent "
                 "current-gen hardware. Respond with ONLY a JSON object of the form "
                 '{"estimate_usd": <number>, "rationale": "<=25 words"}. '
@@ -2302,8 +2316,8 @@ async def get_equipment_estimate(
 
     return await run_in_threadpool(
         lambda: get_or_cache(
-            "vendor_equipment_estimate_v1",
-            {"mfr": mfr.lower(), "mdl": mdl.lower(), "qty": qty_val or 0},
+            "vendor_equipment_estimate_v2",
+            {"mfr": mfr.lower(), "mdl": mdl.lower(), "qty": qty_val or 0, "oc": int(orig_cost or 0)},
             ttl_hours=168,  # 7 days; current-gen equivalent pricing moves slowly
             fetch_fn=_fetch,
         )

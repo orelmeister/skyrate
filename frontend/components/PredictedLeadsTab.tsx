@@ -400,7 +400,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
     if (lead.prediction_type !== "equipment_refresh" || (!mfr && !mdl)) return;
     setEquipEstimateLoading(true);
     try {
-      const res = await api.getEquipmentEstimate(mfr, mdl, undefined, lead.funding_year ?? undefined);
+      const res = await api.getEquipmentEstimate(mfr, mdl, undefined, lead.funding_year ?? undefined, lead.estimated_deal_value ?? undefined);
       const d = res.data;
       if (d && d.success && d.found && typeof d.estimate_usd === "number" && d.estimate_usd > 0) {
         setEquipEstimate({ estimate: d.estimate_usd, rationale: d.rationale || "" });

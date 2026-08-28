@@ -3039,12 +3039,13 @@ class ApiClient {
    * predicted lead (Ari loom Q1c). Cached server-side by manufacturer+model+qty.
    * found=false -> hide the line (LLM failed / junk); never shows $0.
    */
-  async getEquipmentEstimate(manufacturer: string, model: string, qty?: number, year?: number): Promise<ApiResponse<EquipmentEstimateResponse>> {
+  async getEquipmentEstimate(manufacturer: string, model: string, qty?: number, year?: number, originalCost?: number): Promise<ApiResponse<EquipmentEstimateResponse>> {
     const params = new URLSearchParams();
     if (manufacturer) params.append('manufacturer', manufacturer);
     if (model) params.append('model', model);
     if (qty && qty > 0) params.append('qty', String(qty));
     if (year) params.append('year', String(year));
+    if (originalCost && originalCost > 0) params.append('original_cost', String(originalCost));
     return this.request(`/api/v1/vendor/equipment-estimate?${params.toString()}`);
   }
 
