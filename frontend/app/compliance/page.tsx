@@ -120,6 +120,37 @@ export default function CompliancePage() {
   const supportingInputRef = useRef<HTMLInputElement>(null);
   const reanalyzeId = searchParams.get("reanalyze");
 
+  // The compliance workbench is shared by the consultant and applicant portals.
+  // Keep navigation pointed back at whichever portal launched it.
+  const isApplicant = user?.role === "applicant";
+  const portalPath = isApplicant ? "/applicant" : "/consultant";
+  const portalLabel = isApplicant ? "Applicant Portal" : "Consultant Portal";
+  const portalNavItems = isApplicant
+    ? [
+        { id: "overview", label: "Dashboard", icon: "📊" },
+        { id: "frns", label: "FRN Status", icon: "📈" },
+        { id: "disbursements", label: "Funding & Invoicing", icon: "💰" },
+        { id: "appeals", label: "Appeals", icon: "📋" },
+        { id: "settings", label: "Settings", icon: "⚙️" },
+      ]
+    : [
+        { id: "dashboard", label: "Dashboard", icon: "📊" },
+        { id: "schools", label: "My Schools", icon: "🏫" },
+        { id: "funding", label: "Funding Data", icon: "💰" },
+        { id: "frn-status", label: "FRN Status", icon: "📈" },
+        { id: "appeals", label: "Appeals", icon: "📋" },
+        { id: "pia", label: "PIA Assistant", icon: "🛡️" },
+        { id: "service-search", label: "Service Search", icon: "🔍" },
+      ];
+
+  // Honor ?tab=review|bids|calendar so the portals can deep-link a section.
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t === "review" || t === "bids" || t === "calendar") {
+      setActiveTab(t);
+    }
+  }, [searchParams]);
+
   // Pre-fill from reanalyze query param
   useEffect(() => {
     if (reanalyzeId && token) {
@@ -352,30 +383,22 @@ export default function CompliancePage() {
 
   return (
     <div className="min-h-screen bg-slate-50 lg:pl-64">
-      {/* Sidebar navigation (compliance is launched from the consultant portal) */}
+      {/* Sidebar navigation (compliance is launched from the consultant or applicant portal) */}
       <aside className="hidden lg:flex lg:flex-col fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-slate-200">
         <div className="h-16 flex items-center gap-3 px-6 border-b border-slate-200">
-          <Link href="/consultant" className="flex items-center gap-3">
+          <Link href={portalPath} className="flex items-center gap-3">
             <img src="/images/logos/logo-icon-transparent.png" alt="SkyRate AI" width={36} height={36} className="rounded-lg" />
             <div>
               <span className="font-bold text-slate-900">SkyRate AI</span>
-              <span className="block text-xs text-slate-500">Consultant Portal</span>
+              <span className="block text-xs text-slate-500">{portalLabel}</span>
             </div>
           </Link>
         </div>
         <nav className="p-4 space-y-1 overflow-y-auto">
-          {[
-            { id: "dashboard", label: "Dashboard", icon: "📊" },
-            { id: "schools", label: "My Schools", icon: "🏫" },
-            { id: "funding", label: "Funding Data", icon: "💰" },
-            { id: "frn-status", label: "FRN Status", icon: "📈" },
-            { id: "appeals", label: "Appeals", icon: "📋" },
-            { id: "pia", label: "PIA Assistant", icon: "🛡️" },
-            { id: "service-search", label: "Service Search", icon: "🔍" },
-          ].map((item) => (
+          {portalNavItems.map((item) => (
             <Link
               key={item.id}
-              href={`/consultant?tab=${item.id}`}
+              href={`${portalPath}?tab=${item.id}`}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left text-slate-600 hover:bg-slate-50 transition-all"
             >
               <span className="text-xl">{item.icon}</span>
@@ -391,7 +414,7 @@ export default function CompliancePage() {
             <span className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-600"></span>
           </Link>
           <Link
-            href="/consultant?tab=settings"
+            href={`${portalPath}?tab=settings`}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left text-slate-600 hover:bg-slate-50 transition-all"
           >
             <span className="text-xl">⚙️</span>
@@ -405,7 +428,7 @@ export default function CompliancePage() {
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link
-              href="/consultant"
+              href={portalPath}
               className="text-slate-400 hover:text-slate-600 transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />

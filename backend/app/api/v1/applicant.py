@@ -529,6 +529,64 @@ async def register_applicant(
     )
 
 
+def _enrich_frns_with_live_substatus(db: Session, profile, frn_dicts: list) -> None:
+    """
+    Fill each FRN's sub-status (review_stage) from live USAC data when the stored
+    value is empty. The applicant's stored FRN records rarely carry the PIA
+    pending-reason, so the FRN Status table showed no sub-status. USAC's FRN
+    Status dataset exposes it as `pending_reason` per FRN. Mirrors the consultant
+    portal, which reads the sub-status live from the same dataset. Best-effort and
+    cached; never raises.
+    """
+    pending = [f for f in frn_dicts if not (f.get("review_stage") or "").strip()]
+    if not pending:
+        return
+    try:
+        from ...models.applicant import ApplicantBEN
+        bens = db.query(ApplicantBEN).filter(
+            ApplicantBEN.applicant_profile_id == profile.id
+        ).all()
+        ben_numbers = [b.ben for b in bens] or ([profile.ben] if profile.ben else [])
+        if not ben_numbers:
+            return
+
+        reason_map = None
+        cache_key = None
+        try:
+            from app.services.cache_service import get_cached, set_cached, make_cache_key
+            cache_key = make_cache_key("frn_substatus_map", bens=sorted(set(ben_numbers)))
+            reason_map = get_cached(db, cache_key)
+        except Exception:
+            reason_map = None
+
+        if reason_map is None:
+            from utils.usac_client import USACDataClient
+            client = USACDataClient()
+            batch = client.get_frn_status_batch(bens=ben_numbers)
+            reason_map = {}
+            if batch.get("success"):
+                for result in batch.get("results", {}).values():
+                    for rec in result.get("frns", []) or []:
+                        frn_no = str(rec.get("frn") or "").strip()
+                        reason = (rec.get("pending_reason") or "").strip()
+                        if frn_no and reason:
+                            reason_map[frn_no] = reason
+            if cache_key is not None:
+                try:
+                    from app.services.cache_service import set_cached
+                    set_cached(db, cache_key, reason_map, ttl_hours=6)
+                except Exception:
+                    pass
+
+        if reason_map:
+            for f in pending:
+                reason = reason_map.get(str(f.get("frn") or "").strip())
+                if reason:
+                    f["review_stage"] = reason
+    except Exception as e:
+        print(f"[FRN sub-status] enrichment skipped: {e}")
+
+
 @router.get("/dashboard", response_model=DashboardResponse)
 async def get_dashboard(
     current_user: User = Depends(get_current_user),
@@ -591,9 +649,12 @@ async def get_dashboard(
         "last_sync": profile.last_sync_at.isoformat() if profile.last_sync_at else None,
     }
     
+    frn_dicts = [f.to_dict() for f in frns]
+    _enrich_frns_with_live_substatus(db, profile, frn_dicts)
+
     return DashboardResponse(
         profile=profile.to_dict(),
-        frns=[f.to_dict() for f in frns],
+        frns=frn_dicts,
         appeals=[a.to_dict() for a in appeals],
         recent_changes=[c.to_dict() for c in recent_changes],
         summary=summary,
@@ -627,7 +688,9 @@ async def get_frns(
     
     frns = query.order_by(ApplicantFRN.funding_year.desc()).all()
     
-    return {"frns": [f.to_dict() for f in frns]}
+    frn_dicts = [f.to_dict() for f in frns]
+    _enrich_frns_with_live_substatus(db, profile, frn_dicts)
+    return {"frns": frn_dicts}
 
 
 @router.get("/frns/{frn_id}")
@@ -969,6 +1032,32 @@ class AddBENRequest(BaseModel):
 class UpdateBENRequest(BaseModel):
     """Request to update BEN settings"""
     display_name: Optional[str] = None
+    is_primary: Optional[bool] = None  # Set True to make this the primary entity
+
+
+def _normalize_primary_bens(db: Session, profile, bens):
+    """
+    Ensure exactly ONE BEN row is flagged primary. Historically some accounts
+    ended up with every BEN marked primary (or duplicates), which hid the Remove
+    control in the UI and made remove_ben reject every delete. The canonical
+    primary is the row whose BEN matches the profile's primary BEN; otherwise the
+    earliest row. Persists corrections so the primary flag and delete logic agree.
+    """
+    if not bens:
+        return
+    canonical = next((b for b in bens if b.ben == profile.ben), None) or bens[0]
+    changed = False
+    for b in bens:
+        desired = (b.id == canonical.id)
+        if bool(b.is_primary) != desired:
+            b.is_primary = desired
+            changed = True
+    # Keep the profile's primary BEN in sync with the canonical row.
+    if profile.ben != canonical.ben:
+        profile.ben = canonical.ben
+        changed = True
+    if changed:
+        db.commit()
 
 
 @router.get("/bens")
@@ -994,6 +1083,11 @@ async def list_monitored_bens(
     bens = db.query(ApplicantBEN).filter(
         ApplicantBEN.applicant_profile_id == profile.id
     ).order_by(ApplicantBEN.is_primary.desc(), ApplicantBEN.created_at).all()
+    
+    # Repair corrupted primary flags so exactly one BEN is primary. Without this
+    # an account with every BEN marked primary can never delete any of them.
+    _normalize_primary_bens(db, profile, bens)
+    bens.sort(key=lambda b: (not b.is_primary, b.created_at or datetime.min))
     
     return {
         "bens": [ben.to_dict() for ben in bens],
@@ -1144,6 +1238,17 @@ async def update_ben(
     
     if request.display_name is not None:
         ben.display_name = request.display_name
+    
+    # Allow changing which entity is primary. Demote all others and keep the
+    # profile's primary BEN in sync so the FRN/funding views follow.
+    if request.is_primary is True:
+        others = db.query(ApplicantBEN).filter(
+            ApplicantBEN.applicant_profile_id == profile.id
+        ).all()
+        for other in others:
+            other.is_primary = (other.id == ben.id)
+        ben.is_primary = True
+        profile.ben = ben.ben
     
     ben.updated_at = datetime.utcnow()
     db.commit()

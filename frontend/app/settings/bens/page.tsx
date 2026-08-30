@@ -154,6 +154,16 @@ export default function BENSettingsPage() {
     }
   };
 
+  const handleMakePrimary = async (benId: number) => {
+    try {
+      setError(null);
+      await api.patch(`/applicant/bens/${benId}`, { is_primary: true });
+      await fetchBens();
+    } catch (err: any) {
+      setError(err.message || 'Failed to change primary entity');
+    }
+  };
+
   const handleActivateBen = async (benId: number) => {
     try {
       await api.post(`/applicant/bens/${benId}/activate`, {});
@@ -421,6 +431,16 @@ export default function BENSettingsPage() {
                       >
                         <RefreshCw size={14} className={syncingBenId === ben.id ? 'animate-spin' : ''} />
                         {syncingBenId === ben.id ? 'Syncing...' : 'Sync Now'}
+                      </button>
+                    )}
+                    {!ben.is_primary && (
+                      <button
+                        onClick={() => handleMakePrimary(ben.id)}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[var(--brand-blue)]/10 text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/20 text-sm"
+                        title="Make this your primary entity (FRN, funding and disbursement views follow the primary entity)"
+                      >
+                        <CheckCircle size={14} />
+                        Make Primary
                       </button>
                     )}
                     {!ben.is_primary && (

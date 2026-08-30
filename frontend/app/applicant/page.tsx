@@ -121,6 +121,13 @@ function formatCurrency(amount: number): string {
   }).format(amount);
 }
 
+// Upcoming E-Rate funding year using the USAC July-1 cutover: from July onward
+// the active filing cycle is next calendar year's FY (e.g. Aug 2026 -> FY2027).
+function getUpcomingFundingYear(): number {
+  const now = new Date();
+  return now.getMonth() + 1 >= 7 ? now.getFullYear() + 1 : now.getFullYear();
+}
+
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-US', {
     month: 'short',
@@ -1303,6 +1310,7 @@ function ApplicantDashboard() {
                     <th onClick={() => toggleFrnsSort('funding_year')} className={`px-4 py-3 text-left text-xs font-semibold uppercase cursor-pointer select-none ${tThLabel} ${tRowHover}`}>Year{sortArrow('funding_year')}</th>
                     <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${tThLabel}`}>Service</th>
                     <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${tThLabel}`}>Status</th>
+                    <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${tThLabel}`}><span className="inline-flex items-center gap-1">Sub-Status <FrnSubStatusInfo /></span></th>
                     <th onClick={() => toggleFrnsSort('amount_funded')} className={`px-4 py-3 text-right text-xs font-semibold uppercase cursor-pointer select-none ${tThLabel} ${tRowHover}`}>Commitment{sortArrow('amount_funded')}</th>
                     <th onClick={() => toggleFrnsSort('amount_disbursed')} className={`px-4 py-3 text-right text-xs font-semibold uppercase cursor-pointer select-none ${tThLabel} ${tRowHover}`}>Disbursed{sortArrow('amount_disbursed')}</th>
                     <th className={`px-4 py-3 text-center text-xs font-semibold uppercase ${tThLabel}`}>Track</th>
@@ -1352,11 +1360,6 @@ function ApplicantDashboard() {
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${frnStatusBadgeCls(frn)}`}>
                             {frn.status}
                           </span>
-                          {frn.review_stage && !frn.is_denied && (frn.status_type || '').toLowerCase() !== 'funded' && (
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${dark ? 'bg-slate-800 text-slate-300 border border-slate-700' : 'bg-slate-100 text-slate-600 border border-slate-200'}`} title="FRN sub-status / review stage">
-                              {frn.review_stage}
-                            </span>
-                          )}
                           {frn.is_denied && (
                             <button
                               onClick={(e) => {
@@ -1370,6 +1373,15 @@ function ApplicantDashboard() {
                             </button>
                           )}
                         </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {frn.review_stage && !frn.is_denied && (frn.status_type || '').toLowerCase() !== 'funded' ? (
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${dark ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30' : 'bg-amber-50 text-amber-700 border border-amber-200'}`} title="FRN sub-status / review stage">
+                            {frn.review_stage}
+                          </span>
+                        ) : (
+                          <span className={`text-xs ${tFaint}`}>—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className={`font-medium ${frn.amount_funded ? (dark ? 'text-green-300' : 'text-green-700') : tFaint}`}>
@@ -1408,7 +1420,7 @@ function ApplicantDashboard() {
                     {/* FRN Detail Panel */}
                     {selectedFrnId === frn.id && (
                       <tr key={`detail-${frn.id}`}>
-                        <td colSpan={9} className="px-0 py-0">
+                        <td colSpan={10} className="px-0 py-0">
                           <div className={`border-t border-b px-6 py-5 ${dark ? 'bg-slate-950/40 border-purple-500/20' : 'bg-gradient-to-br from-purple-50 to-slate-50 border-purple-200'}`}>
                             {loadingFrnDetail ? (
                               <div className="flex items-center justify-center py-8">
@@ -1846,6 +1858,42 @@ function ApplicantDashboard() {
                 </div>
               ) : null}
             </div>
+
+            {/* Certified FCC Forms — download the real Form 470/471 PDFs per application */}
+            {formPdfError && (
+              <div className={`rounded-xl border p-4 text-sm ${dark ? 'border-amber-500/40 bg-amber-500/10 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>{formPdfError}</div>
+            )}
+            <div className={`rounded-xl border ${tCard}`}>
+              <div className={`px-5 py-4 border-b ${tBorder} flex items-center gap-2`}>
+                <FileText className={`w-4 h-4 ${tMuted}`} />
+                <div>
+                  <h2 className={`font-semibold ${tInk}`}>Certified FCC Forms</h2>
+                  <p className={`text-xs ${tMuted}`}>Download the actual certified Form 470 &amp; Form 471 PDFs straight from USAC.</p>
+                </div>
+              </div>
+              {applicationList.length > 0 ? (
+                <div className={`divide-y ${dark ? 'divide-slate-800' : 'divide-slate-100'}`}>
+                  {applicationList.map((app) => (
+                    <div key={app.application_number} className="px-5 py-3 flex items-center justify-between gap-4 flex-wrap">
+                      <div className="min-w-0">
+                        <div className={`font-mono text-sm ${tInk}`}>Application {app.application_number}</div>
+                        <div className={`text-xs ${tMuted}`}>FY{app.funding_year} · {app.frn_count} FRN{app.frn_count !== 1 ? 's' : ''}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => downloadFormPdf('470', app.application_number)} disabled={pdfBusyApp === `470-${app.application_number}`} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white">
+                          {pdfBusyApp === `470-${app.application_number}` ? <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Download className="w-3.5 h-3.5" />} Form 470 PDF
+                        </button>
+                        <button onClick={() => downloadFormPdf('471', app.application_number)} disabled={pdfBusyApp === `471-${app.application_number}`} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border disabled:opacity-50 ${dark ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-300 text-slate-700 hover:bg-slate-100'}`}>
+                          {pdfBusyApp === `471-${app.application_number}` ? <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Download className="w-3.5 h-3.5" />} Form 471 PDF
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className={`px-5 py-8 text-center text-sm ${tMuted}`}>No applications found for your registered BENs yet.</div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1947,6 +1995,73 @@ function ApplicantDashboard() {
               <h1 className={`text-xl font-bold ${tInk}`}>Funding &amp; Invoicing</h1>
               <p className={`text-sm ${tMuted}`}>Disbursements and invoicing detail for your registered BENs, straight from USAC.</p>
             </div>
+
+            {/* Funding by year — committed vs invoiced per funding year, computed
+                from your FRNs so recent years (incl. FY2026/FY2027) always appear
+                even before USAC publishes any disbursements. */}
+            {(() => {
+              const byYear = new Map<number, { fy: number; count: number; authorized: number; disbursed: number }>();
+              (frns || []).forEach((f) => {
+                const fy = f.funding_year;
+                if (!fy) return;
+                const e = byYear.get(fy) || { fy, count: 0, authorized: 0, disbursed: 0 };
+                e.count += 1;
+                e.authorized += (f.amount_funded || f.amount_requested || 0);
+                e.disbursed += (f.amount_disbursed || 0);
+                byYear.set(fy, e);
+              });
+              const rows = Array.from(byYear.values()).sort((a, b) => b.fy - a.fy);
+              if (rows.length === 0) return null;
+              const tot = rows.reduce((acc, r) => ({ authorized: acc.authorized + r.authorized, disbursed: acc.disbursed + r.disbursed, count: acc.count + r.count }), { authorized: 0, disbursed: 0, count: 0 });
+              return (
+                <div className={`rounded-xl border ${tCard}`}>
+                  <div className={`px-5 py-4 border-b ${tBorder} flex items-center gap-2`}>
+                    <Coins className={`w-4 h-4 ${tMuted}`} />
+                    <div>
+                      <h2 className={`font-semibold ${tInk}`}>Funding by year</h2>
+                      <p className={`text-xs ${tMuted}`}>Committed vs. invoiced across every funding year on file. Remaining is what USAC has yet to disburse.</p>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className={`border-b ${tBorder}`}>
+                          <th className={`px-5 py-3 text-left text-xs font-semibold uppercase ${tThLabel}`}>Funding Year</th>
+                          <th className={`px-5 py-3 text-left text-xs font-semibold uppercase ${tThLabel}`}>FRNs</th>
+                          <th className={`px-5 py-3 text-right text-xs font-semibold uppercase ${tThLabel}`}>Authorized</th>
+                          <th className={`px-5 py-3 text-right text-xs font-semibold uppercase ${tThLabel}`}>Invoiced</th>
+                          <th className={`px-5 py-3 text-right text-xs font-semibold uppercase ${tThLabel}`}>Remaining</th>
+                        </tr>
+                      </thead>
+                      <tbody className={`divide-y ${dark ? 'divide-slate-800' : 'divide-slate-100'}`}>
+                        {rows.map((r) => {
+                          const remaining = Math.max(r.authorized - r.disbursed, 0);
+                          return (
+                            <tr key={r.fy} className={tRowHover}>
+                              <td className={`px-5 py-3 font-medium ${tInk}`}>FY{r.fy}{r.fy === getUpcomingFundingYear() ? <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${dark ? 'bg-purple-500/20 text-purple-200' : 'bg-purple-100 text-purple-700'}`}>upcoming</span> : null}</td>
+                              <td className={`px-5 py-3 ${tMuted}`}>{r.count}</td>
+                              <td className={`px-5 py-3 text-right font-medium ${tInk}`}>{formatCurrency(r.authorized)}</td>
+                              <td className={`px-5 py-3 text-right ${r.disbursed ? (dark ? 'text-green-300' : 'text-green-700') : tFaint}`}>{r.disbursed ? formatCurrency(r.disbursed) : '—'}</td>
+                              <td className={`px-5 py-3 text-right ${remaining ? (dark ? 'text-amber-300' : 'text-amber-700') : tFaint}`}>{remaining ? formatCurrency(remaining) : '—'}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className={`border-t ${tBorder} font-semibold`}>
+                          <td className={`px-5 py-3 ${tInk}`}>Total</td>
+                          <td className={`px-5 py-3 ${tMuted}`}>{tot.count}</td>
+                          <td className={`px-5 py-3 text-right ${tInk}`}>{formatCurrency(tot.authorized)}</td>
+                          <td className={`px-5 py-3 text-right ${dark ? 'text-green-300' : 'text-green-700'}`}>{formatCurrency(tot.disbursed)}</td>
+                          <td className={`px-5 py-3 text-right ${dark ? 'text-amber-300' : 'text-amber-700'}`}>{formatCurrency(Math.max(tot.authorized - tot.disbursed, 0))}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Filters */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
               <div className="flex items-end gap-4">
@@ -1958,8 +2073,8 @@ function ApplicantDashboard() {
                     className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
                   >
                     <option value="">All Years</option>
-                    {Array.from({ length: 10 }, (_, i) => 2025 - i).map(y => (
-                      <option key={y} value={y}>{y}</option>
+                    {(() => { const uy = getUpcomingFundingYear(); return Array.from({ length: 11 }, (_, i) => uy - i); })().map(y => (
+                      <option key={y} value={y}>FY{y}{y === getUpcomingFundingYear() ? ' (upcoming)' : ''}</option>
                     ))}
                   </select>
                 </div>
@@ -2102,44 +2217,33 @@ function ApplicantDashboard() {
             {/* Header */}
             <div>
               <h1 className={`text-xl font-bold ${tInk}`}>Compliance</h1>
-              <p className={`text-sm ${tMuted}`}>Download your certified FCC forms, track PIA reviews, and manage appeals.</p>
+              <p className={`text-sm ${tMuted}`}>Review USAC documents, analyze competitive bids, and stay on top of E-Rate deadlines. Track PIA reviews and manage appeals below.</p>
             </div>
 
             {formPdfError && (
               <div className={`rounded-xl border p-4 text-sm ${dark ? 'border-amber-500/40 bg-amber-500/10 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>{formPdfError}</div>
             )}
 
-            {/* Certified FCC Forms */}
-            <div className={`rounded-xl border ${tCard}`}>
-              <div className={`px-5 py-4 border-b ${tBorder} flex items-center gap-2`}>
-                <FileText className={`w-4 h-4 ${tMuted}`} />
-                <div>
-                  <h2 className={`font-semibold ${tInk}`}>Certified FCC Forms</h2>
-                  <p className={`text-xs ${tMuted}`}>Download the actual certified Form 470 &amp; Form 471 PDFs straight from USAC.</p>
-                </div>
-              </div>
-              {applicationList.length > 0 ? (
-                <div className={`divide-y ${dark ? 'divide-slate-800' : 'divide-slate-100'}`}>
-                  {applicationList.map((app) => (
-                    <div key={app.application_number} className="px-5 py-3 flex items-center justify-between gap-4 flex-wrap">
-                      <div className="min-w-0">
-                        <div className={`font-mono text-sm ${tInk}`}>Application {app.application_number}</div>
-                        <div className={`text-xs ${tMuted}`}>FY{app.funding_year} · {app.frn_count} FRN{app.frn_count !== 1 ? 's' : ''}</div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => downloadFormPdf('470', app.application_number)} disabled={pdfBusyApp === `470-${app.application_number}`} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white">
-                          {pdfBusyApp === `470-${app.application_number}` ? <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Download className="w-3.5 h-3.5" />} Form 470 PDF
-                        </button>
-                        <button onClick={() => downloadFormPdf('471', app.application_number)} disabled={pdfBusyApp === `471-${app.application_number}`} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border disabled:opacity-50 ${dark ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-300 text-slate-700 hover:bg-slate-100'}`}>
-                          {pdfBusyApp === `471-${app.application_number}` ? <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Download className="w-3.5 h-3.5" />} Form 471 PDF
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className={`px-5 py-8 text-center text-sm ${tMuted}`}>No applications found for your registered BENs yet.</div>
-              )}
+            {/* Compliance workbench — document review, bid analysis, calendar */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <button onClick={() => router.push('/compliance?tab=review')} className={`text-left rounded-xl border p-5 transition-all ${tCard} hover:border-purple-400 hover:shadow-md`}>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${dark ? 'bg-indigo-500/15 text-indigo-300' : 'bg-indigo-100 text-indigo-600'}`}><Shield className="w-5 h-5" /></div>
+                <h2 className={`font-semibold ${tInk}`}>Document Review</h2>
+                <p className={`text-xs mt-1 ${tMuted}`}>AI-check a Form 470/471/486 and supporting docs against USAC rules before you file.</p>
+                <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-purple-600">Open <ChevronRight className="w-3.5 h-3.5" /></span>
+              </button>
+              <button onClick={() => router.push('/compliance?tab=bids')} className={`text-left rounded-xl border p-5 transition-all ${tCard} hover:border-purple-400 hover:shadow-md`}>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${dark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-100 text-amber-600'}`}><BadgeCheck className="w-5 h-5" /></div>
+                <h2 className={`font-semibold ${tInk}`}>Bid Analysis</h2>
+                <p className={`text-xs mt-1 ${tMuted}`}>Compare vendor bid responses to your Form 470 and document a defensible, fair evaluation.</p>
+                <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-purple-600">Open <ChevronRight className="w-3.5 h-3.5" /></span>
+              </button>
+              <button onClick={() => router.push('/compliance?tab=calendar')} className={`text-left rounded-xl border p-5 transition-all ${tCard} hover:border-purple-400 hover:shadow-md`}>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${dark ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-100 text-emerald-600'}`}><Bell className="w-5 h-5" /></div>
+                <h2 className={`font-semibold ${tInk}`}>Annual Calendar</h2>
+                <p className={`text-xs mt-1 ${tMuted}`}>Key E-Rate dates and filing windows so you never miss a Form 470, 471, or invoice deadline.</p>
+                <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-purple-600">Open <ChevronRight className="w-3.5 h-3.5" /></span>
+              </button>
             </div>
 
             {/* FRNs under USAC review (PIA) */}
