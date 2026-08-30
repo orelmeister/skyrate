@@ -226,9 +226,19 @@ class PredictionService:
         """
         count = 0
         
-        # Fetch expiring contracts from USAC
+        # Contracts expiring on/before the end of the CURRENT funding year (June 30)
+        # are already being rebid in the current filing cycle (the entity has posted /
+        # will post a Form 470 for service starting next July) — they are NOT
+        # forward-looking sales leads. Only surface expirations AFTER that cutoff.
+        _now = datetime.utcnow()
+        _current_fy_start = _now.year if _now.month >= 7 else _now.year - 1
+        next_cycle_cutoff = datetime(_current_fy_start + 1, 6, 30)
+        
+        # Fetch expiring contracts from USAC. Look ~24 months ahead so we capture the
+        # full NEXT funding cycle (July of next year through the following June), since
+        # everything before next_cycle_cutoff is filtered out below.
         result = self.usac_client.get_expiring_contracts(
-            months_ahead=12,
+            months_ahead=24,
             states=states,
             funded_only=True,
             limit=5000
@@ -262,6 +272,11 @@ class PredictionService:
                 try:
                     exp_date = datetime.fromisoformat(exp_date_str.replace('T', ' ').split('.')[0])
                 except (ValueError, AttributeError):
+                    continue
+                
+                # Skip contracts expiring on/before the end of the current funding
+                # year — already covered by the current filing cycle, not a lead.
+                if exp_date <= next_cycle_cutoff:
                     continue
                 
                 # Calculate confidence score
@@ -820,6 +835,21 @@ class PredictionService:
                 or_(
                     PredictedLead.expires_at.is_(None),
                     PredictedLead.expires_at > datetime.utcnow()
+                )
+            )
+            
+            # Contract-expiry leads whose contract expires on/before the end of the
+            # CURRENT funding year (June 30) are already being rebid in the current
+            # filing cycle — not forward-looking sales leads. Hide them at read time
+            # too, so stale rows generated before this rule don't show at demo.
+            _now = datetime.utcnow()
+            _current_fy_start = _now.year if _now.month >= 7 else _now.year - 1
+            _next_cycle_cutoff = datetime(_current_fy_start + 1, 6, 30)
+            query = query.filter(
+                or_(
+                    PredictedLead.prediction_type != PredictionType.CONTRACT_EXPIRY.value,
+                    PredictedLead.contract_expiration_date.is_(None),
+                    PredictedLead.contract_expiration_date > _next_cycle_cutoff,
                 )
             )
             
