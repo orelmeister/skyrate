@@ -1338,6 +1338,86 @@ async def get_pilot_frns(
     return _local_response()
 
 
+@router.get("/pilot-program-totals")
+async def get_pilot_program_totals(
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
+):
+    """
+    Program-level totals for the FCC Cybersecurity Pilot Program, aggregated
+    across ALL participants from USAC Open Data dataset qr48-4kx4
+    (Cybersecurity Pilot FCC Form 471), Current form version.
+
+    NOTE: these are Form 471 COMMITMENT amounts, not disbursements. USAC has not
+    published a pilot disbursement/payout dataset, so ``disbursed`` is null and
+    ``disbursement_available`` is False. No numbers are fabricated.
+    """
+    import requests as _requests
+
+    try:
+        from utils.usac_cache import get_or_cache
+
+        def _fetch():
+            base = "https://opendata.usac.org/resource/qr48-4kx4.json"
+            agg = _requests.get(base, params={
+                "$select": "sum(frn_current_committed_amount) as committed, sum(frn_requested_amount) as requested, count(frn) as frn_count",
+                "$where": "form_version='Current'",
+            }, timeout=45)
+            agg.raise_for_status()
+            arow = (agg.json() or [{}])[0]
+            dist = _requests.get(base, params={
+                "$select": "count(distinct billed_entity_number) as participants",
+                "$where": "form_version='Current'",
+            }, timeout=45)
+            dist.raise_for_status()
+            drow = (dist.json() or [{}])[0]
+
+            def _f(v):
+                try:
+                    return float(v)
+                except (TypeError, ValueError):
+                    return 0.0
+
+            def _i(v):
+                try:
+                    return int(float(v))
+                except (TypeError, ValueError):
+                    return 0
+
+            return {
+                "committed": _f(arow.get("committed")),
+                "requested": _f(arow.get("requested")),
+                "frn_count": _i(arow.get("frn_count")),
+                "participants": _i(drow.get("participants")),
+            }
+
+        result = get_or_cache(
+            namespace="pilot_program_totals",
+            params={"v": 1},
+            ttl_hours=6,
+            fetch_fn=_fetch,
+        )
+        return {
+            "success": True,
+            "dataset": "qr48-4kx4",
+            "source": "USAC Open Data - Cybersecurity Pilot FCC Form 471",
+            "program": {
+                "committed": result.get("committed", 0),
+                "requested": result.get("requested", 0),
+                "frn_count": result.get("frn_count", 0),
+                "participants": result.get("participants", 0),
+                "disbursed": None,
+                "disbursement_available": False,
+                "appropriation_usd": 200000000,
+                "note": "Amounts are USAC-published Form 471 commitments. USAC has not published pilot disbursement/payout data, so paid figures are unavailable.",
+            },
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load Cybersecurity Pilot program totals: {str(e)}",
+        )
+
+
 # ==================== FORM 470 LEAD GENERATION (Sprint 3) ====================
 
 class Form470SearchRequest(BaseModel):

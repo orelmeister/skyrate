@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, type PilotFrnRecord, type PilotFrnResponse } from "@/lib/api";
+import { api, type PilotFrnRecord, type PilotFrnResponse, type PilotProgramTotalsResponse } from "@/lib/api";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 
 /**
@@ -29,6 +29,7 @@ export default function PilotFrns() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
+  const [programTotals, setProgramTotals] = useState<PilotProgramTotalsResponse["program"] | null>(null);
 
   const load = useCallback(async (refresh = false) => {
     if (refresh) setRefreshing(true);
@@ -53,11 +54,47 @@ export default function PilotFrns() {
     load(false);
   }, [load]);
 
+  // Program-level totals (national committed pool) load once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    api.getPilotProgramTotals()
+      .then((resp) => {
+        if (!cancelled && resp.success && resp.data?.program) setProgramTotals(resp.data.program);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const frns = useMemo(() => {
     const list = data?.frns || [];
     if (!statusFilter) return list;
     return list.filter((f) => (f.status || "").toLowerCase().includes(statusFilter.toLowerCase()));
   }, [data, statusFilter]);
+
+  // Vendor's own committed share across all their pilot FRNs.
+  const myCommitted = useMemo(
+    () => (data?.frns || []).reduce((s, f) => s + Number(f.committed_amount || 0), 0),
+    [data],
+  );
+
+  // Per-entity payouts: group the vendor's pilot FRNs by participant (BEN),
+  // summing committed + requested. Committed = USAC Form 471 commitment (there
+  // is no published pilot disbursement figure).
+  const perEntity = useMemo(() => {
+    const map = new Map<string, { ben: string; name: string; state: string; committed: number; requested: number; frn_count: number }>();
+    for (const f of data?.frns || []) {
+      const key = f.ben || f.entity_name || f.frn;
+      const cur = map.get(key) || { ben: f.ben || "", name: f.entity_name || "", state: f.state || "", committed: 0, requested: 0, frn_count: 0 };
+      cur.committed += Number(f.committed_amount || 0);
+      cur.requested += Number(f.requested_amount || 0);
+      cur.frn_count += 1;
+      if (!cur.name && f.entity_name) cur.name = f.entity_name;
+      map.set(key, cur);
+    }
+    return Array.from(map.values()).sort((a, b) => b.committed - a.committed);
+  }, [data]);
 
   const exportCsv = () => {
     const columns = [
@@ -133,6 +170,86 @@ export default function PilotFrns() {
             <div className="text-2xl font-bold text-red-800">{summary.denied.count}</div>
             <div className="text-xs text-red-600">{money(summary.denied.amount)}</div>
           </div>
+        </div>
+      )}
+
+      {/* Payouts & Disbursements — program-level pool + this vendor's per-entity
+          commitments. Source: USAC Open Data qr48-4kx4 (Cybersecurity Pilot FCC
+          Form 471). Amounts are Form 471 COMMITMENTS; USAC has not published a
+          pilot disbursement dataset, so paid/disbursed figures are unavailable. */}
+      {(programTotals || (data && data.frns.length > 0)) && (
+        <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="text-lg font-semibold text-slate-900">Payouts &amp; Disbursements</h3>
+            <span className="text-xs text-slate-400">
+              Source: USAC Open Data (qr48-4kx4) · commitments, not disbursements
+            </span>
+          </div>
+
+          {programTotals && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-3">
+                <div className="text-xs font-medium text-indigo-700">National pool committed</div>
+                <div className="text-xl font-bold text-indigo-900">{money(programTotals.committed)}</div>
+                <div className="text-[11px] text-indigo-500">{programTotals.frn_count.toLocaleString()} FRNs</div>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="text-xs font-medium text-slate-600">National requested</div>
+                <div className="text-xl font-bold text-slate-900">{money(programTotals.requested)}</div>
+                <div className="text-[11px] text-slate-400">{programTotals.participants.toLocaleString()} participants</div>
+              </div>
+              <div className="rounded-xl border border-green-100 bg-green-50 p-3">
+                <div className="text-xs font-medium text-green-700">Your customers&apos; committed</div>
+                <div className="text-xl font-bold text-green-900">{money(myCommitted)}</div>
+                <div className="text-[11px] text-green-500">
+                  {programTotals.committed > 0 ? `${((myCommitted / programTotals.committed) * 100).toFixed(2)}% of pool` : "share of pool"}
+                </div>
+              </div>
+              <div className="rounded-xl border border-amber-100 bg-amber-50 p-3">
+                <div className="text-xs font-medium text-amber-700">Disbursed / paid</div>
+                <div className="text-lg font-bold text-amber-900">Not yet published</div>
+                <div className="text-[11px] text-amber-500">USAC has no pilot payout dataset</div>
+              </div>
+            </div>
+          )}
+
+          {programTotals && (
+            <p className="text-xs text-slate-400">
+              FCC Cybersecurity Pilot appropriation: {money(programTotals.appropriation_usd)} over 3 years. {programTotals.note}
+            </p>
+          )}
+
+          {perEntity.length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="min-w-full divide-y divide-slate-200 text-sm">
+                <thead className="bg-slate-50">
+                  <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <th className="px-4 py-2.5">Participant</th>
+                    <th className="px-4 py-2.5">State</th>
+                    <th className="px-4 py-2.5 text-right">FRNs</th>
+                    <th className="px-4 py-2.5 text-right">Requested</th>
+                    <th className="px-4 py-2.5 text-right">Committed</th>
+                    <th className="px-4 py-2.5 text-right">Disbursed</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {perEntity.map((e) => (
+                    <tr key={e.ben || e.name} className="hover:bg-slate-50">
+                      <td className="px-4 py-2.5">
+                        <div className="text-slate-900">{e.name || "—"}</div>
+                        {e.ben && <div className="text-xs text-slate-400">BEN {e.ben}</div>}
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-600">{e.state || "—"}</td>
+                      <td className="px-4 py-2.5 text-right text-slate-600">{e.frn_count}</td>
+                      <td className="px-4 py-2.5 text-right text-slate-600">{money(e.requested)}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-slate-900">{money(e.committed)}</td>
+                      <td className="px-4 py-2.5 text-right text-slate-400">n/a</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

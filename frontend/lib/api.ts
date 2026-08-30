@@ -478,6 +478,23 @@ export interface PilotFrnResponse {
   error?: string;
 }
 
+export interface PilotProgramTotalsResponse {
+  success: boolean;
+  dataset?: string;
+  source?: string;
+  program: {
+    committed: number;
+    requested: number;
+    frn_count: number;
+    participants: number;
+    disbursed: number | null;
+    disbursement_available: boolean;
+    appropriation_usd: number;
+    note: string;
+  };
+  error?: string;
+}
+
 
 // ==================== FRN WATCH / REPORT MONITOR TYPES ====================
 
@@ -2972,6 +2989,11 @@ class ApiClient {
     if (limit) params.set('limit', String(limit));
     const queryString = params.toString() ? `?${params.toString()}` : '';
     return this.request(`/api/v1/vendor/pilot-frns${queryString}`);
+  }
+
+  // Program-level Cybersecurity Pilot totals (national committed pool, participants).
+  async getPilotProgramTotals(): Promise<ApiResponse<PilotProgramTotalsResponse>> {
+    return this.request(`/api/v1/vendor/pilot-program-totals`);
   }
 
   // ==================== FORM 470 LEAD GENERATION (Sprint 3) ====================
