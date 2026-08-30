@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import type { SwitchingSignalsResponse, OpportunitySignals, SwitchLikelihood } from "@/lib/api";
 import { SkeletonRows, SkeletonStatCards } from "@/components/Skeleton";
-import { downloadCsv, csvFilename } from "@/lib/csv-export";
+import { downloadCsv, csvFilename, downloadExcel, excelFilename } from "@/lib/csv-export";
 
 // Resolve + download a file (used for the certified Form 471 PDF from USAC).
 // USAC certified PDFs live on publicdata.usac.org and block cross-origin fetch,
@@ -401,6 +401,46 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
     }
   };
 
+  // Export the currently-loaded (filtered) Opportunities. Exports the rows the
+  // user is viewing on this page for the active filters.
+  const buildOpportunitiesExportData = () => {
+    const columns = ['ben', 'organization_name', 'state', 'city', 'entity_type', 'signals', 'confidence_score', 'estimated_deal_value', 'funding_year', 'discount_rate', 'service_type', 'manufacturer', 'equipment_model', 'contract_expiration_date', 'current_provider_name', 'c2_budget_total', 'c2_budget_remaining', 'contact_name', 'contact_email', 'contact_phone', 'status'];
+    const rows = leads.map((l) => ({
+      ben: l.ben,
+      organization_name: l.organization_name || '',
+      state: l.state || '',
+      city: l.city || '',
+      entity_type: l.entity_type || '',
+      signals: (l.signal_types && l.signal_types.length ? l.signal_types : [l.prediction_type]).join('; '),
+      confidence_score: l.confidence_score ?? '',
+      estimated_deal_value: l.estimated_deal_value ?? '',
+      funding_year: l.funding_year ?? '',
+      discount_rate: l.discount_rate ?? '',
+      service_type: l.service_type || '',
+      manufacturer: l.manufacturer || '',
+      equipment_model: l.equipment_model || '',
+      contract_expiration_date: l.contract_expiration_date || '',
+      current_provider_name: l.current_provider_name || '',
+      c2_budget_total: l.c2_budget_total ?? '',
+      c2_budget_remaining: l.c2_budget_remaining ?? '',
+      contact_name: l.contact_name || '',
+      contact_email: l.contact_email || '',
+      contact_phone: l.contact_phone || '',
+      status: l.status || '',
+    }));
+    return { columns, rows };
+  };
+
+  const exportOpportunitiesCsv = () => {
+    const { columns, rows } = buildOpportunitiesExportData();
+    downloadCsv(csvFilename('opportunities'), columns, rows);
+  };
+
+  const exportOpportunitiesExcel = () => {
+    const { columns, rows } = buildOpportunitiesExportData();
+    downloadExcel(excelFilename('opportunities'), columns, rows);
+  };
+
   const handleStatusUpdate = async (leadId: number, newStatus: string) => {
     try {
       await api.patch(`/vendor/predicted-leads/${leadId}/status`, {
@@ -679,20 +719,38 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
             One unified list of schools likely to buy — each entity shows every signal that applies (contract expiring, equipment refresh, C2 budget) plus a switch-likelihood score
           </p>
         </div>
-        <button
-          onClick={handleRefresh}
-          disabled={isRefreshing}
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:shadow-lg transition-all disabled:opacity-50"
-        >
-          {isRefreshing ? (
-            <>
-              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-              Analyzing...
-            </>
-          ) : (
-            <>🔄 Refresh Predictions</>
-          )}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={exportOpportunitiesCsv}
+            disabled={leads.length === 0}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors disabled:opacity-50"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+            Export CSV
+          </button>
+          <button
+            onClick={exportOpportunitiesExcel}
+            disabled={leads.length === 0}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-emerald-700 bg-white border border-emerald-200 rounded-xl hover:bg-emerald-50 transition-colors disabled:opacity-50"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+            Export Excel
+          </button>
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:shadow-lg transition-all disabled:opacity-50"
+          >
+            {isRefreshing ? (
+              <>
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                Analyzing...
+              </>
+            ) : (
+              <>🔄 Refresh Predictions</>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}

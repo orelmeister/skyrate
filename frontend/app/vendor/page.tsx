@@ -15,8 +15,8 @@ import OpportunityAlerts from "@/components/OpportunityAlerts";
 import { TableExportBar } from "@/components/TableExportBar";
 import MissingIdentifierBanner from "@/components/MissingIdentifierBanner";
 import { SkeletonRows, SkeletonTable, SkeletonStatCards } from "@/components/Skeleton";
-import { downloadCsv, csvFilename } from "@/lib/csv-export";
 import { DisbursementPanel } from "@/components/FRNDetailModal";
+import { downloadCsv, csvFilename, downloadExcel, excelFilename } from "@/lib/csv-export";
 import { ChevronRight, ChevronDown, Target, Clock, Building2, Bell, ArrowUpRight, Zap, BarChart3, Search, TrendingUp, Home, Activity, Shield, Map as MapIcon, Sparkles, FileSearch, Bookmark, Settings as SettingsIcon, HelpCircle, PanelLeft, Sun, Moon, LogOut, Receipt } from "lucide-react";
 import PilotFrns from "./PilotFrns";
 import { FrnSubStatusInfo, FRN_PENDING_REASON_OPTIONS } from "@/components/FrnSubStatusInfo";
@@ -1757,8 +1757,77 @@ function VendorPortalPage() {
       service_types: l.service_types?.join('; ') || '',
       manufacturers: l.manufacturers?.join('; ') || '',
     }));
-    
+    return { columns, rows };
+  };
+
+  const exportForm470LeadsCsv = () => {
+    const { columns, rows } = exportSelectedForm470Leads();
     downloadCsv(csvFilename('form470_leads'), columns, rows);
+  };
+
+  const exportForm470LeadsExcel = () => {
+    const { columns, rows } = exportSelectedForm470Leads();
+    downloadExcel(excelFilename('form470_leads'), columns, rows);
+  };
+
+  // Invoicing / Disbursements export — one row per invoice line (falls back to a
+  // FRN-summary row when a FRN has no individual lines). Exports whatever is
+  // currently loaded for the vendor's SPIN + selected funding year.
+  const buildInvoiceExportData = () => {
+    const columns = ['frn', 'funding_year', 'ben', 'billed_entity_name', 'service_provider_name', 'spin', 'service_type', 'category', 'invoice_id', 'invoice_type', 'invoice_status', 'invoice_date', 'completion_date', 'requested_amount', 'disbursed_amount'];
+    const rows: Record<string, unknown>[] = [];
+    for (const g of invoiceData?.frns || []) {
+      if (g.lines && g.lines.length > 0) {
+        for (const ln of g.lines) {
+          rows.push({
+            frn: g.frn,
+            funding_year: g.funding_year || '',
+            ben: g.billed_entity_number || '',
+            billed_entity_name: g.billed_entity_name || '',
+            service_provider_name: g.service_provider_name || '',
+            spin: g.spin || '',
+            service_type: ln.service_type || g.service_type || '',
+            category: ln.category || g.category || '',
+            invoice_id: ln.invoice_id || '',
+            invoice_type: ln.invoice_type || '',
+            invoice_status: ln.status || '',
+            invoice_date: ln.invoice_date || '',
+            completion_date: ln.completion_date || '',
+            requested_amount: ln.requested_amount ?? 0,
+            disbursed_amount: ln.disbursed_amount ?? 0,
+          });
+        }
+      } else {
+        rows.push({
+          frn: g.frn,
+          funding_year: g.funding_year || '',
+          ben: g.billed_entity_number || '',
+          billed_entity_name: g.billed_entity_name || '',
+          service_provider_name: g.service_provider_name || '',
+          spin: g.spin || '',
+          service_type: g.service_type || '',
+          category: g.category || '',
+          invoice_id: '',
+          invoice_type: '',
+          invoice_status: '',
+          invoice_date: '',
+          completion_date: '',
+          requested_amount: g.total_requested ?? 0,
+          disbursed_amount: g.total_disbursed ?? 0,
+        });
+      }
+    }
+    return { columns, rows };
+  };
+
+  const exportInvoicesCsv = () => {
+    const { columns, rows } = buildInvoiceExportData();
+    downloadCsv(csvFilename('invoicing_disbursements'), columns, rows);
+  };
+
+  const exportInvoicesExcel = () => {
+    const { columns, rows } = buildInvoiceExportData();
+    downloadExcel(excelFilename('invoicing_disbursements'), columns, rows);
   };
 
   const exportSavedLeads = async () => {
@@ -2416,7 +2485,28 @@ function VendorPortalPage() {
                 </div>
 
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="p-4 border-b border-slate-200"><h2 className="text-lg font-semibold text-slate-900">Invoices by FRN</h2><p className="text-sm text-slate-500">Click a row to see individual invoice lines</p></div>
+                  <div className="p-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-semibold text-slate-900">Invoices by FRN</h2>
+                      <p className="text-sm text-slate-500">Click a row to see individual invoice lines</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={exportInvoicesCsv}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                        Export CSV
+                      </button>
+                      <button
+                        onClick={exportInvoicesExcel}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-700 bg-white border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                        Export Excel
+                      </button>
+                    </div>
+                  </div>
                   <div className="divide-y divide-slate-100">
                     {[...invoiceData.frns].sort((a, b) => (a.billed_entity_name || '').localeCompare(b.billed_entity_name || '')).map((g) => {
                       const out = Math.max(0, (g.total_requested || 0) - (g.total_disbursed || 0));
@@ -3641,7 +3731,8 @@ function VendorPortalPage() {
               <TableExportBar
                 selectedCount={selectedForm470Leads.size}
                 totalCount={form470Leads.length}
-                onExportCsv={exportSelectedForm470Leads}
+                onExportCsv={exportForm470LeadsCsv}
+                onExportExcel={exportForm470LeadsExcel}
                 onClearSelection={clearForm470Selection}
               />
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
