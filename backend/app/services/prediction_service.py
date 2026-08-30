@@ -718,6 +718,140 @@ class PredictionService:
     # QUERY & ACCESS METHODS (used by API endpoints)
     # =========================================================================
     
+    def _apply_prediction_filters(
+        self,
+        query,
+        prediction_type: Optional[PredictionType] = None,
+        states: Optional[List[str]] = None,
+        manufacturers: Optional[List[str]] = None,
+        entity_types: Optional[List[str]] = None,
+        min_confidence: float = 0.0,
+        min_deal_value: float = 0.0,
+        max_deal_value: Optional[float] = None,
+        service_type: Optional[str] = None,
+        status_filter: Optional[List[PredictionStatus]] = None,
+        name: Optional[str] = None,
+    ):
+        """Apply the shared PredictedLead filter set to a query and return it.
+
+        Extracted so both get_predictions (per-row) and get_unified_opportunities
+        (grouped-by-BEN) apply identical filtering. Does NOT sort or paginate.
+        """
+        # Apply filters
+        if prediction_type:
+            query = query.filter(PredictedLead.prediction_type == prediction_type)
+
+        if name:
+            query = query.filter(
+                func.lower(PredictedLead.organization_name).contains(name.strip().lower())
+            )
+
+        if states:
+            query = query.filter(PredictedLead.state.in_(states))
+
+        if manufacturers:
+            # Case-insensitive manufacturer matching
+            mfr_conditions = []
+            for mfr in manufacturers:
+                mfr_conditions.append(
+                    func.lower(PredictedLead.manufacturer).contains(mfr.lower())
+                )
+            query = query.filter(or_(*mfr_conditions))
+
+        if entity_types:
+            et_conditions = []
+            for et in entity_types:
+                et_lower = et.lower()
+                if et_lower == "charter school":
+                    # Charter schools often have entity_type="School" with "charter" in name
+                    et_conditions.append(or_(
+                        func.lower(PredictedLead.entity_type).contains("charter"),
+                        func.lower(PredictedLead.organization_name).contains("charter")
+                    ))
+                elif et_lower == "private school":
+                    # Private schools often have entity_type="School" or NULL — fall back
+                    # to matching organization name keywords (private, academy, prep,
+                    # parochial, christian, catholic, montessori, hebrew, day school).
+                    et_conditions.append(or_(
+                        func.lower(PredictedLead.entity_type).contains("private"),
+                        func.lower(PredictedLead.organization_name).contains("private"),
+                        func.lower(PredictedLead.organization_name).contains("academy"),
+                        func.lower(PredictedLead.organization_name).contains("parochial"),
+                        func.lower(PredictedLead.organization_name).contains("montessori"),
+                        func.lower(PredictedLead.organization_name).contains(" prep "),
+                        func.lower(PredictedLead.organization_name).contains("day school"),
+                    ))
+                else:
+                    et_conditions.append(
+                        func.lower(PredictedLead.entity_type).contains(et_lower)
+                    )
+            query = query.filter(or_(*et_conditions))
+
+        if min_confidence > 0:
+            query = query.filter(PredictedLead.confidence_score >= min_confidence)
+
+        if min_deal_value > 0:
+            query = query.filter(PredictedLead.estimated_deal_value >= min_deal_value)
+
+        # Optional max funding filter (used by $-range UI filter)
+        if max_deal_value is not None and max_deal_value > 0:
+            query = query.filter(PredictedLead.estimated_deal_value <= max_deal_value)
+
+        # Optional service-type filter. Maps UI tokens to USAC Form 471
+        # service_type_name keywords (stored on PredictedLead.service_type).
+        if service_type:
+            st = service_type.strip().lower()
+            service_type_keyword_map = {
+                'internet': ['internet'],
+                'data-transmission': ['data transmission'],
+                'data_transmission': ['data transmission'],
+                'equipment': ['internal connections'],
+                'voice': ['voice'],
+                'mibs': ['managed internal broadband', 'mibs'],
+            }
+            st_keywords = service_type_keyword_map.get(st, [st])
+            st_conditions = [
+                func.lower(PredictedLead.service_type).contains(kw)
+                for kw in st_keywords
+            ]
+            query = query.filter(or_(*st_conditions))
+
+        if status_filter:
+            query = query.filter(PredictedLead.status.in_(status_filter))
+        else:
+            # Default: exclude dismissed and expired
+            query = query.filter(
+                PredictedLead.status.in_([
+                    PredictionStatus.NEW,
+                    PredictionStatus.VIEWED,
+                    PredictionStatus.CONTACTED
+                ])
+            )
+
+        # Exclude expired predictions
+        query = query.filter(
+            or_(
+                PredictedLead.expires_at.is_(None),
+                PredictedLead.expires_at > datetime.utcnow()
+            )
+        )
+
+        # Contract-expiry leads whose contract expires on/before the end of the
+        # CURRENT funding year (June 30) are already being rebid in the current
+        # filing cycle — not forward-looking sales leads. Hide them at read time
+        # too, so stale rows generated before this rule don't show at demo.
+        _now = datetime.utcnow()
+        _current_fy_start = _now.year if _now.month >= 7 else _now.year - 1
+        _next_cycle_cutoff = datetime(_current_fy_start + 1, 6, 30)
+        query = query.filter(
+            or_(
+                PredictedLead.prediction_type != PredictionType.CONTRACT_EXPIRY.value,
+                PredictedLead.contract_expiration_date.is_(None),
+                PredictedLead.contract_expiration_date > _next_cycle_cutoff,
+            )
+        )
+        return query
+
     def get_predictions(
         self,
         db: Session,
@@ -734,7 +868,8 @@ class PredictionService:
         sort_by: str = 'confidence_score',
         sort_order: str = 'desc',
         limit: int = 50,
-        offset: int = 0
+        offset: int = 0,
+        name: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Query predicted leads with filters. Used by vendor API endpoints.
@@ -743,116 +878,20 @@ class PredictionService:
         """
         try:
             query = db.query(PredictedLead)
-            
-            # Apply filters
-            if prediction_type:
-                query = query.filter(PredictedLead.prediction_type == prediction_type)
-            
-            if states:
-                query = query.filter(PredictedLead.state.in_(states))
-            
-            if manufacturers:
-                # Case-insensitive manufacturer matching
-                mfr_conditions = []
-                for mfr in manufacturers:
-                    mfr_conditions.append(
-                        func.lower(PredictedLead.manufacturer).contains(mfr.lower())
-                    )
-                query = query.filter(or_(*mfr_conditions))
-            
-            if entity_types:
-                et_conditions = []
-                for et in entity_types:
-                    et_lower = et.lower()
-                    if et_lower == "charter school":
-                        # Charter schools often have entity_type="School" with "charter" in name
-                        et_conditions.append(or_(
-                            func.lower(PredictedLead.entity_type).contains("charter"),
-                            func.lower(PredictedLead.organization_name).contains("charter")
-                        ))
-                    elif et_lower == "private school":
-                        # Private schools often have entity_type="School" or NULL — fall back
-                        # to matching organization name keywords (private, academy, prep,
-                        # parochial, christian, catholic, montessori, hebrew, day school).
-                        et_conditions.append(or_(
-                            func.lower(PredictedLead.entity_type).contains("private"),
-                            func.lower(PredictedLead.organization_name).contains("private"),
-                            func.lower(PredictedLead.organization_name).contains("academy"),
-                            func.lower(PredictedLead.organization_name).contains("parochial"),
-                            func.lower(PredictedLead.organization_name).contains("montessori"),
-                            func.lower(PredictedLead.organization_name).contains(" prep "),
-                            func.lower(PredictedLead.organization_name).contains("day school"),
-                        ))
-                    else:
-                        et_conditions.append(
-                            func.lower(PredictedLead.entity_type).contains(et_lower)
-                        )
-                query = query.filter(or_(*et_conditions))
-            
-            if min_confidence > 0:
-                query = query.filter(PredictedLead.confidence_score >= min_confidence)
-            
-            if min_deal_value > 0:
-                query = query.filter(PredictedLead.estimated_deal_value >= min_deal_value)
-            
-            # Optional max funding filter (used by $-range UI filter)
-            if max_deal_value is not None and max_deal_value > 0:
-                query = query.filter(PredictedLead.estimated_deal_value <= max_deal_value)
-            
-            # Optional service-type filter. Maps UI tokens to USAC Form 471
-            # service_type_name keywords (stored on PredictedLead.service_type).
-            if service_type:
-                st = service_type.strip().lower()
-                service_type_keyword_map = {
-                    'internet': ['internet'],
-                    'data-transmission': ['data transmission'],
-                    'data_transmission': ['data transmission'],
-                    'equipment': ['internal connections'],
-                    'voice': ['voice'],
-                    'mibs': ['managed internal broadband', 'mibs'],
-                }
-                st_keywords = service_type_keyword_map.get(st, [st])
-                st_conditions = [
-                    func.lower(PredictedLead.service_type).contains(kw)
-                    for kw in st_keywords
-                ]
-                query = query.filter(or_(*st_conditions))
-            
-            if status_filter:
-                query = query.filter(PredictedLead.status.in_(status_filter))
-            else:
-                # Default: exclude dismissed and expired
-                query = query.filter(
-                    PredictedLead.status.in_([
-                        PredictionStatus.NEW,
-                        PredictionStatus.VIEWED,
-                        PredictionStatus.CONTACTED
-                    ])
-                )
-            
-            # Exclude expired predictions
-            query = query.filter(
-                or_(
-                    PredictedLead.expires_at.is_(None),
-                    PredictedLead.expires_at > datetime.utcnow()
-                )
+            query = self._apply_prediction_filters(
+                query,
+                prediction_type=prediction_type,
+                states=states,
+                manufacturers=manufacturers,
+                entity_types=entity_types,
+                min_confidence=min_confidence,
+                min_deal_value=min_deal_value,
+                max_deal_value=max_deal_value,
+                service_type=service_type,
+                status_filter=status_filter,
+                name=name,
             )
-            
-            # Contract-expiry leads whose contract expires on/before the end of the
-            # CURRENT funding year (June 30) are already being rebid in the current
-            # filing cycle — not forward-looking sales leads. Hide them at read time
-            # too, so stale rows generated before this rule don't show at demo.
-            _now = datetime.utcnow()
-            _current_fy_start = _now.year if _now.month >= 7 else _now.year - 1
-            _next_cycle_cutoff = datetime(_current_fy_start + 1, 6, 30)
-            query = query.filter(
-                or_(
-                    PredictedLead.prediction_type != PredictionType.CONTRACT_EXPIRY.value,
-                    PredictedLead.contract_expiration_date.is_(None),
-                    PredictedLead.contract_expiration_date > _next_cycle_cutoff,
-                )
-            )
-            
+
             # Get total count before pagination
             total = query.count()
             
@@ -894,7 +933,271 @@ class PredictionService:
         except Exception as e:
             logger.error(f"Error querying predictions: {e}")
             return {'success': False, 'error': str(e), 'data': [], 'total': 0}
-    
+
+    @staticmethod
+    def _parse_dt(value: Optional[str]) -> Optional[datetime]:
+        """Parse an ISO datetime string back to datetime (tolerant)."""
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(str(value).replace('Z', '+00:00').split('+')[0])
+        except Exception:
+            return None
+
+    def _build_opportunity(
+        self,
+        ben: str,
+        member_dicts: List[Dict[str, Any]],
+        serviced_bens: Optional[set] = None,
+    ) -> Dict[str, Any]:
+        """Collapse all PredictedLead rows for one BEN into a single unified
+        opportunity carrying every applicable signal + a switch-likelihood score.
+
+        Each member dict is a PredictedLead.to_dict(). The representative row
+        (highest confidence) supplies identity; per-signal rows overlay their
+        own fields so the frontend detail panel renders every applicable section.
+        """
+        # Representative = highest-confidence member (identity / react key / id).
+        ordered = sorted(member_dicts, key=lambda d: d.get('confidence_score') or 0, reverse=True)
+        rep = ordered[0]
+        opp: Dict[str, Any] = dict(rep)
+
+        signals: Dict[str, Any] = {}
+        signal_types: List[str] = []
+
+        contract_rows = [d for d in member_dicts if d.get('prediction_type') == PredictionType.CONTRACT_EXPIRY.value]
+        equip_rows = [d for d in member_dicts if d.get('prediction_type') == PredictionType.EQUIPMENT_REFRESH.value]
+        c2_rows = [d for d in member_dicts if d.get('prediction_type') == PredictionType.C2_BUDGET_RESET.value]
+
+        # --- Contract expiry: pick the SOONEST expiring contract for this entity.
+        if contract_rows:
+            c = min(
+                contract_rows,
+                key=lambda d: self._parse_dt(d.get('contract_expiration_date')) or datetime.max,
+            )
+            signals['contract_expiry'] = {
+                'contract_expiration_date': c.get('contract_expiration_date'),
+                'current_provider_name': c.get('current_provider_name'),
+                'current_spin': c.get('current_spin'),
+                'contract_number': c.get('contract_number'),
+            }
+            signal_types.append('contract_expiry')
+            opp['contract_expiration_date'] = c.get('contract_expiration_date')
+            opp['current_provider_name'] = c.get('current_provider_name') or opp.get('current_provider_name')
+            opp['current_spin'] = c.get('current_spin') or opp.get('current_spin')
+            opp['contract_number'] = c.get('contract_number') or opp.get('contract_number')
+
+        # --- Equipment refresh: pick the highest-value equipment line.
+        if equip_rows:
+            e = max(equip_rows, key=lambda d: d.get('estimated_deal_value') or 0)
+            signals['equipment_refresh'] = {
+                'manufacturer': e.get('manufacturer'),
+                'equipment_model': e.get('equipment_model'),
+                'product_type': e.get('product_type'),
+                'estimated_deal_value': e.get('estimated_deal_value'),
+                'funding_year': e.get('funding_year'),
+            }
+            signal_types.append('equipment_refresh')
+            opp['manufacturer'] = e.get('manufacturer') or opp.get('manufacturer')
+            opp['equipment_model'] = e.get('equipment_model') or opp.get('equipment_model')
+            opp['product_type'] = e.get('product_type') or opp.get('product_type')
+            # Original equipment cost + purchase year kept separate from the headline
+            # estimated_deal_value so the frontend replacement estimate stays correct.
+            opp['equipment_original_cost'] = e.get('estimated_deal_value')
+            opp['equipment_funding_year'] = e.get('funding_year')
+
+        # --- Category 2 budget: pick the line with the most remaining budget.
+        if c2_rows:
+            c2 = max(c2_rows, key=lambda d: d.get('c2_budget_remaining') or 0)
+            signals['c2_budget'] = {
+                'c2_budget_total': c2.get('c2_budget_total'),
+                'c2_budget_remaining': c2.get('c2_budget_remaining'),
+                'c2_budget_cycle': c2.get('c2_budget_cycle'),
+            }
+            signal_types.append('c2_budget')
+            opp['c2_budget_total'] = c2.get('c2_budget_total')
+            opp['c2_budget_remaining'] = c2.get('c2_budget_remaining')
+            opp['c2_budget_cycle'] = c2.get('c2_budget_cycle')
+
+        # --- Aggregates across all members.
+        opp['confidence_score'] = max((d.get('confidence_score') or 0) for d in member_dicts)
+        opp['estimated_deal_value'] = max((d.get('estimated_deal_value') or 0) for d in member_dicts) or None
+        opp['estimated_deal_value_basis'] = 'max'
+        action_dates = [self._parse_dt(d.get('predicted_action_date')) for d in member_dicts]
+        action_dates = [d for d in action_dates if d is not None]
+        if action_dates:
+            opp['predicted_action_date'] = min(action_dates).isoformat()
+        # Representative FRN: rep's own, else the first member that has one.
+        if not opp.get('frn'):
+            for d in member_dicts:
+                if d.get('frn'):
+                    opp['frn'] = d['frn']
+                    break
+
+        opp['signals'] = signals
+        opp['signal_types'] = signal_types
+        opp['member_prediction_ids'] = [d.get('id') for d in member_dicts if d.get('id')]
+
+        # --- Switch-likelihood score (0-100) + short reason.
+        score = 0
+        reasons: List[str] = []
+        ce = signals.get('contract_expiry')
+        if ce and ce.get('contract_expiration_date'):
+            exp = self._parse_dt(ce['contract_expiration_date'])
+            if exp:
+                days = (exp - datetime.utcnow()).days
+                if days < 0:
+                    score += 35
+                    reasons.append('Contract already expired - active rebid window')
+                elif days <= 183:
+                    score += 40
+                    reasons.append('Contract expiring within 6 months')
+                elif days <= 366:
+                    score += 30
+                    reasons.append('Contract expiring within 12 months')
+                else:
+                    score += 15
+                    reasons.append('Contract expiry approaching')
+        if 'equipment_refresh' in signals:
+            score += 20
+            reasons.append('Aging equipment due for refresh')
+        c2 = signals.get('c2_budget')
+        if c2 and (c2.get('c2_budget_remaining') or 0) > 0:
+            score += 20
+            reasons.append('Unspent Category 2 budget available')
+        score += int((opp.get('confidence_score') or 0) * 20)
+        score = max(0, min(100, score))
+
+        at_risk = None
+        if serviced_bens is not None:
+            at_risk = str(ben) in serviced_bens
+            if at_risk:
+                reasons.insert(0, 'You currently service this entity - retention risk')
+
+        level = 'high' if score >= 66 else ('medium' if score >= 33 else 'low')
+        opp['switch_likelihood'] = {
+            'score': score,
+            'level': level,
+            'reason': '; '.join(reasons) if reasons else 'Limited switching signals',
+            'at_risk': at_risk,
+        }
+        return opp
+
+    def get_unified_opportunities(
+        self,
+        db: Session,
+        states: Optional[List[str]] = None,
+        manufacturers: Optional[List[str]] = None,
+        entity_types: Optional[List[str]] = None,
+        min_confidence: float = 0.0,
+        min_deal_value: float = 0.0,
+        max_deal_value: Optional[float] = None,
+        service_type: Optional[str] = None,
+        status_filter: Optional[List[PredictionStatus]] = None,
+        name: Optional[str] = None,
+        signal: Optional[str] = None,
+        serviced_bens: Optional[set] = None,
+        sort_by: str = 'confidence_score',
+        sort_order: str = 'desc',
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """Unified vendor opportunities: one row per ENTITY (BEN) merging every
+        prediction type into a single opportunity with signal flags + a
+        switch-likelihood score. Preserves get_predictions for back-compat.
+
+        `signal` optionally filters to entities that carry a specific signal
+        (contract_expiry | equipment_refresh | c2_budget).
+        """
+        try:
+            query = db.query(PredictedLead)
+            # NOTE: prediction_type is intentionally NOT filtered here — all types
+            # are grouped per entity. The `signal` param filters AFTER grouping.
+            query = self._apply_prediction_filters(
+                query,
+                prediction_type=None,
+                states=states,
+                manufacturers=manufacturers,
+                entity_types=entity_types,
+                min_confidence=min_confidence,
+                min_deal_value=min_deal_value,
+                max_deal_value=max_deal_value,
+                service_type=service_type,
+                status_filter=status_filter,
+                name=name,
+            )
+            rows = query.all()
+
+            # Group by BEN.
+            groups: Dict[str, List[Dict[str, Any]]] = {}
+            for lead in rows:
+                ben = str(lead.ben) if lead.ben is not None else ''
+                if not ben:
+                    continue
+                groups.setdefault(ben, []).append(lead.to_dict())
+
+            opportunities = [
+                self._build_opportunity(ben, members, serviced_bens)
+                for ben, members in groups.items()
+            ]
+
+            # Optional secondary signal filter (kept ONE unified list, just scoped).
+            signal_key_map = {
+                'contract_expiry': 'contract_expiry',
+                'equipment_refresh': 'equipment_refresh',
+                'c2_budget': 'c2_budget',
+                'c2_budget_reset': 'c2_budget',
+            }
+            if signal:
+                want = signal_key_map.get(signal.strip().lower())
+                if want:
+                    opportunities = [o for o in opportunities if want in o.get('signal_types', [])]
+
+            # Sort opportunities on aggregate fields (None-safe).
+            SORT_KEYS = {
+                'confidence_score', 'estimated_deal_value', 'predicted_action_date',
+                'organization_name', 'c2_budget_total', 'c2_budget_remaining',
+                'contract_expiration_date', 'state', 'switch_score',
+            }
+            key = 'switch_score' if sort_by == 'switch_likelihood' else sort_by
+            if key == 'entity_name':
+                key = 'organization_name'
+            if key not in SORT_KEYS:
+                key = 'confidence_score'
+            reverse = (sort_order != 'asc')
+
+            def _sort_val(o: Dict[str, Any]):
+                if key == 'switch_score':
+                    return o.get('switch_likelihood', {}).get('score') or 0
+                v = o.get(key)
+                if key in ('predicted_action_date', 'contract_expiration_date'):
+                    dt = self._parse_dt(v)
+                    # Sort missing dates last regardless of direction.
+                    if dt is None:
+                        return datetime.max if not reverse else datetime.min
+                    return dt
+                if key in ('organization_name', 'state'):
+                    return (v or '').lower()
+                return v or 0
+
+            opportunities.sort(key=_sort_val, reverse=reverse)
+
+            total = len(opportunities)
+            page = opportunities[offset:offset + limit]
+
+            return {
+                'success': True,
+                'unified': True,
+                'data': page,
+                'total': total,
+                'limit': limit,
+                'offset': offset,
+                'has_more': (offset + limit) < total,
+            }
+        except Exception as e:
+            logger.error(f"Error building unified opportunities: {e}")
+            return {'success': False, 'error': str(e), 'data': [], 'total': 0}
+
     def get_prediction_by_id(
         self,
         db: Session,

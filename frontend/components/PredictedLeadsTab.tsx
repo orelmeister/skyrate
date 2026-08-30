@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
-import type { SwitchingSignalsResponse } from "@/lib/api";
+import type { SwitchingSignalsResponse, OpportunitySignals, SwitchLikelihood } from "@/lib/api";
 import { SkeletonRows, SkeletonStatCards } from "@/components/Skeleton";
 import { downloadCsv, csvFilename } from "@/lib/csv-export";
 
@@ -71,6 +71,13 @@ interface PredictedLead {
   frn: string | null;
   status: string;
   created_at: string;
+  // Unified "Opportunities" fields (present when fetched with unified=true).
+  signals?: OpportunitySignals;
+  signal_types?: string[];
+  switch_likelihood?: SwitchLikelihood;
+  estimated_deal_value_basis?: string;
+  equipment_original_cost?: number | null;
+  equipment_funding_year?: number | null;
 }
 
 interface PredictionStats {
@@ -116,6 +123,38 @@ const PREDICTION_TYPE_CONFIG: Record<string, { label: string; icon: string; colo
     color: "text-purple-700",
     bgColor: "bg-purple-50 border-purple-200",
   },
+};
+
+// Small badge config for the unified-opportunity signals (Ari #1). Each entity
+// shows one badge per applicable signal instead of a single prediction type.
+const SIGNAL_BADGE_CONFIG: Record<string, { label: string; icon: string; className: string }> = {
+  contract_expiry: { label: "Contract expiring", icon: "⏰", className: "bg-red-50 border-red-200 text-red-700" },
+  equipment_refresh: { label: "Equipment refresh", icon: "🔄", className: "bg-blue-50 border-blue-200 text-blue-700" },
+  c2_budget: { label: "C2 budget", icon: "💰", className: "bg-green-50 border-green-200 text-green-700" },
+};
+
+// Which signals apply to a lead. Prefers the unified signal_types list; falls
+// back to the legacy single prediction_type so non-unified data still renders.
+type SignalKey = "contract_expiry" | "equipment_refresh" | "c2_budget";
+function hasSignal(lead: PredictedLead, key: SignalKey): boolean {
+  if (lead.signal_types && lead.signal_types.length > 0) return lead.signal_types.includes(key);
+  if (key === "equipment_refresh") return lead.prediction_type === "equipment_refresh";
+  if (key === "contract_expiry") return lead.prediction_type === "contract_expiry";
+  if (key === "c2_budget") return lead.prediction_type === "c2_budget_reset";
+  return false;
+}
+
+// Ordered list of signal keys present on a lead (for badge rendering).
+function leadSignals(lead: PredictedLead): SignalKey[] {
+  const order: SignalKey[] = ["contract_expiry", "equipment_refresh", "c2_budget"];
+  return order.filter((k) => hasSignal(lead, k));
+}
+
+// Switch-likelihood badge styling by level.
+const SWITCH_LEVEL_CLASS: Record<string, string> = {
+  high: "bg-orange-100 text-orange-700 border-orange-200",
+  medium: "bg-amber-100 text-amber-700 border-amber-200",
+  low: "bg-slate-100 text-slate-600 border-slate-200",
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
@@ -174,11 +213,15 @@ function formatDate(dateStr: string | null): string {
 // quote. Returns null when we can't compute it (missing original cost).
 const EQUIPMENT_INFLATION_RATE = 0.03;
 function estReplacementCost(lead: PredictedLead): number | null {
-  if (lead.prediction_type !== "equipment_refresh") return null;
-  const original = lead.estimated_deal_value;
+  if (!hasSignal(lead, "equipment_refresh")) return null;
+  // Unified opportunities carry the equipment line's own original cost/year
+  // separately from the aggregate headline value; fall back to lead-level for
+  // legacy (non-unified) equipment_refresh leads.
+  const original = lead.equipment_original_cost ?? lead.estimated_deal_value;
   if (original === null || original === undefined || original <= 0) return null;
-  if (!lead.funding_year) return null;
-  const years = new Date().getFullYear() - Number(lead.funding_year);
+  const fy = lead.equipment_funding_year ?? lead.funding_year;
+  if (!fy) return null;
+  const years = new Date().getFullYear() - Number(fy);
   if (!isFinite(years) || years <= 0) return original; // already current-year
   return original * Math.pow(1 + EQUIPMENT_INFLATION_RATE, years);
 }
@@ -280,6 +323,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
   const [filterManufacturer, setFilterManufacturer] = useState<string>("");
   const [filterEntityType, setFilterEntityType] = useState<string>("");
   const [filterServiceType, setFilterServiceType] = useState<string>("");
+  const [filterName, setFilterName] = useState<string>("");
   const [filterMinAmount, setFilterMinAmount] = useState<string>("");
   const [filterMaxAmount, setFilterMaxAmount] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("confidence_score");
@@ -291,11 +335,15 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
     setIsLoading(true);
     try {
       const params = new URLSearchParams();
-      if (filterType) params.append("prediction_type", filterType);
+      // Unified "Opportunities": one row per entity merging all signal types.
+      params.append("unified", "true");
+      // The former prediction-type dropdown is now an OPTIONAL signal scope.
+      if (filterType) params.append("signal", filterType);
       if (filterState) params.append("state", filterState);
       if (filterManufacturer) params.append("manufacturer", filterManufacturer);
       if (filterEntityType) params.append("entity_type", filterEntityType);
       if (filterServiceType) params.append("service_type", filterServiceType);
+      if (filterName.trim()) params.append("name", filterName.trim());
       if (filterMinAmount && !isNaN(Number(filterMinAmount))) {
         params.append("min_deal_value", filterMinAmount);
       }
@@ -321,7 +369,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
     } finally {
       setIsLoading(false);
     }
-  }, [filterType, filterState, filterManufacturer, filterEntityType, filterServiceType, filterMinAmount, filterMaxAmount, sortBy, sortOrder]);
+  }, [filterType, filterState, filterManufacturer, filterEntityType, filterServiceType, filterName, filterMinAmount, filterMaxAmount, sortBy, sortOrder]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -397,10 +445,12 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
     setEquipEstimate(null);
     const mfr = lead.manufacturer || "";
     const mdl = lead.equipment_model || "";
-    if (lead.prediction_type !== "equipment_refresh" || (!mfr && !mdl)) return;
+    if (!hasSignal(lead, "equipment_refresh") || (!mfr && !mdl)) return;
     setEquipEstimateLoading(true);
     try {
-      const res = await api.getEquipmentEstimate(mfr, mdl, undefined, lead.funding_year ?? undefined, lead.estimated_deal_value ?? undefined, lead.frn ?? undefined);
+      const fy = lead.equipment_funding_year ?? lead.funding_year;
+      const orig = lead.equipment_original_cost ?? lead.estimated_deal_value;
+      const res = await api.getEquipmentEstimate(mfr, mdl, undefined, fy ?? undefined, orig ?? undefined, lead.frn ?? undefined);
       const d = res.data;
       if (d && d.success && d.found && typeof d.estimate_usd === "number" && d.estimate_usd > 0) {
         setEquipEstimate({
@@ -623,10 +673,10 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            🔮 Predictive Lead Intelligence
+            🔮 Opportunities
           </h2>
           <p className="text-slate-500 mt-1">
-            AI-powered predictions of schools that will need your products/services before they even post a Form 470
+            One unified list of schools likely to buy — each entity shows every signal that applies (contract expiring, equipment refresh, C2 budget) plus a switch-likelihood score
           </p>
         </div>
         <button
@@ -719,15 +769,37 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm font-medium text-slate-700">Filters:</span>
 
+          <input
+            type="text"
+            placeholder="Applicant name…"
+            value={filterName}
+            onChange={(e) => { setFilterName(e.target.value); setOffset(0); }}
+            className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm w-48 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          />
+
+          <select
+            value={filterServiceType}
+            onChange={(e) => { setFilterServiceType(e.target.value); setOffset(0); }}
+            className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          >
+            <option value="">All Service Types (Cat 1 & 2)</option>
+            <option value="internet">Internet</option>
+            <option value="data-transmission">Data Transmission</option>
+            <option value="equipment">Equipment (Internal Connections)</option>
+            <option value="voice">Voice</option>
+            <option value="mibs">MIBS</option>
+          </select>
+
           <select
             value={filterType}
             onChange={(e) => { setFilterType(e.target.value); setOffset(0); }}
             className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            title="Optional: scope the list to entities with a specific signal"
           >
-            <option value="">All Types</option>
-            <option value="contract_expiry">⏰ Contract Expiring</option>
-            <option value="equipment_refresh">🔄 Equipment Refresh</option>
-            <option value="c2_budget_reset">💰 C2 Budget</option>
+            <option value="">All Signals</option>
+            <option value="contract_expiry">⏰ Has contract expiring</option>
+            <option value="equipment_refresh">🔄 Has equipment refresh</option>
+            <option value="c2_budget">💰 Has C2 budget</option>
           </select>
 
           <select
@@ -746,18 +818,6 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
             <option value="State Agency">State Agency</option>
           </select>
 
-          <select
-            value={filterServiceType}
-            onChange={(e) => { setFilterServiceType(e.target.value); setOffset(0); }}
-            className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-          >
-            <option value="">All Service Types</option>
-            <option value="internet">Internet</option>
-            <option value="data-transmission">Data Transmission</option>
-            <option value="equipment">Equipment (Internal Connections)</option>
-            <option value="voice">Voice</option>
-            <option value="mibs">MIBS</option>
-          </select>
 
           <select
             value={filterState}
@@ -830,7 +890,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
           {isLoading ? (
             <SkeletonRows rows={6} height="h-28" />
           ) : leads.length === 0 ? (
-            (filterType || filterState || filterManufacturer || filterEntityType || filterServiceType || filterMinAmount || filterMaxAmount) ? (
+            (filterType || filterState || filterManufacturer || filterEntityType || filterServiceType || filterName || filterMinAmount || filterMaxAmount) ? (
               <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
                 <span className="text-5xl mb-4 block">🔍</span>
                 <h3 className="text-lg font-semibold text-slate-700 mb-2">No leads match these filters</h3>
@@ -842,7 +902,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                 <button
                   onClick={() => {
                     setFilterType(""); setFilterState(""); setFilterManufacturer("");
-                    setFilterEntityType(""); setFilterServiceType("");
+                    setFilterEntityType(""); setFilterServiceType(""); setFilterName("");
                     setFilterMinAmount(""); setFilterMaxAmount(""); setOffset(0);
                   }}
                   className="px-6 py-2 bg-slate-600 text-white rounded-xl hover:bg-slate-700 transition-colors"
@@ -869,14 +929,10 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
           ) : (
             <>
               {leads.map((lead) => {
-                const typeConfig = PREDICTION_TYPE_CONFIG[lead.prediction_type] || {
-                  label: lead.prediction_type,
-                  icon: "📋",
-                  color: "text-slate-700",
-                  bgColor: "bg-slate-50 border-slate-200",
-                };
                 const statusConfig = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new;
                 const isSelected = selectedLead?.id === lead.id;
+                const signals = leadSignals(lead);
+                const sw = lead.switch_likelihood;
 
                 return (
                   <div
@@ -888,24 +944,52 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                         : "border-slate-200"
                     }`}
                   >
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${typeConfig.bgColor} ${typeConfig.color}`}
-                        >
-                          {typeConfig.icon} {typeConfig.label}
-                        </span>
+                    <div className="flex items-start justify-between mb-2 gap-2">
+                      <div className="flex items-center flex-wrap gap-1.5">
+                        {signals.length > 0 ? (
+                          signals.map((k) => {
+                            const b = SIGNAL_BADGE_CONFIG[k];
+                            return (
+                              <span
+                                key={k}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${b.className}`}
+                              >
+                                {b.icon} {b.label}
+                              </span>
+                            );
+                          })
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border bg-slate-50 border-slate-200 text-slate-700">
+                            📋 {lead.prediction_type}
+                          </span>
+                        )}
                         <ConfidenceBadge score={lead.confidence_score} />
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig.color}`}>
                           {statusConfig.label}
                         </span>
                       </div>
                       {lead.estimated_deal_value && (
-                        <span className="text-sm font-semibold text-green-600">
+                        <span className="text-sm font-semibold text-green-600 whitespace-nowrap">
                           {formatCurrency(lead.estimated_deal_value)}
                         </span>
                       )}
                     </div>
+
+                    {sw && (
+                      <div className="flex items-center flex-wrap gap-1.5 mb-2">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${SWITCH_LEVEL_CLASS[sw.level] || SWITCH_LEVEL_CLASS.low}`}
+                          title={sw.reason}
+                        >
+                          🎯 Switch-likelihood: {sw.level.charAt(0).toUpperCase() + sw.level.slice(1)}
+                        </span>
+                        {sw.at_risk === true && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border bg-rose-100 text-rose-700 border-rose-200">
+                            ⚠ Your customer at risk
+                          </span>
+                        )}
+                      </div>
+                    )}
 
                     <h3 className="font-semibold text-slate-900 mb-1">
                       {lead.organization_name}
@@ -920,7 +1004,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                     </div>
 
                     {(() => {
-                      const st = lead.prediction_type === "contract_expiry"
+                      const st = hasSignal(lead, "contract_expiry")
                         ? expiryStatus(lead.contract_expiration_date)
                         : null;
                       return st ? (
@@ -969,20 +1053,23 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
         <div className="lg:col-span-2">
           {selectedLead ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-6 sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto">
-              {/* Type Badge */}
-              {(() => {
-                const tc = PREDICTION_TYPE_CONFIG[selectedLead.prediction_type] || {
-                  label: selectedLead.prediction_type,
-                  icon: "📋",
-                  color: "text-slate-700",
-                  bgColor: "bg-slate-50",
-                };
-                return (
-                  <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium border ${tc.bgColor} ${tc.color} mb-4`}>
-                    {tc.icon} {tc.label}
+              {/* Signal Badges — every signal that applies to this entity */}
+              <div className="flex items-center flex-wrap gap-1.5 mb-4">
+                {leadSignals(selectedLead).length > 0 ? (
+                  leadSignals(selectedLead).map((k) => {
+                    const b = SIGNAL_BADGE_CONFIG[k];
+                    return (
+                      <span key={k} className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium border ${b.className}`}>
+                        {b.icon} {b.label}
+                      </span>
+                    );
+                  })
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium border bg-slate-50 border-slate-200 text-slate-700">
+                    📋 {selectedLead.prediction_type}
                   </span>
-                );
-              })()}
+                )}
+              </div>
 
               <h3 className="text-xl font-bold text-slate-900 mb-1">
                 {selectedLead.organization_name}
@@ -991,6 +1078,37 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                 BEN: {selectedLead.ben} • {selectedLead.state}
                 {selectedLead.city ? `, ${selectedLead.city}` : ""}
               </p>
+
+              {/* Switch-likelihood + at-risk callout (Ari #1): are they likely to
+                  switch, is there an opening to win, or is this MY customer at risk? */}
+              {selectedLead.switch_likelihood && (
+                <div className={`rounded-xl p-3 mb-4 border ${
+                  selectedLead.switch_likelihood.at_risk === true
+                    ? "bg-rose-50 border-rose-200"
+                    : selectedLead.switch_likelihood.level === "high"
+                    ? "bg-orange-50 border-orange-200"
+                    : selectedLead.switch_likelihood.level === "medium"
+                    ? "bg-amber-50 border-amber-200"
+                    : "bg-slate-50 border-slate-200"
+                }`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                      🎯 Switch-likelihood: <span className="capitalize">{selectedLead.switch_likelihood.level}</span>
+                      <span className="text-slate-400 font-normal">({selectedLead.switch_likelihood.score}/100)</span>
+                    </span>
+                    {selectedLead.switch_likelihood.at_risk === true ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-100 text-rose-700 border border-rose-200">
+                        ⚠ Your customer at risk
+                      </span>
+                    ) : selectedLead.switch_likelihood.at_risk === false ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                        Opportunity to win
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="text-xs text-slate-600">{selectedLead.switch_likelihood.reason}</p>
+                </div>
+              )}
 
               {/* Confidence & Value */}
               <div className="grid grid-cols-2 gap-3 mb-4">
@@ -1115,10 +1233,11 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                     Three estimates shown together (Ari loom Q1): (a) inflation-
                     adjusted original, (b) student-based sizing, (c) AI current-
                     equivalent equipment cost. All clearly labeled as estimates. */}
-                {selectedLead.prediction_type === "equipment_refresh" && (() => {
+                {hasSignal(selectedLead, "equipment_refresh") && (() => {
                   const repl = estReplacementCost(selectedLead);
-                  const original = selectedLead.estimated_deal_value;
-                  const years = selectedLead.funding_year ? new Date().getFullYear() - Number(selectedLead.funding_year) : null;
+                  const original = selectedLead.equipment_original_cost ?? selectedLead.estimated_deal_value;
+                  const equipYear = selectedLead.equipment_funding_year ?? selectedLead.funding_year;
+                  const years = equipYear ? new Date().getFullYear() - Number(equipYear) : null;
                   const students = c2Budget?.students && c2Budget.students > 0 ? c2Budget.students : null;
                   const studentEst = students ? students * C2_PER_STUDENT : null;
                   const hasAnything = original || repl !== null || studentEst !== null || equipEstimate || equipEstimateLoading;
@@ -1131,7 +1250,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                       </div>
                       {original ? (
                         <div className="flex justify-between text-sm">
-                          <span className="text-slate-500">Original cost{selectedLead.funding_year ? ` (FY${selectedLead.funding_year})` : ""}</span>
+                          <span className="text-slate-500">Original cost{equipYear ? ` (FY${equipYear})` : ""}</span>
                           <span className="font-medium text-slate-700">{formatCurrency(original)}</span>
                         </div>
                       ) : null}

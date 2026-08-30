@@ -893,6 +893,37 @@ export interface SwitchingSignalsResponse {
   error?: string;
 }
 
+// Unified vendor "Opportunities" (Ari #1): one row per entity (BEN) merging all
+// prediction types into a single opportunity with per-signal flags + a
+// switch-likelihood score. Served by GET /vendor/predicted-leads?unified=true.
+export interface OpportunitySignals {
+  contract_expiry?: {
+    contract_expiration_date?: string | null;
+    current_provider_name?: string | null;
+    current_spin?: string | null;
+    contract_number?: string | null;
+  };
+  equipment_refresh?: {
+    manufacturer?: string | null;
+    equipment_model?: string | null;
+    product_type?: string | null;
+    estimated_deal_value?: number | null;
+    funding_year?: number | null;
+  };
+  c2_budget?: {
+    c2_budget_total?: number | null;
+    c2_budget_remaining?: number | null;
+    c2_budget_cycle?: string | null;
+  };
+}
+
+export interface SwitchLikelihood {
+  score: number;              // 0-100
+  level: "low" | "medium" | "high";
+  reason: string;
+  at_risk: boolean | null;    // true = you already service this entity (retention risk)
+}
+
 // 28-day competitive bidding window check for a Form 470 (bid-evaluation lock).
 export interface Form470WindowResponse {
   success: boolean;

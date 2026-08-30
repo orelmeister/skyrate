@@ -3986,6 +3986,45 @@ class PredictionStatusUpdate(BaseModel):
     status: str  # new, viewed, contacted, converted, dismissed
 
 
+def _get_vendor_serviced_bens(db: Session, profile: VendorProfile) -> Optional[set]:
+    """Best-effort set of BENs this vendor already services (by SPIN).
+
+    Used to flag unified opportunities as "your customer at risk". Returns None
+    when the data can't be resolved (no SPIN, USAC error) so the caller leaves
+    at_risk unknown rather than fabricating it. Reuses the same 6h-cached USAC
+    serviced-entities summary the serviced-entities endpoint populates.
+    """
+    if not profile or not getattr(profile, 'spin', None):
+        return None
+    try:
+        from utils.usac_client import USACDataClient
+        from app.services.cache_service import get_cached, set_cached, make_cache_key
+
+        cache_key = make_cache_key("vendor_entities", spin=profile.spin, year=None)
+        cached = get_cached(db, cache_key)
+        if cached and isinstance(cached, dict) and cached.get('entities') is not None:
+            return {str(e.get('ben')) for e in cached['entities'] if e.get('ben')}
+
+        client = USACDataClient()
+        summary = client.get_serviced_entities_summary(profile.spin, None)
+        entities = summary.get('entities', []) if summary else []
+        # Cache in the same shape the serviced-entities endpoint uses.
+        set_cached(db, cache_key, {
+            "success": True,
+            "spin": profile.spin,
+            "service_provider_name": summary.get('service_provider_name') if summary else None,
+            "total_entities": summary.get('total_entities', 0) if summary else 0,
+            "total_authorized": summary.get('total_authorized', 0) if summary else 0,
+            "funding_years": summary.get('funding_years', []) if summary else [],
+            "by_year": summary.get('by_year', []) if summary else [],
+            "entities": entities,
+        })
+        return {str(e.get('ben')) for e in entities if e.get('ben')}
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"Could not resolve serviced BENs for at-risk flag: {e}")
+        return None
+
+
 @router.get("/predicted-leads")
 async def get_predicted_leads(
     prediction_type: Optional[str] = None,
@@ -3993,6 +4032,9 @@ async def get_predicted_leads(
     manufacturer: Optional[str] = None,
     entity_type: Optional[str] = None,
     service_type: Optional[str] = None,
+    name: Optional[str] = None,
+    unified: bool = False,
+    signal: Optional[str] = None,
     min_confidence: float = 0.0,
     min_deal_value: float = 0.0,
     max_deal_value: Optional[float] = None,
@@ -4006,15 +4048,47 @@ async def get_predicted_leads(
     """
     Get predicted leads based on AI analysis of USAC data.
     Premium feature — requires Predictive Intelligence subscription ($499/mo).
-    
+
     Prediction types:
     - contract_expiry: Contracts expiring in 3-12 months
     - equipment_refresh: Aging equipment due for replacement  
     - c2_budget_reset: Unspent C2 budget before cycle reset
+
+    unified=true collapses all types into ONE opportunity per entity (BEN) with
+    per-signal flags and a switch-likelihood score (Ari's unified Opportunities
+    view). `signal` optionally scopes the unified list to one signal type.
     """
     from ...services.prediction_service import prediction_service
     from ...models.prediction import PredictionType, PredictionStatus
-    
+
+    # Parse filters shared by both modes
+    states = [s.strip() for s in state.split(',')] if state else None
+    manufacturers_list = [m.strip() for m in manufacturer.split(',')] if manufacturer else None
+    entity_types_list = [e.strip() for e in entity_type.split(',')] if entity_type else None
+
+    if unified:
+        # Best-effort: which of these entities does THIS vendor already service?
+        # Used to flag "your customer at risk" vs "opportunity to win". Never
+        # fabricated — None when serviced data isn't available.
+        serviced_bens = _get_vendor_serviced_bens(db, profile)
+        return prediction_service.get_unified_opportunities(
+            db=db,
+            states=states,
+            manufacturers=manufacturers_list,
+            entity_types=entity_types_list,
+            min_confidence=min_confidence,
+            min_deal_value=min_deal_value,
+            max_deal_value=max_deal_value,
+            service_type=service_type,
+            name=name,
+            signal=signal,
+            serviced_bens=serviced_bens,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            limit=min(limit, 100),
+            offset=offset,
+        )
+
     # Map prediction type string to enum
     ptype = None
     if prediction_type:
@@ -4025,12 +4099,7 @@ async def get_predicted_leads(
                 status_code=400,
                 detail=f"Invalid prediction_type. Valid: {[t.value for t in PredictionType]}"
             )
-    
-    # Parse filters
-    states = [s.strip() for s in state.split(',')] if state else None
-    manufacturers_list = [m.strip() for m in manufacturer.split(',')] if manufacturer else None
-    entity_types_list = [e.strip() for e in entity_type.split(',')] if entity_type else None
-    
+
     result = prediction_service.get_predictions(
         db=db,
         vendor_profile_id=profile.id,
@@ -4042,12 +4111,13 @@ async def get_predicted_leads(
         min_deal_value=min_deal_value,
         max_deal_value=max_deal_value,
         service_type=service_type,
+        name=name,
         sort_by=sort_by,
         sort_order=sort_order,
         limit=min(limit, 100),
         offset=offset,
     )
-    
+
     return result
 
 
