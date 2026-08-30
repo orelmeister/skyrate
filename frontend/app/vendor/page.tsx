@@ -577,6 +577,9 @@ function VendorPortalPage() {
   const [form471Loading, setForm471Loading] = useState(false);
   const [form471Data, setForm471Data] = useState<Form471ByEntityResponse | null>(null);
   const [form471Error, setForm471Error] = useState<string | null>(null);
+  // Entity's Form 470 filings for the 471 Lookup entity, so the vendor can
+  // download the certified Form 470 PDF (parity with consultant/applicant).
+  const [entity470Filings, setEntity470Filings] = useState<Form470Lead[]>([]);
   const [competitorData, setCompetitorData] = useState<CompetitorAnalysisResponse | null>(null);
   const [competitorLoading, setCompetitorLoading] = useState(false);
   
@@ -1284,12 +1287,22 @@ function VendorPortalPage() {
     setForm471Loading(true);
     setForm471Error(null);
     setForm471Data(null);
+    setEntity470Filings([]);
     
     try {
       const response = await api.get471ByEntity(ben, year);
       if (response.success && response.data) {
         if (response.data.success) {
           setForm471Data(response.data);
+          // Best-effort: also pull the entity's Form 470 filing(s) so the vendor
+          // can download the certified Form 470 PDF. Non-blocking; empty when the
+          // entity has no 470 in the local (current/next-year) snapshot.
+          try {
+            const f470 = await api.get470ByBen(ben);
+            setEntity470Filings(f470.success && f470.data?.leads ? f470.data.leads : []);
+          } catch {
+            setEntity470Filings([]);
+          }
         } else {
           setForm471Error(response.data.error || "Failed to fetch 471 data");
         }
@@ -3921,6 +3934,67 @@ function VendorPortalPage() {
                       <div className="text-2xl font-bold text-slate-900">{form471Data.funding_years?.length || 0}</div>
                       <div className="text-sm text-slate-500">Funding Years</div>
                     </div>
+                  </div>
+
+                  {/* Certified Form PDFs — download the actual USAC Form 470 & 471
+                      documents for this entity (parity with consultant/applicant). */}
+                  <div className="mt-6 border-t border-slate-100 pt-5">
+                    <h3 className="text-sm font-semibold text-slate-900 mb-1">Certified Form PDFs</h3>
+                    <p className="text-xs text-slate-500 mb-3">Download the actual USAC-certified Form 470 and Form 471 documents for this entity.</p>
+                    <div className="flex flex-wrap gap-2">
+                      {(() => {
+                        // Distinct Form 470 filings for this entity, newest first.
+                        const seen470 = new Set<string>();
+                        const f470 = entity470Filings.filter((l) => {
+                          const app = String(l.application_number || '');
+                          if (!app || seen470.has(app)) return false;
+                          seen470.add(app);
+                          return true;
+                        });
+                        // Distinct Form 471 applications from the records above.
+                        const seen471 = new Set<string>();
+                        const f471 = (form471Data.records || []).filter((r) => {
+                          const app = String(r.application_number || '');
+                          if (!app || seen471.has(app)) return false;
+                          seen471.add(app);
+                          return true;
+                        });
+                        return (
+                          <>
+                            {f470.map((l) => (
+                              <button
+                                key={`f470-${l.application_number}`}
+                                type="button"
+                                onClick={() => downloadFormPdf('470', l.application_number)}
+                                disabled={pdfBusyApp === String(l.application_number)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" /></svg>
+                                {pdfBusyApp === String(l.application_number) ? 'Fetching…' : `Form 470 PDF · FY${l.funding_year}`}
+                              </button>
+                            ))}
+                            {f471.map((r) => (
+                              <button
+                                key={`f471-${r.application_number}`}
+                                type="button"
+                                onClick={() => downloadFormPdf('471', r.application_number)}
+                                disabled={pdfBusyApp === String(r.application_number)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" /></svg>
+                                {pdfBusyApp === String(r.application_number) ? 'Fetching…' : `Form 471 PDF · FY${r.funding_year}`}
+                              </button>
+                            ))}
+                            {f470.length === 0 && (
+                              <span className="text-xs text-slate-400 self-center">No Form 470 filing found for this entity in the current/next funding year.</span>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                    {pdfError && (
+                      <div className="mt-2 text-xs text-red-600">{pdfError}</div>
+                    )}
                   </div>
                 </div>
 
