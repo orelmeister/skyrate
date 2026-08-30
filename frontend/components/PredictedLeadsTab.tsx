@@ -968,7 +968,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
         {/* Detail Panel */}
         <div className="lg:col-span-2">
           {selectedLead ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 sticky top-20">
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto">
               {/* Type Badge */}
               {(() => {
                 const tc = PREDICTION_TYPE_CONFIG[selectedLead.prediction_type] || {
