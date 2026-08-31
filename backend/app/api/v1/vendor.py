@@ -385,12 +385,18 @@ async def get_471_by_state(
 @router.get("/471/competitors")
 async def get_competitors(
     year: Optional[int] = None,
+    category: Optional[str] = None,
     profile: VendorProfile = Depends(get_vendor_profile),
 ):
     """
     Find competing vendors at entities you service.
     Shows which other vendors have won contracts at "your" schools.
-    
+
+    Optional `category` ('1' or '2') scopes the analysis to Category 1
+    (Internet/transport) or Category 2 (internal connections/equipment) FRNs
+    only — a Category-2 equipment reseller can exclude Cat1 internet volume
+    that would otherwise skew the report.
+
     Requires SPIN to be configured in vendor profile.
     """
     if not profile.spin:
@@ -398,7 +404,9 @@ async def get_competitors(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No SPIN configured in your profile. Please add your SPIN in settings first."
         )
-    
+
+    cat = category if category in ("1", "2") else None
+
     try:
         from utils.usac_client import USACDataClient
         from utils.usac_cache import get_or_cache
@@ -406,9 +414,9 @@ async def get_competitors(
         client = USACDataClient()
         result = get_or_cache(
             namespace="471_competitors_v2",
-            params={"spin": profile.spin, "year": year},
+            params={"spin": profile.spin, "year": year, "category": cat},
             ttl_hours=6,
-            fetch_fn=lambda: client.get_471_competitors_for_spin(profile.spin, year),
+            fetch_fn=lambda: client.get_471_competitors_for_spin(profile.spin, year, category=cat),
         )
         
         return result

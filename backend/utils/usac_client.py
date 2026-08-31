@@ -1415,7 +1415,8 @@ class USACDataClient:
         self,
         spin: str,
         year: Optional[int] = None,
-        limit: int = 5000
+        limit: int = 5000,
+        category: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Find competing vendors at entities that this SPIN has serviced.
@@ -1425,6 +1426,10 @@ class USACDataClient:
             spin: Service Provider Identification Number
             year: Optional funding year filter
             limit: Maximum records
+            category: Optional '1' or '2' to count only Category 1 (Internet/
+                transport) or Category 2 (internal connections/equipment) FRNs.
+                None counts all. Cat1 internet volume otherwise skews the report
+                for a Category-2 equipment reseller.
             
         Returns:
             Dictionary with competitor analysis
@@ -1482,7 +1487,21 @@ class USACDataClient:
             my_frn_set = set()
             competitor_frn_set = set()
 
+            # Category classifier mirrors vendor.py::_cat_of — Cat2 = internal
+            # connections / managed internal broadband / basic maintenance; else
+            # Cat1. When the caller scopes to a category, only that category's
+            # line items are counted.
+            cat_scope = category if category in ("1", "2") else None
+            cat2_kw = ("internal connection", "managed internal broadband",
+                       "basic maintenance", "mibs", "bmic")
+
             for record in data:
+                if cat_scope is not None:
+                    stype = str(record.get('form_471_service_type_name', '') or '').lower()
+                    rec_cat = "2" if any(k in stype for k in cat2_kw) else "1"
+                    if rec_cat != cat_scope:
+                        continue
+
                 vendor_spin = str(record.get('spin_number', '') or record.get('service_provider_number', '') or '')
                 vendor_name = record.get('spin_name', '') or record.get('service_provider_name', '') or ''
                 frn = str(record.get('funding_request_number', '') or '')
@@ -1534,6 +1553,7 @@ class USACDataClient:
             return {
                 'success': True,
                 'spin': spin,
+                'category': cat_scope,
                 'entities_analyzed': len(bens),
                 'my_frn_count': len(my_frn_set),
                 'competitor_frn_count': len(competitor_frn_set),

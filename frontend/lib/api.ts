@@ -378,6 +378,7 @@ export interface Form471ByStateResponse {
 export interface CompetitorAnalysisResponse {
   success: boolean;
   spin: string;
+  category?: string | null;
   entities_analyzed: number;
   my_frn_count: number;
   competitor_frn_count: number;
@@ -2835,9 +2836,12 @@ class ApiClient {
     return this.request(`/api/v1/vendor/471/state/${state}${queryString}`);
   }
 
-  async get471Competitors(year?: number): Promise<ApiResponse<CompetitorAnalysisResponse>> {
-    const params = year ? `?year=${year}` : '';
-    return this.request(`/api/v1/vendor/471/competitors${params}`);
+  async get471Competitors(year?: number, category?: '1' | '2'): Promise<ApiResponse<CompetitorAnalysisResponse>> {
+    const params = new URLSearchParams();
+    if (year) params.set('year', String(year));
+    if (category) params.set('category', category);
+    const qs = params.toString();
+    return this.request(`/api/v1/vendor/471/competitors${qs ? '?' + qs : ''}`);
   }
 
   // ==================== CONSULTANT FORM 470 / 471 LOOKUP ====================

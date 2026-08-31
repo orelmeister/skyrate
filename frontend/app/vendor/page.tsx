@@ -582,6 +582,10 @@ function VendorPortalPage() {
   const [entity470Filings, setEntity470Filings] = useState<Form470Lead[]>([]);
   const [competitorData, setCompetitorData] = useState<CompetitorAnalysisResponse | null>(null);
   const [competitorLoading, setCompetitorLoading] = useState(false);
+  // Category scope for the competitor analysis: '' = All, '1' = Cat 1, '2' = Cat 2.
+  // A Category-2 equipment reseller can exclude Cat1 internet volume that skews
+  // the report (Tim Clark / Laketec).
+  const [competitorCategory, setCompetitorCategory] = useState<'' | '1' | '2'>("");
   
   // FRN Status Monitoring state (Sprint 2)
   const [frnStatusData, setFrnStatusData] = useState<FRNStatusResponse | null>(null);
@@ -1359,14 +1363,15 @@ function VendorPortalPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form471Data, focus471Frn]);
 
-  const loadCompetitorAnalysis = async () => {
+  const loadCompetitorAnalysis = async (cat?: '' | '1' | '2') => {
     if (!profile?.spin) {
       return;
     }
-    
+    // Use the explicit category when provided (toggle click), else current state.
+    const useCat = cat !== undefined ? cat : competitorCategory;
     setCompetitorLoading(true);
     try {
-      const response = await api.get471Competitors();
+      const response = await api.get471Competitors(undefined, useCat || undefined);
       if (response.success && response.data) {
         setCompetitorData(response.data);
       }
@@ -4321,20 +4326,40 @@ function VendorPortalPage() {
                     <h3 className="text-lg font-semibold text-slate-900">Your Competitor Analysis</h3>
                     <p className="text-sm text-slate-600">See which vendors compete at your serviced entities</p>
                   </div>
-                  <button
-                    onClick={loadCompetitorAnalysis}
-                    disabled={competitorLoading}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors text-sm font-medium flex items-center gap-2"
-                  >
-                    {competitorLoading ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        Analyzing...
-                      </>
-                    ) : (
-                      <>Analyze Competitors</>
-                    )}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {/* Category scope toggle — Cat2 equipment resellers can drop
+                        Cat1 internet volume that skews the report (Tim Clark). */}
+                    <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-sm">
+                      {([['', 'All'], ['1', 'Cat 1'], ['2', 'Cat 2']] as const).map(([val, label]) => (
+                        <button
+                          key={val || 'all'}
+                          onClick={() => { setCompetitorCategory(val); loadCompetitorAnalysis(val); }}
+                          disabled={competitorLoading}
+                          className={`px-3 py-1.5 rounded-md font-medium transition-colors disabled:opacity-50 ${
+                            competitorCategory === val
+                              ? 'bg-purple-600 text-white shadow-sm'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => loadCompetitorAnalysis()}
+                      disabled={competitorLoading}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors text-sm font-medium flex items-center gap-2"
+                    >
+                      {competitorLoading ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          Analyzing...
+                        </>
+                      ) : (
+                        <>Analyze Competitors</>
+                      )}
+                    </button>
+                  </div>
                 </div>
                 
                 {competitorData && competitorData.success && (
