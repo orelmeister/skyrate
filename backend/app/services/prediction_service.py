@@ -19,7 +19,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, func, nullslast, nullsfirst
+from sqlalchemy import and_, or_, not_, func, nullslast, nullsfirst
 
 # Add backend directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -733,6 +733,7 @@ class PredictionService:
         service_type: Optional[str] = None,
         status_filter: Optional[List[PredictionStatus]] = None,
         name: Optional[str] = None,
+        category: Optional[str] = None,
     ):
         """Apply the shared PredictedLead filter set to a query and return it.
 
@@ -799,6 +800,31 @@ class PredictionService:
         if max_deal_value is not None and max_deal_value > 0:
             query = query.filter(PredictedLead.estimated_deal_value <= max_deal_value)
 
+        # Optional E-Rate Category scope (Ari #1). Category 2 = equipment/C2
+        # opportunities: equipment_refresh OR c2_budget prediction rows, OR a
+        # service_type naming internal connections / MIBS / basic maintenance.
+        # Category 1 = the remainder (contract-expiry internet / data transmission
+        # / voice). service_type is coalesced to '' so contract-expiry rows with a
+        # NULL service_type aren't dropped from Category 1 by SQL NULL logic.
+        if category:
+            c = str(category).strip().lower()
+            _cat2_service_kw = [
+                'internal connections', 'managed internal broadband',
+                'mibs', 'basic maintenance',
+            ]
+            _st_col = func.lower(func.coalesce(PredictedLead.service_type, ''))
+            is_cat2 = or_(
+                PredictedLead.prediction_type.in_([
+                    PredictionType.EQUIPMENT_REFRESH.value,
+                    PredictionType.C2_BUDGET_RESET.value,
+                ]),
+                *[_st_col.contains(kw) for kw in _cat2_service_kw],
+            )
+            if c in ('2', 'c2', 'cat2', 'category2', 'category-2', 'category 2'):
+                query = query.filter(is_cat2)
+            elif c in ('1', 'c1', 'cat1', 'category1', 'category-1', 'category 1'):
+                query = query.filter(not_(is_cat2))
+
         # Optional service-type filter. Maps UI tokens to USAC Form 471
         # service_type_name keywords (stored on PredictedLead.service_type).
         if service_type:
@@ -807,7 +833,7 @@ class PredictionService:
                 'internet': ['internet'],
                 'data-transmission': ['data transmission'],
                 'data_transmission': ['data transmission'],
-                'equipment': ['internal connections'],
+                'equipment': ['internal connections', 'basic maintenance'],
                 'voice': ['voice'],
                 'mibs': ['managed internal broadband', 'mibs'],
             }
@@ -1100,6 +1126,7 @@ class PredictionService:
         status_filter: Optional[List[PredictionStatus]] = None,
         name: Optional[str] = None,
         signal: Optional[str] = None,
+        category: Optional[str] = None,
         serviced_bens: Optional[set] = None,
         sort_by: str = 'confidence_score',
         sort_order: str = 'desc',
@@ -1129,6 +1156,7 @@ class PredictionService:
                 service_type=service_type,
                 status_filter=status_filter,
                 name=name,
+                category=category,
             )
             rows = query.all()
 

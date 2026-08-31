@@ -318,7 +318,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
   const [enrichError, setEnrichError] = useState<string | null>(null);
 
   // Filters
-  const [filterType, setFilterType] = useState<string>("");
+  const [filterCategory, setFilterCategory] = useState<string>("");
   const [filterState, setFilterState] = useState<string>("");
   const [filterManufacturer, setFilterManufacturer] = useState<string>("");
   const [filterEntityType, setFilterEntityType] = useState<string>("");
@@ -337,8 +337,10 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
       const params = new URLSearchParams();
       // Unified "Opportunities": one row per entity merging all signal types.
       params.append("unified", "true");
-      // The former prediction-type dropdown is now an OPTIONAL signal scope.
-      if (filterType) params.append("signal", filterType);
+      // Category 1 (Internet/Transport) vs Category 2 (Equipment) scope (Ari #1).
+      // Signals are no longer selected manually — every applicable signal badge
+      // renders on each opportunity; the Category dropdown scopes the list.
+      if (filterCategory) params.append("category", filterCategory);
       if (filterState) params.append("state", filterState);
       if (filterManufacturer) params.append("manufacturer", filterManufacturer);
       if (filterEntityType) params.append("entity_type", filterEntityType);
@@ -369,7 +371,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
     } finally {
       setIsLoading(false);
     }
-  }, [filterType, filterState, filterManufacturer, filterEntityType, filterServiceType, filterName, filterMinAmount, filterMaxAmount, sortBy, sortOrder]);
+  }, [filterCategory, filterState, filterManufacturer, filterEntityType, filterServiceType, filterName, filterMinAmount, filterMaxAmount, sortBy, sortOrder]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -836,9 +838,21 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
           />
 
           <select
+            value={filterCategory}
+            onChange={(e) => { setFilterCategory(e.target.value); setOffset(0); }}
+            className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            title="Scope to Category 1 (Internet/Transport) or Category 2 (Equipment)"
+          >
+            <option value="">All Categories</option>
+            <option value="1">Category 1 (Internet/Transport)</option>
+            <option value="2">Category 2 (Equipment)</option>
+          </select>
+
+          <select
             value={filterServiceType}
             onChange={(e) => { setFilterServiceType(e.target.value); setOffset(0); }}
             className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            title="Optional refinement by specific service type"
           >
             <option value="">All Service Types (Cat 1 & 2)</option>
             <option value="internet">Internet</option>
@@ -846,18 +860,6 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
             <option value="equipment">Equipment (Internal Connections)</option>
             <option value="voice">Voice</option>
             <option value="mibs">MIBS</option>
-          </select>
-
-          <select
-            value={filterType}
-            onChange={(e) => { setFilterType(e.target.value); setOffset(0); }}
-            className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-            title="Optional: scope the list to entities with a specific signal"
-          >
-            <option value="">All Signals</option>
-            <option value="contract_expiry">⏰ Has contract expiring</option>
-            <option value="equipment_refresh">🔄 Has equipment refresh</option>
-            <option value="c2_budget">💰 Has C2 budget</option>
           </select>
 
           <select
@@ -948,18 +950,17 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
           {isLoading ? (
             <SkeletonRows rows={6} height="h-28" />
           ) : leads.length === 0 ? (
-            (filterType || filterState || filterManufacturer || filterEntityType || filterServiceType || filterName || filterMinAmount || filterMaxAmount) ? (
+            (filterCategory || filterState || filterManufacturer || filterEntityType || filterServiceType || filterName || filterMinAmount || filterMaxAmount) ? (
               <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
                 <span className="text-5xl mb-4 block">🔍</span>
                 <h3 className="text-lg font-semibold text-slate-700 mb-2">No leads match these filters</h3>
                 <p className="text-slate-500 mb-4">
-                  No predicted leads match your current filters
-                  {filterType ? ` for “${PREDICTION_TYPE_CONFIG[filterType]?.label || filterType}”` : ""}.
+                  No predicted leads match your current filters.
                   Try clearing or widening the filters.
                 </p>
                 <button
                   onClick={() => {
-                    setFilterType(""); setFilterState(""); setFilterManufacturer("");
+                    setFilterCategory(""); setFilterState(""); setFilterManufacturer("");
                     setFilterEntityType(""); setFilterServiceType(""); setFilterName("");
                     setFilterMinAmount(""); setFilterMaxAmount(""); setOffset(0);
                   }}
