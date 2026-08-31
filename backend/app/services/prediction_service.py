@@ -226,13 +226,15 @@ class PredictionService:
         """
         count = 0
         
-        # Contracts expiring on/before the end of the CURRENT funding year (June 30)
-        # are already being rebid in the current filing cycle (the entity has posted /
-        # will post a Form 470 for service starting next July) — they are NOT
-        # forward-looking sales leads. Only surface expirations AFTER that cutoff.
+        # Hide only contracts that already expired on/before June 30 of the
+        # CURRENT funding-year START year (e.g. today = Aug 2026 -> _current_fy_start
+        # = 2026 -> cutoff = 2026-06-30). Contracts expiring at the END of the
+        # current funding year (June 30 2027) are rebid in the ACTIVE filing cycle
+        # that vendors work now, so those MUST show as leads. (Previously the cutoff
+        # was +1 year, which wrongly excluded the June-30-next-year expirations.)
         _now = datetime.utcnow()
         _current_fy_start = _now.year if _now.month >= 7 else _now.year - 1
-        next_cycle_cutoff = datetime(_current_fy_start + 1, 6, 30)
+        next_cycle_cutoff = datetime(_current_fy_start, 6, 30)
         
         # Fetch expiring contracts from USAC. Look ~24 months ahead so we capture the
         # full NEXT funding cycle (July of next year through the following June), since
@@ -836,13 +838,15 @@ class PredictionService:
             )
         )
 
-        # Contract-expiry leads whose contract expires on/before the end of the
-        # CURRENT funding year (June 30) are already being rebid in the current
-        # filing cycle — not forward-looking sales leads. Hide them at read time
-        # too, so stale rows generated before this rule don't show at demo.
+        # Contract-expiry leads that already expired on/before June 30 of the
+        # CURRENT funding-year START year are past the active rebid window — hide
+        # them at read time too. Contracts expiring at the END of the current
+        # funding year (June 30 of _current_fy_start + 1) ARE rebid in the active
+        # filing cycle vendors work now, so those stay visible. (Cutoff was +1 year
+        # before, which wrongly hid the June-30-next-year expirations.)
         _now = datetime.utcnow()
         _current_fy_start = _now.year if _now.month >= 7 else _now.year - 1
-        _next_cycle_cutoff = datetime(_current_fy_start + 1, 6, 30)
+        _next_cycle_cutoff = datetime(_current_fy_start, 6, 30)
         query = query.filter(
             or_(
                 PredictedLead.prediction_type != PredictionType.CONTRACT_EXPIRY.value,
