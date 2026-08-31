@@ -20,9 +20,10 @@ import { DisbursementPanel } from "@/components/FRNDetailModal";
 import { downloadCsv, csvFilename, downloadExcel, excelFilename } from "@/lib/csv-export";
 import { ChevronRight, ChevronDown, Target, Clock, Building2, Bell, ArrowUpRight, Zap, BarChart3, Search, TrendingUp, Home, Activity, Shield, Map as MapIcon, Sparkles, FileSearch, Bookmark, Settings as SettingsIcon, HelpCircle, PanelLeft, Sun, Moon, LogOut, Receipt, StickyNote } from "lucide-react";
 import PilotFrns from "./PilotFrns";
+import ManufacturerInsightsTab from "./ManufacturerInsightsTab";
 import { FrnSubStatusInfo, FRN_PENDING_REASON_OPTIONS } from "@/components/FrnSubStatusInfo";
 import PurchaseHistoryModal from "@/components/PurchaseHistoryModal";
-const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "cyber-pilot", "470-leads", "map", "predicted-leads", "competitive", "invoicing", "search", "leads", "settings"] as const;
+const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "cyber-pilot", "470-leads", "map", "predicted-leads", "competitive", "invoicing", "search", "manufacturer-insights", "leads", "settings"] as const;
 type VendorTab = typeof VENDOR_TABS[number];
 
 // Saved-leads CRM pipeline stages (B7). Order defines the pipeline flow.
@@ -2445,6 +2446,7 @@ function VendorPortalPage() {
     { label: "Intelligence", items: [
       { id: "competitive", label: "470/471 Lookup", Icon: FileSearch },
       { id: "search", label: "School Search", Icon: Search },
+      { id: "manufacturer-insights", label: "Manufacturer Insights", Icon: BarChart3 },
       { id: "cyber-pilot", label: "Cybersecurity Pilot", Icon: Shield },
     ]},
     { label: "Account", items: [
@@ -2656,6 +2658,9 @@ function VendorPortalPage() {
               dark={dark}
             />
           )}
+
+        {/* Manufacturer Insights Tab */}
+        {activeTab === "manufacturer-insights" && <ManufacturerInsightsTab dark={dark} />}
 
         {/* Cybersecurity Pilot Program Tab */}
         {activeTab === "cyber-pilot" && <PilotFrns />}

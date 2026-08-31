@@ -4101,3 +4101,167 @@ class USACDataClient:
         except Exception as e:
             logger.error(f"Error fetching historical 471 for BEN {ben}: {e}")
             return {'success': False, 'error': str(e), 'data': []}
+
+    def get_manufacturer_market_insights(
+        self,
+        manufacturer: str,
+        year: Optional[int] = None,
+        state: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Market analytics for a single equipment manufacturer, computed from the
+        Form 471 line-item dataset (hbj5-2bpj) via server-side SoQL aggregation.
+
+        The manufacturer is matched case-insensitively as a substring against the
+        real column ``form_471_manufacturer_name``. Spend is the sum of
+        ``total_eligible_one_time_costs`` (equipment) plus
+        ``total_eligible_recurring_costs`` (any recurring line items).
+
+        NOTE: hbj5-2bpj has NO reseller/SPIN column (no spin_number/spin_name)
+        and no service-type column, so reseller-level ("top_resellers") and
+        service-type breakdowns are NOT available from this source and are
+        intentionally omitted rather than fabricated.
+
+        Returns aggregate structures (empty, not fabricated, when no data):
+        totals, spend_by_year, spend_by_state, top_entities.
+        """
+        try:
+            if not manufacturer or not str(manufacturer).strip():
+                return {'success': False, 'error': 'manufacturer is required',
+                        'manufacturer': manufacturer}
+
+            url = USAC_ENDPOINTS['471_line_items']
+
+            def _esc(val: str) -> str:
+                # Escape single quotes to prevent SoQL injection.
+                return str(val).replace("'", "''").strip()
+
+            mfr = _esc(manufacturer)
+            where_parts = [f"upper(form_471_manufacturer_name) LIKE upper('%{mfr}%')"]
+            if year:
+                where_parts.append(f"funding_year = '{int(year)}'")
+            if state:
+                where_parts.append(f"upper(state) = upper('{_esc(state)}')")
+            where = ' AND '.join(where_parts)
+
+            def _run(select: str, group: Optional[str] = None,
+                     order: Optional[str] = None, limit: int = 5000) -> list:
+                params = {'$select': select, '$where': where, '$limit': limit}
+                if group:
+                    params['$group'] = group
+                if order:
+                    params['$order'] = order
+                if self.app_token:
+                    params['$$app_token'] = self.app_token
+                resp = self.session.get(url, params=params, timeout=60)
+                resp.raise_for_status()
+                return resp.json()
+
+            _SPEND_SUM = ('sum(total_eligible_one_time_costs) as onetime, '
+                          'sum(total_eligible_recurring_costs) as recurring')
+            _SPEND_ORDER = 'sum(total_eligible_one_time_costs) DESC'
+
+            # ---- Headline totals ------------------------------------------------
+            totals_rows = _run(
+                'count(1) as lines, count(distinct funding_request_number) as frns, '
+                'count(distinct ben) as entities, ' + _SPEND_SUM
+            )
+            t = totals_rows[0] if totals_rows else {}
+            onetime = safe_float(t.get('onetime'))
+            recurring = safe_float(t.get('recurring'))
+            totals = {
+                'total_spend': round(onetime + recurring, 2),
+                'one_time_spend': round(onetime, 2),
+                'recurring_spend': round(recurring, 2),
+                'line_item_count': int(safe_float(t.get('lines'))),
+                'frn_count': int(safe_float(t.get('frns'))),
+                'entity_count': int(safe_float(t.get('entities'))),
+            }
+
+            # ---- Spend by funding year (buying trend) ---------------------------
+            year_rows = _run(
+                'funding_year, ' + _SPEND_SUM + ', count(1) as lines, '
+                'count(distinct funding_request_number) as frns',
+                group='funding_year', order='funding_year DESC', limit=20,
+            )
+            spend_by_year = []
+            for r in year_rows:
+                yo = safe_float(r.get('onetime'))
+                yr_rec = safe_float(r.get('recurring'))
+                spend_by_year.append({
+                    'year': r.get('funding_year'),
+                    'total_spend': round(yo + yr_rec, 2),
+                    'line_item_count': int(safe_float(r.get('lines'))),
+                    'frn_count': int(safe_float(r.get('frns'))),
+                })
+
+            # ---- Spend by state (top 15) ---------------------------------------
+            state_rows = _run(
+                'state, ' + _SPEND_SUM + ', count(distinct funding_request_number) as frns',
+                group='state', order=_SPEND_ORDER, limit=15,
+            )
+            spend_by_state = []
+            for r in state_rows:
+                if not r.get('state'):
+                    continue
+                so = safe_float(r.get('onetime'))
+                s_rec = safe_float(r.get('recurring'))
+                spend_by_state.append({
+                    'state': r.get('state'),
+                    'total_spend': round(so + s_rec, 2),
+                    'frn_count': int(safe_float(r.get('frns'))),
+                })
+
+            # ---- Top buying entities (top 20) ----------------------------------
+            entity_rows = _run(
+                'ben, organization_name, state, ' + _SPEND_SUM + ', '
+                'count(distinct funding_request_number) as frns, '
+                'max(funding_year) as recent_year',
+                group='ben, organization_name, state', order=_SPEND_ORDER, limit=20,
+            )
+            top_entities = []
+            for r in entity_rows:
+                eo = safe_float(r.get('onetime'))
+                e_rec = safe_float(r.get('recurring'))
+                top_entities.append({
+                    'ben': r.get('ben'),
+                    'organization_name': r.get('organization_name'),
+                    'state': r.get('state'),
+                    'total_spend': round(eo + e_rec, 2),
+                    'frn_count': int(safe_float(r.get('frns'))),
+                    'most_recent_year': r.get('recent_year'),
+                })
+
+            logger.info(
+                f"Manufacturer insights '{manufacturer}' "
+                f"(year={year}, state={state}): {totals['line_item_count']} lines, "
+                f"${totals['total_spend']:,.0f} spend"
+            )
+
+            return {
+                'success': True,
+                'manufacturer': manufacturer,
+                'filters': {'year': year, 'state': state},
+                'manufacturer_column': 'form_471_manufacturer_name',
+                'dataset': 'hbj5-2bpj',
+                # hbj5-2bpj lacks a reseller/SPIN column, so reseller intel is
+                # unavailable from this source; surfaced so the UI can explain it.
+                'resellers_available': False,
+                'totals': totals,
+                'spend_by_year': spend_by_year,
+                'spend_by_state': spend_by_state,
+                'top_entities': top_entities,
+            }
+
+        except Exception as e:
+            logger.error(f"Error fetching manufacturer insights for '{manufacturer}': {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'manufacturer': manufacturer,
+                'resellers_available': False,
+                'totals': {},
+                'spend_by_year': [],
+                'spend_by_state': [],
+                'top_entities': [],
+            }

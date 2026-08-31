@@ -286,6 +286,54 @@ export interface EntityPurchaseHistory {
   error?: string;
 }
 
+// Manufacturer market analytics (seed of a future manufacturer intelligence tier).
+// Sourced from the Form 471 line-item dataset (hbj5-2bpj). Reseller/SPIN data is
+// NOT on that dataset, so top_resellers is intentionally absent.
+export interface ManufacturerInsightsTotals {
+  total_spend: number;
+  one_time_spend: number;
+  recurring_spend: number;
+  line_item_count: number;
+  frn_count: number;
+  entity_count: number;
+}
+
+export interface ManufacturerSpendByYear {
+  year: string;
+  total_spend: number;
+  line_item_count: number;
+  frn_count: number;
+}
+
+export interface ManufacturerSpendByState {
+  state: string;
+  total_spend: number;
+  frn_count: number;
+}
+
+export interface ManufacturerTopEntity {
+  ben: string;
+  organization_name?: string | null;
+  state?: string | null;
+  total_spend: number;
+  frn_count: number;
+  most_recent_year?: string | null;
+}
+
+export interface ManufacturerInsights {
+  success: boolean;
+  manufacturer: string;
+  filters?: { year?: number | null; state?: string | null };
+  manufacturer_column?: string;
+  dataset?: string;
+  resellers_available: boolean;
+  totals: Partial<ManufacturerInsightsTotals>;
+  spend_by_year: ManufacturerSpendByYear[];
+  spend_by_state: ManufacturerSpendByState[];
+  top_entities: ManufacturerTopEntity[];
+  error?: string;
+}
+
 // Purchasing-trends indicator (B6) — inferred equipment-buying cadence per BEN.
 export interface PurchasingPattern {
   success: boolean;
@@ -2919,6 +2967,15 @@ class ApiClient {
     if (category) params.set('category', category);
     const qs = params.toString();
     return this.request(`/api/v1/vendor/471/competitors${qs ? '?' + qs : ''}`);
+  }
+
+  async getManufacturerInsights(manufacturer: string, year?: number, state?: string): Promise<ApiResponse<ManufacturerInsights>> {
+    const params = new URLSearchParams();
+    params.set('manufacturer', manufacturer);
+    if (year) params.set('year', String(year));
+    if (state) params.set('state', state);
+    // First (uncached) call runs several server-side USAC aggregations; allow extra time.
+    return this.request(`/api/v1/vendor/manufacturer-insights?${params.toString()}`, { timeoutMs: 60000 });
   }
 
   // ==================== CONSULTANT FORM 470 / 471 LOOKUP ====================

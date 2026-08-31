@@ -1924,6 +1924,58 @@ async def get_470_by_manufacturer(
         )
 
 
+@router.get("/manufacturer-insights")
+async def get_manufacturer_insights(
+    manufacturer: str,
+    year: Optional[int] = None,
+    state: Optional[str] = None,
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
+):
+    """
+    Manufacturer market analytics from the Form 471 line-item dataset (hbj5-2bpj).
+
+    Aggregates funded equipment spend for a given manufacturer (matched
+    case-insensitively as a substring of ``form_471_manufacturer_name``) and
+    returns headline totals, spend-by-year (buying trend), spend-by-state, and
+    the top buying entities. Optionally scoped by funding year and/or state.
+
+    This is the data-backed seed of a future manufacturer intelligence tier.
+    NOTE: hbj5-2bpj has no reseller/SPIN column, so reseller-level intel is not
+    available from this source and is omitted (``resellers_available: false``).
+
+    Args:
+        manufacturer: Manufacturer name, e.g. "Aruba", "Cisco" (partial match).
+        year: Optional funding year filter.
+        state: Optional two-letter state filter.
+    """
+    if not manufacturer or not manufacturer.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="manufacturer query parameter is required",
+        )
+    try:
+        from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
+
+        client = USACDataClient()
+        mfr = manufacturer.strip()
+        state_norm = state.strip().upper() if state and state.strip() else None
+        result = await run_in_threadpool(
+            get_or_cache,
+            namespace="vendor_manufacturer_insights_v1",
+            params={"manufacturer": mfr.lower(), "year": year, "state": state_norm},
+            ttl_hours=24,
+            fetch_fn=lambda: client.get_manufacturer_market_insights(mfr, year, state_norm),
+        )
+        return result
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch manufacturer insights for {manufacturer}: {str(e)}"
+        )
+
+
 @router.get("/470/{application_number}")
 async def get_470_detail(
     application_number: str,
