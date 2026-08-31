@@ -286,6 +286,19 @@ export interface EntityPurchaseHistory {
   error?: string;
 }
 
+// Purchasing-trends indicator (B6) — inferred equipment-buying cadence per BEN.
+export interface PurchasingPattern {
+  success: boolean;
+  ben: string;
+  // 'full_refresh' = spend concentrated in one year (~5yr refresh cycle),
+  // 'spread' = spend distributed across years, 'mixed' = in between, null = no history.
+  pattern: 'full_refresh' | 'spread' | 'mixed' | null;
+  biggest_year?: string | null;
+  biggest_year_share?: number | null;
+  years_active: number;
+  total_spend: number;
+}
+
 export interface SamMatch {
   uei?: string | null;
   legal_name?: string | null;
@@ -2916,6 +2929,11 @@ class ApiClient {
   // ---- Per-entity Form 471 purchase history (B5) ----
   async getEntityPurchaseHistory(ben: string): Promise<ApiResponse<EntityPurchaseHistory>> {
     return this.request(`/api/v1/vendor/entity-purchase-history?ben=${encodeURIComponent(ben)}`);
+  }
+
+  // ---- Purchasing-trends indicator (B6) — inferred buying cadence per BEN ----
+  async getPurchasingPattern(ben: string): Promise<ApiResponse<PurchasingPattern>> {
+    return this.request(`/api/v1/vendor/purchasing-pattern?ben=${encodeURIComponent(ben)}`);
   }
 
   // ---- Per-FRN applicant working annotations (status/install/co-pay/PIA) ----

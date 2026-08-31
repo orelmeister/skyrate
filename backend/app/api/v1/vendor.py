@@ -2820,6 +2820,89 @@ async def get_entity_purchase_history(
     )
 
 
+@router.get("/purchasing-pattern")
+async def get_purchasing_pattern(
+    ben: str,
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
+):
+    """
+    Purchasing-trends indicator (B6) — infers whether an entity buys equipment in
+    one big year (a ~5-year "full refresh" cycle) or spreads purchases across
+    multiple years.
+
+    Reuses the shared 24h-cached 471 pull (_entity_471_history_cached) so it never
+    re-queries USAC on its own. Computed from the entity's one-time (equipment)
+    471 spend across its available funding years:
+      * years_active        = distinct funding years with >0 one-time spend
+      * biggest_year_share  = max single-year one-time spend / total one-time spend
+      * pattern             = 'full_refresh' if share >= 0.60, 'spread' if <= 0.40,
+                              else 'mixed'
+    Inferred signal, not a guarantee. Never fabricates: pattern=null when the
+    entity has no one-time 471 history. Cached 24h.
+    """
+    ben_clean = (ben or "").strip()
+    if not ben_clean:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ben is required")
+
+    def _fetch() -> Dict[str, Any]:
+        empty = {
+            "success": True, "ben": ben_clean, "pattern": None,
+            "biggest_year": None, "biggest_year_share": None,
+            "years_active": 0, "total_spend": 0,
+        }
+        hist = _entity_471_history_cached(ben_clean)
+        if not hist or hist.get("success") is False:
+            return empty
+
+        by_year: Dict[str, float] = {}
+        for r in (hist.get("rows", []) or []):
+            one_time = float(r.get("one_time_cost") or 0)
+            if one_time <= 0:
+                continue
+            yr = str(r.get("funding_year") or "").strip()
+            if not yr:
+                continue
+            by_year[yr] = by_year.get(yr, 0.0) + one_time
+
+        total = sum(by_year.values())
+        years_active = len(by_year)
+        if years_active == 0 or total <= 0:
+            return empty
+
+        biggest_year, biggest_spend = max(by_year.items(), key=lambda kv: kv[1])
+        share = biggest_spend / total
+        if share >= 0.60:
+            pattern = "full_refresh"
+        elif share <= 0.40:
+            pattern = "spread"
+        else:
+            pattern = "mixed"
+
+        return {
+            "success": True,
+            "ben": ben_clean,
+            "pattern": pattern,
+            "biggest_year": biggest_year,
+            "biggest_year_share": round(share, 2),
+            "years_active": years_active,
+            "total_spend": round(total, 2),
+        }
+
+    try:
+        from utils.usac_cache import get_or_cache
+    except ImportError:
+        from ...utils.usac_cache import get_or_cache
+
+    return await run_in_threadpool(
+        lambda: get_or_cache(
+            namespace="vendor_purchasing_pattern_v1",
+            params={"ben": ben_clean},
+            ttl_hours=24,
+            fetch_fn=_fetch,
+        )
+    )
+
+
 @router.post("/470/search")
 async def search_470(
     data: Form470SearchRequest,

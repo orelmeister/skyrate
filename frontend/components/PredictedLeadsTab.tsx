@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
-import type { SwitchingSignalsResponse, OpportunitySignals, SwitchLikelihood } from "@/lib/api";
+import type { SwitchingSignalsResponse, OpportunitySignals, SwitchLikelihood, PurchasingPattern } from "@/lib/api";
 import { SkeletonRows, SkeletonStatCards } from "@/components/Skeleton";
 import { downloadCsv, csvFilename, downloadExcel, excelFilename } from "@/lib/csv-export";
 import PurchaseHistoryModal from "@/components/PurchaseHistoryModal";
@@ -376,6 +376,11 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
   const [filterMaxAmount, setFilterMaxAmount] = useState<string>("");
   // Switch-likelihood level filter (client-side refine of the loaded page).
   const [filterSwitchLevel, setFilterSwitchLevel] = useState<string>("");
+  // Buying-pattern (B6): inferred equipment-buying cadence cached per BEN, plus a
+  // client-side filter that refines the loaded page by loaded pattern.
+  const [patternByBen, setPatternByBen] = useState<Record<string, PurchasingPattern | null>>({});
+  const [filterBuyingPattern, setFilterBuyingPattern] = useState<string>("");
+  const patternInFlight = useRef<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<string>("confidence_score");
   const [sortOrder, setSortOrder] = useState<string>("desc");
   const [offset, setOffset] = useState(0);
@@ -797,10 +802,39 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
     }
   };
 
+  // Buying-pattern (B6): lazily fetch the inferred cadence per BEN, cached so
+  // each entity is queried at most once. Non-blocking — used for the detail
+  // badge and the client-side "Buying pattern" filter over the loaded page.
+  const fetchPurchasingPattern = useCallback(async (ben: string) => {
+    const key = (ben || "").trim();
+    if (!key || patternInFlight.current.has(key)) return;
+    patternInFlight.current.add(key);
+    try {
+      const res = await api.getPurchasingPattern(key);
+      setPatternByBen((prev) => ({ ...prev, [key]: res.success && res.data ? res.data : null }));
+    } catch {
+      setPatternByBen((prev) => ({ ...prev, [key]: null }));
+    }
+  }, []);
+
+  useEffect(() => {
+    const bens = Array.from(new Set(leads.map((l) => (l.ben || "").trim()).filter(Boolean)));
+    bens.forEach((b) => {
+      if (!(b in patternByBen) && !patternInFlight.current.has(b)) fetchPurchasingPattern(b);
+    });
+  }, [leads, patternByBen, fetchPurchasingPattern]);
+
   // Client-side refine of the loaded page by switch-likelihood level (Ari FIX 5).
-  const visibleLeads = filterSwitchLevel
-    ? leads.filter((l) => (l.switch_likelihood?.level || "") === filterSwitchLevel)
-    : leads;
+  const visibleLeads = leads.filter((l) => {
+    if (filterSwitchLevel && (l.switch_likelihood?.level || "") !== filterSwitchLevel) return false;
+    if (filterBuyingPattern) {
+      // Buying-pattern is fetched lazily per BEN; only leads whose pattern has
+      // loaded and matches are shown while the filter is active (inferred).
+      const p = patternByBen[(l.ben || "").trim()];
+      if (!p || p.pattern !== filterBuyingPattern) return false;
+    }
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -1003,6 +1037,17 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
             <option value="high">Switch: High</option>
             <option value="medium">Switch: Medium</option>
             <option value="low">Switch: Low</option>
+          </select>
+
+          <select
+            value={filterBuyingPattern}
+            onChange={(e) => { setFilterBuyingPattern(e.target.value); }}
+            className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            title="Filter by inferred equipment-buying pattern (loads per entity)"
+          >
+            <option value="">Buying pattern: All</option>
+            <option value="full_refresh">Buying: Full refresh</option>
+            <option value="spread">Buying: Spreads purchases</option>
           </select>
 
           <select
@@ -1274,6 +1319,37 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                   <p className="text-xs text-slate-600">{selectedLead.switch_likelihood.reason}</p>
                 </div>
               )}
+
+              {/* Buying pattern (B6): inferred equipment-buying cadence from the
+                  entity's one-time 471 spend across years. Labeled inferred. */}
+              {(() => {
+                const p = patternByBen[(selectedLead.ben || "").trim()];
+                if (!p || !p.pattern) return null;
+                const cfg = PREDICTION_TYPE_CONFIG.historical_pattern;
+                const label = p.pattern === "full_refresh"
+                  ? "Full refresh"
+                  : p.pattern === "spread"
+                  ? "Spreads purchases"
+                  : "Mixed";
+                const pct = p.biggest_year_share != null ? Math.round(p.biggest_year_share * 100) : null;
+                const detail = p.pattern === "full_refresh" && pct != null && p.biggest_year
+                  ? `${pct}% of spend in FY${p.biggest_year}`
+                  : p.pattern === "spread"
+                  ? `spread across ${p.years_active} funding years`
+                  : pct != null && p.biggest_year
+                  ? `${pct}% of spend in FY${p.biggest_year}`
+                  : `${p.years_active} funding years`;
+                return (
+                  <div className={`rounded-xl p-3 mb-4 border ${cfg.bgColor}`}>
+                    <span className={`text-xs font-semibold ${cfg.color} flex items-center gap-1`}>
+                      {cfg.icon} Buying pattern: {label}
+                    </span>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      {detail} <span className="text-slate-400">(inferred, not guaranteed)</span>
+                    </p>
+                  </div>
+                );
+              })()}
 
               {/* Confidence & Value */}
               <div className="grid grid-cols-2 gap-3 mb-4">
