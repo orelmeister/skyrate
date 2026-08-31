@@ -402,6 +402,22 @@ function VendorTeamPanel() {
   const [visible, setVisible] = useState(true);
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
+  // B9: which pending seat's invite link was just copied (transient "Copied" hint).
+  const [copiedSeatId, setCopiedSeatId] = useState<number | null>(null);
+
+  // Build the shareable invite link for a pending seat. Lets the owner onboard a
+  // teammate manually when the invite email is delayed or never arrives.
+  const copyInviteLink = async (seat: any) => {
+    if (!seat?.invite_token) return;
+    const link = `${window.location.origin}/accept-seat?token=${seat.invite_token}`;
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch {
+      window.prompt("Copy this invite link:", link);
+    }
+    setCopiedSeatId(seat.id);
+    setTimeout(() => setCopiedSeatId((cur) => (cur === seat.id ? null : cur)), 2000);
+  };
 
   const loadTeam = async () => {
     const res = await api.getVendorTeam();
@@ -492,13 +508,24 @@ function VendorTeamPanel() {
                       {seat.status}
                     </span>
                   </div>
-                  <button
-                    onClick={() => handleRemove(seat.id)}
-                    disabled={busy}
-                    className="px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:text-white hover:bg-red-500 border border-slate-200 hover:border-red-500 rounded-md transition disabled:opacity-50"
-                  >
-                    Remove
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {seat.status === "invited" && seat.invite_token && (
+                      <button
+                        onClick={() => copyInviteLink(seat)}
+                        disabled={busy}
+                        className="px-2.5 py-1 text-[11px] font-medium text-indigo-600 hover:text-white hover:bg-indigo-600 border border-indigo-200 hover:border-indigo-600 rounded-md transition disabled:opacity-50"
+                      >
+                        {copiedSeatId === seat.id ? "Copied!" : "Copy invite link"}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleRemove(seat.id)}
+                      disabled={busy}
+                      className="px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:text-white hover:bg-red-500 border border-slate-200 hover:border-red-500 rounded-md transition disabled:opacity-50"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
