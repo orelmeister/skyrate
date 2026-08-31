@@ -179,6 +179,34 @@ def safe_str(val, default: str = '') -> str:
     return s
 
 
+# Service-type / function keywords that indicate the applicant is requesting
+# professional services (installation, initial configuration, basic maintenance,
+# or managed internal broadband) rather than plain equipment/connectivity — the
+# Category-2 line items a reseller can bid installation/support on.
+_PRO_SERVICE_KEYWORDS = (
+    "basic maintenance", "managed internal broadband", "mibs", "bmic",
+    "installation", "maintenance", "managed", "professional",
+)
+
+
+def professional_services_flag(services) -> bool:
+    """True when any Form 470 service line requests installation / initial
+    configuration or a professional / managed service. Derived from the
+    470_services dataset (39tn-hjzv) fields ``installation_initial_configuration``
+    (exposed as ``installation_required``), ``service_type`` and ``function``."""
+    for s in services or []:
+        if not isinstance(s, dict):
+            continue
+        inst = str(s.get("installation_required") or "").strip().lower()
+        if inst in ("yes", "y", "true", "1"):
+            return True
+        st = str(s.get("service_type") or "").lower()
+        fn = str(s.get("function") or "").lower()
+        if any(k in st or k in fn for k in _PRO_SERVICE_KEYWORDS):
+            return True
+    return False
+
+
 class USACDataClient:
     """
     Client for fetching data from USAC Open Data Portal.
@@ -2666,6 +2694,9 @@ class USACDataClient:
                 lead['manufacturers'] = list(lead['manufacturers'])
                 lead['service_types'] = list(lead['service_types'])
                 lead['categories'] = list(lead['categories'])
+                # Pro-services / installation flag so the vendor sees it without
+                # downloading the full 470 PDF.
+                lead['professional_services'] = professional_services_flag(lead['services'])
                 leads.append(lead)
             
             # ---- C2 Budget enrichment (USAC dataset 6brt-5pbv) ----

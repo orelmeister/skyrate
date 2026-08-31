@@ -88,6 +88,22 @@ function getUpcomingFundingYear(): number {
   return now.getMonth() + 1 >= 7 ? now.getFullYear() + 1 : now.getFullYear();
 }
 
+// Detect whether a Form 470's service lines request installation / professional
+// services (installation/initial configuration, BMIC, MIBS). Mirrors the backend
+// professional_services_flag; used for the 470 detail-modal badge (the leads list
+// uses the backend-computed lead.professional_services flag directly).
+const PRO_SERVICE_KEYWORDS = ["basic maintenance", "managed internal broadband", "mibs", "bmic", "installation", "maintenance", "managed", "professional"];
+function has470ProServices(services?: { service_type?: string; function?: string; installation_required?: string }[] | null): boolean {
+  for (const s of services || []) {
+    const inst = String(s?.installation_required || "").trim().toLowerCase();
+    if (["yes", "y", "true", "1"].includes(inst)) return true;
+    const st = String(s?.service_type || "").toLowerCase();
+    const fn = String(s?.function || "").toLowerCase();
+    if (PRO_SERVICE_KEYWORDS.some((k) => st.includes(k) || fn.includes(k))) return true;
+  }
+  return false;
+}
+
 // ---------------------------------------------------------------------------
 // VendorCommandCenter
 // Dark, bento-style "command center" home for the vendor portal. Mirrors the
@@ -3798,6 +3814,14 @@ function VendorPortalPage() {
                             <div className="text-sm text-slate-500">
                               470 #{lead.application_number} • {lead.applicant_type}
                             </div>
+                            {lead.professional_services && (
+                              <span
+                                title={`Requested: ${(lead.service_types || []).join(', ') || 'installation / professional services'}`}
+                                className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-teal-100 text-teal-800 rounded text-xs font-medium"
+                              >
+                                Pro services / install requested
+                              </span>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             <div className="text-slate-700">{lead.city}, {lead.state}</div>
@@ -6138,6 +6162,14 @@ function VendorPortalPage() {
                   <p className="text-orange-100 mt-1">
                     Form 470 #{form470Detail?.application_number} • {form470Detail?.funding_year}
                   </p>
+                  {has470ProServices(form470Detail?.services) && (
+                    <span
+                      title={`Requested: ${(form470Detail?.service_types || []).join(', ') || 'installation / professional services'}`}
+                      className="inline-flex items-center gap-1 mt-2 px-2.5 py-1 bg-white/20 text-white rounded-full text-xs font-semibold"
+                    >
+                      Pro services / install requested
+                    </span>
+                  )}
                   {form470Detail?.application_number && (
                     <button
                       type="button"

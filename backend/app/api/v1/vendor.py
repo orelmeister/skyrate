@@ -1553,6 +1553,7 @@ async def get_470_leads(
     import json as _json
     import logging as _logging
     from ...models.vendor_form470_snapshot import VendorForm470Snapshot
+    from utils.usac_client import professional_services_flag as _pro_flag
 
     _log = _logging.getLogger(__name__)
 
@@ -1612,6 +1613,7 @@ async def get_470_leads(
             return []
 
     def _row_to_lead(r):
+        services = _safe_json_list(r.services_json, r.id, "services_json")
         return {
             "application_number": r.application_number,
             "funding_year": r.funding_year,
@@ -1631,10 +1633,11 @@ async def get_470_leads(
             "technical_phone": r.technical_phone,
             "cat1_description": r.cat1_description,
             "cat2_description": r.cat2_description,
-            "services": _safe_json_list(r.services_json, r.id, "services_json"),
+            "services": services,
             "manufacturers": _safe_json_list(r.manufacturers_json, r.id, "manufacturers_json"),
             "service_types": _safe_json_list(r.service_types_json, r.id, "service_types_json"),
             "categories": _safe_json_list(r.categories_json, r.id, "categories_json"),
+            "professional_services": _pro_flag(services),
             "c2_budget_total": r.c2_budget_total,
             "c2_budget_available": r.c2_budget_available,
             "c2_budget_cycle": r.c2_budget_cycle,

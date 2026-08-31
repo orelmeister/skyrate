@@ -738,6 +738,10 @@ export interface Form470Lead {
   manufacturers: string[];
   service_types: string[];
   categories: string[];
+  // True when any service line requests installation / initial configuration or
+  // a professional/managed service (BMIC, MIBS). Derived from the 470_services
+  // dataset field `installation_initial_configuration` + service_type/function.
+  professional_services?: boolean;
   // C2 Budget enrichment (USAC dataset 6brt-5pbv) — populated when state filter
   // is applied. `c2_budget_available` is the remaining headroom we filter on.
   c2_budget_total?: number | null;
