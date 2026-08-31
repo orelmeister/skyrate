@@ -326,6 +326,8 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
   const [filterName, setFilterName] = useState<string>("");
   const [filterMinAmount, setFilterMinAmount] = useState<string>("");
   const [filterMaxAmount, setFilterMaxAmount] = useState<string>("");
+  // Switch-likelihood level filter (client-side refine of the loaded page).
+  const [filterSwitchLevel, setFilterSwitchLevel] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("confidence_score");
   const [sortOrder, setSortOrder] = useState<string>("desc");
   const [offset, setOffset] = useState(0);
@@ -709,6 +711,11 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
     }
   };
 
+  // Client-side refine of the loaded page by switch-likelihood level (Ari FIX 5).
+  const visibleLeads = filterSwitchLevel
+    ? leads.filter((l) => (l.switch_likelihood?.level || "") === filterSwitchLevel)
+    : leads;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -901,6 +908,18 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
           />
 
           <select
+            value={filterSwitchLevel}
+            onChange={(e) => { setFilterSwitchLevel(e.target.value); }}
+            className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            title="Filter by switch-likelihood level"
+          >
+            <option value="">All Switch Levels</option>
+            <option value="high">Switch: High</option>
+            <option value="medium">Switch: Medium</option>
+            <option value="low">Switch: Low</option>
+          </select>
+
+          <select
             value={`${sortBy}:${sortOrder}`}
             onChange={(e) => {
               const [field, order] = e.target.value.split(":");
@@ -918,6 +937,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
             <option value="c2_budget_total:asc">C2 Budget (Low → High)</option>
             <option value="organization_name:asc">Entity Name (A → Z)</option>
             <option value="organization_name:desc">Entity Name (Z → A)</option>
+            <option value="switch_likelihood:desc">Switch likelihood (High → Low)</option>
             <option value="predicted_action_date:asc">Action Date (Soonest)</option>
             <option value="created_at:desc">Newest First</option>
           </select>
@@ -938,7 +958,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
           />
 
           <span className="ml-auto text-sm text-slate-500">
-            {total.toLocaleString()} results
+            {filterSwitchLevel ? `${visibleLeads.length.toLocaleString()} of ${total.toLocaleString()}` : total.toLocaleString()} results
           </span>
         </div>
       </div>
@@ -949,8 +969,8 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
         <div className="lg:col-span-3 space-y-3">
           {isLoading ? (
             <SkeletonRows rows={6} height="h-28" />
-          ) : leads.length === 0 ? (
-            (filterCategory || filterState || filterManufacturer || filterEntityType || filterServiceType || filterName || filterMinAmount || filterMaxAmount) ? (
+          ) : visibleLeads.length === 0 ? (
+            (filterCategory || filterSwitchLevel || filterState || filterManufacturer || filterEntityType || filterServiceType || filterName || filterMinAmount || filterMaxAmount) ? (
               <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
                 <span className="text-5xl mb-4 block">🔍</span>
                 <h3 className="text-lg font-semibold text-slate-700 mb-2">No leads match these filters</h3>
@@ -960,7 +980,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                 </p>
                 <button
                   onClick={() => {
-                    setFilterCategory(""); setFilterState(""); setFilterManufacturer("");
+                    setFilterCategory(""); setFilterSwitchLevel(""); setFilterState(""); setFilterManufacturer("");
                     setFilterEntityType(""); setFilterServiceType(""); setFilterName("");
                     setFilterMinAmount(""); setFilterMaxAmount(""); setOffset(0);
                   }}
@@ -987,7 +1007,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
             )
           ) : (
             <>
-              {leads.map((lead) => {
+              {visibleLeads.map((lead) => {
                 const statusConfig = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new;
                 const isSelected = selectedLead?.id === lead.id;
                 const signals = leadSignals(lead);
