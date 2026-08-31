@@ -30,6 +30,7 @@ from ...models.user import User
 from ...models.vendor import VendorProfile, VendorSearch
 from ...models.account_seat import AccountSeat
 from ...models.vendor_frn_tracking import VendorFrnTracking, WORKING_STATUS_VALUES, PIA_STATUS_VALUES
+from ...models.vendor_frn_note import VendorFrnNote
 
 router = APIRouter(prefix="/vendor", tags=["Vendor Portal"])
 
@@ -2901,6 +2902,63 @@ async def get_purchasing_pattern(
             fetch_fn=_fetch,
         )
     )
+
+
+class FrnNoteUpdate(BaseModel):
+    frn: str
+    note: Optional[str] = None
+
+
+@router.get("/frn-notes")
+async def get_frn_note(
+    frn: str,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
+):
+    """B8: fetch this vendor's free-form manual note for a single FRN.
+
+    Scoped to the account owner's vendor_profile_id so team seats share one note.
+    Returns {frn, note} with note=null when no note exists yet.
+    """
+    frn_clean = (frn or "").strip()
+    if not frn_clean:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="frn is required")
+    row = (
+        db.query(VendorFrnNote)
+        .filter(VendorFrnNote.vendor_profile_id == profile.id, VendorFrnNote.frn == frn_clean)
+        .first()
+    )
+    return {"frn": frn_clean, "note": row.note if row else None}
+
+
+@router.put("/frn-notes")
+async def upsert_frn_note(
+    data: FrnNoteUpdate,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
+):
+    """B8: upsert this vendor's free-form manual note for a single FRN.
+
+    One row per (vendor_profile_id, frn). Scoped to the account owner so team
+    seats edit the same note.
+    """
+    frn_clean = (data.frn or "").strip()
+    if not frn_clean:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="frn is required")
+    note_text = data.note if data.note is not None else None
+    row = (
+        db.query(VendorFrnNote)
+        .filter(VendorFrnNote.vendor_profile_id == profile.id, VendorFrnNote.frn == frn_clean)
+        .first()
+    )
+    if row is None:
+        row = VendorFrnNote(vendor_profile_id=profile.id, frn=frn_clean, note=note_text)
+        db.add(row)
+    else:
+        row.note = note_text
+    db.commit()
+    db.refresh(row)
+    return {"success": True, "frn": row.frn, "note": row.note}
 
 
 @router.post("/470/search")

@@ -17,7 +17,7 @@ import MissingIdentifierBanner from "@/components/MissingIdentifierBanner";
 import { SkeletonRows, SkeletonTable, SkeletonStatCards } from "@/components/Skeleton";
 import { DisbursementPanel } from "@/components/FRNDetailModal";
 import { downloadCsv, csvFilename, downloadExcel, excelFilename } from "@/lib/csv-export";
-import { ChevronRight, ChevronDown, Target, Clock, Building2, Bell, ArrowUpRight, Zap, BarChart3, Search, TrendingUp, Home, Activity, Shield, Map as MapIcon, Sparkles, FileSearch, Bookmark, Settings as SettingsIcon, HelpCircle, PanelLeft, Sun, Moon, LogOut, Receipt } from "lucide-react";
+import { ChevronRight, ChevronDown, Target, Clock, Building2, Bell, ArrowUpRight, Zap, BarChart3, Search, TrendingUp, Home, Activity, Shield, Map as MapIcon, Sparkles, FileSearch, Bookmark, Settings as SettingsIcon, HelpCircle, PanelLeft, Sun, Moon, LogOut, Receipt, StickyNote } from "lucide-react";
 import PilotFrns from "./PilotFrns";
 import { FrnSubStatusInfo, FRN_PENDING_REASON_OPTIONS } from "@/components/FrnSubStatusInfo";
 import PurchaseHistoryModal from "@/components/PurchaseHistoryModal";
@@ -641,6 +641,11 @@ function VendorPortalPage() {
   const [selectedFRN, setSelectedFRN] = useState<FRNStatusRecord | null>(null);
   const [showFRNDetailModal, setShowFRNDetailModal] = useState(false);
   const [disbursementOpen, setDisbursementOpen] = useState(false);
+  // B8: per-FRN free-form manual notes (vendor-scoped). Loaded lazily on open.
+  const [frnNotes, setFrnNotes] = useState<Record<string, string>>({});
+  const [frnNoteOpen, setFrnNoteOpen] = useState<string | null>(null);
+  const [frnNoteDraft, setFrnNoteDraft] = useState<string>("");
+  const [frnNoteSaving, setFrnNoteSaving] = useState<boolean>(false);
   const [frnTableSort, setFrnTableSort] = useState<{ field: string; dir: 'asc' | 'desc' } | null>(null);
   // Incremental "load more" count so users can page past the first 100 FRNs
   // (mirrors the consultant portfolio FRN table). Reset whenever the underlying
@@ -1437,13 +1442,41 @@ function VendorPortalPage() {
     }
   };
 
+  // B8: open the inline note editor for an FRN, lazily loading the saved note.
+  const openFrnNote = async (frn: string) => {
+    setFrnNoteOpen(frn);
+    setFrnNoteDraft(frnNotes[frn] ?? "");
+    if (!(frn in frnNotes)) {
+      try {
+        const res = await api.getFrnNote(frn);
+        if (res.success && res.data) {
+          const note = res.data.note || "";
+          setFrnNotes((prev) => ({ ...prev, [frn]: note }));
+          setFrnNoteDraft(note);
+        }
+      } catch { /* non-blocking: start with an empty draft */ }
+    }
+  };
+
+  const saveFrnNote = async (frn: string) => {
+    setFrnNoteSaving(true);
+    try {
+      const res = await api.updateFrnNote(frn, frnNoteDraft);
+      if (res.success) {
+        setFrnNotes((prev) => ({ ...prev, [frn]: frnNoteDraft }));
+        setFrnNoteOpen(null);
+      }
+    } catch { /* leave editor open on failure */ } finally {
+      setFrnNoteSaving(false);
+    }
+  };
+
   // FRN Status Monitoring functions (Sprint 2)
   const loadFRNStatus = async (year?: number, status?: string, pendingReason?: string, ben?: string, spinSearch?: string, crn?: string, globalView?: boolean) => {
     // Allow loading even without SPIN when a BEN / SPIN search / CRN or globalView is provided
     if (!profile?.spin && !ben && !spinSearch && !crn && !globalView) {
       return;
-    }
-    
+    }    
     setFrnStatusLoading(true);
     try {
       // Large national vendors (e.g. CDW Government LLC) can have several
@@ -3008,6 +3041,16 @@ function VendorPortalPage() {
                                   >
                                     <SettingsIcon className="w-3 h-3" /> Track
                                   </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); openFrnNote(frn.frn); }}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-slate-600 bg-slate-100 hover:bg-indigo-100 hover:text-indigo-700 border border-slate-200 transition-colors"
+                                    title="Add a private note for this FRN"
+                                  >
+                                    <StickyNote className="w-3 h-3" /> {frnNotes[frn.frn] ? "Note" : "Add note"}
+                                  </button>
+                                  {frnNotes[frn.frn] && (
+                                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500" title="Has a note" />
+                                  )}
                                   {frnTrackingMap[frn.frn]?.installed && (
                                     <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700 border border-green-200" title="Equipment installed">Installed</span>
                                   )}
@@ -3015,6 +3058,35 @@ function VendorPortalPage() {
                                     <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-teal-100 text-teal-700 border border-teal-200" title="Applicant co-pay paid">Co-pay paid</span>
                                   )}
                                 </div>
+                                {frnNoteOpen === frn.frn && (
+                                  <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                                    <textarea
+                                      value={frnNoteDraft}
+                                      onChange={(e) => setFrnNoteDraft(e.target.value)}
+                                      onBlur={() => saveFrnNote(frn.frn)}
+                                      rows={2}
+                                      placeholder="Private note for this FRN..."
+                                      autoFocus
+                                      className="w-full text-xs border border-slate-300 rounded p-1.5 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    />
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <button
+                                        onClick={() => saveFrnNote(frn.frn)}
+                                        disabled={frnNoteSaving}
+                                        className="px-2 py-0.5 text-[10px] rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+                                      >
+                                        {frnNoteSaving ? "Saving..." : "Save"}
+                                      </button>
+                                      <button
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => setFrnNoteOpen(null)}
+                                        className="px-2 py-0.5 text-[10px] rounded border border-slate-300 text-slate-600 hover:bg-slate-100"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
                               </td>
                               <td className="px-4 py-3">
                                 <div className="font-medium text-slate-900 truncate max-w-[200px]">{frn.entity_name}</div>

@@ -2931,6 +2931,15 @@ class ApiClient {
     return this.request(`/api/v1/vendor/entity-purchase-history?ben=${encodeURIComponent(ben)}`);
   }
 
+  // ---- Per-FRN vendor manual note (B8) ----
+  async getFrnNote(frn: string): Promise<ApiResponse<{ frn: string; note: string | null }>> {
+    return this.request(`/api/v1/vendor/frn-notes?frn=${encodeURIComponent(frn)}`);
+  }
+
+  async updateFrnNote(frn: string, note: string): Promise<ApiResponse<{ success: boolean; frn: string; note: string | null }>> {
+    return this.put(`/vendor/frn-notes`, { frn, note });
+  }
+
   // ---- Purchasing-trends indicator (B6) — inferred buying cadence per BEN ----
   async getPurchasingPattern(ben: string): Promise<ApiResponse<PurchasingPattern>> {
     return this.request(`/api/v1/vendor/purchasing-pattern?ben=${encodeURIComponent(ben)}`);

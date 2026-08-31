@@ -38,6 +38,7 @@ from .email_verification_token import EmailVerificationToken
 from .compliance_analysis import ComplianceAnalysis
 from .frn_status_change import FrnStatusChangeQueue
 from .compliance_tracker import CompliancePlan, ComplianceTask, ComplianceTaskTemplate
+from .vendor_frn_note import VendorFrnNote
 
 __all__ = [
     "User",
@@ -113,4 +114,6 @@ __all__ = [
     "CompliancePlan",
     "ComplianceTask",
     "ComplianceTaskTemplate",
+    # Vendor per-FRN manual note (B8)
+    "VendorFrnNote",
 ]
