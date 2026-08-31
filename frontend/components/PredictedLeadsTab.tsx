@@ -150,6 +150,16 @@ function leadSignals(lead: PredictedLead): SignalKey[] {
   return order.filter((k) => hasSignal(lead, k));
 }
 
+// E-Rate category ("1" | "2") of a lead. Prefers the lead's own service type
+// (mirrors the backend classifier); falls back to its signal mix. Used to scope
+// switching signals so a Cat 1 provider is never compared to a Cat 2 one.
+function leadCategory(lead: PredictedLead): "1" | "2" {
+  const st = (lead.service_type || "").toLowerCase();
+  const cat2Kw = ["internal connection", "managed internal broadband", "basic maintenance", "mibs", "bmic"];
+  if (st) return cat2Kw.some((k) => st.includes(k)) ? "2" : "1";
+  return (hasSignal(lead, "equipment_refresh") || hasSignal(lead, "c2_budget")) ? "2" : "1";
+}
+
 // Switch-likelihood badge styling by level.
 const SWITCH_LEVEL_CLASS: Record<string, string> = {
   high: "bg-orange-100 text-orange-700 border-orange-200",
@@ -514,11 +524,11 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
   };
 
   // Fetch inferred "switching signals" from USAC filing history (Ari loom Q2).
-  const fetchSwitchingSignals = async (ben: string) => {
+  const fetchSwitchingSignals = async (ben: string, category?: "1" | "2") => {
     setSwitchSignals(null);
     setSwitchSignalsLoading(true);
     try {
-      const res = await api.getSwitchingSignals(ben);
+      const res = await api.getSwitchingSignals(ben, category);
       const d = res.data;
       if (d && d.success && d.signals) {
         setSwitchSignals(d.signals);
@@ -547,7 +557,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
     // AI current-equivalent equipment estimate (equipment_refresh only) + the
     // entity's inferred switching signals (Ari loom Q1c / Q2).
     fetchEquipmentEstimate(lead);
-    if (lead.ben) fetchSwitchingSignals(lead.ben);
+    if (lead.ben) fetchSwitchingSignals(lead.ben, leadCategory(lead));
     else setSwitchSignals(null);
   };
 

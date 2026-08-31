@@ -2548,6 +2548,7 @@ async def get_equipment_estimate(
 @router.get("/switching-signals")
 async def get_switching_signals(
     ben: str,
+    category: Optional[str] = None,
     current_user: User = Depends(require_role("admin", "vendor", "super")),
 ):
     """
@@ -2583,9 +2584,23 @@ async def get_switching_signals(
             return {"success": False, "ben": ben_clean, "error": str(ex)[:160]}
 
         frns = (hist or {}).get("frns", []) or []
-        # Dominant provider per funding year = SPIN with the most committed $
-        # (fallback: most FRNs). Ignore rows with no provider name.
-        by_year: Dict[int, Dict[str, float]] = {}
+
+        # Providers of a Cat 1 recurring service (internet/transport/voice) are
+        # NOT interchangeable with Cat 2 equipment resellers. Comparing across
+        # categories produced bogus "switches" (e.g. Zayo=Cat1 -> CDW=Cat2), so
+        # provider history is segmented BY CATEGORY and tenure/switch are only
+        # computed within a single category. (Ari 2026-08-31.)
+        def _cat_of(stype: str) -> str:
+            s = (stype or "").lower()
+            cat2_kw = ("internal connection", "managed internal broadband",
+                       "basic maintenance", "mibs", "bmic")
+            return "2" if any(k in s for k in cat2_kw) else "1"
+
+        # Dominant provider $ per (category, year). Ignore rows with no provider
+        # name. Also track which category owns the single largest recent
+        # commitment (used to pick a category when the caller passes none).
+        by_cat_year: Dict[str, Dict[int, Dict[str, float]]] = {"1": {}, "2": {}}
+        top_recent = (-1, 0.0, None)  # (year, amount, category)
         for f in frns:
             spin = (f.get("spin_name") or "").strip()
             if not spin:
@@ -2599,8 +2614,17 @@ async def get_switching_signals(
                 amt = float(f.get("commitment_amount") or 0) or 0.0
             except (TypeError, ValueError):
                 amt = 0.0
-            slot = by_year.setdefault(yr, {})
+            cat = _cat_of(f.get("service_type") or "")
+            slot = by_cat_year[cat].setdefault(yr, {})
             slot[spin] = slot.get(spin, 0.0) + (amt if amt > 0 else 0.0001)
+            if (yr, amt) > (top_recent[0], top_recent[1]):
+                top_recent = (yr, amt, cat)
+
+        # Report the caller's lead category if valid, else the category that
+        # owns the largest recent commitment. Either way the series below is a
+        # SINGLE category, so a switch can never cross Cat 1 <-> Cat 2.
+        want_cat = category if category in ("1", "2") else (top_recent[2] or "1")
+        by_year = by_cat_year.get(want_cat, {})
 
         if not by_year:
             return {"success": True, "ben": ben_clean, "signals": {}}
@@ -2657,8 +2681,8 @@ async def get_switching_signals(
 
     return await run_in_threadpool(
         lambda: get_or_cache(
-            "vendor_switching_signals_v1",
-            {"ben": ben_clean},
+            "vendor_switching_signals_v2",
+            {"ben": ben_clean, "cat": (category if category in ("1", "2") else "")},
             ttl_hours=24,
             fetch_fn=_fetch,
         )

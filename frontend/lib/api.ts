@@ -3110,8 +3110,9 @@ class ApiClient {
    * from USAC filing history (provider tenure, recently switched) - explicitly
    * NOT a satisfaction score. Omits any signal the data doesn't support.
    */
-  async getSwitchingSignals(ben: string): Promise<ApiResponse<SwitchingSignalsResponse>> {
-    return this.request(`/api/v1/vendor/switching-signals?ben=${encodeURIComponent(ben)}`);
+  async getSwitchingSignals(ben: string, category?: "1" | "2"): Promise<ApiResponse<SwitchingSignalsResponse>> {
+    const catQ = category ? `&category=${category}` : "";
+    return this.request(`/api/v1/vendor/switching-signals?ben=${encodeURIComponent(ben)}${catQ}`);
   }
 
   /**
