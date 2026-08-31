@@ -104,6 +104,28 @@ function has470ProServices(services?: { service_type?: string; function?: string
   return false;
 }
 
+// Persist a vendor's last-used filter selections across sessions so Tim's
+// preferred filters (e.g. Great Lakes states + Category 2) stick between visits.
+function loadSavedFilters<T>(key: string): T | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? (parsed as T) : null;
+  } catch {
+    return null;
+  }
+}
+function saveFilters(key: string, value: unknown): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* localStorage unavailable (private mode / quota) — non-fatal */
+  }
+}
+
 // ---------------------------------------------------------------------------
 // VendorCommandCenter
 // Dark, bento-style "command center" home for the vendor portal. Mirrors the
@@ -835,6 +857,21 @@ function VendorPortalPage() {
     max_deal_value?: number;
     name?: string;
   }>({ year: getUpcomingFundingYear() });
+  // Rehydrate the vendor's last-used Form 470 filters once on mount; keep the
+  // upcoming-funding-year default only when nothing was saved (Tim's Great Lakes
+  // + Cat 2 selection sticks between visits). Persist on every subsequent change.
+  const form470FiltersSkipPersist = useRef(true);
+  useEffect(() => {
+    const saved = loadSavedFilters<typeof form470Filters>("vendor_470_filters");
+    if (saved) setForm470Filters(saved);
+  }, []);
+  useEffect(() => {
+    if (form470FiltersSkipPersist.current) {
+      form470FiltersSkipPersist.current = false;
+      return;
+    }
+    saveFilters("vendor_470_filters", form470Filters);
+  }, [form470Filters]);
   const [form470TotalLeads, setForm470TotalLeads] = useState(0);
   const [form470Detail, setForm470Detail] = useState<Form470DetailResponse | null>(null);
   const [form470DetailLoading, setForm470DetailLoading] = useState(false);

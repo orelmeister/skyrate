@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
 import type { SwitchingSignalsResponse, OpportunitySignals, SwitchLikelihood } from "@/lib/api";
 import { SkeletonRows, SkeletonStatCards } from "@/components/Skeleton";
@@ -296,8 +296,43 @@ function ConfidenceBadge({ score }: { score: number }) {
   );
 }
 
-export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?: (ben: string, year?: number, frn?: string) => void; onView470?: (applicationNumber: string) => void }) {
-  const [leads, setLeads] = useState<PredictedLead[]>([]);
+// Persist the vendor's last-used Predicted Leads filters across sessions
+// (localStorage) so preferred selections stick between visits.
+const PREDICTED_FILTERS_KEY = "vendor_predicted_filters";
+interface SavedPredictedFilters {
+  category?: string;
+  state?: string;
+  manufacturer?: string;
+  entity_type?: string;
+  service_type?: string;
+  name?: string;
+  min_amount?: string;
+  max_amount?: string;
+  switch_level?: string;
+  sort_by?: string;
+  sort_order?: string;
+}
+function loadPredictedFilters(): SavedPredictedFilters | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(PREDICTED_FILTERS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? (parsed as SavedPredictedFilters) : null;
+  } catch {
+    return null;
+  }
+}
+function savePredictedFilters(value: SavedPredictedFilters): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(PREDICTED_FILTERS_KEY, JSON.stringify(value));
+  } catch {
+    /* localStorage unavailable — non-fatal */
+  }
+}
+
+export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?: (ben: string, year?: number, frn?: string) => void; onView470?: (applicationNumber: string) => void }) {  const [leads, setLeads] = useState<PredictedLead[]>([]);
   const [stats, setStats] = useState<PredictionStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -342,6 +377,44 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
   const [sortOrder, setSortOrder] = useState<string>("desc");
   const [offset, setOffset] = useState(0);
   const limit = 25;
+
+  // Rehydrate the vendor's last-used filters once on mount, then persist on
+  // every subsequent change (Tim's preferred filters stick between visits).
+  const predictedSkipPersist = useRef(true);
+  useEffect(() => {
+    const saved = loadPredictedFilters();
+    if (!saved) return;
+    if (typeof saved.category === "string") setFilterCategory(saved.category);
+    if (typeof saved.state === "string") setFilterState(saved.state);
+    if (typeof saved.manufacturer === "string") setFilterManufacturer(saved.manufacturer);
+    if (typeof saved.entity_type === "string") setFilterEntityType(saved.entity_type);
+    if (typeof saved.service_type === "string") setFilterServiceType(saved.service_type);
+    if (typeof saved.name === "string") setFilterName(saved.name);
+    if (typeof saved.min_amount === "string") setFilterMinAmount(saved.min_amount);
+    if (typeof saved.max_amount === "string") setFilterMaxAmount(saved.max_amount);
+    if (typeof saved.switch_level === "string") setFilterSwitchLevel(saved.switch_level);
+    if (typeof saved.sort_by === "string") setSortBy(saved.sort_by);
+    if (typeof saved.sort_order === "string") setSortOrder(saved.sort_order);
+  }, []);
+  useEffect(() => {
+    if (predictedSkipPersist.current) {
+      predictedSkipPersist.current = false;
+      return;
+    }
+    savePredictedFilters({
+      category: filterCategory,
+      state: filterState,
+      manufacturer: filterManufacturer,
+      entity_type: filterEntityType,
+      service_type: filterServiceType,
+      name: filterName,
+      min_amount: filterMinAmount,
+      max_amount: filterMaxAmount,
+      switch_level: filterSwitchLevel,
+      sort_by: sortBy,
+      sort_order: sortOrder,
+    });
+  }, [filterCategory, filterState, filterManufacturer, filterEntityType, filterServiceType, filterName, filterMinAmount, filterMaxAmount, filterSwitchLevel, sortBy, sortOrder]);
 
   const fetchLeads = useCallback(async (newOffset = 0) => {
     setIsLoading(true);
