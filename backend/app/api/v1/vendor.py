@@ -31,6 +31,7 @@ from ...models.vendor import VendorProfile, VendorSearch
 from ...models.account_seat import AccountSeat
 from ...models.vendor_frn_tracking import VendorFrnTracking, WORKING_STATUS_VALUES, PIA_STATUS_VALUES
 from ...models.vendor_frn_note import VendorFrnNote
+from ...models.vendor_470_digest import Vendor470DigestSubscription
 
 router = APIRouter(prefix="/vendor", tags=["Vendor Portal"])
 
@@ -2959,6 +2960,182 @@ async def upsert_frn_note(
     db.commit()
     db.refresh(row)
     return {"success": True, "frn": row.frn, "note": row.note}
+
+
+# ==================== FORM 470 DAILY DIGEST SUBSCRIPTIONS ====================
+# Opt-in "email me new Form 470 matches daily". A vendor saves their current
+# Form 470 Lead search filters as a named subscription; a daily scheduler job
+# (12:00 UTC) emails the NEW postings since the last dispatch. Scoped to the
+# account OWNER's vendor_profile_id so team seats share the same digests.
+
+_DIGEST_FILTER_KEYS = ("year", "state", "category", "service_type", "manufacturer", "name")
+
+
+class Digest470Create(BaseModel):
+    name: Optional[str] = None
+    filters: Optional[Dict[str, Any]] = None
+    email: Optional[EmailStr] = None
+
+
+class Digest470Update(BaseModel):
+    name: Optional[str] = None
+    filters: Optional[Dict[str, Any]] = None
+    enabled: Optional[bool] = None
+    email: Optional[EmailStr] = None
+
+
+def _clean_digest_filters(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Keep only the recognised, non-empty Form 470 filter keys."""
+    raw = raw or {}
+    out: Dict[str, Any] = {}
+    for key in _DIGEST_FILTER_KEYS:
+        val = raw.get(key)
+        if val in (None, "", []):
+            continue
+        if key == "year":
+            try:
+                out[key] = int(val)
+            except (TypeError, ValueError):
+                continue
+        else:
+            out[key] = str(val).strip()
+    return out
+
+
+def _digest_default_name(filters: Dict[str, Any]) -> str:
+    bits: List[str] = []
+    if filters.get("state"):
+        bits.append(str(filters["state"]).upper())
+    if filters.get("category"):
+        bits.append(f"Category {filters['category']}")
+    if filters.get("service_type"):
+        bits.append(str(filters["service_type"]))
+    if filters.get("manufacturer"):
+        bits.append(str(filters["manufacturer"]))
+    if filters.get("name"):
+        bits.append(str(filters["name"]))
+    return " / ".join(bits) if bits else "All Form 470 postings"
+
+
+@router.get("/digest-subscriptions")
+async def list_digest_subscriptions(
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
+):
+    """List this vendor's saved Form 470 daily-digest subscriptions."""
+    rows = (
+        db.query(Vendor470DigestSubscription)
+        .filter(Vendor470DigestSubscription.vendor_profile_id == profile.id)
+        .order_by(Vendor470DigestSubscription.created_at.desc())
+        .all()
+    )
+    return {"success": True, "subscriptions": [r.to_dict() for r in rows]}
+
+
+@router.post("/digest-subscriptions")
+async def create_digest_subscription(
+    data: Digest470Create,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
+):
+    """Save the current Form 470 search filters as a daily-digest subscription."""
+    filters = _clean_digest_filters(data.filters)
+    name = (data.name or "").strip() or _digest_default_name(filters)
+    row = Vendor470DigestSubscription(
+        vendor_profile_id=profile.id,
+        name=name[:160],
+        filters_json=filters,
+        frequency="daily",
+        enabled=True,
+        email=(str(data.email) if data.email else None),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"success": True, "subscription": row.to_dict()}
+
+
+@router.put("/digest-subscriptions/{sub_id}")
+async def update_digest_subscription(
+    sub_id: int,
+    data: Digest470Update,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
+):
+    """Enable/disable, rename, re-target, or re-filter a digest subscription."""
+    row = (
+        db.query(Vendor470DigestSubscription)
+        .filter(
+            Vendor470DigestSubscription.id == sub_id,
+            Vendor470DigestSubscription.vendor_profile_id == profile.id,
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subscription not found")
+    if data.name is not None:
+        row.name = (data.name.strip() or row.name)[:160]
+    if data.filters is not None:
+        row.filters_json = _clean_digest_filters(data.filters)
+        # Filters changed: reset the baseline so the next run re-baselines.
+        row.last_seen_marker = None
+    if data.enabled is not None:
+        row.enabled = bool(data.enabled)
+    if data.email is not None:
+        row.email = str(data.email) if data.email else None
+    db.commit()
+    db.refresh(row)
+    return {"success": True, "subscription": row.to_dict()}
+
+
+@router.delete("/digest-subscriptions/{sub_id}")
+async def delete_digest_subscription(
+    sub_id: int,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
+):
+    """Delete a digest subscription."""
+    row = (
+        db.query(Vendor470DigestSubscription)
+        .filter(
+            Vendor470DigestSubscription.id == sub_id,
+            Vendor470DigestSubscription.vendor_profile_id == profile.id,
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subscription not found")
+    db.delete(row)
+    db.commit()
+    return {"success": True}
+
+
+@router.post("/digest-subscriptions/{sub_id}/preview")
+async def preview_digest_subscription(
+    sub_id: int,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
+):
+    """Return the Form 470 rows that WOULD be emailed now (no wait, no send)."""
+    row = (
+        db.query(Vendor470DigestSubscription)
+        .filter(
+            Vendor470DigestSubscription.id == sub_id,
+            Vendor470DigestSubscription.vendor_profile_id == profile.id,
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subscription not found")
+    try:
+        from ...services.vendor_470_digest import preview_subscription
+        result = await run_in_threadpool(preview_subscription, row)
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to preview digest: {str(e)}",
+        )
 
 
 @router.post("/470/search")

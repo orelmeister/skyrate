@@ -8,6 +8,7 @@ import { useVerificationGuard } from "@/lib/use-verification-guard";
 import { PERF_V2_ENABLED } from "@/lib/featureFlags";
 import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse, FRNStatusResponse, FRNStatusSummaryResponse, FRNStatusRecord, Form470Lead, Form470LeadsResponse, Form470DetailResponse, SavedLead, EnrichedContactData, FRNWatch, CreateWatchRequest, FRNReportHistory, VendorDisbursementResponse } from "@/lib/api";
 import { Form471LineItem, FrnTracking } from "@/lib/api";
+import { Vendor470DigestSubscription, Vendor470DigestPreview } from "@/lib/api";
 import { useTabParam } from "@/hooks/useTabParam";
 import PredictedLeadsTab from "@/components/PredictedLeadsTab";
 import OpportunityMap from "@/components/OpportunityMap";
@@ -907,6 +908,83 @@ function VendorPortalPage() {
   useEffect(() => {
     const saved = loadSavedFilters<typeof form470Filters>("vendor_470_filters");
     if (saved) setForm470Filters(saved);
+  }, []);
+
+  // Form 470 daily-digest subscriptions ("email me new matches daily").
+  const [digests, setDigests] = useState<Vendor470DigestSubscription[]>([]);
+  const [showDigests, setShowDigests] = useState(false);
+  const [digestBusy, setDigestBusy] = useState(false);
+  const [digestMsg, setDigestMsg] = useState<string | null>(null);
+  const [digestPreview, setDigestPreview] = useState<{ id: number; data: Vendor470DigestPreview } | null>(null);
+
+  const loadDigests = async () => {
+    try {
+      const res = await api.listDigestSubscriptions();
+      if (res.data?.success) setDigests(res.data.subscriptions || []);
+    } catch {
+      /* non-blocking */
+    }
+  };
+
+  const saveCurrentSearchAsDigest = async () => {
+    setDigestBusy(true);
+    setDigestMsg(null);
+    try {
+      const filters: Record<string, unknown> = {};
+      if (form470Filters.year) filters.year = form470Filters.year;
+      if (form470Filters.state) filters.state = form470Filters.state;
+      if (form470Filters.category) filters.category = form470Filters.category;
+      if (form470Filters.service_type) filters.service_type = form470Filters.service_type;
+      if (form470Filters.manufacturer) filters.manufacturer = form470Filters.manufacturer;
+      if (form470Filters.name) filters.name = form470Filters.name;
+      const res = await api.createDigestSubscription({ filters });
+      if (res.data?.success) {
+        setDigestMsg("Saved. You'll get a daily email when new matching Form 470s post.");
+        setShowDigests(true);
+        await loadDigests();
+      } else {
+        setDigestMsg(res.error || "Could not save digest.");
+      }
+    } catch {
+      setDigestMsg("Could not save digest.");
+    } finally {
+      setDigestBusy(false);
+    }
+  };
+
+  const toggleDigest = async (d: Vendor470DigestSubscription) => {
+    try {
+      await api.updateDigestSubscription(d.id, { enabled: !d.enabled });
+      await loadDigests();
+    } catch {
+      /* non-blocking */
+    }
+  };
+
+  const removeDigest = async (id: number) => {
+    try {
+      await api.deleteDigestSubscription(id);
+      if (digestPreview?.id === id) setDigestPreview(null);
+      await loadDigests();
+    } catch {
+      /* non-blocking */
+    }
+  };
+
+  const previewDigest = async (id: number) => {
+    setDigestBusy(true);
+    try {
+      const res = await api.previewDigestSubscription(id);
+      if (res.data) setDigestPreview({ id, data: res.data });
+    } catch {
+      /* non-blocking */
+    } finally {
+      setDigestBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDigests();
   }, []);
   useEffect(() => {
     if (form470FiltersSkipPersist.current) {
@@ -3842,7 +3920,116 @@ function VendorPortalPage() {
                 >
                   Clear Filters
                 </button>
+                <button
+                  onClick={saveCurrentSearchAsDigest}
+                  disabled={digestBusy}
+                  title="Save these filters and get a daily email when new matching Form 470s post"
+                  className="px-4 py-2 text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium disabled:opacity-50"
+                >
+                  Email me new matches daily
+                </button>
+                <button
+                  onClick={() => { setShowDigests((v) => !v); if (!showDigests) loadDigests(); }}
+                  className="px-4 py-2 text-indigo-700 border border-indigo-200 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors text-sm font-medium"
+                >
+                  Manage digests{digests.length ? ` (${digests.length})` : ""}
+                </button>
               </div>
+
+              {digestMsg && (
+                <div className="mt-3 text-sm text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2">
+                  {digestMsg}
+                </div>
+              )}
+
+              {showDigests && (
+                <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50/50 p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-slate-900">Daily Form 470 email digests</h3>
+                    <button
+                      onClick={() => setShowDigests(false)}
+                      className="text-slate-400 hover:text-slate-600 text-sm"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  {digests.length === 0 ? (
+                    <p className="text-sm text-slate-500">
+                      No digests yet. Set your filters above and click &ldquo;Email me new matches daily&rdquo; to get a daily email of new Form 470 postings that match.
+                    </p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {digests.map((d) => (
+                        <li key={d.id} className="bg-white rounded-lg border border-slate-200 px-3 py-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="text-sm font-medium text-slate-900 truncate">{d.name}</div>
+                              <div className="text-xs text-slate-500">
+                                {d.enabled ? "Active" : "Paused"}
+                                {d.last_sent_at ? ` \u00b7 last sent ${String(d.last_sent_at).slice(0, 10)}` : " \u00b7 not sent yet"}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => previewDigest(d.id)}
+                                disabled={digestBusy}
+                                className="px-2.5 py-1 text-xs text-indigo-700 border border-indigo-200 rounded hover:bg-indigo-50 disabled:opacity-50"
+                              >
+                                Preview
+                              </button>
+                              <button
+                                onClick={() => toggleDigest(d)}
+                                className="px-2.5 py-1 text-xs text-slate-700 border border-slate-200 rounded hover:bg-slate-50"
+                              >
+                                {d.enabled ? "Pause" : "Resume"}
+                              </button>
+                              <button
+                                onClick={() => removeDigest(d.id)}
+                                className="px-2.5 py-1 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                          {digestPreview && digestPreview.id === d.id && (
+                            <div className="mt-2 border-t border-slate-100 pt-2">
+                              <div className="text-xs text-slate-600 mb-1">
+                                {digestPreview.data.is_baseline
+                                  ? `${digestPreview.data.total_matches} matches (showing ${digestPreview.data.rows.length} recent; first email establishes a baseline, then only NEW postings are sent)`
+                                  : `${digestPreview.data.new_count} new since last digest`}
+                              </div>
+                              {digestPreview.data.rows.length === 0 ? (
+                                <div className="text-xs text-slate-400">No new postings right now.</div>
+                              ) : (
+                                <div className="max-h-48 overflow-y-auto">
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr className="text-left text-slate-400">
+                                        <th className="py-1 pr-2">Applicant</th>
+                                        <th className="py-1 pr-2">State</th>
+                                        <th className="py-1 pr-2">Posted</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {digestPreview.data.rows.slice(0, 25).map((r, i) => (
+                                        <tr key={i} className="border-t border-slate-100">
+                                          <td className="py-1 pr-2 text-slate-700">{r.entity_name || "\u2014"}</td>
+                                          <td className="py-1 pr-2 text-slate-500">{r.state || ""}</td>
+                                          <td className="py-1 pr-2 text-slate-500">{r.posting_date ? String(r.posting_date).slice(0, 10) : ""}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
 
               {/* Look up a specific BEN — jump straight to that entity's 470 */}
               <div className="mt-4 rounded-xl border border-purple-200 bg-purple-50/60 p-4">

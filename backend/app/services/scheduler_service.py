@@ -2021,6 +2021,26 @@ def run_opportunity_digest_job():
         logger.error(f"[opportunity_digest] weekly run failed: {e}")
 
 
+def run_vendor_470_digest_job():
+    """Email each enabled vendor Form 470 daily-digest subscription the NEW 470
+    postings that match its saved search since the last dispatch. Runs daily at
+    12:00 UTC. Whole job + each subscription are independently guarded so one bad
+    subscription never crashes the worker. Disable via SKYRATE_DISABLE_470_DIGEST=1."""
+    logger.info("[vendor_470_digest] starting daily run")
+    try:
+        from .vendor_470_digest import send_vendor_470_digests
+        result = send_vendor_470_digests()
+        logger.info(
+            "[vendor_470_digest] done subs=%s emails=%s baselines=%s errors=%s",
+            result.get("subscriptions"),
+            result.get("emails_sent"),
+            result.get("baselines"),
+            result.get("errors"),
+        )
+    except Exception as e:
+        logger.error(f"[vendor_470_digest] daily run failed: {e}")
+
+
 def init_scheduler():
     """Initialize the background scheduler with all jobs.
 
@@ -2267,6 +2287,20 @@ def init_scheduler():
         coalesce=True,
         replace_existing=True,
         next_run_time=boot + timedelta(minutes=7),
+    )
+
+    # Vendor Form 470 DAILY digest - 12:00 UTC every day. Emails each enabled
+    # saved-search subscription its NEW 470 postings since the last dispatch.
+    # Opt-in only; a no-op when no subscriptions exist. Disable via
+    # SKYRATE_DISABLE_470_DIGEST=1. Independent of every other job schedule.
+    scheduler.add_job(
+        run_vendor_470_digest_job,
+        trigger=CronTrigger(hour=12, minute=0, timezone='UTC'),
+        id='vendor_470_digest',
+        name='Email vendor Form 470 daily digests (opt-in)',
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
     )
 
     # FRN disbursements - daily at 04:30 UTC (first run 8 min after boot)

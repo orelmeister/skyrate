@@ -39,6 +39,7 @@ from .compliance_analysis import ComplianceAnalysis
 from .frn_status_change import FrnStatusChangeQueue
 from .compliance_tracker import CompliancePlan, ComplianceTask, ComplianceTaskTemplate
 from .vendor_frn_note import VendorFrnNote
+from .vendor_470_digest import Vendor470DigestSubscription
 
 __all__ = [
     "User",
@@ -116,4 +117,6 @@ __all__ = [
     "ComplianceTaskTemplate",
     # Vendor per-FRN manual note (B8)
     "VendorFrnNote",
+    # Vendor Form 470 daily digest subscription
+    "Vendor470DigestSubscription",
 ]

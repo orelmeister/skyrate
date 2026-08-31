@@ -861,6 +861,37 @@ export interface VendorAlertSubscription {
   created_at?: string | null;
 }
 
+export interface Vendor470DigestSubscription {
+  id: number;
+  name: string;
+  filters: Record<string, unknown>;
+  frequency: string;
+  enabled: boolean;
+  email?: string | null;
+  last_sent_at?: string | null;
+  last_seen_marker?: string | null;
+  created_at?: string | null;
+}
+
+export interface Vendor470DigestPreviewRow {
+  application_number?: string;
+  entity_name?: string;
+  state?: string;
+  service_types?: string[];
+  manufacturers?: string[];
+  allowable_contract_date?: string;
+  posting_date?: string;
+  [key: string]: unknown;
+}
+
+export interface Vendor470DigestPreview {
+  success: boolean;
+  is_baseline: boolean;
+  total_matches: number;
+  new_count: number;
+  rows: Vendor470DigestPreviewRow[];
+}
+
 export interface Form470DetailEntity {
   ben: string;
   name: string;
@@ -3328,6 +3359,58 @@ class ApiClient {
    */
   async deleteVendorAlert(id: number): Promise<ApiResponse<{ success: boolean }>> {
     return this.request(`/api/v1/vendor/alerts/${id}`, { method: 'DELETE' });
+  }
+
+  // ============ FORM 470 DAILY DIGEST SUBSCRIPTIONS ============
+
+  /**
+   * List the vendor's saved Form 470 daily-digest subscriptions.
+   */
+  async listDigestSubscriptions(): Promise<ApiResponse<{ success: boolean; subscriptions: Vendor470DigestSubscription[] }>> {
+    return this.request('/api/v1/vendor/digest-subscriptions');
+  }
+
+  /**
+   * Save the current Form 470 search filters as a daily-digest subscription.
+   */
+  async createDigestSubscription(payload: {
+    name?: string;
+    filters?: Record<string, unknown>;
+    email?: string;
+  }): Promise<ApiResponse<{ success: boolean; subscription: Vendor470DigestSubscription }>> {
+    return this.request('/api/v1/vendor/digest-subscriptions', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  /**
+   * Enable/disable, rename, re-target, or re-filter a digest subscription.
+   */
+  async updateDigestSubscription(id: number, payload: {
+    name?: string;
+    filters?: Record<string, unknown>;
+    enabled?: boolean;
+    email?: string;
+  }): Promise<ApiResponse<{ success: boolean; subscription: Vendor470DigestSubscription }>> {
+    return this.request(`/api/v1/vendor/digest-subscriptions/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  /**
+   * Delete a digest subscription.
+   */
+  async deleteDigestSubscription(id: number): Promise<ApiResponse<{ success: boolean }>> {
+    return this.request(`/api/v1/vendor/digest-subscriptions/${id}`, { method: 'DELETE' });
+  }
+
+  /**
+   * Preview the Form 470 rows that WOULD be emailed now for a subscription.
+   */
+  async previewDigestSubscription(id: number): Promise<ApiResponse<Vendor470DigestPreview>> {
+    return this.request(`/api/v1/vendor/digest-subscriptions/${id}/preview`, { method: 'POST' });
   }
 
   // ==================== SAVED LEADS ====================
