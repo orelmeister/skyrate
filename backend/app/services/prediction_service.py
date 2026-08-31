@@ -838,10 +838,23 @@ class PredictionService:
                 'mibs': ['managed internal broadband', 'mibs'],
             }
             st_keywords = service_type_keyword_map.get(st, [st])
-            st_conditions = [
-                func.lower(PredictedLead.service_type).contains(kw)
-                for kw in st_keywords
-            ]
+            # Coalesce NULL service_type to '' so the text match doesn't drop rows
+            # via SQL 3-valued logic.
+            _st_col = func.lower(func.coalesce(PredictedLead.service_type, ''))
+            st_conditions = [_st_col.contains(kw) for kw in st_keywords]
+            # Equipment-refresh and C2-budget predictions store their equipment
+            # detail in product_type/manufacturer and leave service_type NULL, so a
+            # pure text match returned 0 rows for them. They ARE Category-2 Internal
+            # Connections equipment by definition, so include those prediction types
+            # for the equipment / MIBS filters (fixes "Equipment (Internal
+            # Connections)" returning an empty list).
+            if st in ('equipment', 'mibs'):
+                st_conditions.append(
+                    PredictedLead.prediction_type.in_([
+                        PredictionType.EQUIPMENT_REFRESH.value,
+                        PredictionType.C2_BUDGET_RESET.value,
+                    ])
+                )
             query = query.filter(or_(*st_conditions))
 
         if status_filter:
