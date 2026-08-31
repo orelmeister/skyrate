@@ -2169,6 +2169,44 @@ async def get_470_by_ben(
             detail="BEN is required",
         )
 
+    def _fetch_470_history() -> list:
+        """Best-effort: the entity's FULL Form 470 history across ALL funding
+        years from USAC Open Data (FCC Form 470 Basic Info, jp7a-89nd). The local
+        snapshot only holds current/next year, so this surfaces every certified
+        Form 470 the entity ever filed for download. Never raises."""
+        import requests as _rq
+        ben_soql = ben_clean.replace("'", "''")
+        try:
+            r = _rq.get(
+                "https://opendata.usac.org/resource/jp7a-89nd.json",
+                params={
+                    "$select": "application_number,funding_year,billed_entity_name,ben,f470_status,billed_entity_state,billed_entity_city",
+                    "$where": f"ben='{ben_soql}'",
+                    "$order": "funding_year DESC",
+                    "$limit": 200,
+                },
+                timeout=25,
+            )
+            if r.status_code != 200:
+                return []
+            out = []
+            for rec in (r.json() or []):
+                app = rec.get("application_number")
+                if not app:
+                    continue
+                out.append({
+                    "application_number": app,
+                    "funding_year": rec.get("funding_year"),
+                    "ben": rec.get("ben") or ben_clean,
+                    "entity_name": rec.get("billed_entity_name"),
+                    "state": rec.get("billed_entity_state"),
+                    "city": rec.get("billed_entity_city"),
+                    "status": rec.get("f470_status"),
+                })
+            return out
+        except Exception:
+            return []
+
     try:
         q = db.query(VendorForm470Snapshot).filter(VendorForm470Snapshot.ben == ben_clean)
         if year:
@@ -2201,6 +2239,40 @@ async def get_470_by_ben(
             "c2_budget_available": r.c2_budget_available,
             "c2_budget_cycle": r.c2_budget_cycle,
         } for r in rows]
+
+        # Merge in the entity's full Form 470 history (all years) so the vendor
+        # can download every certified Form 470, not just current/next year. Only
+        # when no specific year was requested. Best-effort + 24h cached.
+        if not year:
+            try:
+                from utils.usac_cache import get_or_cache
+            except ImportError:
+                from ...utils.usac_cache import get_or_cache
+            try:
+                history = await run_in_threadpool(
+                    lambda: get_or_cache(
+                        "vendor_470_history_v1",
+                        {"ben": ben_clean},
+                        ttl_hours=24,
+                        fetch_fn=_fetch_470_history,
+                    )
+                )
+            except Exception:
+                history = []
+            seen_apps = {str(l.get("application_number")) for l in leads if l.get("application_number")}
+            for h in (history or []):
+                app = str(h.get("application_number") or "")
+                if app and app not in seen_apps:
+                    seen_apps.add(app)
+                    leads.append(h)
+
+            def _fy(l):
+                try:
+                    return int(l.get("funding_year") or 0)
+                except (TypeError, ValueError):
+                    return 0
+            leads.sort(key=_fy, reverse=True)
+
         return {"success": True, "ben": ben_clean, "total_leads": len(leads), "leads": leads}
     except Exception as e:
         raise HTTPException(

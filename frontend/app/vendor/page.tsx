@@ -2206,7 +2206,7 @@ function VendorPortalPage() {
       { id: "invoicing", label: "Invoicing", Icon: Receipt },
     ]},
     { label: "Intelligence", items: [
-      { id: "competitive", label: "471 Lookup", Icon: FileSearch },
+      { id: "competitive", label: "470/471 Lookup", Icon: FileSearch },
       { id: "search", label: "School Search", Icon: Search },
       { id: "cyber-pilot", label: "Cybersecurity Pilot", Icon: Shield },
     ]},
@@ -3932,8 +3932,8 @@ function VendorPortalPage() {
                     <span className="text-3xl">🎯</span>
                   </div>
                   <div>
-                    <h1 className="text-2xl font-bold">Form 471 Competitive Analysis</h1>
-                    <p className="text-blue-100 mt-1">See which vendors have won contracts at any school</p>
+                    <h1 className="text-2xl font-bold">470/471 Lookup</h1>
+                    <p className="text-blue-100 mt-1">See who has won contracts at any school and download its certified Form 470 &amp; 471 documents</p>
                   </div>
                 </div>
               </div>
@@ -4077,7 +4077,7 @@ function VendorPortalPage() {
                               </button>
                             ))}
                             {f470.length === 0 && (
-                              <span className="text-xs text-slate-400 self-center">No Form 470 filing found for this entity in the current/next funding year.</span>
+                              <span className="text-xs text-slate-400 self-center">No Form 470 filings found for this entity.</span>
                             )}
                           </>
                         );
