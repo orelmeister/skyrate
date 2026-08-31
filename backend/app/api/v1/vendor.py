@@ -2431,7 +2431,7 @@ async def get_equipment_estimate(
 
         try:
             qres = get_or_cache(
-                "vendor_equipment_qty_v1",
+                "vendor_equipment_qty_v2",
                 {"frn": frn_clean, "mdl": mdl.lower()},
                 ttl_hours=168,
                 fetch_fn=_fetch_qty,
@@ -2456,7 +2456,17 @@ async def get_equipment_estimate(
         result["qty"] = deployment_qty
         if isinstance(unit_price, (int, float)) and unit_price > 0 and deployment_qty:
             deployment_total = round(unit_price * deployment_qty)
-            if 0 < deployment_total <= 1_000_000_000:
+            # Sanity guard (Ari 0827): a "replace the whole deployment" total must be
+            # believable relative to what the entity ACTUALLY spent. The Form 471
+            # line-item quantity summed across an FRN can pick up a bogus large qty
+            # unrelated to this small purchase (e.g. a $1,222 original cost yielding
+            # a $1.7M "deployment total" at 139 units). When the original cost is
+            # known, cap the total at 8x the larger of (original cost, one current
+            # unit): a genuine reasonable expansion still shows, a ~1000x blow-up is
+            # dropped. Better to omit the total than show an absurd one.
+            sane_ceiling = max(orig_cost or 0, unit_price) * 8
+            too_large = bool(orig_cost and orig_cost > 0 and deployment_total > sane_ceiling)
+            if 0 < deployment_total <= 1_000_000_000 and not too_large:
                 result["deployment_total"] = deployment_total
         return result
 
