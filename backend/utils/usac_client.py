@@ -1356,7 +1356,123 @@ class USACDataClient:
                 'success': False,
                 'error': f'Failed to fetch 471 data: {str(e)}'
             }
-    
+
+    def get_entity_471_history(
+        self,
+        ben: str,
+        limit: int = 2000,
+    ) -> Dict[str, Any]:
+        """
+        Raw per-line 471 history for a single entity (BEN) across ALL funding
+        years, from the Recipient Details & Commitments dataset (avi8-svp9).
+        Matches the BEN as either billed_entity_number (direct applicant) OR
+        ros_entity_number (consortium recipient of service).
+
+        Shared low-level pull reused by the per-entity Purchase History view and
+        the purchasing-pattern signal so those two features never double-query
+        USAC. Never fabricates: 'rows' is [] when the entity has no 471 lines.
+
+        NOTE: avi8-svp9 has NO manufacturer column (only form_471_product_name /
+        form_471_function_name / form_471_service_type_name). Manufacturer is
+        enriched separately by the caller from the 471_line_items dataset.
+
+        Returns {'success', 'ben', 'entity_name', 'rows': [ {funding_year,
+        category, service_type, function, product, spin_name, spin_number, frn,
+        line_item_number, one_time_cost, recurring_cost, total_cost, quantity} ]}.
+        """
+        ben_clean = (ben or "").strip()
+        if not ben_clean:
+            return {'success': False, 'error': 'ben is required', 'rows': []}
+        try:
+            url = "https://opendata.usac.org/resource/avi8-svp9.json"
+            # funding_year is a TEXT column on avi8-svp9 -> string comparison only.
+            where_clause = (
+                f"(billed_entity_number='{ben_clean}' "
+                f"OR ros_entity_number='{ben_clean}')"
+            )
+            params = {
+                '$where': where_clause,
+                '$limit': limit,
+                '$order': 'funding_year DESC',
+                '$select': (
+                    'application_number, funding_request_number, '
+                    'form_471_line_item_number, funding_year, '
+                    'chosen_category_of_service, form_471_service_type_name, '
+                    'form_471_function_name, form_471_product_name, '
+                    'spin_name, spin_number, one_time_quantity, monthly_quantity, '
+                    'total_eligible_one_time_costs, total_eligible_recurring_costs, '
+                    'post_discount_extended_eligible_line_item_costs, '
+                    'pre_discount_extended_eligible_line_item_costs, '
+                    'billed_entity_number, ros_entity_number, '
+                    'organization_name, ros_entity_name'
+                ),
+            }
+            if self.app_token:
+                params['$$app_token'] = self.app_token
+
+            logger.info(f"Fetching 471 history for entity BEN {ben_clean}")
+            resp = self.session.get(url, params=params, timeout=60)
+            resp.raise_for_status()
+            data = resp.json() or []
+
+            if not data:
+                return {'success': True, 'ben': ben_clean, 'entity_name': None, 'rows': []}
+
+            def _norm_cat(record: Dict[str, Any]) -> str:
+                raw = str(record.get('chosen_category_of_service') or '').lower()
+                if '2' in raw:
+                    return '2'
+                if '1' in raw:
+                    return '1'
+                # Fall back to a service-type keyword classifier (Cat2 = internal
+                # connections / managed internal broadband / basic maintenance).
+                stype = str(record.get('form_471_service_type_name') or '').lower()
+                cat2_kw = ('internal connection', 'managed internal broadband',
+                           'basic maintenance', 'mibs', 'bmic')
+                return '2' if any(k in stype for k in cat2_kw) else '1'
+
+            first = data[0]
+            is_ros = str(first.get('ros_entity_number', '')) == ben_clean
+            entity_name = (
+                first.get('ros_entity_name') if is_ros else first.get('organization_name')
+            ) or first.get('organization_name') or first.get('ros_entity_name')
+
+            rows = []
+            for record in data:
+                one_time = safe_float(record.get('total_eligible_one_time_costs'))
+                recurring = safe_float(record.get('total_eligible_recurring_costs'))
+                committed = safe_float(record.get('post_discount_extended_eligible_line_item_costs'))
+                total_cost = committed if committed > 0 else (one_time + recurring)
+                qty = safe_float(record.get('one_time_quantity')) or safe_float(record.get('monthly_quantity'))
+                rows.append({
+                    'funding_year': str(record.get('funding_year') or '').strip(),
+                    'category': _norm_cat(record),
+                    'service_type': record.get('form_471_service_type_name') or '',
+                    'function': record.get('form_471_function_name') or '',
+                    'product': record.get('form_471_product_name') or '',
+                    'spin_name': record.get('spin_name') or '',
+                    'spin_number': str(record.get('spin_number') or ''),
+                    'frn': str(record.get('funding_request_number') or ''),
+                    'line_item_number': str(record.get('form_471_line_item_number') or ''),
+                    'one_time_cost': one_time,
+                    'recurring_cost': recurring,
+                    'total_cost': total_cost,
+                    'quantity': qty,
+                })
+
+            return {
+                'success': True,
+                'ben': ben_clean,
+                'entity_name': entity_name,
+                'rows': rows,
+            }
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching 471 history for BEN {ben_clean}: {e}")
+            return {'success': False, 'error': str(e), 'rows': []}
+        except Exception as e:
+            logger.error(f"Error in get_entity_471_history for BEN {ben_clean}: {e}")
+            return {'success': False, 'error': str(e), 'rows': []}
+
     def get_471_by_state(
         self,
         state: str,

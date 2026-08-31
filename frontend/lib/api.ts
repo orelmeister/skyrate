@@ -257,6 +257,35 @@ export interface FrnTrackingUpdate {
   notes?: string | null;
 }
 
+// Per-entity Form 471 purchase history (B5) — grouped by funding year.
+export interface PurchaseHistoryLineItem {
+  category?: string | null;
+  service_type?: string | null;
+  manufacturer?: string | null;
+  model?: string | null;
+  product?: string | null;
+  provider?: string | null;
+  spin_number?: string | null;
+  frn?: string | null;
+  quantity?: number | null;
+  total_cost?: number | null;
+}
+
+export interface PurchaseHistoryYear {
+  funding_year: string;
+  year_total: number;
+  line_items: PurchaseHistoryLineItem[];
+}
+
+export interface EntityPurchaseHistory {
+  success: boolean;
+  ben: string;
+  entity_name?: string | null;
+  years: PurchaseHistoryYear[];
+  overall_total: number;
+  error?: string;
+}
+
 export interface SamMatch {
   uei?: string | null;
   legal_name?: string | null;
@@ -2882,6 +2911,11 @@ class ApiClient {
 
   async vendorUpsertFrnTracking(data: FrnTrackingUpdate): Promise<ApiResponse<{ success: boolean; tracking: FrnTracking }>> {
     return this.put(`/vendor/frn-tracking`, data);
+  }
+
+  // ---- Per-entity Form 471 purchase history (B5) ----
+  async getEntityPurchaseHistory(ben: string): Promise<ApiResponse<EntityPurchaseHistory>> {
+    return this.request(`/api/v1/vendor/entity-purchase-history?ben=${encodeURIComponent(ben)}`);
   }
 
   // ---- Per-FRN applicant working annotations (status/install/co-pay/PIA) ----

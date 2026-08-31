@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import type { SwitchingSignalsResponse, OpportunitySignals, SwitchLikelihood } from "@/lib/api";
 import { SkeletonRows, SkeletonStatCards } from "@/components/Skeleton";
 import { downloadCsv, csvFilename, downloadExcel, excelFilename } from "@/lib/csv-export";
+import PurchaseHistoryModal from "@/components/PurchaseHistoryModal";
 
 // Resolve + download a file (used for the certified Form 471 PDF from USAC).
 // USAC certified PDFs live on publicdata.usac.org and block cross-origin fetch,
@@ -337,6 +338,8 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedLead, setSelectedLead] = useState<PredictedLead | null>(null);
+  // Per-entity Form 471 purchase-history drill-down (B5) — opened from the detail panel.
+  const [purchaseHistoryBen, setPurchaseHistoryBen] = useState<string | null>(null);
   // Form 470 filing check for the selected entity (Ari request): did they post a 470?
   const [f470Loading, setF470Loading] = useState(false);
   const [f470Result, setF470Result] = useState<{ filed: boolean; leads: { application_number: string; funding_year: string; entity_name: string }[] } | null>(null);
@@ -1630,6 +1633,16 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                 </button>
               )}
 
+              {/* Per-entity purchase history drill-down (B5) — what have they bought over the years? */}
+              {selectedLead.ben && (
+                <button
+                  onClick={() => setPurchaseHistoryBen(selectedLead.ben)}
+                  className="w-full px-3 py-2 mb-3 bg-white border border-slate-300 text-slate-700 rounded-xl text-sm font-medium hover:bg-slate-50 transition-all"
+                >
+                  📜 View purchase history
+                </button>
+              )}
+
               {/* Download the REAL certified Form 471 PDF (Ari loom-1 #4) + line-item CSV */}
               {selectedLead.ben && (
                 <div className="mb-3 space-y-2">
@@ -1938,6 +1951,13 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
           )}
         </div>
       )}
+
+      {/* Per-entity purchase-history drill-down modal (B5) */}
+      <PurchaseHistoryModal
+        ben={purchaseHistoryBen}
+        entityName={selectedLead?.organization_name}
+        onClose={() => setPurchaseHistoryBen(null)}
+      />
     </div>
   );
 }

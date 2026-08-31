@@ -2700,6 +2700,126 @@ async def get_switching_signals(
     )
 
 
+def _entity_471_history_cached(ben_clean: str) -> Dict[str, Any]:
+    """Shared 24h-cached raw 471 line pull for a single BEN (avi8-svp9).
+
+    Reused by BOTH the Purchase History view (B5) and the purchasing-pattern
+    signal (B6) so those two features never double-query USAC for the same BEN.
+    """
+    try:
+        from utils.usac_client import USACDataClient
+        from utils.usac_cache import get_or_cache
+    except ImportError:
+        from ...utils.usac_client import USACDataClient
+        from ...utils.usac_cache import get_or_cache
+    client = USACDataClient()
+    return get_or_cache(
+        namespace="entity_471_history_v1",
+        params={"ben": ben_clean},
+        ttl_hours=24,
+        fetch_fn=lambda: client.get_entity_471_history(ben_clean),
+    )
+
+
+@router.get("/entity-purchase-history")
+async def get_entity_purchase_history(
+    ben: str,
+    current_user: User = Depends(require_role("admin", "vendor", "super")),
+):
+    """
+    Per-entity Form 471 "Purchase History" (B5) — a one-click BEN drill-down that
+    answers a vendor's "what has this entity bought?" workflow.
+
+    Groups the entity's historical 471 line items by funding year (newest first).
+    Each year carries a line list {funding_year, category, service_type,
+    manufacturer, product, provider (spin_name), quantity, total_cost} plus a
+    per-year total; the response also carries an overall total.
+
+    Data source: USAC avi8-svp9 (Recipient Details & Commitments) for
+    year/category/provider/product/quantity/cost. avi8-svp9 has NO manufacturer
+    column, so manufacturer/model is best-effort enriched from the 471_line_items
+    dataset (hbj5-2bpj) joined on (frn, line_item_number). Never fabricates:
+    returns an empty years list when the entity has no 471 history. Cached 24h.
+    """
+    ben_clean = (ben or "").strip()
+    if not ben_clean:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ben is required")
+
+    def _fetch() -> Dict[str, Any]:
+        hist = _entity_471_history_cached(ben_clean)
+        if not hist or hist.get("success") is False:
+            return {"success": False, "ben": ben_clean, "years": [], "overall_total": 0,
+                    "error": (hist or {}).get("error", "history unavailable")}
+
+        rows = hist.get("rows", []) or []
+
+        # Best-effort manufacturer/model enrichment from 471_line_items (hbj5-2bpj),
+        # which DOES carry form_471_manufacturer_name + model_of_equipment. Keyed by
+        # (frn, line_item_number). Non-blocking: manufacturer stays null on failure.
+        mfr_lookup: Dict[str, Dict[str, Any]] = {}
+        try:
+            from utils.usac_client import USACDataClient
+        except ImportError:
+            from ...utils.usac_client import USACDataClient
+        try:
+            li = USACDataClient().get_471_line_items(ben=ben_clean, limit=2000)
+            for item in (li or {}).get("line_items", []) or []:
+                key = f"{str(item.get('funding_request_number') or '')}|{str(item.get('line_item_number') or '')}"
+                mfr_lookup[key] = {
+                    "manufacturer": item.get("manufacturer"),
+                    "model": item.get("model"),
+                }
+        except Exception as ex:
+            import logging as _lg
+            _lg.getLogger(__name__).info(f"purchase-history mfr enrich skipped for BEN {ben_clean}: {ex}")
+
+        by_year: Dict[str, Dict[str, Any]] = {}
+        overall_total = 0.0
+        for r in rows:
+            yr = r.get("funding_year") or ""
+            slot = by_year.setdefault(yr, {"funding_year": yr, "line_items": [], "year_total": 0.0})
+            key = f"{r.get('frn', '')}|{r.get('line_item_number', '')}"
+            mfr = mfr_lookup.get(key, {})
+            cost = float(r.get("total_cost") or 0)
+            slot["line_items"].append({
+                "category": r.get("category"),
+                "service_type": r.get("service_type"),
+                "manufacturer": mfr.get("manufacturer"),
+                "model": mfr.get("model"),
+                "product": r.get("product"),
+                "provider": r.get("spin_name"),
+                "spin_number": r.get("spin_number"),
+                "frn": r.get("frn"),
+                "quantity": r.get("quantity"),
+                "total_cost": cost,
+            })
+            slot["year_total"] += cost
+            overall_total += cost
+
+        years = sorted(by_year.values(), key=lambda y: y["funding_year"], reverse=True)
+        return {
+            "success": True,
+            "ben": ben_clean,
+            "entity_name": hist.get("entity_name"),
+            "years": years,
+            "overall_total": overall_total,
+        }
+
+    try:
+        from utils.usac_cache import get_or_cache
+    except ImportError:
+        from ...utils.usac_cache import get_or_cache
+
+    return await run_in_threadpool(
+        lambda: get_or_cache(
+            namespace="entity_purchase_history_v1",
+            params={"ben": ben_clean},
+            ttl_hours=24,
+            fetch_fn=_fetch,
+        )
+    )
+
+
 @router.post("/470/search")
 async def search_470(
     data: Form470SearchRequest,

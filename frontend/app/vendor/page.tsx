@@ -20,7 +20,7 @@ import { downloadCsv, csvFilename, downloadExcel, excelFilename } from "@/lib/cs
 import { ChevronRight, ChevronDown, Target, Clock, Building2, Bell, ArrowUpRight, Zap, BarChart3, Search, TrendingUp, Home, Activity, Shield, Map as MapIcon, Sparkles, FileSearch, Bookmark, Settings as SettingsIcon, HelpCircle, PanelLeft, Sun, Moon, LogOut, Receipt } from "lucide-react";
 import PilotFrns from "./PilotFrns";
 import { FrnSubStatusInfo, FRN_PENDING_REASON_OPTIONS } from "@/components/FrnSubStatusInfo";
-
+import PurchaseHistoryModal from "@/components/PurchaseHistoryModal";
 const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "cyber-pilot", "470-leads", "map", "predicted-leads", "competitive", "invoicing", "search", "leads", "settings"] as const;
 type VendorTab = typeof VENDOR_TABS[number];
 
@@ -618,6 +618,8 @@ function VendorPortalPage() {
   // Entity's Form 470 filings for the 471 Lookup entity, so the vendor can
   // download the certified Form 470 PDF (parity with consultant/applicant).
   const [entity470Filings, setEntity470Filings] = useState<Form470Lead[]>([]);
+  // Per-entity Form 471 purchase-history drill-down (B5) — opened from the 471 Lookup view.
+  const [purchaseHistoryBen, setPurchaseHistoryBen] = useState<string | null>(null);
   const [competitorData, setCompetitorData] = useState<CompetitorAnalysisResponse | null>(null);
   const [competitorLoading, setCompetitorLoading] = useState(false);
   // Category scope for the competitor analysis: '' = All, '1' = Cat 1, '2' = Cat 2.
@@ -4093,6 +4095,18 @@ function VendorPortalPage() {
                     </div>
                   </div>
 
+                  {/* Per-entity purchase-history drill-down (B5) */}
+                  {form471Data.ben && (
+                    <div className="mt-5">
+                      <button
+                        onClick={() => setPurchaseHistoryBen(String(form471Data.ben))}
+                        className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-xl text-sm font-medium hover:bg-slate-50 transition-colors"
+                      >
+                        📜 View purchase history
+                      </button>
+                    </div>
+                  )}
+
                   {/* Certified Form PDFs — download the actual USAC Form 470 & 471
                       documents for this entity (parity with consultant/applicant). */}
                   <div className="mt-6 border-t border-slate-100 pt-5">
@@ -5903,6 +5917,13 @@ function VendorPortalPage() {
           </div>
         </div>
       )}
+
+      {/* Per-entity purchase-history drill-down modal (B5) */}
+      <PurchaseHistoryModal
+        ben={purchaseHistoryBen}
+        entityName={form471Data?.entity_name}
+        onClose={() => setPurchaseHistoryBen(null)}
+      />
 
       {/* FRN Detail Modal */}
       {showFRNDetailModal && selectedFRN && (
