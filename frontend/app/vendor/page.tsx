@@ -24,6 +24,15 @@ import PurchaseHistoryModal from "@/components/PurchaseHistoryModal";
 const VENDOR_TABS = ["dashboard", "my-entities", "frn-status", "cyber-pilot", "470-leads", "map", "predicted-leads", "competitive", "invoicing", "search", "leads", "settings"] as const;
 type VendorTab = typeof VENDOR_TABS[number];
 
+// Saved-leads CRM pipeline stages (B7). Order defines the pipeline flow.
+const PIPELINE_STAGES: { key: string; label: string; chip: string; dot: string }[] = [
+  { key: "new", label: "New", chip: "bg-blue-100 text-blue-700", dot: "bg-blue-500" },
+  { key: "contacted", label: "Contacted", chip: "bg-yellow-100 text-yellow-700", dot: "bg-yellow-500" },
+  { key: "qualified", label: "Qualified", chip: "bg-purple-100 text-purple-700", dot: "bg-purple-500" },
+  { key: "won", label: "Won", chip: "bg-green-100 text-green-700", dot: "bg-green-500" },
+  { key: "lost", label: "Lost", chip: "bg-red-100 text-red-700", dot: "bg-red-500" },
+];
+
 interface SearchResult {
   ben: string;
   name: string;
@@ -936,6 +945,8 @@ function VendorPortalPage() {
   const [savedLeadsTotalCount, setSavedLeadsTotalCount] = useState(0);
   const [savedLeadsFilter, setSavedLeadsFilter] = useState<string>('');
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<number>>(new Set());
+  // B7: per-stage totals for the CRM pipeline bar (always across all leads, not the filtered view)
+  const [pipelineCounts, setPipelineCounts] = useState<Record<string, number>>({});
   
   // Lead saving/enrichment state for the modal
   const [isLeadSaved, setIsLeadSaved] = useState(false);
@@ -1691,6 +1702,24 @@ function VendorPortalPage() {
     } finally {
       setSavedLeadsLoading(false);
     }
+    loadPipelineCounts();
+  };
+
+  // B7: tally saved leads by stage across the whole account for the pipeline bar.
+  const loadPipelineCounts = async () => {
+    try {
+      const response = await api.getSavedLeads({ limit: 500 });
+      if (response.success && response.data) {
+        const counts: Record<string, number> = {};
+        for (const l of response.data.leads || []) {
+          const s = l.lead_status || "new";
+          counts[s] = (counts[s] || 0) + 1;
+        }
+        setPipelineCounts(counts);
+      }
+    } catch (error) {
+      console.error("Failed to load pipeline counts:", error);
+    }
   };
 
   const saveCurrentLead = async () => {
@@ -1785,12 +1814,21 @@ function VendorPortalPage() {
   };
 
   const updateLeadStatus = async (leadId: number, status: string) => {
+    // Optimistic: reflect the new stage immediately, revert on failure.
+    const previous = savedLeads;
+    const nextStatus = status as SavedLead["lead_status"];
+    setSavedLeads(cur => cur.map(l => (l.id === leadId ? { ...l, lead_status: nextStatus } : l)));
     try {
       await api.updateSavedLead(leadId, { lead_status: status });
-      // Refresh saved leads list
-      loadSavedLeads(savedLeadsFilter || undefined);
+      // If a stage filter is active the lead may no longer belong to the view.
+      if (savedLeadsFilter && savedLeadsFilter !== status) {
+        loadSavedLeads(savedLeadsFilter);
+      } else {
+        loadPipelineCounts();
+      }
     } catch (error) {
       console.error("Failed to update lead status:", error);
+      setSavedLeads(previous);
     }
   };
 
@@ -1801,6 +1839,7 @@ function VendorPortalPage() {
       await api.deleteSavedLead(leadId);
       setSavedLeads(prev => prev.filter(l => l.id !== leadId));
       setSavedLeadsTotalCount(prev => prev - 1);
+      loadPipelineCounts();
     } catch (error) {
       console.error("Failed to delete lead:", error);
     }
@@ -4880,7 +4919,36 @@ function VendorPortalPage() {
                   </button>
                 </div>
               </div>
-              
+
+              {/* Pipeline stage summary (B7): per-stage counts double as quick filters */}
+              <div className="flex items-stretch gap-2 mb-4 overflow-x-auto pb-1">
+                {(() => {
+                  const totalAll = PIPELINE_STAGES.reduce((n, s) => n + (pipelineCounts[s.key] || 0), 0);
+                  return (
+                    <button
+                      onClick={() => { setSavedLeadsFilter(''); loadSavedLeads(); }}
+                      className={`flex-shrink-0 min-w-[92px] rounded-xl border px-3 py-2 text-left transition-colors ${savedLeadsFilter === '' ? 'border-purple-400 bg-purple-50' : 'border-slate-200 hover:bg-slate-50'}`}
+                    >
+                      <div className="text-lg font-bold text-slate-900">{totalAll}</div>
+                      <div className="text-xs text-slate-500">All</div>
+                    </button>
+                  );
+                })()}
+                {PIPELINE_STAGES.map((stage) => (
+                  <button
+                    key={stage.key}
+                    onClick={() => { setSavedLeadsFilter(stage.key); loadSavedLeads(stage.key); }}
+                    className={`flex-shrink-0 min-w-[92px] rounded-xl border px-3 py-2 text-left transition-colors ${savedLeadsFilter === stage.key ? 'border-purple-400 bg-purple-50' : 'border-slate-200 hover:bg-slate-50'}`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className={`w-2 h-2 rounded-full ${stage.dot}`}></span>
+                      <span className="text-lg font-bold text-slate-900">{pipelineCounts[stage.key] || 0}</span>
+                    </div>
+                    <div className="text-xs text-slate-500">{stage.label}</div>
+                  </button>
+                ))}
+              </div>
+
               {/* Selection controls */}
               {savedLeads.length > 0 && (
                 <div className="flex items-center gap-3 mb-4 pb-4 border-b border-slate-100">
