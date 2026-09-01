@@ -2041,6 +2041,28 @@ def run_vendor_470_digest_job():
         logger.error(f"[vendor_470_digest] daily run failed: {e}")
 
 
+def run_bid_copilot_kb_job():
+    """Ensure the Bid Compliance Copilot FCC knowledge base is seeded (idempotent).
+    Runs daily; the hook where future live FCC/USAC corpus ingestion (P5) plugs in.
+    Disable via SKYRATE_DISABLE_BID_KB=1."""
+    if _os.environ.get("SKYRATE_DISABLE_BID_KB") == "1":
+        logger.info("[bid_copilot_kb] disabled via SKYRATE_DISABLE_BID_KB=1; skipping")
+        return
+    logger.info("[bid_copilot_kb] ensuring FCC knowledge base")
+    try:
+        from app.core.database import SessionLocal
+        from .bid_copilot.knowledge_base import seed_knowledge_base
+        db = SessionLocal()
+        try:
+            counts = seed_knowledge_base(db)
+            logger.info("[bid_copilot_kb] done chunks_added=%s precedents_added=%s",
+                        counts.get("chunks_added"), counts.get("precedents_added"))
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"[bid_copilot_kb] run failed: {e}")
+
+
 def init_scheduler():
     """Initialize the background scheduler with all jobs.
 
@@ -2298,6 +2320,19 @@ def init_scheduler():
         trigger=CronTrigger(hour=12, minute=0, timezone='UTC'),
         id='vendor_470_digest',
         name='Email vendor Form 470 daily digests (opt-in)',
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
+
+    # Bid Compliance Copilot FCC knowledge base - ensure seeded daily at 03:20 UTC.
+    # Idempotent; the plug-in point for future live FCC/USAC corpus ingestion (P5).
+    # Disable via SKYRATE_DISABLE_BID_KB=1.
+    scheduler.add_job(
+        run_bid_copilot_kb_job,
+        trigger=CronTrigger(hour=3, minute=20, timezone='UTC'),
+        id='bid_copilot_kb',
+        name='Ensure/refresh Bid Copilot FCC knowledge base',
         max_instances=1,
         coalesce=True,
         replace_existing=True,

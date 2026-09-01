@@ -40,6 +40,7 @@ from .frn_status_change import FrnStatusChangeQueue
 from .compliance_tracker import CompliancePlan, ComplianceTask, ComplianceTaskTemplate
 from .vendor_frn_note import VendorFrnNote
 from .vendor_470_digest import Vendor470DigestSubscription
+from .bid_copilot import VendorBidAnalysis, FccKbChunk, AppealPrecedent
 
 __all__ = [
     "User",
@@ -119,4 +120,8 @@ __all__ = [
     "VendorFrnNote",
     # Vendor Form 470 daily digest subscription
     "Vendor470DigestSubscription",
+    # Bid Compliance Copilot (vendor-side pre-submission scoring)
+    "VendorBidAnalysis",
+    "FccKbChunk",
+    "AppealPrecedent",
 ]

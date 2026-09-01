@@ -26,7 +26,7 @@ from app.core.database import engine, Base
 from app.core import perf_metrics
 
 # Import API routers - services are imported lazily within these
-from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals, alerts, applicant, notifications, support, onboarding, blog, frn_reports, usac, portfolio_analyzer, pia, mail_campaigns, leads, public_tools, denial_hunter, denial_hunter_tracking, admin_jobs, compliance, compliance_tracker, industry, fcc, erateapp_sso
+from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals, alerts, applicant, notifications, support, onboarding, blog, frn_reports, usac, portfolio_analyzer, pia, mail_campaigns, leads, public_tools, denial_hunter, denial_hunter_tracking, admin_jobs, compliance, compliance_tracker, industry, fcc, erateapp_sso, bid_copilot
 
 # Configure logging
 logging.basicConfig(
@@ -969,6 +969,7 @@ async def lifespan(app: FastAPI):
     from app.models.vendor_frn_tracking import VendorFrnTracking
     from app.models.vendor_frn_note import VendorFrnNote
     from app.models.applicant_frn_tracking import ApplicantFrnTracking
+    from app.models.bid_copilot import VendorBidAnalysis, FccKbChunk, AppealPrecedent
     
     # Guard: Warn loudly if running on SQLite in non-dev environment
     if settings.ENVIRONMENT != "development":
@@ -998,6 +999,19 @@ async def lifespan(app: FastAPI):
         logger.info("Demo accounts seeded")
     except Exception as e:
         logger.error(f"Demo account seeding error: {e}")
+    
+    # Seed the Bid Compliance Copilot FCC knowledge base (idempotent, non-fatal)
+    try:
+        from app.core.database import SessionLocal as _KBSession
+        from app.services.bid_copilot.knowledge_base import ensure_seeded as _ensure_kb
+        _kbdb = _KBSession()
+        try:
+            _ensure_kb(_kbdb)
+        finally:
+            _kbdb.close()
+        logger.info("Bid Copilot FCC knowledge base ensured")
+    except Exception as e:
+        logger.error(f"Bid Copilot KB seed error (non-fatal): {e}")
     
     # Initialize background scheduler for alerts/digests
     from app.services.scheduler_service import init_scheduler, shutdown_scheduler, refresh_admin_frn_snapshot
@@ -1306,6 +1320,7 @@ app.include_router(compliance_tracker.router, prefix="/v1")
 app.include_router(industry.router, prefix="/v1")
 app.include_router(fcc.router, prefix="/v1")
 app.include_router(erateapp_sso.router, prefix="/v1")
+app.include_router(bid_copilot.router, prefix="/v1")
 
 # ==================== MODELS ====================
 

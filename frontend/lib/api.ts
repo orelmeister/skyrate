@@ -1522,6 +1522,114 @@ export interface IndustryTopConsultantsResponse {
   consultants: IndustryConsultant[];
 }
 
+// ==================== Bid Compliance Copilot ====================
+export interface BidCopilotSubscore {
+  key: string;
+  label: string;
+  weight: number;
+  anchor?: string;
+  score: number;
+  level: "pass" | "warn" | "fail";
+  rationale?: string | null;
+}
+export interface BidCopilotFinding {
+  dimension: string;
+  level: "pass" | "warn" | "fail";
+  message: string;
+  fix?: string;
+  rule_cite?: string | null;
+  precedent_id?: number | null;
+  precedent_url?: string | null;
+  source?: string;
+}
+export interface BidCopilotSource {
+  id?: number;
+  citation?: string;
+  title?: string;
+  url?: string;
+  source_type?: string;
+  score?: number;
+}
+export interface BidCopilotChatTurn {
+  role: string;
+  content: string;
+  ts?: string;
+}
+export interface BidAnalysis {
+  id: number;
+  form_470_number?: string | null;
+  ben?: string | null;
+  funding_year?: number | null;
+  applicant_name?: string | null;
+  bid_filename?: string | null;
+  overall_score?: number | null;
+  status?: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+  subscores?: BidCopilotSubscore[];
+  findings?: BidCopilotFinding[];
+  context?: Bid470Context | Record<string, unknown>;
+  sources?: BidCopilotSource[];
+  refined_bid_text?: string | null;
+  chat_history?: BidCopilotChatTurn[];
+  engine?: string | null;
+  bid_excerpt?: string;
+  summary?: string | null;
+  llm_used?: boolean;
+  disclaimer?: string;
+}
+export interface BidAnalysisListItem {
+  id: number;
+  form_470_number?: string | null;
+  ben?: string | null;
+  funding_year?: number | null;
+  applicant_name?: string | null;
+  bid_filename?: string | null;
+  overall_score?: number | null;
+  status?: string;
+  created_at?: string | null;
+}
+export interface Bid470Service {
+  service_category?: string;
+  service_type?: string;
+  function?: string;
+  manufacturer?: string;
+  quantity?: string | number;
+  unit?: string;
+  installation_required?: string;
+}
+export interface Bid470Context {
+  form_470_number: string;
+  found: boolean;
+  error?: string;
+  funding_year?: number | null;
+  status?: string;
+  ben?: string | null;
+  applicant_name?: string | null;
+  state?: string;
+  city?: string;
+  categories?: string[];
+  service_types?: string[];
+  manufacturers?: string[];
+  services?: Bid470Service[];
+  total_services?: number;
+  rfp_links?: string[];
+  category_one_description?: string | null;
+  category_two_description?: string | null;
+  rfp_uploaded_text?: string;
+}
+export interface AppealPrecedentDetail {
+  id: number;
+  docket?: string;
+  release_id?: string;
+  title?: string;
+  issue_tags?: string[];
+  outcome?: string;
+  summary?: string;
+  url?: string;
+  funding_year?: number | null;
+}
+
 class ApiClient {
   private getAccessToken(): string | null {
     if (typeof window === 'undefined') return null;
@@ -2922,6 +3030,81 @@ class ApiClient {
     if (options?.frn) params.set('frn', options.frn);
     const queryString = params.toString() ? `?${params.toString()}` : '';
     return this.request(`/api/v1/vendor/entity/${ben}/enrich${queryString}`);
+  }
+
+  // ==================== Bid Compliance Copilot ====================
+
+  async getBid470Context(form470: string): Promise<ApiResponse<{ success: boolean; context: Bid470Context }>> {
+    return this.request(`/api/v1/vendor/bid-copilot/470-context?form470=${encodeURIComponent(form470)}`, { timeoutMs: 40000 });
+  }
+
+  async analyzeBid(bid: File, form470Number: string, rfpFile?: File | null): Promise<ApiResponse<{ success: boolean; analysis: BidAnalysis }>> {
+    const formData = new FormData();
+    formData.append('bid', bid);
+    formData.append('form_470_number', form470Number);
+    if (rfpFile) formData.append('rfp_file', rfpFile);
+    const token = this.getAccessToken();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 90000);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/vendor/bid-copilot/analyze`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      const ct = response.headers.get('content-type') || '';
+      if (!ct.toLowerCase().includes('application/json')) {
+        return { success: false, error: `Server error (HTTP ${response.status}).` };
+      }
+      const data = await response.json();
+      if (!response.ok) {
+        return { success: false, error: (data && (data.detail || data.error)) || `Server error (HTTP ${response.status}).` };
+      }
+      return { success: true, data };
+    } catch (e: unknown) {
+      clearTimeout(timeoutId);
+      const msg = e instanceof Error ? e.message : 'Upload failed';
+      return { success: false, error: msg };
+    }
+  }
+
+  async listBidAnalyses(): Promise<ApiResponse<{ success: boolean; analyses: BidAnalysisListItem[] }>> {
+    return this.request(`/api/v1/vendor/bid-copilot`);
+  }
+
+  async getBidAnalysis(id: number): Promise<ApiResponse<{ success: boolean; analysis: BidAnalysis }>> {
+    return this.request(`/api/v1/vendor/bid-copilot/${id}`);
+  }
+
+  async refineBidAnalysis(id: number, message: string): Promise<ApiResponse<{ success: boolean; reply: string; refined_bid_text: string | null; chat_history: BidCopilotChatTurn[]; ok: boolean }>> {
+    return this.request(`/api/v1/vendor/bid-copilot/${id}/refine`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+      timeoutMs: 70000,
+    });
+  }
+
+  async getBidPrecedent(id: number): Promise<ApiResponse<{ success: boolean; precedent: AppealPrecedentDetail }>> {
+    return this.request(`/api/v1/vendor/bid-copilot/precedent/${id}`);
+  }
+
+  bidAnalysisExportUrl(id: number, fmt: 'md' | 'txt' = 'md'): string {
+    return `${API_BASE_URL}/api/v1/vendor/bid-copilot/${id}/export?fmt=${fmt}`;
+  }
+
+  async downloadBidExport(id: number, fmt: 'md' | 'txt' = 'md'): Promise<Blob | null> {
+    const token = this.getAccessToken();
+    try {
+      const res = await fetch(this.bidAnalysisExportUrl(id, fmt), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) return null;
+      return await res.blob();
+    } catch {
+      return null;
+    }
   }
 
   async lookupSpin(spin: string, year?: number): Promise<ApiResponse<{
