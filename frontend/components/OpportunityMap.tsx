@@ -170,6 +170,11 @@ export default function OpportunityMap() {
   const satelliteLayerRef = useRef<any>(null);
   const satLabelsRef = useRef<any>(null);
   const fiberLayerRef = useRef<any>(null);
+  const computeUpcomingFy = () => {
+    const n = new Date();
+    return n.getMonth() + 1 >= 7 ? n.getFullYear() + 1 : n.getFullYear();
+  };
+  const [fundingYear, setFundingYear] = useState<number>(computeUpcomingFy());
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [stateFilter, setStateFilter] = useState<string>("");
@@ -203,7 +208,7 @@ export default function OpportunityMap() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get470Geo({ limit: 1500 });
+      const res = await api.get470Geo({ limit: 1500, funding_year: fundingYear });
       if (res.success && res.data?.leads) {
         setLeads(res.data.leads);
       } else {
@@ -214,7 +219,7 @@ export default function OpportunityMap() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fundingYear]);
 
   useEffect(() => {
     onReload();
@@ -595,6 +600,18 @@ export default function OpportunityMap() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-slate-600">Funding Year</label>
+          <select
+            value={fundingYear}
+            onChange={(e) => setFundingYear(parseInt(e.target.value))}
+            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white"
+          >
+            {(() => { const uy = computeUpcomingFy(); return [uy, uy - 1, uy - 2, uy - 3]; })().map((y) => (
+              <option key={y} value={y}>FY{y}{y === computeUpcomingFy() ? " (upcoming)" : ""}</option>
+            ))}
+          </select>
+        </div>
         <div className="flex items-center gap-2">
           <label className="text-xs font-semibold text-slate-600">State</label>
           <select

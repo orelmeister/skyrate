@@ -1473,11 +1473,16 @@ async def get_470_geo(
             return None
         return None if f == 0.0 else f
 
-    where = ["latitude IS NOT NULL", "longitude IS NOT NULL"]
+    # Default the map to the upcoming/active E-Rate filing cycle (USAC July-1
+    # cutover) rather than just the newest postings, so it plots the current
+    # cycle's opportunities (e.g. FY2027) not last year's (Ari 2026-09-01 #3).
+    from datetime import datetime as _dt
+    _now = _dt.utcnow()
+    effective_fy = int(funding_year) if funding_year else (_now.year + 1 if _now.month >= 7 else _now.year)
+
+    where = ["latitude IS NOT NULL", "longitude IS NOT NULL", f"funding_year = '{effective_fy}'"]
     if state:
         where.append(f"billed_entity_state = '{state.upper().replace(chr(39), '')}'")
-    if funding_year:
-        where.append(f"funding_year = '{int(funding_year)}'")
 
     params = {
         "$where": " AND ".join(where),
@@ -1517,7 +1522,7 @@ async def get_470_geo(
             "contact_name": r.get("contact_name"),
         })
 
-    return {"success": True, "total": len(leads), "leads": leads}
+    return {"success": True, "total": len(leads), "funding_year": effective_fy, "leads": leads}
 
 
 @router.get("/470/leads")
