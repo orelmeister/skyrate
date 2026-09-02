@@ -1618,6 +1618,16 @@ export interface Bid470Context {
   category_two_description?: string | null;
   rfp_uploaded_text?: string;
 }
+export interface Bid470SearchResult {
+  form_470_number: string;
+  funding_year?: number | string | null;
+  applicant_name?: string | null;
+  ben?: string | null;
+  state?: string | null;
+  status?: string | null;
+  allowable_contract_date?: string | null;
+  posting_date?: string | null;
+}
 export interface AppealPrecedentDetail {
   id: number;
   docket?: string;
@@ -3036,6 +3046,10 @@ class ApiClient {
 
   async getBid470Context(form470: string): Promise<ApiResponse<{ success: boolean; context: Bid470Context }>> {
     return this.request(`/api/v1/vendor/bid-copilot/470-context?form470=${encodeURIComponent(form470)}`, { timeoutMs: 40000 });
+  }
+
+  async searchBid470s(q: string): Promise<ApiResponse<{ success: boolean; results: Bid470SearchResult[]; count: number }>> {
+    return this.request(`/api/v1/vendor/bid-copilot/470-search?q=${encodeURIComponent(q)}`, { timeoutMs: 40000 });
   }
 
   async analyzeBid(bid: File, form470Number: string, rfpFile?: File | null): Promise<ApiResponse<{ success: boolean; analysis: BidAnalysis }>> {

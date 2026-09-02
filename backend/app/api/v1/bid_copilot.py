@@ -62,6 +62,21 @@ async def _run_in_threadpool_ctx(form_470: str):
     return await run_in_threadpool(copilot.build_470_context, form_470)
 
 
+@router.get("/470-search")
+async def search_470s(
+    q: str,
+    profile: VendorProfile = Depends(get_vendor_profile),
+):
+    """Find an entity's Form 470 filings by BEN or applicant name (picker dropdown)."""
+    query = (q or "").strip()
+    if len(query) < 3:
+        raise HTTPException(status_code=400, detail="Enter at least 3 characters (applicant name or BEN).")
+    from starlette.concurrency import run_in_threadpool
+    from utils.usac_client import USACDataClient
+    results = await run_in_threadpool(lambda: USACDataClient().search_470s(query, 25))
+    return {"success": True, "results": results, "count": len(results)}
+
+
 # ==================== ANALYZE ====================
 
 @router.post("/analyze")

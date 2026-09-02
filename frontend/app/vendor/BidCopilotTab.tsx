@@ -4,11 +4,11 @@ import { useState, useEffect, useCallback } from "react";
 import {
   ClipboardCheck, Upload, FileText, Search, Loader2, AlertTriangle,
   CheckCircle2, XCircle, AlertCircle, Sparkles, Download, Send, History,
-  ExternalLink, ShieldCheck, RefreshCw,
+  ExternalLink, ShieldCheck, RefreshCw, Building2,
 } from "lucide-react";
 import {
   api, BidAnalysis, Bid470Context, BidAnalysisListItem,
-  BidCopilotFinding, BidCopilotSubscore, AppealPrecedentDetail,
+  BidCopilotFinding, BidCopilotSubscore, AppealPrecedentDetail, Bid470SearchResult,
 } from "@/lib/api";
 
 const LEVEL_META: Record<string, { color: string; bg: string; Icon: typeof CheckCircle2; label: string }> = {
@@ -55,6 +55,8 @@ export default function BidCopilotTab({ dark = false }: { dark?: boolean }) {
   const [refineMsg, setRefineMsg] = useState("");
   const [refining, setRefining] = useState(false);
   const [precedent, setPrecedent] = useState<AppealPrecedentDetail | null>(null);
+  const [finderResults, setFinderResults] = useState<Bid470SearchResult[]>([]);
+  const [finding, setFinding] = useState(false);
 
   const cardCls = dark ? "bg-[#12132a] border-slate-800" : "bg-white border-slate-200";
   const ink = dark ? "text-slate-100" : "text-slate-900";
@@ -70,9 +72,10 @@ export default function BidCopilotTab({ dark = false }: { dark?: boolean }) {
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
 
-  const loadContext = async () => {
-    const f = form470.trim();
+  const loadContext = async (explicit?: string) => {
+    const f = (explicit ?? form470).trim();
     if (!f) { setError("Enter the Form 470 number you're bidding on."); return; }
+    setFinderResults([]);
     setCtxLoading(true);
     setError(null);
     try {
@@ -90,6 +93,38 @@ export default function BidCopilotTab({ dark = false }: { dark?: boolean }) {
     } finally {
       setCtxLoading(false);
     }
+  };
+
+  // "Find" resolves the input: a long numeric id is a 470 number (load it directly);
+  // anything else is an applicant-name / BEN search that returns a pick list.
+  const runFind = async () => {
+    const q = form470.trim();
+    if (!q) { setError("Enter an applicant name, BEN, or Form 470 number."); return; }
+    if (/^\d{10,}$/.test(q)) { loadContext(q); return; }
+    setFinding(true);
+    setError(null);
+    setFinderResults([]);
+    try {
+      const res = await api.searchBid470s(q);
+      if (res.success && res.data?.success) {
+        setFinderResults(res.data.results || []);
+        if (!(res.data.results || []).length) {
+          setError("No Form 470s found for that applicant/BEN. Try a different spelling, or paste the 470 number.");
+        }
+      } else {
+        setError(res.error || "Search failed.");
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Search failed.");
+    } finally {
+      setFinding(false);
+    }
+  };
+
+  const pickResult = (r: Bid470SearchResult) => {
+    setForm470(r.form_470_number);
+    setFinderResults([]);
+    loadContext(r.form_470_number);
   };
 
   const runAnalyze = async () => {
@@ -193,25 +228,46 @@ export default function BidCopilotTab({ dark = false }: { dark?: boolean }) {
         <div className="lg:col-span-1 space-y-6">
           <div className={`rounded-2xl border p-5 shadow-sm ${cardCls}`}>
             <h2 className={`text-lg font-semibold mb-3 ${ink}`}>1 · Target Form 470</h2>
-            <label className={`block text-sm font-medium mb-1.5 ${faint}`}>Form 470 number</label>
+            <label className={`block text-sm font-medium mb-1.5 ${faint}`}>Applicant name, BEN, or Form 470 number</label>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={form470}
                 onChange={(e) => setForm470(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") loadContext(); }}
-                placeholder="e.g. 230001234567"
+                onKeyDown={(e) => { if (e.key === "Enter") runFind(); }}
+                placeholder="e.g. Lincoln School District, 16024013, or 230001234567"
                 className={`flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-violet-500 ${inputCls}`}
               />
               <button
-                onClick={loadContext}
-                disabled={ctxLoading}
+                onClick={runFind}
+                disabled={ctxLoading || finding}
                 className="px-3 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-60 flex items-center gap-1"
               >
-                {ctxLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                Load
+                {(ctxLoading || finding) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                Find
               </button>
             </div>
+            <p className={`mt-1.5 text-xs ${faint}`}>Search by applicant to pick from their 470s, or paste a 470 number directly.</p>
+
+            {finderResults.length > 0 && (
+              <div className={`mt-3 rounded-xl border divide-y max-h-64 overflow-y-auto ${dark ? "border-slate-700 divide-slate-800" : "border-slate-200 divide-slate-100"}`}>
+                {finderResults.map((r) => (
+                  <button
+                    key={r.form_470_number}
+                    onClick={() => pickResult(r)}
+                    className={`w-full text-left px-3 py-2 text-sm flex items-start gap-2 ${dark ? "hover:bg-slate-800" : "hover:bg-slate-50"}`}
+                  >
+                    <Building2 className="w-4 h-4 mt-0.5 shrink-0 text-violet-500" />
+                    <span className="min-w-0">
+                      <span className={`block font-medium truncate ${ink}`}>{r.applicant_name || "Applicant"}</span>
+                      <span className={`block text-xs ${faint}`}>
+                        470 {r.form_470_number} · FY{r.funding_year} · BEN {r.ben || "—"}{r.state ? ` · ${r.state}` : ""}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
 
             {context?.found && (
               <div className={`mt-4 rounded-xl border p-3 text-sm ${dark ? "border-slate-700 bg-slate-900/50" : "border-slate-200 bg-slate-50"}`}>
@@ -230,14 +286,19 @@ export default function BidCopilotTab({ dark = false }: { dark?: boolean }) {
                 {(context.service_types?.length ?? 0) > 0 && (
                   <div className={`mt-1 text-xs ${faint}`}>{context.service_types!.slice(0, 8).join(" · ")}</div>
                 )}
-                {(context.rfp_links?.length ?? 0) > 0 && (
+                {(context.rfp_links?.length ?? 0) > 0 ? (
                   <div className="mt-2 space-y-1">
+                    <div className={`text-xs font-medium flex items-center gap-1 ${dark ? "text-emerald-400" : "text-emerald-600"}`}>
+                      <CheckCircle2 className="w-3 h-3" /> RFP auto-detected from USAC — no manual upload needed
+                    </div>
                     {context.rfp_links!.slice(0, 4).map((u, i) => (
                       <a key={i} href={u} target="_blank" rel="noopener noreferrer" className="text-xs text-violet-600 hover:underline flex items-center gap-1">
                         <ExternalLink className="w-3 h-3" /> RFP document {i + 1}
                       </a>
                     ))}
                   </div>
+                ) : (
+                  <div className={`mt-2 text-xs ${faint}`}>No RFP attached on USAC — optionally upload it below for a deeper check.</div>
                 )}
               </div>
             )}
@@ -247,7 +308,7 @@ export default function BidCopilotTab({ dark = false }: { dark?: boolean }) {
             <h2 className={`text-lg font-semibold mb-3 ${ink}`}>2 · Upload your bid</h2>
             <FilePicker label="Bid / proposal" file={bidFile} onPick={setBidFile} dark={dark} faint={faint} />
             <div className="mt-3">
-              <FilePicker label="RFP (optional)" file={rfpFile} onPick={setRfpFile} dark={dark} faint={faint} />
+              <FilePicker label="RFP (optional · auto-pulled from USAC when available)" file={rfpFile} onPick={setRfpFile} dark={dark} faint={faint} />
             </div>
             <button
               onClick={runAnalyze}

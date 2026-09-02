@@ -2970,6 +2970,59 @@ class USACDataClient:
             limit=limit
         )
     
+    def search_470s(
+        self,
+        query: str,
+        limit: int = 25,
+    ) -> List[Dict[str, Any]]:
+        """Find Form 470 filings by BEN or applicant name for the bid-copilot picker.
+
+        Numeric query -> exact BEN match; text query -> billed_entity_name LIKE.
+        Newest funding years first, de-duped by application_number. Never raises."""
+        q = (query or "").strip()
+        if not q:
+            return []
+        try:
+            url = USAC_ENDPOINTS['470_basic']
+            if q.isdigit():
+                where = f"ben = '{q}'"
+            else:
+                safe = q.replace("'", "''").upper()
+                where = f"upper(billed_entity_name) like '%{safe}%'"
+            params = {
+                '$where': where,
+                '$select': ("application_number, funding_year, billed_entity_name, ben, "
+                            "billed_entity_state, f470_status, allowable_contract_date, "
+                            "certified_datetime"),
+                '$order': 'funding_year DESC',
+                '$limit': max(1, min(limit, 50)) * 3,  # room to de-dupe form versions
+            }
+            resp = self.session.get(url, params=params, timeout=30)
+            resp.raise_for_status()
+            rows = resp.json() or []
+        except Exception as e:
+            logger.error(f"search_470s failed for '{query}': {e}")
+            return []
+
+        seen: Dict[str, Dict[str, Any]] = {}
+        for r in rows:
+            app = str(r.get('application_number') or '').strip()
+            if not app or app in seen:
+                continue
+            seen[app] = {
+                'form_470_number': app,
+                'funding_year': r.get('funding_year'),
+                'applicant_name': r.get('billed_entity_name'),
+                'ben': r.get('ben'),
+                'state': r.get('billed_entity_state'),
+                'status': r.get('f470_status'),
+                'allowable_contract_date': r.get('allowable_contract_date'),
+                'posting_date': r.get('certified_datetime'),
+            }
+        results = list(seen.values())
+        results.sort(key=lambda x: str(x.get('funding_year') or ''), reverse=True)
+        return results[:limit]
+
     def get_470_detail(
         self,
         application_number: str,

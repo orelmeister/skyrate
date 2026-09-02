@@ -69,6 +69,14 @@ _INELIGIBLE_HINTS = (
 )
 _ALLOCATION_HINTS = ("cost alloc", "cost-alloc", "allocation", "ineligible", "eligible portion")
 _ITEMIZE_HINTS = ("unit price", "qty", "quantity", "line item", "itemized", "each", "per unit", "$")
+# Category-1 (transport/internet) vs Category-2 (internal connections) signals, in
+# tokenized form (see _tok: non-alphanumerics collapse to single spaces).
+_C1_HINTS = ("internet access", "internet", "wan", "data transmission", "broadband",
+             "lit fiber", "dark fiber", "ethernet", "mpls", "leased lit", "bandwidth",
+             "fiber transport", "transport service")
+_C2_HINTS = ("internal connection", "switch", "router", "access point", "wireless",
+             "wi fi", "wifi", "firewall", "cabling", "uninterruptible", "patch panel",
+             "cat6", "cat 6", "basic maintenance", "managed internal", "structured cabling")
 _SPIN_RE = re.compile(r"\bspin\b|\b1[0-9]{8}\b", re.IGNORECASE)
 _TERM_RE = re.compile(r"\b(\d+)\s*(year|yr|month|mo)s?\b", re.IGNORECASE)
 _DATE_RE = re.compile(r"\b(20\d{2})\b|\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b")
@@ -76,6 +84,47 @@ _DATE_RE = re.compile(r"\b(20\d{2})\b|\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b")
 
 def _tok(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
+
+
+_CAT_LABELS = {"1": "Category 1", "2": "Category 2", "other": "other services"}
+
+
+def _norm_cat(v: Any) -> str:
+    """Normalize a 470 service_category value to '1' / '2' / 'other'."""
+    s = _tok(v)
+    if not s:
+        return "other"
+    if "2" in s or "two" in s or "internal" in s:
+        return "2"
+    if "1" in s or "one" in s:
+        return "1"
+    return "other"
+
+
+def _cats_label(cats) -> str:
+    labels = [_CAT_LABELS.get(c, f"Category {c}") for c in sorted(cats)]
+    return " & ".join(labels) if labels else "n/a"
+
+
+def _detect_bid_categories(low: str, terms_by_cat: Dict[str, List[str]]) -> set:
+    """Which E-Rate category(ies) does this bid actually target? Explicit mention,
+    keyword signals, or strong term coverage each count as targeting a category."""
+    targeted: set = set()
+    if any(p in low for p in ("category 1", "category one", "cat 1", "cat1")):
+        targeted.add("1")
+    if any(p in low for p in ("category 2", "category two", "cat 2", "cat2", "internal connection")):
+        targeted.add("2")
+    if sum(1 for h in _C1_HINTS if h in low) >= 2:
+        targeted.add("1")
+    if sum(1 for h in _C2_HINTS if h in low) >= 2:
+        targeted.add("2")
+    for cat, terms in terms_by_cat.items():
+        if not terms:
+            continue
+        hit = [t for t in terms if _tok(t) and _tok(t) in low]
+        if len(hit) / max(1, len(terms)) >= 0.34:
+            targeted.add(cat)
+    return targeted
 
 
 # ---------------------------------------------------------------------------
@@ -187,23 +236,36 @@ def run_deterministic(bid_text: str, ctx: Dict[str, Any]) -> Dict[str, Any]:
     findings: List[Dict[str, Any]] = []
     subscores: Dict[str, int] = {}
 
-    # --- Responsiveness: does the bid mention each requested service_type / manufacturer? ---
-    requested_terms: List[str] = []
+    # --- Responsiveness: does the bid address the requested services it is bidding on? ---
+    # A 470 often lists BOTH Category 1 and Category 2, and a vendor is NOT required to
+    # bid on both unless the RFP mandates bundling. Detect which category(ies) THIS bid
+    # targets and score coverage only over those, so a compliant single-category bid is
+    # not penalized for "missing" the other category (Ari 2026-09-01 feedback).
+    terms_by_cat: Dict[str, List[str]] = {}
     for s in ctx.get("services") or []:
+        cat = _norm_cat(s.get("service_category"))
         for field in ("service_type", "function", "manufacturer"):
             v = s.get(field)
             if v and isinstance(v, str) and len(v) > 2:
-                requested_terms.append(v)
-    requested_terms = list(dict.fromkeys(requested_terms))  # de-dupe, keep order
+                terms_by_cat.setdefault(cat, []).append(v)
+    for c in terms_by_cat:
+        terms_by_cat[c] = list(dict.fromkeys(terms_by_cat[c]))
+    requested_terms = list(dict.fromkeys(t for terms in terms_by_cat.values() for t in terms))
 
-    if requested_terms:
-        hit = [t for t in requested_terms if _tok(t) and _tok(t) in low]
-        coverage = len(hit) / max(1, len(requested_terms))
+    present_cats = {c for c, terms in terms_by_cat.items() if terms}
+    bid_cats = _detect_bid_categories(low, terms_by_cat) & present_cats
+    scored_cats = bid_cats or set(present_cats)  # fall back to all when undetectable
+    not_scored_cats = present_cats - scored_cats
+    scored_terms = list(dict.fromkeys(t for c in scored_cats for t in terms_by_cat.get(c, [])))
+
+    if scored_terms:
+        hit = [t for t in scored_terms if _tok(t) and _tok(t) in low]
+        coverage = len(hit) / max(1, len(scored_terms))
         subscores["responsiveness"] = int(round(coverage * 100))
-        missing = [t for t in requested_terms if t not in hit][:8]
+        missing = [t for t in scored_terms if t not in hit][:8]
         if coverage < 0.5:
             findings.append(_f("responsiveness", "fail",
-                              "The bid does not clearly address most requested services on the Form 470.",
+                              "The bid does not clearly address most of the services it is bidding on.",
                               f"Explicitly respond to each requested item: {', '.join(missing)}.",
                               rule_cite="47 CFR § 54.503"))
         elif missing:
@@ -213,6 +275,14 @@ def run_deterministic(bid_text: str, ctx: Dict[str, Any]) -> Dict[str, Any]:
                               rule_cite="47 CFR § 54.503"))
     else:
         subscores["responsiveness"] = 70  # no structured 470 lines available to check against
+
+    # Partial-category bids are permitted — surface (do NOT penalize) the un-bid category.
+    if not_scored_cats and len(present_cats) > 1:
+        findings.append(_f("responsiveness", "pass",
+                          f"Bid targets {_cats_label(scored_cats)} only; "
+                          f"{_cats_label(not_scored_cats)} item(s) on the Form 470 were not scored.",
+                          "Bidding on a single category is permitted unless the Form 470/RFP requires a bundled all-categories bid — confirm the RFP does not mandate one.",
+                          rule_cite="47 CFR § 54.503"))
 
     # --- Eligibility: ineligible items without cost allocation ---
     found_ineligible = [w for w in _INELIGIBLE_HINTS if w in low]
@@ -289,7 +359,9 @@ def run_deterministic(bid_text: str, ctx: Dict[str, Any]) -> Dict[str, Any]:
     return {"subscores": subscores, "findings": findings,
             "signals": {"has_spin": has_spin, "has_term": has_term, "has_dates": has_dates,
                         "ineligible_hits": sorted(set(found_ineligible)),
-                        "requested_terms": requested_terms}}
+                        "requested_terms": requested_terms,
+                        "bid_categories": sorted(scored_cats),
+                        "not_scored_categories": sorted(not_scored_cats)}}
 
 
 def _f(dimension: str, level: str, message: str, fix: str,
@@ -408,6 +480,22 @@ async def analyze_bid(db, bid_text: str, ctx: Dict[str, Any]) -> Dict[str, Any]:
     """Full pipeline: deterministic + RAG + grounded LLM -> merged result."""
     det = run_deterministic(bid_text, ctx)
 
+    # Category-scope note for the LLM: don't penalize a single-category bid for the
+    # category it isn't bidding on (Ari 2026-09-01 feedback).
+    _sig = det.get("signals", {})
+    _bid_cats = [_CAT_LABELS.get(c, c) for c in (_sig.get("bid_categories") or [])]
+    _not_scored = [_CAT_LABELS.get(c, c) for c in (_sig.get("not_scored_categories") or [])]
+    cat_note = ""
+    if _bid_cats:
+        cat_note = f"=== BID CATEGORY SCOPE ===\nThis bid targets: {', '.join(_bid_cats)}."
+        if _not_scored:
+            cat_note += (
+                f" The Form 470 also lists {', '.join(_not_scored)}, which this vendor is NOT bidding on. "
+                "Do NOT lower the responsiveness score for the un-bid category — bidding on a single "
+                "E-Rate category is permitted unless the 470/RFP requires a bundled all-categories bid."
+            )
+        cat_note += "\n\n"
+
     # Build a retrieval query from the 470 + the deterministic signals so we pull
     # the rules/precedents most relevant to THIS bid's likely issues.
     issue_terms = []
@@ -430,6 +518,7 @@ async def analyze_bid(db, bid_text: str, ctx: Dict[str, Any]) -> Dict[str, Any]:
 
     user_prompt = (
         f"=== FORM 470 REQUIREMENTS ===\n{_context_summary_text(ctx)}\n\n"
+        f"{cat_note}"
         f"=== DETERMINISTIC FINDINGS (facts already computed; do not contradict) ===\n{det_findings_text}\n\n"
         f"=== RETRIEVED KNOWLEDGE-BASE PASSAGES (cite ONLY these) ===\n{_build_kb_block(chunks)}\n\n"
         f"=== VENDOR BID TEXT ===\n{bid_for_llm}\n\n"
