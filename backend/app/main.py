@@ -970,6 +970,7 @@ async def lifespan(app: FastAPI):
     from app.models.vendor_frn_note import VendorFrnNote
     from app.models.applicant_frn_tracking import ApplicantFrnTracking
     from app.models.bid_copilot import VendorBidAnalysis, FccKbChunk, AppealPrecedent
+    from app.models.vendor_outreach import VendorOutreach
     
     # Guard: Warn loudly if running on SQLite in non-dev environment
     if settings.ENVIRONMENT != "development":

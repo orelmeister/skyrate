@@ -1079,6 +1079,18 @@ export interface SwitchLikelihood {
   incumbent?: SwitchIncumbent | null;   // who holds it now + how long (best effort)
   at_risk: boolean | null;    // true = you already service this entity (retention risk)
 }
+export interface VendorOutreach {
+  id: number;
+  ben?: string | null;
+  application_number?: string | null;
+  entity_name?: string | null;
+  channel: string;            // email | call | note
+  to_email?: string | null;
+  subject?: string | null;
+  body?: string | null;
+  status: string;             // logged | sent | failed
+  created_at?: string | null;
+}
 
 // 28-day competitive bidding window check for a Form 470 (bid-evaluation lock).
 export interface Form470WindowResponse {
@@ -3063,6 +3075,18 @@ class ApiClient {
 
   async searchBid470s(q: string): Promise<ApiResponse<{ success: boolean; results: Bid470SearchResult[]; count: number }>> {
     return this.request(`/api/v1/vendor/bid-copilot/470-search?q=${encodeURIComponent(q)}`, { timeoutMs: 40000 });
+  }
+
+  async listOutreach(ben?: string): Promise<ApiResponse<{ success: boolean; outreach: VendorOutreach[] }>> {
+    return this.get(`/vendor/outreach${ben ? `?ben=${encodeURIComponent(ben)}` : ""}`);
+  }
+
+  async logOutreach(payload: { ben?: string; application_number?: string; entity_name?: string; channel?: string; to_email?: string; subject?: string; body?: string; status?: string }): Promise<ApiResponse<{ success: boolean; outreach: VendorOutreach }>> {
+    return this.post(`/vendor/outreach`, payload);
+  }
+
+  async draftOutreach(payload: { entity_name?: string; application_number?: string; service?: string; contact_name?: string }): Promise<ApiResponse<{ success: boolean; subject: string; body: string; engine: string }>> {
+    return this.post(`/vendor/outreach/draft`, payload);
   }
 
   async analyzeBid(bid: File, form470Number: string, rfpFile?: File | null): Promise<ApiResponse<{ success: boolean; analysis: BidAnalysis }>> {

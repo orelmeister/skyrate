@@ -1525,6 +1525,138 @@ async def get_470_geo(
     return {"success": True, "total": len(leads), "funding_year": effective_fy, "leads": leads}
 
 
+# ==================== OUTREACH (mini-CRM activity trail) ====================
+
+class OutreachLogRequest(BaseModel):
+    ben: Optional[str] = None
+    application_number: Optional[str] = None
+    entity_name: Optional[str] = None
+    channel: str = "email"          # email | call | note
+    to_email: Optional[str] = None
+    subject: Optional[str] = None
+    body: Optional[str] = None
+    status: str = "logged"          # logged | sent | failed
+
+
+class OutreachDraftRequest(BaseModel):
+    entity_name: Optional[str] = None
+    application_number: Optional[str] = None
+    service: Optional[str] = None
+    contact_name: Optional[str] = None
+
+
+@router.post("/outreach")
+async def log_outreach(
+    payload: OutreachLogRequest,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
+):
+    """Record an outreach touch (call / email / note) on a prospect for the CRM trail."""
+    from ...models.vendor_outreach import VendorOutreach
+    channel = (payload.channel or "email").strip().lower()
+    if channel not in ("email", "call", "note"):
+        channel = "note"
+    status_val = (payload.status or "logged").strip().lower()
+    if status_val not in ("logged", "sent", "failed"):
+        status_val = "logged"
+    row = VendorOutreach(
+        vendor_profile_id=profile.id,
+        ben=(str(payload.ben) if payload.ben else None),
+        application_number=(str(payload.application_number) if payload.application_number else None),
+        entity_name=(payload.entity_name or None),
+        channel=channel,
+        to_email=(payload.to_email or None),
+        subject=((payload.subject or "")[:512] or None),
+        body=(payload.body or None),
+        status=status_val,
+        created_at=datetime.utcnow(),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"success": True, "outreach": row.to_dict()}
+
+
+@router.get("/outreach")
+async def list_outreach(
+    ben: Optional[str] = None,
+    limit: int = 50,
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db),
+):
+    """List this vendor's outreach history, optionally scoped to one entity (BEN)."""
+    from ...models.vendor_outreach import VendorOutreach
+    q = db.query(VendorOutreach).filter(VendorOutreach.vendor_profile_id == profile.id)
+    if ben:
+        q = q.filter(VendorOutreach.ben == str(ben))
+    rows = q.order_by(VendorOutreach.created_at.desc()).limit(max(1, min(limit, 200))).all()
+    return {"success": True, "outreach": [r.to_dict() for r in rows]}
+
+
+@router.post("/outreach/draft")
+async def draft_outreach(
+    payload: OutreachDraftRequest,
+    profile: VendorProfile = Depends(get_vendor_profile),
+):
+    """Generate a short, professional outreach email (AI, with template fallback)."""
+    import logging as _lg
+    _dlog = _lg.getLogger(__name__)
+    entity = (payload.entity_name or "your organization").strip()
+    app_num = (payload.application_number or "").strip()
+    svc = (payload.service or "").strip()
+    contact = (payload.contact_name or "").strip()
+    company = (getattr(profile, "company_name", None) or getattr(profile, "organization_name", None) or "our team")
+
+    project = f"Form 470 (#{app_num})" if app_num else "your E-Rate procurement"
+    subject = f"Regarding Form 470 #{app_num}" if app_num else "Regarding your E-Rate services"
+    first = contact.split()[0] if contact else ""
+    greeting = f"Hello {first}," if first else "Hello,"
+    svc_phrase = f" for your {svc} needs" if svc else ""
+    template_body = "\n".join([
+        greeting,
+        "",
+        (f"I'm reaching out regarding {entity}'s {project}{svc_phrase}. {company} would welcome the "
+         f"opportunity to submit a competitive bid and support your E-Rate project."),
+        "",
+        "Would you have time for a brief call to discuss your requirements and timeline?",
+        "",
+        "Thank you,",
+        str(company),
+    ])
+
+    try:
+        import google.generativeai as genai
+        from ...core.config import settings
+        api_key = settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY
+        if api_key:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel(settings.GEMINI_MODEL or "gemini-2.5-flash")
+            prompt = (
+                "Write a concise, professional B2B outreach email from an E-Rate service provider "
+                f"({company}) to a school/library that posted {project}"
+                f"{(' for ' + svc) if svc else ''}. Recipient contact: {contact or 'unknown'}; "
+                f"entity: {entity}. 90-130 words, courteous, no placeholders, one clear ask for a brief call. "
+                'Return JSON only: {"subject": "...", "body": "..."}.'
+            )
+            resp = await run_in_threadpool(
+                lambda: model.generate_content(
+                    prompt,
+                    generation_config=genai.GenerationConfig(
+                        temperature=0.4, max_output_tokens=600, response_mime_type="application/json"),
+                    request_options={"timeout": 20},
+                )
+            )
+            import json as _json
+            data = _json.loads((resp.text or "").strip())
+            if isinstance(data, dict) and data.get("body"):
+                return {"success": True, "subject": ((data.get("subject") or subject)[:200]),
+                        "body": data["body"], "engine": settings.GEMINI_MODEL or "gemini-2.5-flash"}
+    except Exception as _e:
+        _dlog.warning(f"[outreach draft] AI fallback: {_e}")
+
+    return {"success": True, "subject": subject, "body": template_body, "engine": "template"}
+
+
 @router.get("/470/leads")
 async def get_470_leads(
     request: Request,

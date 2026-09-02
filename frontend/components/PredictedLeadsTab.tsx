@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
-import type { SwitchingSignalsResponse, OpportunitySignals, SwitchLikelihood, PurchasingPattern } from "@/lib/api";
+import type { SwitchingSignalsResponse, OpportunitySignals, SwitchLikelihood, PurchasingPattern, VendorOutreach } from "@/lib/api";
 import { SkeletonRows, SkeletonStatCards } from "@/components/Skeleton";
 import { downloadCsv, csvFilename, downloadExcel, excelFilename } from "@/lib/csv-export";
 import PurchaseHistoryModal from "@/components/PurchaseHistoryModal";
@@ -354,6 +354,11 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
   // Switching signals inferred from USAC filing history (Ari loom Q2).
   const [switchSignals, setSwitchSignals] = useState<SwitchingSignalsResponse["signals"] | null>(null);
   const [switchSignalsLoading, setSwitchSignalsLoading] = useState(false);
+  // Outreach mini-CRM (Parker + 2nd vendor): compose/log/history per lead.
+  const [outreachHistory, setOutreachHistory] = useState<VendorOutreach[]>([]);
+  const [outreachSubject, setOutreachSubject] = useState("");
+  const [outreachBody, setOutreachBody] = useState("");
+  const [outreachDrafting, setOutreachDrafting] = useState(false);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
 
@@ -640,6 +645,60 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
     fetchEquipmentEstimate(lead);
     if (lead.ben) fetchSwitchingSignals(lead.ben, leadCategory(lead));
     else setSwitchSignals(null);
+    // Outreach: load history + reset the composer for this lead.
+    loadOutreach(lead.ben);
+    setOutreachSubject("");
+    setOutreachBody("");
+  };
+
+  // ---- Outreach mini-CRM handlers (compose / log / history) ----
+  const loadOutreach = async (ben?: string | null) => {
+    if (!ben) { setOutreachHistory([]); return; }
+    try {
+      const res = await api.listOutreach(ben);
+      if (res.success && res.data?.success) setOutreachHistory(res.data.outreach || []);
+    } catch { /* non-fatal */ }
+  };
+
+  const generateOutreachDraft = async () => {
+    if (!selectedLead) return;
+    setOutreachDrafting(true);
+    try {
+      const res = await api.draftOutreach({
+        entity_name: selectedLead.organization_name || undefined,
+        application_number: selectedLead.application_number || undefined,
+        service: selectedLead.service_type || undefined,
+        contact_name: selectedLead.contact_name || undefined,
+      });
+      if (res.success && res.data?.success) {
+        setOutreachSubject(res.data.subject || "");
+        setOutreachBody(res.data.body || "");
+      }
+    } catch { /* non-fatal */ }
+    finally { setOutreachDrafting(false); }
+  };
+
+  const logOutreachTouch = async (channel: "email" | "call" | "note", status: string = "logged") => {
+    if (!selectedLead) return;
+    const res = await api.logOutreach({
+      ben: selectedLead.ben || undefined,
+      application_number: selectedLead.application_number || undefined,
+      entity_name: selectedLead.organization_name || undefined,
+      channel,
+      to_email: channel === "email" ? (selectedLead.contact_email || undefined) : undefined,
+      subject: channel === "email" ? (outreachSubject || undefined) : undefined,
+      body: outreachBody || undefined,
+      status,
+    });
+    if (res.success) loadOutreach(selectedLead.ben);
+  };
+
+  const sendOutreachEmail = () => {
+    if (!selectedLead?.contact_email) return;
+    const subject = outreachSubject || "Regarding your E-Rate services";
+    const mailto = `mailto:${selectedLead.contact_email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(outreachBody)}`;
+    if (typeof window !== "undefined") window.open(mailto, "_blank");
+    logOutreachTouch("email", "sent");
   };
 
   // Check whether the selected entity has posted a Form 470 this cycle.
@@ -1343,6 +1402,76 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                       {selectedLead.switch_likelihood.incumbent.est_contract_term_years
                         ? ` · ~${selectedLead.switch_likelihood.incumbent.est_contract_term_years}-yr contract`
                         : ""}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Outreach mini-CRM (Parker + 2nd vendor): draft, send via email, log
+                  the touch, and see the history — all on the lead. */}
+              {selectedLead && (
+                <div className="rounded-xl p-3 mb-4 border border-slate-200 bg-white">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-slate-700">✉️ Outreach</span>
+                    {outreachHistory.length > 0 && (
+                      <span className="text-[11px] text-slate-400">{outreachHistory.length} logged</span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    <button
+                      onClick={generateOutreachDraft}
+                      disabled={outreachDrafting}
+                      className="px-2.5 py-1 rounded-lg text-xs font-medium bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60"
+                    >
+                      {outreachDrafting ? "Drafting…" : "✨ Draft with AI"}
+                    </button>
+                    <button onClick={() => logOutreachTouch("call")} className="px-2.5 py-1 rounded-lg text-xs font-medium border border-slate-300 text-slate-600 hover:bg-slate-50">Log call</button>
+                    <button onClick={() => logOutreachTouch("note")} className="px-2.5 py-1 rounded-lg text-xs font-medium border border-slate-300 text-slate-600 hover:bg-slate-50">Log note</button>
+                  </div>
+                  <input
+                    value={outreachSubject}
+                    onChange={(e) => setOutreachSubject(e.target.value)}
+                    placeholder="Subject"
+                    className="w-full mb-2 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-violet-500"
+                  />
+                  <textarea
+                    value={outreachBody}
+                    onChange={(e) => setOutreachBody(e.target.value)}
+                    rows={5}
+                    placeholder="Write your outreach message, or click Draft with AI…"
+                    className="w-full mb-2 px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-violet-500"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={sendOutreachEmail}
+                      disabled={!selectedLead.contact_email || !outreachBody.trim()}
+                      title={selectedLead.contact_email ? `Email ${selectedLead.contact_email}` : "No contact email on file"}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      Send via email
+                    </button>
+                    <button
+                      onClick={() => logOutreachTouch("email", "sent")}
+                      disabled={!outreachBody.trim()}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Log as sent
+                    </button>
+                  </div>
+                  {!selectedLead.contact_email && (
+                    <p className="mt-1 text-[11px] text-slate-400">No contact email on file — “Send via email” opens your mail client once one is available.</p>
+                  )}
+                  {outreachHistory.length > 0 && (
+                    <div className="mt-3 border-t border-slate-100 pt-2 space-y-1.5 max-h-40 overflow-y-auto">
+                      {outreachHistory.map((o) => (
+                        <div key={o.id} className="text-[11px] text-slate-600 flex items-start gap-2">
+                          <span className="uppercase font-semibold text-slate-400 w-10 shrink-0">{o.channel}</span>
+                          <span className="min-w-0">
+                            <span className="text-slate-700">{o.subject || o.body?.slice(0, 60) || "(logged)"}</span>
+                            <span className="block text-slate-400">{o.created_at ? new Date(o.created_at).toLocaleDateString() : ""} · {o.status}</span>
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
