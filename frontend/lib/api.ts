@@ -1060,10 +1060,23 @@ export interface OpportunitySignals {
   };
 }
 
+export interface SwitchLikelihoodFactor {
+  label: string;
+  points: number;
+  detail?: string;
+}
+export interface SwitchIncumbent {
+  provider_name?: string | null;
+  since_funding_year?: number | null;
+  contract_expiration_date?: string | null;
+  est_contract_term_years?: number | null;
+}
 export interface SwitchLikelihood {
   score: number;              // 0-100
   level: "low" | "medium" | "high";
   reason: string;
+  factors?: SwitchLikelihoodFactor[];   // per-factor point breakdown (the "why")
+  incumbent?: SwitchIncumbent | null;   // who holds it now + how long (best effort)
   at_risk: boolean | null;    // true = you already service this entity (retention risk)
 }
 

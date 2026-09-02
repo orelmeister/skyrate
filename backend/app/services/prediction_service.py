@@ -1023,6 +1023,7 @@ class PredictionService:
                 'current_provider_name': c.get('current_provider_name'),
                 'current_spin': c.get('current_spin'),
                 'contract_number': c.get('contract_number'),
+                'funding_year': c.get('funding_year'),
             }
             signal_types.append('contract_expiry')
             opp['contract_expiration_date'] = c.get('contract_expiration_date')
@@ -1081,34 +1082,46 @@ class PredictionService:
         opp['signal_types'] = signal_types
         opp['member_prediction_ids'] = [d.get('id') for d in member_dicts if d.get('id')]
 
-        # --- Switch-likelihood score (0-100) + short reason.
+        # --- Switch-likelihood score (0-100) + explainable factor breakdown.
         score = 0
         reasons: List[str] = []
+        factors: List[Dict[str, Any]] = []
+        exp = None
         ce = signals.get('contract_expiry')
         if ce and ce.get('contract_expiration_date'):
             exp = self._parse_dt(ce['contract_expiration_date'])
             if exp:
                 days = (exp - datetime.utcnow()).days
+                when = exp.strftime('%b %Y')
                 if days < 0:
-                    score += 35
-                    reasons.append('Contract already expired - active rebid window')
+                    pts, label, detail = 35, 'Contract already expired', f'Expired {when} - active rebid window'
                 elif days <= 183:
-                    score += 40
-                    reasons.append('Contract expiring within 6 months')
+                    pts, label, detail = 40, 'Contract expiring within 6 months', f'Expires {when}'
                 elif days <= 366:
-                    score += 30
-                    reasons.append('Contract expiring within 12 months')
+                    pts, label, detail = 30, 'Contract expiring within 12 months', f'Expires {when}'
                 else:
-                    score += 15
-                    reasons.append('Contract expiry approaching')
+                    pts, label, detail = 15, 'Contract expiry approaching', f'Expires {when}'
+                score += pts
+                reasons.append(label)
+                factors.append({'label': label, 'points': pts, 'detail': detail})
         if 'equipment_refresh' in signals:
             score += 20
             reasons.append('Aging equipment due for refresh')
+            er = signals.get('equipment_refresh') or {}
+            er_detail = ' '.join(str(x) for x in [er.get('manufacturer'),
+                        er.get('equipment_model') or er.get('product_type')] if x) or 'Equipment nearing end of life'
+            factors.append({'label': 'Aging equipment due for refresh', 'points': 20, 'detail': er_detail})
         c2 = signals.get('c2_budget')
         if c2 and (c2.get('c2_budget_remaining') or 0) > 0:
             score += 20
             reasons.append('Unspent Category 2 budget available')
-        score += int((opp.get('confidence_score') or 0) * 20)
+            factors.append({'label': 'Unspent Category 2 budget', 'points': 20,
+                            'detail': f"${(c2.get('c2_budget_remaining') or 0):,.0f} remaining"})
+        conf_pts = int((opp.get('confidence_score') or 0) * 20)
+        if conf_pts > 0:
+            factors.append({'label': 'Model confidence', 'points': conf_pts,
+                            'detail': f"{int((opp.get('confidence_score') or 0) * 100)}% prediction confidence"})
+        score += conf_pts
         score = max(0, min(100, score))
 
         at_risk = None
@@ -1116,12 +1129,33 @@ class PredictionService:
             at_risk = str(ben) in serviced_bens
             if at_risk:
                 reasons.insert(0, 'You currently service this entity - retention risk')
+                factors.insert(0, {'label': 'You currently service this entity', 'points': 0,
+                                   'detail': 'Retention risk - protect this account'})
+
+        # Incumbent-of-record summary: who holds it now + how long (best effort).
+        incumbent = None
+        if ce and (ce.get('current_provider_name') or ce.get('funding_year') or ce.get('contract_expiration_date')):
+            since_fy = ce.get('funding_year')
+            est_term = None
+            try:
+                if since_fy and exp:
+                    est_term = max(1, exp.year - int(since_fy))
+            except (TypeError, ValueError):
+                est_term = None
+            incumbent = {
+                'provider_name': ce.get('current_provider_name'),
+                'since_funding_year': int(since_fy) if since_fy else None,
+                'contract_expiration_date': ce.get('contract_expiration_date'),
+                'est_contract_term_years': est_term,
+            }
 
         level = 'high' if score >= 66 else ('medium' if score >= 33 else 'low')
         opp['switch_likelihood'] = {
             'score': score,
             'level': level,
             'reason': '; '.join(reasons) if reasons else 'Limited switching signals',
+            'factors': factors,
+            'incumbent': incumbent,
             'at_risk': at_risk,
         }
         return opp

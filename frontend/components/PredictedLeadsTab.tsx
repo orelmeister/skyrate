@@ -1316,7 +1316,35 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                       </span>
                     ) : null}
                   </div>
-                  <p className="text-xs text-slate-600">{selectedLead.switch_likelihood.reason}</p>
+                  {(selectedLead.switch_likelihood.factors?.length ?? 0) > 0 ? (
+                    <div className="space-y-1">
+                      {selectedLead.switch_likelihood.factors!.map((f, i) => (
+                        <div key={i} className="flex items-start justify-between gap-2 text-xs">
+                          <span className="text-slate-600">
+                            <span className="font-medium text-slate-700">{f.label}</span>
+                            {f.detail ? <span className="text-slate-500"> — {f.detail}</span> : null}
+                          </span>
+                          {f.points > 0 && (
+                            <span className="shrink-0 font-semibold text-slate-500">+{f.points}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-600">{selectedLead.switch_likelihood.reason}</p>
+                  )}
+                  {selectedLead.switch_likelihood.incumbent?.provider_name && (
+                    <div className="mt-2 pt-2 border-t border-slate-200/70 text-xs text-slate-600">
+                      <span className="font-medium text-slate-700">Incumbent:</span>{" "}
+                      {selectedLead.switch_likelihood.incumbent.provider_name}
+                      {selectedLead.switch_likelihood.incumbent.since_funding_year
+                        ? ` · since FY${selectedLead.switch_likelihood.incumbent.since_funding_year}`
+                        : ""}
+                      {selectedLead.switch_likelihood.incumbent.est_contract_term_years
+                        ? ` · ~${selectedLead.switch_likelihood.incumbent.est_contract_term_years}-yr contract`
+                        : ""}
+                    </div>
+                  )}
                 </div>
               )}
 
