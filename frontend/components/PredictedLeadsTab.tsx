@@ -877,10 +877,21 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
   }, []);
 
   useEffect(() => {
-    const bens = Array.from(new Set(leads.map((l) => (l.ben || "").trim()).filter(Boolean)));
-    bens.forEach((b) => {
-      if (!(b in patternByBen) && !patternInFlight.current.has(b)) fetchPurchasingPattern(b);
-    });
+    const bens = Array.from(new Set(leads.map((l) => (l.ben || "").trim()).filter(Boolean)))
+      .filter((b) => !(b in patternByBen) && !patternInFlight.current.has(b));
+    if (bens.length === 0) return;
+    // Bounded concurrency: never fire a burst of per-lead requests at once — that
+    // exhausted the backend DB connection pool (max_user_connections). Drain 3 at a time.
+    let cancelled = false;
+    let idx = 0;
+    const CONCURRENCY = 3;
+    const worker = async () => {
+      while (!cancelled && idx < bens.length) {
+        await fetchPurchasingPattern(bens[idx++]);
+      }
+    };
+    Promise.all(Array.from({ length: Math.min(CONCURRENCY, bens.length) }, worker)).catch(() => {});
+    return () => { cancelled = true; };
   }, [leads, patternByBen, fetchPurchasingPattern]);
 
   // Client-side refine of the loaded page by switch-likelihood level (Ari FIX 5).

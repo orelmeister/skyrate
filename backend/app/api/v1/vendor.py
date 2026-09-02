@@ -3084,14 +3084,26 @@ async def get_purchasing_pattern(
     except ImportError:
         from ...utils.usac_cache import get_or_cache
 
-    return await run_in_threadpool(
-        lambda: get_or_cache(
-            namespace="vendor_purchasing_pattern_v1",
-            params={"ben": ben_clean},
-            ttl_hours=24,
-            fetch_fn=_fetch,
+    empty = {
+        "success": True, "ben": ben_clean, "pattern": None,
+        "biggest_year": None, "biggest_year_share": None,
+        "years_active": 0, "total_spend": 0,
+    }
+    # This is a non-critical inferred badge; if the DB/cache is briefly unavailable
+    # (e.g. connection-pool pressure) degrade to an empty result instead of 500-ing.
+    try:
+        return await run_in_threadpool(
+            lambda: get_or_cache(
+                namespace="vendor_purchasing_pattern_v1",
+                params={"ben": ben_clean},
+                ttl_hours=24,
+                fetch_fn=_fetch,
+            )
         )
-    )
+    except Exception as e:
+        import logging as _lg
+        _lg.getLogger(__name__).warning(f"[purchasing-pattern] soft-fail for {ben_clean}: {e}")
+        return empty
 
 
 class FrnNoteUpdate(BaseModel):

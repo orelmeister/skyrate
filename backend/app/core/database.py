@@ -38,13 +38,20 @@ if is_sqlite:
         echo=settings.DEBUG
     )
 elif is_mysql:
-    # MySQL settings (Bluehost production)
+    # MySQL settings (shared Hostinger MySQL has a low max_user_connections cap,
+    # so keep the per-process peak small and env-tunable. The scheduler worker
+    # shares this DB user, so set DB_POOL_SIZE=1/DB_MAX_OVERFLOW=2 on that
+    # component to keep web + worker under the cap).
+    _pool_size = int(os.environ.get("DB_POOL_SIZE", "5"))
+    _max_overflow = int(os.environ.get("DB_MAX_OVERFLOW", "5"))
     engine = create_engine(
         _db_url,
         pool_pre_ping=True,
-        pool_size=5,
-        max_overflow=10,
-        pool_recycle=3600,  # Recycle connections after 1 hour (important for MySQL)
+        pool_size=_pool_size,
+        max_overflow=_max_overflow,
+        pool_recycle=1800,   # recycle < MySQL wait_timeout to drop stale connections
+        pool_timeout=30,     # wait for a pooled connection instead of erroring
+        pool_use_lifo=True,  # reuse warm connections, minimizing simultaneous opens
         connect_args={"connect_timeout": 10},  # 10s connection timeout
         echo=settings.DEBUG
     )
