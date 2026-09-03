@@ -226,15 +226,14 @@ class PredictionService:
         """
         count = 0
         
-        # Hide only contracts that already expired on/before June 30 of the
-        # CURRENT funding-year START year (e.g. today = Aug 2026 -> _current_fy_start
-        # = 2026 -> cutoff = 2026-06-30). Contracts expiring at the END of the
-        # current funding year (June 30 2027) are rebid in the ACTIVE filing cycle
-        # that vendors work now, so those MUST show as leads. (Previously the cutoff
-        # was +1 year, which wrongly excluded the June-30-next-year expirations.)
+        # Contract-expiry leads only make sense for the NEXT funding cycle vendors
+        # prospect now. Today = FY{_current_fy_start}; the next cycle is
+        # FY{_current_fy_start + 1}. Ari's rule: only surface contracts expiring in
+        # the NEXT calendar year onward (e.g. in Sep 2026 -> only contracts expiring
+        # 2027+, NOT the remaining 2026 ones whose rebid window already closed).
         _now = datetime.utcnow()
         _current_fy_start = _now.year if _now.month >= 7 else _now.year - 1
-        next_cycle_cutoff = datetime(_current_fy_start, 6, 30)
+        next_cycle_cutoff = datetime(_current_fy_start + 1, 1, 1)
         
         # Fetch expiring contracts from USAC. Look ~24 months ahead so we capture the
         # full NEXT funding cycle (July of next year through the following June), since
@@ -276,9 +275,18 @@ class PredictionService:
                 except (ValueError, AttributeError):
                     continue
                 
-                # Skip contracts expiring on/before the end of the current funding
-                # year — already covered by the current filing cycle, not a lead.
-                if exp_date <= next_cycle_cutoff:
+                # Skip contracts expiring before the next calendar year — those
+                # belong to the current/closed filing cycle, not a future lead.
+                if exp_date < next_cycle_cutoff:
+                    continue
+
+                # Contract-expiry leads are only valid for recurring-service
+                # contracts: Category 1 (Internet / Data Transmission / Voice) and
+                # MIBS. Category-2 EQUIPMENT (Internal Connections / Basic
+                # Maintenance) is a one-time purchase, surfaced via the
+                # equipment-refresh signal — never as an expiring contract. (Ari)
+                _svc = str(record.get('form_471_service_type_name', '') or '').lower()
+                if 'internal connections' in _svc or 'basic maintenance' in _svc:
                     continue
                 
                 # Calculate confidence score
@@ -877,20 +885,38 @@ class PredictionService:
             )
         )
 
-        # Contract-expiry leads that already expired on/before June 30 of the
-        # CURRENT funding-year START year are past the active rebid window — hide
-        # them at read time too. Contracts expiring at the END of the current
-        # funding year (June 30 of _current_fy_start + 1) ARE rebid in the active
-        # filing cycle vendors work now, so those stay visible. (Cutoff was +1 year
-        # before, which wrongly hid the June-30-next-year expirations.)
+        # Contract-expiry leads only belong to the NEXT funding cycle vendors
+        # prospect now. Only surface contracts expiring in the next calendar year
+        # onward (e.g. in Sep 2026 -> only 2027+ expirations; the remaining 2026
+        # ones are past their rebid window). Ari: "only contracts expiring in 2027,
+        # which is next year — never a contract expiring in 2026."
         _now = datetime.utcnow()
         _current_fy_start = _now.year if _now.month >= 7 else _now.year - 1
-        _next_cycle_cutoff = datetime(_current_fy_start, 6, 30)
+        _next_cycle_start = datetime(_current_fy_start + 1, 1, 1)
         query = query.filter(
             or_(
                 PredictedLead.prediction_type != PredictionType.CONTRACT_EXPIRY.value,
                 PredictedLead.contract_expiration_date.is_(None),
-                PredictedLead.contract_expiration_date > _next_cycle_cutoff,
+                PredictedLead.contract_expiration_date >= _next_cycle_start,
+            )
+        )
+
+        # A "contract expiring" signal only applies to recurring-service contracts:
+        # Category 1 (Internet / Data Transmission / Voice) and MIBS (Managed
+        # Internal Broadband Services). Category-2 EQUIPMENT — Internal Connections
+        # and Basic Maintenance of Internal Connections — is a one-time purchase,
+        # not a renewable contract, so it must never appear as a contract-expiry
+        # lead (that equipment is surfaced via the equipment-refresh / C2-budget
+        # signals instead). Ari: "expiring contracts are only for category one and
+        # MIBS, not internal connections."
+        _ce_st_col = func.lower(func.coalesce(PredictedLead.service_type, ''))
+        query = query.filter(
+            or_(
+                PredictedLead.prediction_type != PredictionType.CONTRACT_EXPIRY.value,
+                and_(
+                    not_(_ce_st_col.contains('internal connections')),
+                    not_(_ce_st_col.contains('basic maintenance')),
+                ),
             )
         )
         return query
