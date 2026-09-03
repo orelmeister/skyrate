@@ -1630,6 +1630,11 @@ class USACDataClient:
             competitors: Dict[str, Any] = {}
             my_frn_set = set()
             competitor_frn_set = set()
+            # Per-entity name + your funded $ at each entity, so the drill-down can
+            # show WHICH of your schools each competitor serves and how you stack
+            # up head-to-head (Ari 2026-09-03).
+            entity_names: Dict[str, str] = {}
+            my_by_entity: Dict[str, float] = {}
 
             # Category classifier mirrors vendor.py::_cat_of — Cat2 = internal
             # connections / managed internal broadband / basic maintenance; else
@@ -1659,8 +1664,17 @@ class USACDataClient:
                 if not vendor_spin:
                     continue
 
+                if entity and entity not in entity_names:
+                    entity_names[entity] = (
+                        record.get('organization_name')
+                        or record.get('ros_entity_name')
+                        or entity
+                    )
+
                 if vendor_spin == spin:
                     my_frn_set.add(frn)
+                    if entity:
+                        my_by_entity[entity] = my_by_entity.get(entity, 0.0) + committed
                     continue
 
                 competitor_frn_set.add(frn)
@@ -1671,7 +1685,8 @@ class USACDataClient:
                         'name': vendor_name,
                         'frns': set(),
                         'total_committed': 0.0,
-                        'entities': set()
+                        'entities': set(),
+                        'by_entity': {},
                     }
 
                 comp = competitors[vendor_spin]
@@ -1681,14 +1696,44 @@ class USACDataClient:
                 comp['total_committed'] += committed
                 if entity:
                     comp['entities'].add(entity)
+                    be = comp['by_entity'].get(entity)
+                    if be is None:
+                        be = {'committed': 0.0, 'frns': set()}
+                        comp['by_entity'][entity] = be
+                    be['committed'] += committed
+                    be['frns'].add(frn)
 
-            # Convert sets to counts
+            # Convert sets to counts + build the per-competitor entity drill-down
+            # (which of your schools they serve, and how you stack up head-to-head).
             competitor_list = []
             for comp in competitors.values():
                 comp['frn_count'] = len(comp['frns'])
                 comp['entity_count'] = len(comp['entities'])
+                detail = []
+                shared = 0
+                my_at_shared = 0.0
+                their_at_shared = 0.0
+                for ent, be in comp['by_entity'].items():
+                    mine = my_by_entity.get(ent, 0.0)
+                    detail.append({
+                        'ben': ent,
+                        'name': entity_names.get(ent, ent),
+                        'frn_count': len(be['frns']),
+                        'committed': round(be['committed'], 2),
+                        'my_committed': round(mine, 2),
+                    })
+                    if mine > 0:
+                        shared += 1
+                        my_at_shared += mine
+                        their_at_shared += be['committed']
+                detail.sort(key=lambda d: d['committed'], reverse=True)
+                comp['entities_detail'] = detail[:15]
+                comp['shared_entities'] = shared
+                comp['my_committed_at_shared'] = round(my_at_shared, 2)
+                comp['their_committed_at_shared'] = round(their_at_shared, 2)
                 del comp['frns']
                 del comp['entities']
+                del comp['by_entity']
                 competitor_list.append(comp)
 
             # Sort by funded dollars

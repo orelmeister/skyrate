@@ -196,12 +196,26 @@ export interface Form471Record {
   product_description: string;
 }
 
+export interface CompetitorEntityDetail {
+  ben: string;
+  name: string;
+  frn_count: number;
+  committed: number;
+  my_committed: number;
+}
+
 export interface Form471Vendor {
   spin: string;
   name: string;
   frn_count: number;
   total_committed: number;
   entity_count?: number;
+  // Per-competitor drill-down: which of your schools this vendor serves and how
+  // you stack up head-to-head (Ari 2026-09-03).
+  entities_detail?: CompetitorEntityDetail[];
+  shared_entities?: number;
+  my_committed_at_shared?: number;
+  their_committed_at_shared?: number;
 }
 
 export interface Form471LineItem {

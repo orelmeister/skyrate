@@ -665,6 +665,13 @@ function VendorPortalPage() {
   // A Category-2 equipment reseller can exclude Cat1 internet volume that skews
   // the report (Tim Clark / Laketec).
   const [competitorCategory, setCompetitorCategory] = useState<'' | '1' | '2'>("");
+  // Ari 2026-09-03: click a competitor to drill into which of your schools they
+  // serve + how you stack up; and compare all vendors at a specific school.
+  const [expandedCompetitor, setExpandedCompetitor] = useState<string | null>(null);
+  const [compareBen, setCompareBen] = useState("");
+  const [compareData, setCompareData] = useState<Form471ByEntityResponse | null>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareError, setCompareError] = useState<string | null>(null);
   
   // FRN Status Monitoring state (Sprint 2)
   const [frnStatusData, setFrnStatusData] = useState<FRNStatusResponse | null>(null);
@@ -1557,6 +1564,31 @@ function VendorPortalPage() {
       console.error("Failed to load competitor analysis:", error);
     } finally {
       setCompetitorLoading(false);
+    }
+  };
+
+  // Ari 2026-09-03: enter a school's BEN to see which vendors it has used and
+  // how you stack up. Reuses the existing per-entity vendor rollup.
+  const runCompareAtSchool = async () => {
+    const ben = compareBen.trim();
+    if (!ben) return;
+    setCompareLoading(true);
+    setCompareError(null);
+    setCompareData(null);
+    try {
+      const res = await api.get471ByEntity(ben);
+      if (res.success && res.data) {
+        setCompareData(res.data);
+        if (!res.data.vendors || res.data.vendors.length === 0) {
+          setCompareError("No Form 471 vendors on record for that BEN.");
+        }
+      } else {
+        setCompareError(res.error || "Lookup failed. Check the BEN and try again.");
+      }
+    } catch {
+      setCompareError("Lookup failed. Check the BEN and try again.");
+    } finally {
+      setCompareLoading(false);
     }
   };
 
@@ -4789,33 +4821,153 @@ function VendorPortalPage() {
                     
                     {competitorData.competitors && competitorData.competitors.length > 0 && (
                       <div className="border border-slate-200 rounded-xl overflow-hidden">
-                        <div className="p-3 bg-slate-50 border-b border-slate-200">
+                        <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                           <span className="font-medium text-slate-700">Top Competitors at Your Entities</span>
+                          <span className="text-xs text-slate-400">Click a competitor to see the breakdown</span>
                         </div>
                         <div className="divide-y divide-slate-100">
-                          {competitorData.competitors.slice(0, 10).map((comp, idx) => (
-                            <div key={comp.spin} className="p-3 flex items-center gap-3 hover:bg-slate-50">
-                              <div className="w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center text-sm font-bold text-slate-600">
-                                {idx + 1}
+                          {competitorData.competitors.slice(0, 10).map((comp, idx) => {
+                            const isOpen = expandedCompetitor === comp.spin;
+                            const theirs = comp.their_committed_at_shared || 0;
+                            const mine = comp.my_committed_at_shared || 0;
+                            const youLead = mine >= theirs;
+                            return (
+                              <div key={comp.spin}>
+                                <button
+                                  onClick={() => setExpandedCompetitor(isOpen ? null : comp.spin)}
+                                  className="w-full p-3 flex items-center gap-3 hover:bg-slate-50 text-left"
+                                >
+                                  <div className="w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center text-sm font-bold text-slate-600">
+                                    {idx + 1}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-medium text-slate-900 truncate">{comp.name}</div>
+                                    <div className="text-xs text-slate-500">
+                                      {comp.frn_count} FRNs • {comp.entity_count || 0} entities
+                                      {(comp.shared_entities || 0) > 0 && (
+                                        <> • <span className={youLead ? "text-green-600" : "text-amber-600"}>{comp.shared_entities} shared with you</span></>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="font-medium text-amber-600">
+                                      ${comp.total_committed?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                    </div>
+                                  </div>
+                                  <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                                </button>
+                                {isOpen && (
+                                  <div className="px-3 pb-3 bg-slate-50/60">
+                                    {(comp.shared_entities || 0) > 0 ? (
+                                      <div className={`mb-3 rounded-lg p-3 text-sm ${youLead ? "bg-green-50 text-green-800" : "bg-amber-50 text-amber-800"}`}>
+                                        At the {comp.shared_entities} school{comp.shared_entities === 1 ? "" : "s"} you both serve, {comp.name} has won{" "}
+                                        <strong>${theirs.toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong> vs your{" "}
+                                        <strong>${mine.toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong>
+                                        {youLead
+                                          ? " — you lead here."
+                                          : ` — they're outspending you ${(theirs / Math.max(1, mine)).toFixed(1)}x here.`}
+                                      </div>
+                                    ) : (
+                                      <div className="mb-3 rounded-lg bg-slate-100 p-3 text-sm text-slate-600">
+                                        No direct overlap — {comp.name} wins at your entities where you don&apos;t currently hold the FRN.
+                                      </div>
+                                    )}
+                                    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                      <table className="w-full text-sm">
+                                        <thead className="bg-slate-50 text-slate-500">
+                                          <tr>
+                                            <th className="text-left font-medium px-3 py-2">School (BEN)</th>
+                                            <th className="text-right font-medium px-3 py-2">Their $</th>
+                                            <th className="text-right font-medium px-3 py-2">Your $</th>
+                                            <th className="text-right font-medium px-3 py-2">FRNs</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                          {(comp.entities_detail || []).map((e) => (
+                                            <tr key={e.ben}>
+                                              <td className="px-3 py-2">
+                                                <div className="font-medium text-slate-800 truncate max-w-[220px]">{e.name}</div>
+                                                <div className="text-xs text-slate-400">BEN {e.ben}</div>
+                                              </td>
+                                              <td className="px-3 py-2 text-right text-amber-600">${e.committed.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                                              <td className="px-3 py-2 text-right text-green-600">{e.my_committed > 0 ? `$${e.my_committed.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}</td>
+                                              <td className="px-3 py-2 text-right text-slate-600">{e.frn_count}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="font-medium text-slate-900 truncate">{comp.name}</div>
-                                <div className="text-xs text-slate-500">
-                                  {comp.frn_count} FRNs • {comp.entity_count || 0} entities
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <div className="font-medium text-amber-600">
-                                  ${comp.total_committed?.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}
                   </div>
                 )}
+
+                {/* Ari 2026-09-03: compare all vendors at a specific school (BEN) */}
+                <div className="mt-6 border-t border-slate-100 pt-5">
+                  <h4 className="text-sm font-semibold text-slate-900 mb-1">Compare vendors at a specific school</h4>
+                  <p className="text-xs text-slate-500 mb-3">Enter a school&apos;s BEN to see which vendors it has used and how you stack up.</p>
+                  <div className="flex gap-2">
+                    <input
+                      value={compareBen}
+                      onChange={(e) => setCompareBen(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") runCompareAtSchool(); }}
+                      placeholder="Enter a BEN (e.g., 125430)"
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                    <button
+                      onClick={runCompareAtSchool}
+                      disabled={compareLoading || !compareBen.trim()}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50 text-sm font-medium"
+                    >
+                      {compareLoading ? "Checking..." : "Compare"}
+                    </button>
+                  </div>
+                  {compareError && <p className="mt-2 text-sm text-red-600">{compareError}</p>}
+                  {compareData && compareData.vendors && compareData.vendors.length > 0 && (
+                    <div className="mt-4">
+                      <div className="mb-2 text-sm text-slate-700">
+                        <span className="font-medium">{compareData.entity_name}</span>
+                        {compareData.entity_state ? ` · ${compareData.entity_state}` : ""} — {compareData.vendors.length} vendor{compareData.vendors.length === 1 ? "" : "s"} on record
+                      </div>
+                      <div className="overflow-hidden rounded-lg border border-slate-200">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50 text-slate-500">
+                            <tr>
+                              <th className="text-left font-medium px-3 py-2">Vendor</th>
+                              <th className="text-right font-medium px-3 py-2">Funded $</th>
+                              <th className="text-right font-medium px-3 py-2">FRNs</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {[...compareData.vendors].sort((a, b) => b.total_committed - a.total_committed).map((v) => {
+                              const you = !!profile?.spin && v.spin === profile.spin;
+                              return (
+                                <tr key={v.spin} className={you ? "bg-green-50" : ""}>
+                                  <td className="px-3 py-2">
+                                    <span className="font-medium text-slate-800">{v.name}</span>
+                                    {you && <span className="ml-2 text-xs font-semibold text-green-700 bg-green-100 rounded px-1.5 py-0.5">You</span>}
+                                    <div className="text-xs text-slate-400">SPIN {v.spin}</div>
+                                  </td>
+                                  <td className="px-3 py-2 text-right text-amber-600">${v.total_committed.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                                  <td className="px-3 py-2 text-right text-slate-600">{v.frn_count}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      {!compareData.vendors.some((v) => !!profile?.spin && v.spin === profile.spin) && (
+                        <p className="mt-2 text-xs text-amber-600">You have no funded FRNs on record at this school — an opportunity to target.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
