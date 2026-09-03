@@ -155,6 +155,33 @@ export default function RootLayout({
             }),
           }}
         />
+        {/* Brand entity graph — disambiguates the "SkyRate" brand for the knowledge panel */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@graph": [
+                {
+                  "@type": "Organization",
+                  "@id": "https://skyrate.ai/#organization",
+                  "name": "SkyRate",
+                  "alternateName": "SkyRate AI",
+                  "legalName": "SkyRate LLC",
+                  "url": "https://skyrate.ai",
+                  "logo": "https://skyrate.ai/images/logos/logo-icon-transparent.png"
+                },
+                {
+                  "@type": "WebSite",
+                  "@id": "https://skyrate.ai/#website",
+                  "url": "https://skyrate.ai",
+                  "name": "SkyRate AI",
+                  "publisher": { "@id": "https://skyrate.ai/#organization" }
+                }
+              ]
+            }),
+          }}
+        />
       </head>
       <body className={`${inter.className} antialiased bg-slate-50 text-slate-900`}>
         {/* Google Tag Manager (noscript) */}

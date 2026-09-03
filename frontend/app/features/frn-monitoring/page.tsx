@@ -4,27 +4,48 @@ import { Check, ArrowRight, Bell, Activity, Clock, Mail, BarChart3, Shield, Data
 import FrnLookupClient from "@/app/tools/frn-tracker/FrnLookupClient";
 
 export const metadata: Metadata = {
-  title: "FRN Status Checker 2026 — Free E-Rate FRN Tracker & Lookup | SkyRate",
-  description: "Check your E-Rate FRN status free in seconds — no signup. See if funding is committed, pending, denied, or flagged, then get real-time USAC alerts on every status change. Updated August 2026.",
+  title: "Automated FRN Monitoring & Real-Time E-Rate Alerts | SkyRate",
+  description: "SkyRate AI watches every FRN in your E-Rate portfolio across USAC and sends real-time alerts on approvals, denials, disbursements, and PIA changes. Includes a free FRN status lookup. Updated September 2026.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/features/frn-monitoring" },
   openGraph: {
-    title: "FRN Status Checker 2026 — Free E-Rate FRN Tracker & Lookup | SkyRate",
-    description: "Check your E-Rate FRN status free in seconds — no signup. See if funding is committed, pending, denied, or flagged, then get real-time USAC alerts on every status change. Updated August 2026.",
+    title: "Automated FRN Monitoring & Real-Time E-Rate Alerts | SkyRate",
+    description: "SkyRate AI watches every FRN in your E-Rate portfolio across USAC and sends real-time alerts on approvals, denials, disbursements, and PIA changes. Includes a free FRN status lookup. Updated September 2026.",
     url: "https://skyrate.ai/features/frn-monitoring",
     siteName: "SkyRate AI",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "FRN Status Checker 2026 — Free E-Rate FRN Tracker & Lookup | SkyRate",
-    description: "Check your E-Rate FRN status free in seconds — no signup. See if funding is committed, pending, denied, or flagged, then get real-time USAC alerts on every status change. Updated August 2026.",
+    title: "Automated FRN Monitoring & Real-Time E-Rate Alerts | SkyRate",
+    description: "SkyRate AI watches every FRN in your E-Rate portfolio across USAC and sends real-time alerts on approvals, denials, disbursements, and PIA changes. Includes a free FRN status lookup. Updated September 2026.",
+  },
+};
+
+const monitoringJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "SkyRate FRN Monitoring & Alerts",
+  applicationCategory: "BusinessApplication",
+  operatingSystem: "Web",
+  url: "https://skyrate.ai/features/frn-monitoring",
+  description:
+    "Automated monitoring of E-Rate Funding Request Numbers (FRNs) across USAC with real-time email and push alerts on every status change — approvals, denials, disbursements, and PIA activity.",
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  provider: {
+    "@type": "Organization",
+    name: "SkyRate LLC",
+    url: "https://skyrate.ai",
   },
 };
 
 export default function FRNMonitoringFeaturePage() {
   return (
     <div className="min-h-screen bg-white">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(monitoringJsonLd) }}
+      />
       {/* Header */}
       <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">

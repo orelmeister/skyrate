@@ -4,12 +4,12 @@ import { Check, ArrowRight, Brain, FileText, Scale, Zap, Shield, Clock, Sparkles
 
 export const metadata: Metadata = {
   title: "Free AI Appeal Letter Generator for E-Rate | SkyRate AI",
-  description: "Generate a winning E-Rate appeal letter free with SkyRate AI. Analyzes your USAC denial and drafts a compliant appeal citing FCC Order 19-117 in seconds.",
+  description: "Generate a winning E-Rate appeal letter free with SkyRate AI. Analyzes your USAC denial and drafts a compliant appeal citing FCC Order 19-117 in seconds. Updated September 2026.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/features/appeal-generator" },
   openGraph: {
     title: "Free AI Appeal Letter Generator for E-Rate | SkyRate AI",
-    description: "Generate a winning E-Rate appeal letter free with SkyRate AI. Analyzes your USAC denial and drafts a compliant appeal citing FCC Order 19-117 in seconds.",
+    description: "Generate a winning E-Rate appeal letter free with SkyRate AI. Analyzes your USAC denial and drafts a compliant appeal citing FCC Order 19-117 in seconds. Updated September 2026.",
     url: "https://skyrate.ai/features/appeal-generator",
     siteName: "SkyRate AI",
     type: "website",
