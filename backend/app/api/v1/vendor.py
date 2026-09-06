@@ -24,7 +24,7 @@ import uuid as uuid_mod
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..', 'skyrate-ai'))
 
 from ...core.database import get_db
-from ...core.security import get_current_user, require_role
+from ...core.security import get_current_user, require_role, require_role_claims
 from ...core.accounts import require_account_owner, resolve_vendor_account
 from ...models.user import User
 from ...models.vendor import VendorProfile, VendorSearch
@@ -2751,7 +2751,9 @@ async def get_equipment_estimate(
 async def get_switching_signals(
     ben: str,
     category: Optional[str] = None,
-    current_user: User = Depends(require_role("admin", "vendor", "super")),
+    # DB-free auth: read-only public USAC data, prefetched per lead. Holding a
+    # pooled connection through the auth query exhausted the pool (see below).
+    _claims: Dict[str, Any] = Depends(require_role_claims("admin", "vendor", "super")),
 ):
     """
     "Switching signals" for a vendor lead (Ari loom answers Q2 = A). Inferred
@@ -2915,7 +2917,8 @@ def _entity_471_history_cached(ben_clean: str) -> Dict[str, Any]:
 @router.get("/entity-purchase-history")
 async def get_entity_purchase_history(
     ben: str,
-    current_user: User = Depends(require_role("admin", "vendor", "super")),
+    # DB-free auth: read-only public USAC data (see get_purchasing_pattern).
+    _claims: Dict[str, Any] = Depends(require_role_claims("admin", "vendor", "super")),
 ):
     """
     Per-entity Form 471 "Purchase History" (B5) — a one-click BEN drill-down that
@@ -3014,7 +3017,11 @@ async def get_entity_purchase_history(
 @router.get("/purchasing-pattern")
 async def get_purchasing_pattern(
     ben: str,
-    current_user: User = Depends(require_role("admin", "vendor", "super")),
+    # DB-free auth (JWT claims only): this badge is prefetched for every visible
+    # lead. Routing it through get_current_user pinned a pooled DB connection for
+    # the whole multi-second USAC call, so a burst exhausted the pool and threw
+    # QueuePool TimeoutError 500s on the auth query (outside the soft-fail below).
+    _claims: Dict[str, Any] = Depends(require_role_claims("admin", "vendor", "super")),
 ):
     """
     Purchasing-trends indicator (B6) — infers whether an entity buys equipment in

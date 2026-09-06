@@ -170,6 +170,36 @@ def require_role(*roles: str):
     return role_checker
 
 
+def require_role_claims(*roles: str):
+    """Lightweight, DB-FREE role gate authorized from the signed JWT claims only.
+
+    Use ONLY on read-only endpoints that serve public USAC data and never touch
+    the DB `User` object. Skipping the get_current_user DB lookup means the
+    request never holds (or waits on) a pooled DB connection for its full, often
+    multi-second USAC duration -- a burst of per-lead badge calls was otherwise
+    exhausting the MySQL connection pool and 500-ing on the auth query. The token
+    is still fully verified (signature + type + role claim); the only trade-off is
+    that a user disabled AFTER the short-lived access token was issued keeps
+    access to these non-sensitive endpoints until the token expires.
+    """
+    async def claims_checker(
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+    ) -> Dict[str, Any]:
+        payload = decode_token(credentials.credentials)
+        if payload.get("type") != "access":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token type",
+            )
+        if payload.get("role") not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied. Required roles: {', '.join(roles)}",
+            )
+        return payload
+    return claims_checker
+
+
 # Role-based dependencies
 require_admin = require_role("admin", "super")
 require_consultant = require_role("admin", "consultant", "super")
