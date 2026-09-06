@@ -701,13 +701,19 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
     logOutreachTouch("email", "sent");
   };
 
-  // Check whether the selected entity has posted a Form 470 this cycle.
+  // Check whether the selected entity has posted a Form 470 for the CURRENT/upcoming
+  // funding cycle only. Past-cycle 470s are irrelevant to a new sales lead, so they are
+  // filtered out — "filed this cycle" must mean the upcoming FY, not old years. (Ari 2026-09-06)
   const checkForm470 = async () => {
     if (!selectedLead?.ben) return;
     setF470Loading(true);
     try {
       const res = await api.get470ByBen(selectedLead.ben);
-      const leads = (res.data?.leads || []).map((l) => ({
+      const now = new Date();
+      const upcomingFY = now.getMonth() + 1 >= 7 ? now.getFullYear() + 1 : now.getFullYear();
+      const leads = (res.data?.leads || [])
+        .filter((l) => Number(l.funding_year) >= upcomingFY)
+        .map((l) => ({
         application_number: l.application_number,
         funding_year: l.funding_year,
         entity_name: l.entity_name,

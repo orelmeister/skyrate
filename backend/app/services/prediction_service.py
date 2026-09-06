@@ -854,9 +854,12 @@ class PredictionService:
             # detail in product_type/manufacturer and leave service_type NULL, so a
             # pure text match returned 0 rows for them. They ARE Category-2 Internal
             # Connections equipment by definition, so include those prediction types
-            # for the equipment / MIBS filters (fixes "Equipment (Internal
-            # Connections)" returning an empty list).
-            if st in ('equipment', 'mibs'):
+            # for the equipment filter (fixes "Equipment (Internal Connections)"
+            # returning an empty list). NOTE: MBS is a recurring MANAGED service, NOT
+            # equipment, so it must NOT pull in equipment_refresh/c2_budget rows —
+            # doing so made the MBS filter show equipment (Ari 2026-09-06). MBS matches
+            # only on its service_type text ('managed internal broadband' / 'mibs').
+            if st == 'equipment':
                 st_conditions.append(
                     PredictedLead.prediction_type.in_([
                         PredictionType.EQUIPMENT_REFRESH.value,
