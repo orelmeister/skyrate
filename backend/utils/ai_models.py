@@ -63,10 +63,12 @@ class AIModelManager:
         self._check_available_models()
         
         # Default routing preferences
+        # MIGRATION 2026-09: Anthropic Claude removed for cost reduction. Heavy-duty
+        # analysis / report generation now routes to DeepSeek Reasoner.
         self._task_routing = {
             TaskType.QUICK_ANSWER: AIModel.GEMINI,
-            TaskType.DEEP_ANALYSIS: AIModel.CLAUDE,
-            TaskType.REPORT_GENERATION: AIModel.CLAUDE,
+            TaskType.DEEP_ANALYSIS: AIModel.DEEPSEEK,
+            TaskType.REPORT_GENERATION: AIModel.DEEPSEEK,
             TaskType.QUERY_INTERPRETATION: AIModel.GEMINI,
         }
     
@@ -81,8 +83,10 @@ class AIModelManager:
         self._models[AIModel.DEEPSEEK] = bool(deepseek_key)
         
         # Check Claude
-        claude_key = os.environ.get('ANTHROPIC_API_KEY')
-        self._models[AIModel.CLAUDE] = bool(claude_key)
+        # MIGRATION 2026-09: Anthropic Claude removed from the environment for cost
+        # reduction. Force it permanently unavailable so nothing can route to it or
+        # incur Anthropic charges, regardless of whether ANTHROPIC_API_KEY is still set.
+        self._models[AIModel.CLAUDE] = False
         
         available = [m.value for m, v in self._models.items() if v]
         logger.info(f"Available AI models: {available if available else 'None (running in stub mode)'}")
@@ -110,8 +114,8 @@ class AIModelManager:
         if self.is_model_available(preferred):
             return preferred
         
-        # Fallback chain
-        fallback_order = [AIModel.GEMINI, AIModel.DEEPSEEK, AIModel.CLAUDE]
+        # Fallback chain (Claude removed for cost reduction 2026-09)
+        fallback_order = [AIModel.GEMINI, AIModel.DEEPSEEK]
         for model in fallback_order:
             if self.is_model_available(model):
                 return model
@@ -153,12 +157,14 @@ class AIModelManager:
             logger.error(f"Gemini API error: {e}")
             return self._stub_response(prompt, "Gemini", str(e))
     
-    def call_deepseek(self, messages: List[Dict[str, str]], **kwargs) -> str:
+    def call_deepseek(self, messages: List[Dict[str, str]], model: Optional[str] = None, **kwargs) -> str:
         """
         Call DeepSeek API.
         
         Args:
             messages: Chat messages in OpenAI format
+            model: Optional model override (e.g. 'deepseek-reasoner' for heavy-duty
+                   analysis). Defaults to the DEEPSEEK_MODEL env / 'deepseek-chat'.
             **kwargs: Additional parameters
             
         Returns:
@@ -174,7 +180,7 @@ class AIModelManager:
         try:
             import httpx
             
-            model_name = os.environ.get('DEEPSEEK_MODEL', 'deepseek-chat')
+            model_name = model or os.environ.get('DEEPSEEK_MODEL', 'deepseek-chat')
             
             response = httpx.post(
                 "https://api.deepseek.com/v1/chat/completions",
@@ -187,7 +193,7 @@ class AIModelManager:
                     "messages": messages,
                     **kwargs
                 },
-                timeout=60.0
+                timeout=120.0
             )
             response.raise_for_status()
             return response.json()["choices"][0]["message"]["content"]
@@ -205,52 +211,33 @@ class AIModelManager:
         **kwargs
     ) -> str:
         """
-        Call Anthropic Claude API.
+        Compatibility shim -- Anthropic Claude has been removed from the environment
+        for cost reduction (migration 2026-09). Every former Claude call is now
+        transparently served by DeepSeek Reasoner, so no code path can incur Anthropic
+        charges. The optional `system` prompt is converted to an OpenAI-style system
+        message for DeepSeek.
         
         Args:
             messages: Chat messages
-            system: Optional system prompt
+            system: Optional system prompt (prepended as a system message)
             max_tokens: Maximum tokens to generate
-            **kwargs: Additional parameters
+            **kwargs: Additional parameters (forwarded to DeepSeek)
             
         Returns:
-            Generated text response
+            Generated text response from DeepSeek Reasoner
         """
-        api_key = os.environ.get('ANTHROPIC_API_KEY')
-        
-        if not api_key:
-            logger.warning("Claude API key not configured, returning placeholder")
-            prompt = messages[-1].get('content', '') if messages else ''
-            return self._stub_response(prompt, "Claude")
-        
-        try:
-            import anthropic
-            
-            # Create client with timeout settings
-            client = anthropic.Anthropic(
-                api_key=api_key,
-                timeout=120.0  # 2 minute timeout for long appeals
-            )
-            # NOTE: Model IDs must be verified against the Anthropic API docs —
-            # newer model IDs like claude-sonnet-4-* are not yet stable release names.
-            model_name = os.environ.get('CLAUDE_MODEL', 'claude-3-7-sonnet-20250219')
-            
-            response = client.messages.create(
-                model=model_name,
-                max_tokens=max_tokens,
-                system=system or "You are a helpful AI assistant specializing in E-Rate funding analysis.",
-                messages=messages
-            )
-            return response.content[0].text
-            
-        except ImportError:
-            logger.warning("anthropic package not installed")
-            prompt = messages[-1].get('content', '') if messages else ''
-            return self._stub_response(prompt, "Claude")
-        except Exception as e:
-            logger.error(f"Claude API error: {e}")
-            prompt = messages[-1].get('content', '') if messages else ''
-            return self._stub_response(prompt, "Claude", str(e))
+        logger.info("call_claude() redirected to DeepSeek Reasoner (Claude removed 2026-09)")
+        reasoner_model = os.environ.get('DEEPSEEK_REASONER_MODEL', 'deepseek-reasoner')
+        ds_messages: List[Dict[str, str]] = []
+        if system:
+            ds_messages.append({"role": "system", "content": system})
+        ds_messages.extend(messages)
+        return self.call_deepseek(
+            ds_messages,
+            model=reasoner_model,
+            max_tokens=max_tokens,
+            **kwargs
+        )
     
     def _rule_based_parse(self, query: str) -> Dict[str, Any]:
         """
@@ -451,49 +438,50 @@ DATA CONTEXT:
 Please provide a comprehensive, professional response that directly addresses the request.
 Use specific details from the data provided."""
 
-        # Try models in order of preference for deep analysis: Claude > Gemini > DeepSeek
+        # AI model preference for deep analysis (migration 2026-09):
+        # DeepSeek Reasoner (heavy-duty) > Gemini fallback. Claude removed for cost.
+        reasoner_model = os.environ.get('DEEPSEEK_REASONER_MODEL', 'deepseek-reasoner')
+        consultant_system = "You are a senior E-Rate program consultant with 15+ years of experience with USAC and FCC E-Rate rules. You write winning appeals by demonstrating, with evidence, that the applicant followed program rules and that USAC's decision contains a factual or procedural error. You cite specific FCC orders and USAC program guidelines. You never use legal jargon, administrative law arguments, or due process claims -- those are ignored by USAC reviewers. Your appeals are clear, concise, rule-based, and evidence-focused."
+
+        # Explicit model override. 'claude' is honored as an alias for the heavy-duty
+        # model (now DeepSeek Reasoner) so existing callers keep working.
         if model:
             model = model.lower()
-            if model == 'claude' and self.is_model_available(AIModel.CLAUDE):
-                return self.call_claude(
-                    [{"role": "user", "content": full_prompt}],
-                    system="You are a senior E-Rate program consultant with 15+ years of experience with USAC and FCC E-Rate rules. You write winning appeals by demonstrating, with evidence, that the applicant followed program rules and that USAC's decision contains a factual or procedural error. You cite specific FCC orders and USAC program guidelines. You never use legal jargon, administrative law arguments, or due process claims — those are ignored by USAC reviewers. Your appeals are clear, concise, rule-based, and evidence-focused.",
+            if model == 'gemini' and self.is_model_available(AIModel.GEMINI):
+                return self.call_gemini(full_prompt)
+            elif model in ('deepseek', 'claude', 'reasoner') and self.is_model_available(AIModel.DEEPSEEK):
+                return self.call_deepseek(
+                    [{"role": "system", "content": consultant_system},
+                     {"role": "user", "content": full_prompt}],
+                    model=reasoner_model,
                     max_tokens=8000
                 )
-            elif model == 'gemini' and self.is_model_available(AIModel.GEMINI):
-                return self.call_gemini(full_prompt)
-            elif model == 'deepseek' and self.is_model_available(AIModel.DEEPSEEK):
-                return self.call_deepseek([{"role": "user", "content": full_prompt}])
-        
-        # Auto-select best available model with fallback on stub response
-        if self.is_model_available(AIModel.CLAUDE):
-            logger.info("Using Claude for deep analysis")
-            print("[AI] deep_analysis: trying Claude", flush=True)
-            result = self.call_claude(
-                [{"role": "user", "content": full_prompt}],
-                system="You are a senior E-Rate program consultant with 15+ years of experience with USAC and FCC E-Rate rules. You write winning appeals by demonstrating, with evidence, that the applicant followed program rules and that USAC's decision contains a factual or procedural error. You cite specific FCC orders and USAC program guidelines. You never use legal jargon, administrative law arguments, or due process claims — those are ignored by USAC reviewers. Your appeals are clear, concise, rule-based, and evidence-focused.",
+
+        # Auto-select: DeepSeek Reasoner first, Gemini fallback on stub response.
+        if self.is_model_available(AIModel.DEEPSEEK):
+            logger.info("Using DeepSeek Reasoner for deep analysis")
+            print("[AI] deep_analysis: trying DeepSeek Reasoner", flush=True)
+            result = self.call_deepseek(
+                [{"role": "system", "content": consultant_system},
+                 {"role": "user", "content": full_prompt}],
+                model=reasoner_model,
                 max_tokens=8000
             )
             if not self._is_stub_response(result):
-                print("[AI] deep_analysis: Claude succeeded", flush=True)
+                print("[AI] deep_analysis: DeepSeek Reasoner succeeded", flush=True)
                 return result
-            print(f"[AI] deep_analysis: Claude returned stub, falling back to Gemini. Stub snippet: {result[:120]}", flush=True)
-            logger.warning("Claude returned stub response at runtime, falling back to Gemini")
+            print(f"[AI] deep_analysis: DeepSeek returned stub, falling back to Gemini. Stub snippet: {result[:120]}", flush=True)
+            logger.warning("DeepSeek returned stub response at runtime, falling back to Gemini")
 
         if self.is_model_available(AIModel.GEMINI):
-            logger.info("Using Gemini for deep analysis (Claude unavailable or stub)")
+            logger.info("Using Gemini for deep analysis (DeepSeek unavailable or stub)")
             print("[AI] deep_analysis: trying Gemini", flush=True)
             result = self.call_gemini(full_prompt)
             if not self._is_stub_response(result):
                 print("[AI] deep_analysis: Gemini succeeded", flush=True)
                 return result
-            print(f"[AI] deep_analysis: Gemini returned stub, falling back to DeepSeek. Stub snippet: {result[:120]}", flush=True)
-            logger.warning("Gemini returned stub response at runtime, falling back to DeepSeek")
-
-        if self.is_model_available(AIModel.DEEPSEEK):
-            logger.info("Using DeepSeek for deep analysis (Claude and Gemini unavailable or stub)")
-            print("[AI] deep_analysis: trying DeepSeek", flush=True)
-            return self.call_deepseek([{"role": "user", "content": full_prompt}])
+            print(f"[AI] deep_analysis: Gemini returned stub. Stub snippet: {result[:120]}", flush=True)
+            logger.warning("Gemini returned stub response at runtime")
 
         print("[AI] deep_analysis: ALL models unavailable - running in stub mode", flush=True)
         logger.warning("No AI models available for deep analysis")

@@ -85,8 +85,9 @@ class Settings(BaseSettings):
     
     # AI Model Names
     DEEPSEEK_MODEL: str = "deepseek-chat"
+    DEEPSEEK_REASONER_MODEL: str = "deepseek-reasoner"  # heavy-duty analysis (replaces Claude)
     GEMINI_MODEL: str = "gemini-2.5-flash"
-    CLAUDE_MODEL: str = "claude-3-5-sonnet-latest"
+    CLAUDE_MODEL: str = "claude-3-5-sonnet-latest"  # DEPRECATED 2026-09: Claude removed for cost
     
     # Stripe
     STRIPE_SECRET_KEY: Optional[str] = None
