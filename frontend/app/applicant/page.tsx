@@ -46,6 +46,10 @@ interface FRN {
   is_denied: boolean;
   denial_reason: string | null;
   review_stage?: string | null;
+  sub_status?: string | null;
+  spin_name?: string | null;
+  spin?: string | null;
+  provider?: string | null;
   disbursement_status?: string | null;
   appeal_deadline: string | null;
   days_in_review: number | null;
@@ -241,22 +245,26 @@ function ApplicantCommandCenter({
   // Funding-by-year breakdown (Ari loom-2 #1). Computed client-side from the
   // applicant's own FRNs — committed dollars + status counts per funding year.
   const fundingByYear = (() => {
-    const map = new Map<number, { year: number; total: number; funded: number; pending: number; denied: number; fundedAmt: number }>();
+    const map = new Map<number, { year: number; total: number; funded: number; pending: number; denied: number; fundedAmt: number; pendingAmt: number; deniedAmt: number }>();
     frns.forEach((f) => {
       const y = f.funding_year || 0;
       if (!y) return;
-      if (!map.has(y)) map.set(y, { year: y, total: 0, funded: 0, pending: 0, denied: 0, fundedAmt: 0 });
+      if (!map.has(y)) map.set(y, { year: y, total: 0, funded: 0, pending: 0, denied: 0, fundedAmt: 0, pendingAmt: 0, deniedAmt: 0 });
       const e = map.get(y)!;
       e.total += 1;
       const st = (f.status_type || "").toLowerCase();
       const isDenied = f.is_denied || st === "denied";
       if (st === "funded") { e.funded += 1; e.fundedAmt += f.amount_funded || 0; }
-      else if (isDenied) { e.denied += 1; }
-      else { e.pending += 1; }
+      else if (isDenied) { e.denied += 1; e.deniedAmt += f.amount_requested || 0; }
+      else { e.pending += 1; e.pendingAmt += f.amount_requested || f.amount_funded || 0; }
     });
     return Array.from(map.values()).sort((a, b) => b.year - a.year);
   })();
-  const fundingByYearMax = Math.max(...fundingByYear.map((e) => e.fundedAmt), 1);
+  // Consultant-style: pick a funding year from a pulldown and see its detail
+  // (Ari loom "Polishing Applicant Page to Match Dashboard" #1).
+  const [selectedFundingYear, setSelectedFundingYear] = useState<number | null>(null);
+  const activeFundingYear = selectedFundingYear ?? (fundingByYear[0]?.year ?? null);
+  const activeFundingYearData = fundingByYear.find((y) => y.year === activeFundingYear) || null;
 
   return (
     <div className={`rounded-3xl border p-6 md:p-8 shadow-2xl ${container}`}>
@@ -320,35 +328,58 @@ function ApplicantCommandCenter({
         </div>
       </div>
 
-      {/* Authorized by funding year (Ari loom-2 #1) */}
+      {/* Funding by year — consultant-style year pulldown + detail panel
+          (Ari loom "Polishing Applicant Page to Match Dashboard" #1). */}
       {fundingByYear.length > 0 && (
         <div className={`rounded-2xl border p-5 mt-5 ${card}`}>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
-              <div className="font-semibold">Authorized by funding year</div>
-              <div className={`text-xs ${muted}`}>Committed funding and FRN counts per E-Rate funding year</div>
+              <div className="font-semibold">Funding by year</div>
+              <div className={`text-xs ${muted}`}>Select a funding year to see its committed funding and FRN breakdown</div>
             </div>
-            <Coins className={`w-4 h-4 ${faint}`} />
+            <div className="flex items-center gap-2">
+              <Coins className={`w-4 h-4 ${faint}`} />
+              <select
+                value={activeFundingYear ?? ""}
+                onChange={(e) => setSelectedFundingYear(e.target.value ? parseInt(e.target.value) : null)}
+                className={`rounded-lg border px-3 py-2 text-sm font-medium ${dark ? "bg-slate-900 border-slate-700 text-slate-200" : "bg-white border-slate-300 text-slate-900"}`}
+                aria-label="Select funding year"
+              >
+                {fundingByYear.map((y) => (
+                  <option key={y.year} value={y.year}>FY{y.year}</option>
+                ))}
+              </select>
+            </div>
           </div>
-          <div className="space-y-3">
-            {fundingByYear.map((y) => (
-              <div key={y.year}>
-                <div className="flex items-center justify-between text-sm mb-1 gap-2">
-                  <div className="flex items-center gap-2 flex-wrap min-w-0">
-                    <span className="font-semibold">FY{y.year}</span>
-                    <span className={`text-xs ${muted}`}>{y.total} FRN{y.total !== 1 ? "s" : ""}</span>
-                    <span className="text-xs text-emerald-500">{y.funded} funded</span>
-                    {y.pending > 0 && <span className="text-xs text-amber-500">{y.pending} pending</span>}
-                    {y.denied > 0 && <span className="text-xs text-red-500">{y.denied} denied</span>}
-                  </div>
-                  <span className="font-semibold shrink-0">{formatCurrency(y.fundedAmt)}</span>
+          {activeFundingYearData ? (
+            <div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className={`rounded-xl border p-4 ${softRow}`}>
+                  <div className={`text-xs ${muted}`}>Committed</div>
+                  <div className="text-2xl font-bold">{formatCurrency(activeFundingYearData.fundedAmt)}</div>
+                  <div className={`text-xs ${faint}`}>{activeFundingYearData.total} FRN{activeFundingYearData.total !== 1 ? "s" : ""} in FY{activeFundingYearData.year}</div>
                 </div>
-                <div className={`h-2 rounded ${track}`}>
-                  <div className="h-full rounded bg-gradient-to-r from-purple-500 to-pink-500" style={{ width: `${Math.round(y.fundedAmt / fundingByYearMax * 100)}%` }} />
+                <div className={`rounded-xl border p-4 ${softRow}`}>
+                  <div className="text-xs text-emerald-500 font-medium">Funded</div>
+                  <div className="text-2xl font-bold">{activeFundingYearData.funded}</div>
+                  <div className={`text-xs ${faint}`}>{formatCurrency(activeFundingYearData.fundedAmt)} committed</div>
+                </div>
+                <div className={`rounded-xl border p-4 ${softRow}`}>
+                  <div className="text-xs text-amber-500 font-medium">Pending</div>
+                  <div className="text-2xl font-bold">{activeFundingYearData.pending}</div>
+                  <div className={`text-xs ${faint}`}>{formatCurrency(activeFundingYearData.pendingAmt)} requested</div>
+                </div>
+                <div className={`rounded-xl border p-4 ${softRow}`}>
+                  <div className="text-xs text-red-500 font-medium">Denied</div>
+                  <div className="text-2xl font-bold">{activeFundingYearData.denied}</div>
+                  <div className={`text-xs ${faint}`}>{formatCurrency(activeFundingYearData.deniedAmt)} requested</div>
                 </div>
               </div>
-            ))}
-          </div>
+              <button onClick={() => onTab("frns")} className={`mt-4 text-sm font-medium ${link}`}>View all FRNs →</button>
+            </div>
+          ) : (
+            <div className={`text-sm ${muted}`}>No funding data for this year.</div>
+          )}
         </div>
       )}
 
@@ -1021,6 +1052,17 @@ function ApplicantDashboard() {
     if (denied) return dark ? "bg-red-500/15 text-red-300" : "bg-red-100 text-red-800";
     return dark ? "bg-amber-500/15 text-amber-300" : "bg-amber-100 text-amber-800";
   };
+  // Sub-status badge colors, mirroring the consultant portal's invoicing/review
+  // vocabulary so the applicant table reads the same way.
+  const subStatusBadgeCls = (s: string) => {
+    const v = (s || "").toLowerCase();
+    if (v === "fully invoiced") return dark ? "bg-green-500/15 text-green-300 border border-green-500/30" : "bg-green-50 text-green-700 border border-green-200";
+    if (v === "partially invoiced") return dark ? "bg-sky-500/15 text-sky-300 border border-sky-500/30" : "bg-sky-50 text-sky-700 border border-sky-200";
+    if (v === "denied") return dark ? "bg-red-500/15 text-red-300 border border-red-500/30" : "bg-red-50 text-red-700 border border-red-200";
+    if (v === "not invoiced" || v === "cancelled") return dark ? "bg-slate-500/15 text-slate-300 border border-slate-500/30" : "bg-slate-100 text-slate-600 border border-slate-200";
+    // Pending review reasons (FCDL Issued, Waiting for Heightened Scrutiny, First Extension, Awaiting Review, ...)
+    return dark ? "bg-amber-500/15 text-amber-300 border border-amber-500/30" : "bg-amber-50 text-amber-700 border border-amber-200";
+  };
   const sortArrow = (field: string) => frnsSort?.field === field ? (frnsSort.dir === "asc" ? " ▲" : " ▼") : "";
 
   return (
@@ -1309,6 +1351,7 @@ function ApplicantDashboard() {
                     <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${tThLabel}`}>Entity / BEN</th>
                     <th onClick={() => toggleFrnsSort('funding_year')} className={`px-4 py-3 text-left text-xs font-semibold uppercase cursor-pointer select-none ${tThLabel} ${tRowHover}`}>Year{sortArrow('funding_year')}</th>
                     <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${tThLabel}`}>Service</th>
+                    <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${tThLabel}`}>Provider</th>
                     <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${tThLabel}`}>Status</th>
                     <th className={`px-4 py-3 text-left text-xs font-semibold uppercase ${tThLabel}`}><span className="inline-flex items-center gap-1">Sub-Status <FrnSubStatusInfo /></span></th>
                     <th onClick={() => toggleFrnsSort('amount_funded')} className={`px-4 py-3 text-right text-xs font-semibold uppercase cursor-pointer select-none ${tThLabel} ${tRowHover}`}>Commitment{sortArrow('amount_funded')}</th>
@@ -1355,6 +1398,16 @@ function ApplicantDashboard() {
                       </td>
                       <td className={`px-4 py-3 ${tMuted}`}>{frn.funding_year}</td>
                       <td className={`px-4 py-3 text-sm ${tMuted}`}>{frn.service_type || '—'}</td>
+                      <td className="px-4 py-3 text-sm">
+                        {(frn.provider || frn.spin_name) ? (
+                          <div className="max-w-[170px]">
+                            <div className={`truncate ${tInk}`} title={frn.provider || frn.spin_name || ''}>{frn.provider || frn.spin_name}</div>
+                            {frn.spin ? <div className={`text-xs ${tFaint}`}>SPIN {frn.spin}</div> : null}
+                          </div>
+                        ) : (
+                          <span className={`text-xs ${tFaint}`}>—</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-col items-start gap-1">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${frnStatusBadgeCls(frn)}`}>
@@ -1375,9 +1428,9 @@ function ApplicantDashboard() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        {frn.review_stage && !frn.is_denied && (frn.status_type || '').toLowerCase() !== 'funded' ? (
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${dark ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30' : 'bg-amber-50 text-amber-700 border border-amber-200'}`} title="FRN sub-status / review stage">
-                            {frn.review_stage}
+                        {frn.sub_status ? (
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${subStatusBadgeCls(frn.sub_status)}`} title="FRN sub-status / review stage">
+                            {frn.sub_status}
                           </span>
                         ) : (
                           <span className={`text-xs ${tFaint}`}>—</span>
@@ -1420,7 +1473,7 @@ function ApplicantDashboard() {
                     {/* FRN Detail Panel */}
                     {selectedFrnId === frn.id && (
                       <tr key={`detail-${frn.id}`}>
-                        <td colSpan={10} className="px-0 py-0">
+                        <td colSpan={11} className="px-0 py-0">
                           <div className={`border-t border-b px-6 py-5 ${dark ? 'bg-slate-950/40 border-purple-500/20' : 'bg-gradient-to-br from-purple-50 to-slate-50 border-purple-200'}`}>
                             {loadingFrnDetail ? (
                               <div className="flex items-center justify-center py-8">
@@ -1506,17 +1559,21 @@ function ApplicantDashboard() {
                                   {/* Service Provider */}
                                   <div className={`rounded-lg p-4 border ${tInnerCard}`}>
                                     <h4 className={`font-medium mb-3 text-sm flex items-center gap-2 ${tInk}`}>🏢 Service Provider</h4>
+                                    {(() => {
+                                      const spinNo = frnDetail.raw_data?.spin || frnDetail.raw_data?.service_provider_number || frn.spin || '';
+                                      const providerName = frnDetail.raw_data?.service_provider_name || frnDetail.raw_data?.spin_name || frn.provider || frn.spin_name || '';
+                                      return (
                                     <div className="space-y-2 text-sm">
-                                      {(frnDetail.raw_data?.spin || frnDetail.raw_data?.service_provider_number) && (
+                                      {spinNo && (
                                         <div className="flex justify-between">
                                           <span className={tMuted}>SPIN</span>
-                                          <span className={`font-mono ${tInk}`}>{frnDetail.raw_data?.spin || frnDetail.raw_data?.service_provider_number}</span>
+                                          <span className={`font-mono ${tInk}`}>{spinNo}</span>
                                         </div>
                                       )}
-                                      {frnDetail.raw_data?.service_provider_name && (
+                                      {providerName && (
                                         <div className="flex justify-between">
                                           <span className={tMuted}>Provider</span>
-                                          <span className={`text-right max-w-[150px] truncate ${tInk}`} title={frnDetail.raw_data.service_provider_name}>{frnDetail.raw_data.service_provider_name}</span>
+                                          <span className={`text-right max-w-[150px] truncate ${tInk}`} title={providerName}>{providerName}</span>
                                         </div>
                                       )}
                                       {frnDetail.raw_data?.establishing_fcc_form_470 && (
@@ -1531,10 +1588,12 @@ function ApplicantDashboard() {
                                           <span className={tInk}>{formatDate(frnDetail.raw_data.contract_expiration_date)}</span>
                                         </div>
                                       )}
-                                      {!frnDetail.raw_data?.spin && !frnDetail.raw_data?.service_provider_name && (
+                                      {!spinNo && !providerName && (
                                         <div className={`text-xs ${tFaint}`}>Provider info not available</div>
                                       )}
                                     </div>
+                                      );
+                                    })()}
                                   </div>
 
                                   {/* Service & Dates */}
@@ -1716,7 +1775,7 @@ function ApplicantDashboard() {
                   ))}
                   {sortedFrns.length === 0 && (
                     <tr>
-                      <td colSpan={9} className={`px-4 py-10 text-center text-sm ${tMuted}`}>
+                      <td colSpan={11} className={`px-4 py-10 text-center text-sm ${tMuted}`}>
                         No FRNs match your filters.
                       </td>
                     </tr>
