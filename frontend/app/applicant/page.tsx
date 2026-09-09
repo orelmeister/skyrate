@@ -926,8 +926,24 @@ function ApplicantDashboard() {
     });
     return Array.from(map.values()).sort((a, b) => b.funding_year - a.funding_year || a.application_number.localeCompare(b.application_number));
   }, [data?.frns]);
+  // Consultant-parity PIA detection (mirrors consultant.py /pia-frns): an FRN is
+  // actively under USAC PIA review when it carries a review stage (pending_reason)
+  // that is NOT terminal and its status is not terminal. The old keyword regex
+  // matched none of USAC's real stage labels ("First Extension", "Waiting for
+  // Heightened Scrutiny", ...), so this section always rendered empty.
   const piaFrns = useMemo(() => {
-    return (data?.frns || []).filter((f) => /pia|program integrity|information requested|selected for review/i.test(f.review_stage || ""));
+    const TERMINAL = /fcdl|funded|committed|denied|cancel|withdrawn/i;
+    return (data?.frns || []).filter((f) => {
+      const reason = (f.review_stage || "").trim();
+      if (!reason || TERMINAL.test(reason)) return false;
+      const stype = (f.status_type || "").toLowerCase();
+      if (stype === "funded" || stype === "denied" || stype.includes("cancel")) return false;
+      return true;
+    });
+  }, [data?.frns]);
+  // Denied FRNs drive the Compliance denial-status card (consultant parity).
+  const deniedFrns = useMemo(() => {
+    return (data?.frns || []).filter((f) => f.is_denied || (f.status_type || "").toLowerCase() === "denied");
   }, [data?.frns]);
 
   // Show loading spinner while store hydrates from localStorage
@@ -2305,6 +2321,37 @@ function ApplicantDashboard() {
               </button>
             </div>
 
+            {/* Denial status — consultant parity: an explicit "no denials" all-clear
+                when clean, otherwise the denied FRNs with an appeal CTA. */}
+            <div className={`rounded-xl border ${tCard}`}>
+              <div className={`px-5 py-4 border-b ${tBorder} flex items-center gap-2`}>
+                <Scale className={`w-4 h-4 ${tMuted}`} />
+                <div>
+                  <h2 className={`font-semibold ${tInk}`}>Denial status</h2>
+                  <p className={`text-xs ${tMuted}`}>Funding requests USAC has denied, and the appeals available to you.</p>
+                </div>
+              </div>
+              {deniedFrns.length > 0 ? (
+                <div className={`divide-y ${dark ? 'divide-slate-800' : 'divide-slate-100'}`}>
+                  {deniedFrns.map((f) => (
+                    <div key={f.id} className="px-5 py-3 flex items-center justify-between gap-4 flex-wrap">
+                      <div className="min-w-0">
+                        <div className={`font-mono text-sm ${tInk}`}>FRN {f.frn}</div>
+                        <div className={`text-xs ${tMuted} truncate`}>FY{f.funding_year} · {f.service_type || 'Service'}{f.denial_reason ? ` · ${f.denial_reason}` : ''}</div>
+                      </div>
+                      <button onClick={() => setSelectedTab('appeals')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white">Review appeal <ChevronRight className="w-3.5 h-3.5" /></button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="px-5 py-8 flex flex-col items-center text-center gap-2">
+                  <div className={`w-11 h-11 rounded-full flex items-center justify-center ${dark ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-100 text-emerald-600'}`}><BadgeCheck className="w-6 h-6" /></div>
+                  <div className={`font-semibold ${tInk}`}>No denials</div>
+                  <p className={`text-xs ${tMuted}`}>All {frnStats.total} of your funding requests are in good standing.</p>
+                </div>
+              )}
+            </div>
+
             {/* FRNs under USAC review (PIA) */}
             <div className={`rounded-xl border ${tCard}`}>
               <div className={`px-5 py-4 border-b ${tBorder} flex items-center gap-2`}>
@@ -2341,6 +2388,39 @@ function ApplicantDashboard() {
                 </div>
               </div>
               <button onClick={() => setSelectedTab('appeals')} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white">Open Appeals <ChevronRight className="w-4 h-4" /></button>
+            </div>
+
+            {/* Certified FCC Forms — download the real Form 470/471 PDFs per application (consultant/vendor parity) */}
+            <div className={`rounded-xl border ${tCard}`}>
+              <div className={`px-5 py-4 border-b ${tBorder} flex items-center gap-2`}>
+                <FileText className={`w-4 h-4 ${tMuted}`} />
+                <div>
+                  <h2 className={`font-semibold ${tInk}`}>Certified FCC Forms</h2>
+                  <p className={`text-xs ${tMuted}`}>Download the actual certified Form 470 &amp; Form 471 PDFs straight from USAC.</p>
+                </div>
+              </div>
+              {applicationList.length > 0 ? (
+                <div className={`divide-y ${dark ? 'divide-slate-800' : 'divide-slate-100'}`}>
+                  {applicationList.map((app) => (
+                    <div key={app.application_number} className="px-5 py-3 flex items-center justify-between gap-4 flex-wrap">
+                      <div className="min-w-0">
+                        <div className={`font-mono text-sm ${tInk}`}>Application {app.application_number}</div>
+                        <div className={`text-xs ${tMuted}`}>FY{app.funding_year} · {app.frn_count} FRN{app.frn_count !== 1 ? 's' : ''}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => downloadFormPdf('470', app.application_number)} disabled={pdfBusyApp === `470-${app.application_number}`} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white">
+                          {pdfBusyApp === `470-${app.application_number}` ? <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Download className="w-3.5 h-3.5" />} Form 470 PDF
+                        </button>
+                        <button onClick={() => downloadFormPdf('471', app.application_number)} disabled={pdfBusyApp === `471-${app.application_number}`} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border disabled:opacity-50 ${dark ? 'border-slate-700 text-slate-200 hover:bg-slate-800' : 'border-slate-300 text-slate-700 hover:bg-slate-100'}`}>
+                          {pdfBusyApp === `471-${app.application_number}` ? <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Download className="w-3.5 h-3.5" />} Form 471 PDF
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className={`px-5 py-8 text-center text-sm ${tMuted}`}>No applications found for your registered BENs yet.</div>
+              )}
             </div>
           </div>
         )}
