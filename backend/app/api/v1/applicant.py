@@ -529,62 +529,117 @@ async def register_applicant(
     )
 
 
+def _derive_frn_sub_status(f: dict) -> Optional[str]:
+    """
+    Consultant-parity sub-status derived purely from the applicant's own FRN data
+    (no USAC dependency) so EVERY row shows a meaningful label. Mirrors the
+    consultant portal's derivation (consultant.py _aggregate_rows):
+      - funded/committed -> invoicing state (Not / Partially / Fully Invoiced)
+      - pending/review   -> the review stage (live pending_reason) or "Awaiting Review"
+      - denied           -> "Denied"; cancelled -> "Cancelled"
+    """
+    status = (f.get("status") or "").lower()
+    stype = (f.get("status_type") or "").lower()
+    if f.get("is_denied") or "denied" in status or stype == "denied":
+        return "Denied"
+    if "cancel" in status or stype in ("cancelled", "canceled"):
+        return "Cancelled"
+    if "fund" in status or "commit" in status or stype == "funded":
+        committed = float(f.get("amount_funded") or 0)
+        disbursed = float(f.get("amount_disbursed") or 0)
+        if disbursed <= 0:
+            return "Not Invoiced"
+        if disbursed < committed:
+            return "Partially Invoiced"
+        return "Fully Invoiced"
+    if "pending" in status or "review" in status or stype in ("pending_review", "in_review"):
+        return (f.get("review_stage") or "").strip() or "Awaiting Review"
+    return None
+
+
 def _enrich_frns_with_live_substatus(db: Session, profile, frn_dicts: list) -> None:
     """
-    Fill each FRN's sub-status (review_stage) from live USAC data when the stored
-    value is empty. The applicant's stored FRN records rarely carry the PIA
-    pending-reason, so the FRN Status table showed no sub-status. USAC's FRN
-    Status dataset exposes it as `pending_reason` per FRN. Mirrors the consultant
-    portal, which reads the sub-status live from the same dataset. Best-effort and
-    cached; never raises.
+    Bring the applicant FRN table to consultant parity. The applicant's stored
+    FRN records rarely carry the PIA pending-reason or the service provider, so
+    the table showed no sub-status and no provider. This helper:
+      1. Always derives an always-present `sub_status` from the applicant's own
+         data (invoicing state / review stage), independent of USAC.
+      2. Best-effort overlays the live USAC FRN Status dataset (one cached batch
+         call): the PIA `pending_reason` (-> review_stage, and the pending
+         sub_status), the service provider (`spin_name`), and the authorized
+         disbursement (so the Disbursed column + invoicing sub_status are exact).
+    Never raises.
     """
-    pending = [f for f in frn_dicts if not (f.get("review_stage") or "").strip()]
-    if not pending:
+    if not frn_dicts:
         return
+
+    # 1. Live overlay map: frn -> {pending_reason, spin_name, spin, disbursed}
+    info_map: Dict[str, Dict[str, Any]] = {}
     try:
         from ...models.applicant import ApplicantBEN
         bens = db.query(ApplicantBEN).filter(
             ApplicantBEN.applicant_profile_id == profile.id
         ).all()
         ben_numbers = [b.ben for b in bens] or ([profile.ben] if profile.ben else [])
-        if not ben_numbers:
-            return
+        ben_numbers = sorted({str(b).strip() for b in ben_numbers if b})
+        if ben_numbers:
+            cache_key = None
+            cached = None
+            try:
+                from app.services.cache_service import get_cached, make_cache_key
+                cache_key = make_cache_key("frn_info_map_v2", bens=ben_numbers)
+                cached = get_cached(db, cache_key)
+            except Exception:
+                cached = None
 
-        reason_map = None
-        cache_key = None
-        try:
-            from app.services.cache_service import get_cached, set_cached, make_cache_key
-            cache_key = make_cache_key("frn_substatus_map", bens=sorted(set(ben_numbers)))
-            reason_map = get_cached(db, cache_key)
-        except Exception:
-            reason_map = None
-
-        if reason_map is None:
-            from utils.usac_client import USACDataClient
-            client = USACDataClient()
-            batch = client.get_frn_status_batch(bens=ben_numbers)
-            reason_map = {}
-            if batch.get("success"):
-                for result in batch.get("results", {}).values():
-                    for rec in result.get("frns", []) or []:
-                        frn_no = str(rec.get("frn") or "").strip()
-                        reason = (rec.get("pending_reason") or "").strip()
-                        if frn_no and reason:
-                            reason_map[frn_no] = reason
-            if cache_key is not None:
-                try:
-                    from app.services.cache_service import set_cached
-                    set_cached(db, cache_key, reason_map, ttl_hours=6)
-                except Exception:
-                    pass
-
-        if reason_map:
-            for f in pending:
-                reason = reason_map.get(str(f.get("frn") or "").strip())
-                if reason:
-                    f["review_stage"] = reason
+            if isinstance(cached, dict) and cached:
+                info_map = cached
+            else:
+                from utils.usac_client import USACDataClient
+                client = USACDataClient()
+                batch = client.get_frn_status_batch(bens=ben_numbers)
+                if batch.get("success"):
+                    for result in batch.get("results", {}).values():
+                        for rec in result.get("frns", []) or []:
+                            frn_no = str(rec.get("frn") or "").strip()
+                            if not frn_no:
+                                continue
+                            prev = info_map.get(frn_no, {})
+                            reason = (rec.get("pending_reason") or "").strip()
+                            spin_name = (rec.get("spin_name") or "").strip()
+                            spin = str(rec.get("spin") or "").strip()
+                            disbursed = float(rec.get("disbursed_amount") or 0)
+                            info_map[frn_no] = {
+                                "pending_reason": reason or prev.get("pending_reason", ""),
+                                "spin_name": spin_name or prev.get("spin_name", ""),
+                                "spin": spin or prev.get("spin", ""),
+                                "disbursed": max(disbursed, float(prev.get("disbursed", 0))),
+                            }
+                # Only cache a NON-EMPTY map so a transient USAC miss can't poison
+                # the cache with {} for the full TTL (root cause of stale blanks).
+                if cache_key is not None and info_map:
+                    try:
+                        from app.services.cache_service import set_cached
+                        set_cached(db, cache_key, info_map, ttl_hours=6)
+                    except Exception:
+                        pass
     except Exception as e:
-        print(f"[FRN sub-status] enrichment skipped: {e}")
+        print(f"[FRN sub-status] live overlay skipped: {e}")
+
+    # 2. Apply the overlay, then compute the always-present derived sub_status.
+    for f in frn_dicts:
+        info = info_map.get(str(f.get("frn") or "").strip())
+        if info:
+            if info.get("spin_name") and not (f.get("spin_name") or "").strip():
+                f["spin_name"] = info["spin_name"]
+            if info.get("spin") and not str(f.get("spin") or "").strip():
+                f["spin"] = info["spin"]
+            if info.get("pending_reason") and not (f.get("review_stage") or "").strip():
+                f["review_stage"] = info["pending_reason"]
+            if info.get("disbursed") and not float(f.get("amount_disbursed") or 0):
+                f["amount_disbursed"] = info["disbursed"]
+        f["provider"] = (f.get("spin_name") or "").strip() or None
+        f["sub_status"] = _derive_frn_sub_status(f)
 
 
 @router.get("/dashboard", response_model=DashboardResponse)
