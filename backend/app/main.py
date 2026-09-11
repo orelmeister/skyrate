@@ -605,6 +605,63 @@ def seed_demo_accounts():
         sync_thread.start()
 
 
+def _backfill_applicant_source_ben():
+    """One-time, idempotent backfill of ApplicantFRN.source_ben.
+
+    Rows created before the source_ben column existed have it NULL. Derive the
+    BEN the row was synced under from the stored USAC JSON so the portal can
+    scope to the profile's current BEN. Structure (verified): sync stores
+    raw_data = the USAC `app` dict, which itself nests the original USAC row at
+    raw_data['raw_data']; the entity BEN lives at raw_data['raw_data']['ben']
+    (fall back to raw_data['ben']).
+
+    Only touches rows where source_ben IS NULL, so it is a no-op on every boot
+    after the first. Never deletes or otherwise mutates funding data.
+    """
+    from sqlalchemy import inspect as _inspect
+    from app.core.database import SessionLocal
+    from app.models.applicant import ApplicantFRN
+
+    db = SessionLocal()
+    try:
+        insp = _inspect(db.get_bind())
+        if not insp.has_table("applicant_frns"):
+            return
+        cols = [c["name"] for c in insp.get_columns("applicant_frns")]
+        if "source_ben" not in cols:
+            logger.info("[source_ben backfill] column missing, skipping")
+            return
+
+        rows = db.query(ApplicantFRN).filter(ApplicantFRN.source_ben.is_(None)).all()
+        stamped = 0
+        left_null = 0
+        for f in rows:
+            derived = None
+            rd = f.raw_data if isinstance(f.raw_data, dict) else None
+            if rd:
+                inner = rd.get("raw_data")
+                if isinstance(inner, dict) and inner.get("ben") not in (None, ""):
+                    derived = inner.get("ben")
+                elif rd.get("ben") not in (None, ""):
+                    derived = rd.get("ben")
+            if derived is None or str(derived).strip() == "":
+                left_null += 1
+                continue
+            f.source_ben = str(derived).strip()
+            stamped += 1
+
+        if stamped:
+            db.commit()
+        logger.info(
+            f"[source_ben backfill] scanned={len(rows)} stamped={stamped} left_null={left_null}"
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"[source_ben backfill] error (non-fatal): {e}")
+    finally:
+        db.close()
+
+
 def _run_schema_migrations(engine):
     """
     Add missing columns to existing tables in MySQL.
@@ -745,6 +802,10 @@ def _run_schema_migrations(engine):
         # Team seats for VENDOR accounts — generalize account_seats to both types
         ("account_seats", "account_type", "VARCHAR(20) NOT NULL DEFAULT 'consultant'", None),
         ("account_seats", "vendor_profile_id", "INT DEFAULT NULL", None),
+        # Applicant FRN data hygiene — the BEN a row was synced under, so the
+        # portal can scope to the profile's CURRENT BEN and hide orphaned rows
+        # left behind by a BEN change. Display-only; never used to delete.
+        ("applicant_frns", "source_ben", "VARCHAR(50) DEFAULT NULL", None),
     ]
     
     try:
@@ -991,6 +1052,14 @@ async def lifespan(app: FastAPI):
         
         # Run lightweight schema migrations for MySQL (add missing columns)
         _run_schema_migrations(engine)
+
+        # One-time idempotent backfill of the new ApplicantFRN.source_ben column
+        # (only touches rows where it is NULL). Runs after migrations so the
+        # column exists. Non-fatal.
+        try:
+            _backfill_applicant_source_ben()
+        except Exception as _bf_err:
+            logger.error(f"source_ben backfill error (non-fatal): {_bf_err}")
     except Exception as e:
         logger.error(f"Database schema initialization error (non-fatal): {e}")
     

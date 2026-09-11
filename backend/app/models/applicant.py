@@ -248,6 +248,10 @@ class ApplicantFRN(Base):
     id = Column(Integer, primary_key=True, index=True)
     applicant_profile_id = Column(Integer, ForeignKey("applicant_profiles.id"), nullable=False)
     applicant_ben_id = Column(Integer, ForeignKey("applicant_bens.id"), nullable=True)  # Link to specific BEN
+    # The BEN this row was synced under. Used only to scope the portal display to
+    # the profile's CURRENT BEN(s) so orphaned rows left behind when an account's
+    # BEN changes stop showing. Never used to delete data.
+    source_ben = Column(String(50), nullable=True, index=True)
     
     # FRN identification
     frn = Column(String(50), nullable=False, index=True)
@@ -321,6 +325,7 @@ class ApplicantFRN(Base):
             "disbursement_status": self.disbursement_status,
             "review_stage": self.review_stage,
             "days_in_review": self.days_in_review,
+            "source_ben": self.source_ben,
             "fetched_at": self.fetched_at.isoformat() if self.fetched_at else None,
         }
 

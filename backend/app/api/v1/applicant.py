@@ -194,7 +194,7 @@ def sync_applicant_data(applicant_profile_id: int):
             total_denied = 0
             
             for app in applications.get('applications', []):
-                frn = app.get('frn')
+                frn = _normalize_frn(app.get('frn'))
                 if not frn:
                     continue
                 
@@ -237,6 +237,7 @@ def sync_applicant_data(applicant_profile_id: int):
                     'is_denied': is_denied,
                     'denial_reason': app.get('fcdl_comment') if is_denied else None,
                     'fcdl_comment': app.get('fcdl_comment'),
+                    'source_ben': ben,
                     'raw_data': app,
                 }
                 
@@ -557,6 +558,138 @@ def _derive_frn_sub_status(f: dict) -> Optional[str]:
     return None
 
 
+def _normalize_frn(value) -> str:
+    """Normalize an FRN for comparison and storage.
+
+    USAC data arrives via pandas; a numeric FRN column stringifies as
+    '1799048449.0' on one code path while another path yields '1799048449'.
+    Those two forms broke the (profile, frn) upsert key and created duplicate
+    rows. Collapse them by stripping whitespace and a single trailing '.0'.
+    """
+    s = str(value if value is not None else "").strip()
+    if s.endswith(".0"):
+        s = s[:-2]
+    return s
+
+
+def _current_ben_set(db: Session, profile) -> set:
+    """Every BEN identifier currently attached to this applicant profile:
+    the profile's primary BEN plus every monitored ApplicantBEN."""
+    bens = set()
+    if getattr(profile, "ben", None):
+        bens.add(str(profile.ben).strip())
+    try:
+        from ...models.applicant import ApplicantBEN
+        for b in db.query(ApplicantBEN).filter(
+            ApplicantBEN.applicant_profile_id == profile.id
+        ).all():
+            if b.ben:
+                bens.add(str(b.ben).strip())
+    except Exception:
+        pass
+    return {b for b in bens if b}
+
+
+def _monitored_ben_ids(db: Session, profile) -> set:
+    """Primary-key ids of the ApplicantBEN rows currently monitored by this
+    profile. Rows linked via applicant_ben_id to one of these are in-scope
+    regardless of source_ben stamping (multi-BEN safety)."""
+    try:
+        from ...models.applicant import ApplicantBEN
+        return {
+            b.id for b in db.query(ApplicantBEN).filter(
+                ApplicantBEN.applicant_profile_id == profile.id
+            ).all()
+        }
+    except Exception:
+        return set()
+
+
+def _frn_populated_score(f) -> int:
+    """Rough 'how complete is this row' score, used to pick the survivor when
+    collapsing duplicate FRNs on the read path. Higher = more populated."""
+    score = 0
+    try:
+        if f.amount_funded is not None and float(f.amount_funded or 0) > 0:
+            score += 1
+        if f.amount_disbursed is not None and float(f.amount_disbursed or 0) > 0:
+            score += 1
+        if f.amount_requested is not None and float(f.amount_requested or 0) > 0:
+            score += 1
+        if f.status and str(f.status).strip().lower() not in ("", "unknown"):
+            score += 1
+        if f.service_type:
+            score += 1
+        if f.review_stage:
+            score += 1
+        rd = f.raw_data if isinstance(f.raw_data, dict) else {}
+        if rd.get("spin_name") or rd.get("service_provider_name") or rd.get("spin"):
+            score += 2
+    except Exception:
+        pass
+    return score
+
+
+def _scope_and_dedupe_frns(db: Session, profile, frns: list) -> list:
+    """Non-destructive read-path hygiene shared by every applicant FRN reader.
+
+    1. SCOPE to the profile's CURRENT BEN(s). A row is in-scope when its
+       source_ben matches a current BEN, OR it is linked (applicant_ben_id) to a
+       still-monitored ApplicantBEN. This hides orphaned rows left behind when an
+       account's BEN was changed (they were never removed, only orphaned).
+
+       SAFETY FALLBACK (the most important part): if NO row is in-scope — e.g.
+       nothing has been re-synced since the source_ben column was added — return
+       ALL rows unchanged. A real customer must never open the portal to an empty
+       FRN table because of this scoping.
+
+    2. COLLAPSE duplicate rows by normalized FRN, keeping the most-populated row.
+
+    Nothing is ever deleted from the database. This only shapes the response.
+    """
+    if not frns:
+        return frns
+
+    current_bens = _current_ben_set(db, profile)
+    monitored_ids = _monitored_ben_ids(db, profile)
+
+    def _in_scope(f) -> bool:
+        if current_bens and _normalize_frn(getattr(f, "source_ben", None)) in current_bens:
+            return True
+        if getattr(f, "applicant_ben_id", None) and f.applicant_ben_id in monitored_ids:
+            return True
+        return False
+
+    scoped = [f for f in frns if _in_scope(f)]
+    if not scoped:
+        # Fallback: nothing stamped/linked yet -> show everything (never empty).
+        scoped = frns
+
+    # Collapse duplicates by normalized FRN, keeping the richest row.
+    best: Dict[str, Any] = {}
+    for f in scoped:
+        key = _normalize_frn(f.frn) or f"__id_{f.id}"
+        cur = best.get(key)
+        if cur is None:
+            best[key] = f
+            continue
+        f_rank = (_frn_populated_score(f), f.fetched_at or datetime.min)
+        cur_rank = (_frn_populated_score(cur), cur.fetched_at or datetime.min)
+        if f_rank > cur_rank:
+            best[key] = f
+
+    # Preserve the incoming ordering (already sorted by funding_year desc).
+    seen = set()
+    result = []
+    for f in scoped:
+        key = _normalize_frn(f.frn) or f"__id_{f.id}"
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(best[key])
+    return result
+
+
 def _enrich_frns_with_live_substatus(db: Session, profile, frn_dicts: list) -> None:
     """
     Bring the applicant FRN table to consultant parity. The applicant's stored
@@ -671,6 +804,10 @@ async def get_dashboard(
     frns = db.query(ApplicantFRN).filter(
         ApplicantFRN.applicant_profile_id == profile.id
     ).order_by(ApplicantFRN.funding_year.desc(), ApplicantFRN.status_type).all()
+
+    # Scope to the profile's current BEN(s) + collapse duplicate FRNs (non-destructive).
+    # Done before the summary so the dashboard counts agree with the FRN table.
+    frns = _scope_and_dedupe_frns(db, profile, frns)
     
     # Get appeals
     appeals = db.query(ApplicantAutoAppeal).filter(
@@ -742,6 +879,9 @@ async def get_frns(
         query = query.filter(ApplicantFRN.status_type == status_type)
     
     frns = query.order_by(ApplicantFRN.funding_year.desc()).all()
+
+    # Scope to the profile's current BEN(s) + collapse duplicate FRNs (non-destructive).
+    frns = _scope_and_dedupe_frns(db, profile, frns)
     
     frn_dicts = [f.to_dict() for f in frns]
     _enrich_frns_with_live_substatus(db, profile, frn_dicts)
@@ -1431,7 +1571,7 @@ def sync_individual_ben_data(ben_id: int):
             total_denied = 0
             
             for app in applications.get('applications', []):
-                frn = app.get('frn')
+                frn = _normalize_frn(app.get('frn'))
                 if not frn:
                     continue
                 
@@ -1470,6 +1610,7 @@ def sync_individual_ben_data(ben_id: int):
                     'amount_funded': app.get('amount_funded'),
                     'is_denied': is_denied,
                     'denial_reason': app.get('fcdl_comment') if is_denied else None,
+                    'source_ben': ben.ben,
                     'raw_data': app,
                 }
                 
