@@ -13,6 +13,11 @@ Disallow: /vendor
 Disallow: /applicant
 Disallow: /onboarding
 Disallow: /settings/
+Disallow: /portal
+Disallow: /super
+Disallow: /accept-seat
+Disallow: /compliance
+Disallow: /subscribe
 Disallow: /api/
 
 # Sitemap
