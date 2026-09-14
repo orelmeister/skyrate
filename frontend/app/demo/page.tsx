@@ -115,6 +115,15 @@ export default function DemoPage() {
           >
             Start your free trial →
           </Link>
+          <p className="mt-4 text-sm text-slate-300">
+            Prefer a live walkthrough?{" "}
+            <Link
+              href="/book-demo?source=demo-page"
+              className="font-semibold text-white underline hover:text-purple-200"
+            >
+              Book a demo →
+            </Link>
+          </p>
         </section>
       </main>
     </div>

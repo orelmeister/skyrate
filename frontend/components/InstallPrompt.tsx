@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { Download, Smartphone, Monitor, X, Share, Plus, MoreVertical, ChevronRight, Globe, ExternalLink } from 'lucide-react';
 import { detectPlatform, detectBrowser, detectOS, isRunningAsPWA, type BrowserType, type OSType } from '@/lib/notifications';
 
@@ -10,6 +11,9 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 export default function InstallPrompt() {
+  const pathname = usePathname();
+  // Never show the install nudge on lead-capture / conversion pages.
+  const suppressed = pathname === '/book-demo' || pathname === '/sign-up';
   const [showPrompt, setShowPrompt] = useState(false);
   const [platform, setPlatform] = useState<'ios' | 'android' | 'desktop' | 'unknown'>('unknown');
   const [browser, setBrowser] = useState<BrowserType>('unknown');
@@ -18,6 +22,7 @@ export default function InstallPrompt() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
+    if (suppressed) return;
     // Don't show if already installed as PWA
     if (isRunningAsPWA()) return;
 
@@ -57,7 +62,7 @@ export default function InstallPrompt() {
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
     };
-  }, []);
+  }, [suppressed]);
 
   const handleInstall = async () => {
     if (deferredPrompt) {
@@ -76,7 +81,7 @@ export default function InstallPrompt() {
     localStorage.setItem('skyrate-install-dismissed', Date.now().toString());
   };
 
-  if (!showPrompt || dismissed) return null;
+  if (!showPrompt || dismissed || suppressed) return null;
 
   // Determine what content to show based on platform + browser combination
   const renderInstructions = () => {

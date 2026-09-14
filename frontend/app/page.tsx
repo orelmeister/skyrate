@@ -62,6 +62,7 @@ export default function HomePage() {
             <Link href="/features/applicants" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">For Applicants</Link>
             <Link href="/pricing" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">Pricing</Link>
             <Link href="/blog" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">Blog</Link>
+            <Link href="/book-demo" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">Book a Demo</Link>
           </nav>
 
           <div className="flex items-center gap-3">
@@ -97,6 +98,7 @@ export default function HomePage() {
             <Link href="/features/applicants" className="text-slate-400 hover:text-white font-medium py-1">For Applicants</Link>
             <Link href="/pricing" className="text-slate-400 hover:text-white font-medium py-1">Pricing</Link>
             <Link href="/blog" className="text-slate-400 hover:text-white font-medium py-1">Blog</Link>
+            <Link href="/book-demo" className="text-slate-400 hover:text-white font-medium py-1">Book a Demo</Link>
             <Link href="/sign-in" className="text-indigo-400 font-medium py-1 sm:hidden">Sign In</Link>
           </nav>
         </div>
@@ -1100,6 +1102,7 @@ export default function HomePage() {
                 <li><Link href="/contact" className="hover:text-white transition">Contact</Link></li>
                 <li><Link href="/case-studies" className="hover:text-white transition">Case Studies</Link></li>
                 <li><Link href="/demo" className="hover:text-white transition">Live Demo</Link></li>
+                <li><Link href="/book-demo" className="hover:text-white transition">Book a Demo</Link></li>
                 <li>
                   <a
                     href="https://erateapp.com"

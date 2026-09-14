@@ -4,21 +4,21 @@ import { Check, ArrowRight, Bell, Activity, Clock, Mail, BarChart3, Shield, Data
 import FrnLookupClient from "@/app/tools/frn-tracker/FrnLookupClient";
 
 export const metadata: Metadata = {
-  title: "Free FRN Status Lookup + Automated E-Rate Monitoring | SkyRate",
-  description: "Check any E-Rate FRN's status free — no signup. Instant commitment, disbursement and denial data from USAC, plus automated alerts when any FRN in your portfolio changes. Updated September 2026.",
+  title: "Automated FRN Monitoring & Real-Time E-Rate Alerts | SkyRate",
+  description: "Automated monitoring for every FRN in your E-Rate portfolio — real-time alerts on approvals, denials, disbursements and PIA activity, pulled straight from USAC. Updated September 2026.",
   robots: { index: true, follow: true },
   alternates: { canonical: "https://skyrate.ai/features/frn-monitoring" },
   openGraph: {
-    title: "Free FRN Status Lookup + Automated E-Rate Monitoring | SkyRate",
-    description: "Check any E-Rate FRN's status free — no signup. Instant commitment, disbursement and denial data from USAC, plus automated alerts when any FRN in your portfolio changes. Updated September 2026.",
+    title: "Automated FRN Monitoring & Real-Time E-Rate Alerts | SkyRate",
+    description: "Automated monitoring for every FRN in your E-Rate portfolio — real-time alerts on approvals, denials, disbursements and PIA activity, pulled straight from USAC. Updated September 2026.",
     url: "https://skyrate.ai/features/frn-monitoring",
     siteName: "SkyRate AI",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Free FRN Status Lookup + Automated E-Rate Monitoring | SkyRate",
-    description: "Check any E-Rate FRN's status free — no signup. Instant commitment, disbursement and denial data from USAC, plus automated alerts when any FRN in your portfolio changes. Updated September 2026.",
+    title: "Automated FRN Monitoring & Real-Time E-Rate Alerts | SkyRate",
+    description: "Automated monitoring for every FRN in your E-Rate portfolio — real-time alerts on approvals, denials, disbursements and PIA activity, pulled straight from USAC. Updated September 2026.",
   },
 };
 

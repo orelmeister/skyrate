@@ -378,7 +378,7 @@ export default function PricingPage() {
                 Start free trial
               </Link>
               <Link
-                href="/demo?source=pricing-bottom-cta"
+                href="/book-demo?source=pricing-bottom-cta"
                 className="w-full sm:w-auto bg-white/10 hover:bg-white/20 border border-white/30 px-6 sm:px-8 py-3 sm:py-4 rounded-lg font-semibold transition text-sm sm:text-base"
               >
                 Book a demo
@@ -401,7 +401,7 @@ export default function PricingPage() {
               <ul className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
                 <li><Link href="/features" className="hover:text-white transition">Features</Link></li>
                 <li><Link href="/pricing" className="hover:text-white transition">Pricing</Link></li>
-                <li><Link href="/demo" className="hover:text-white transition">Book a demo</Link></li>
+                <li><Link href="/book-demo?source=pricing-footer" className="hover:text-white transition">Book a demo</Link></li>
                 <li><Link href="/sign-up" className="hover:text-white transition">Start free</Link></li>
               </ul>
             </div>

@@ -292,7 +292,7 @@ export default function PricingClient() {
             <p className="text-sm text-slate-500 mt-1">Volume pricing, multi-seat, dedicated CSM</p>
           </div>
           <Link
-            href={handleTierCta("enterprise", "/demo?source=pricing-enterprise")}
+            href={handleTierCta("enterprise", "/book-demo?source=pricing-enterprise")}
             onClick={() => trackEvent("pricing_demo_click", { source: "enterprise_tier", audience })}
             className="block w-full text-center py-3 px-6 rounded-xl font-semibold transition bg-slate-900 text-white hover:bg-slate-800 mb-6"
           >

@@ -25,9 +25,13 @@ export default function BookDemoPage() {
       setError("Please enter your name and email.");
       return;
     }
+    const source =
+      (typeof window !== "undefined" &&
+        new URLSearchParams(window.location.search).get("source")) ||
+      "book-demo";
     setSubmitting(true);
     try {
-      trackEvent("demo_request_submit", { role });
+      trackEvent("demo_form_submit", { role, source });
       const res = await fetch("/api/v1/leads/demo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -45,10 +49,13 @@ export default function BookDemoPage() {
         const data = await res.json().catch(() => null);
         if (data && data.calendar_url) calendarUrl = data.calendar_url;
       }
+      // Fire the completion event right before we hand off to the calendar.
+      trackEvent("demo_booked", { role, source });
       // Redirect to the calendar to finish self-scheduling.
       window.location.href = calendarUrl;
     } catch {
       // Never trap the user — send them to the calendar regardless.
+      trackEvent("demo_booked", { role, source });
       window.location.href = FALLBACK_CALENDAR;
     }
   }
@@ -173,6 +180,50 @@ export default function BookDemoPage() {
               No spam. We&apos;ll only use this to prepare for your demo.
             </p>
           </form>
+
+          {/* Why book a demo — benefits, social proof, phone */}
+          <div className="mt-8 space-y-6">
+            <ul className="space-y-3">
+              {[
+                "See your real E-Rate data live — we load your actual USAC portfolio, not a canned demo.",
+                "FRN, Form 470 & 471 tracking for your whole portfolio in one dashboard.",
+                "20 minutes, no commitment, no credit card.",
+              ].map((benefit) => (
+                <li key={benefit} className="flex items-start gap-3 text-sm text-slate-300">
+                  <svg
+                    className="mt-0.5 h-5 w-5 flex-shrink-0 text-purple-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>{benefit}</span>
+                </li>
+              ))}
+            </ul>
+
+            <figure className="bg-white/5 border border-white/10 rounded-2xl p-5">
+              <blockquote className="text-sm text-slate-200 leading-relaxed">
+                &ldquo;Before SkyRate, our district spent 40+ hours per funding year on E-Rate
+                paperwork. Now our consultants handle 3x the clients with the same team.&rdquo;
+              </blockquote>
+              <figcaption className="mt-3 text-xs text-slate-400">
+                <span className="font-semibold text-slate-200">E-Rate Consultant</span> · Mid-Atlantic Region
+              </figcaption>
+            </figure>
+
+            <p className="text-center text-sm text-slate-400">
+              Prefer to talk now? Call{" "}
+              <a
+                href="tel:855-765-7291"
+                className="font-semibold text-purple-300 hover:text-purple-200"
+              >
+                (855) 765-7291
+              </a>
+            </p>
+          </div>
         </div>
       </main>
     </div>

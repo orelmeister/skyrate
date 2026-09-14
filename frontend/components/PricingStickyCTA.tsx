@@ -8,7 +8,7 @@ export default function PricingStickyCTA() {
     <div className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur px-4 py-3 shadow-2xl">
       <div className="flex items-center gap-2">
         <Link
-          href="/demo?source=pricing-sticky"
+          href="/book-demo?source=pricing-sticky"
           onClick={() => trackEvent("pricing_demo_click", { source: "sticky_cta" })}
           className="flex-1 text-center py-2.5 rounded-lg font-semibold text-sm border border-slate-300 text-slate-800 hover:bg-slate-50"
         >

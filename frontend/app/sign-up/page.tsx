@@ -213,6 +213,13 @@ function SignUpPage() {
               /* no-op */
             }
             setUserProperties({ user_role: role, auth_provider: "google" });
+            trackEvent("sign_up_complete", {
+              method: "google",
+              source:
+                typeof window !== "undefined"
+                  ? new URLSearchParams(window.location.search).get("source") || undefined
+                  : undefined,
+            });
             trackEvent("signup_google_success", { role });
             router.push("/onboarding");
           } else {
@@ -330,6 +337,10 @@ function SignUpPage() {
       setUserProperties({
         user_role: formData.role,
         has_identifier: hasIdentifier,
+      });
+      trackEvent("sign_up_complete", {
+        method: "email",
+        source: searchParams.get("source") || undefined,
       });
       trackEvent("signup_complete", {
         role: formData.role,

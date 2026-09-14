@@ -49,6 +49,9 @@ export type SkyRateEvent =
   | "winback_email_clicked"
   | "audience_chip_click"
   | "demo_viewed"
+  | "demo_form_submit"
+  | "demo_booked"
+  | "sign_up_complete"
   | "case_study_viewed";
 
 export function trackEvent(
