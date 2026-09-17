@@ -28,6 +28,10 @@ router = APIRouter(prefix="/subscriptions", tags=["Subscriptions"])
 # Trial period in days
 TRIAL_PERIOD_DAYS = 14
 
+# Bounded lifetime for a granted free subscription (days). Applied to NEW grants
+# only; this change never backfills/alters existing subscription rows in the DB.
+FREE_GRANT_DURATION_DAYS = 365
+
 # Stripe import (optional - won't fail if not installed)
 try:
     import stripe
@@ -101,7 +105,7 @@ def grant_free_subscription(user: User, db: Session, reason: str = "coupon") -> 
         subscription.plan = SubscriptionPlan.YEARLY.value  # Give yearly plan for free users
         subscription.start_date = datetime.utcnow()
         subscription.trial_end = None  # No trial needed
-        subscription.end_date = datetime.utcnow() + timedelta(days=365 * 100)  # 100 years = forever
+        subscription.end_date = datetime.utcnow() + timedelta(days=FREE_GRANT_DURATION_DAYS)
         # Mark as "free" account with special IDs
         subscription.stripe_customer_id = f"FREE_{reason.upper()}_{user.id}"
         subscription.stripe_subscription_id = f"FREE_{reason.upper()}_{user.id}"
@@ -116,7 +120,7 @@ def grant_free_subscription(user: User, db: Session, reason: str = "coupon") -> 
             stripe_customer_id=f"FREE_{reason.upper()}_{user.id}",
             stripe_subscription_id=f"FREE_{reason.upper()}_{user.id}",
             start_date=datetime.utcnow(),
-            end_date=datetime.utcnow() + timedelta(days=365 * 100),  # 100 years = forever
+            end_date=datetime.utcnow() + timedelta(days=FREE_GRANT_DURATION_DAYS),
             trial_end=None
         )
         db.add(subscription)
@@ -145,18 +149,16 @@ async def get_payment_status(
     EXCEPTION: Test accounts automatically get free access.
     """
     billing_user = resolve_billing_user(current_user, db)
-    # Check if this is a test account - auto-grant free subscription
+    # Test accounts are entitled to free access. Report that WITHOUT mutating the
+    # DB here - a GET must be side-effect free. Any actual grant happens on an
+    # explicit POST (e.g. /redeem-coupon), never on this status read.
     if is_test_account(billing_user.email):
         subscription = billing_user.subscription
-        # If no subscription or not active, grant free access
-        if not subscription or not subscription.is_active:
-            subscription = grant_free_subscription(billing_user, db, reason="test_account")
-        
         return PaymentStatusResponse(
             requires_payment_setup=False,
-            subscription_status=subscription.status,
+            subscription_status=(subscription.status if subscription else None),
             trial_ends_at=None,
-            plan=subscription.plan
+            plan=(subscription.plan if subscription else None),
         )
     
     subscription = billing_user.subscription

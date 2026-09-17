@@ -2057,7 +2057,6 @@ function ChatTab() {
                 ) : (
                   (thread?.messages || []).map((m: any) => {
                     const isAdmin = m.sender_type === "admin";
-                    const isHtml = typeof m.message === "string" && /<[a-z][\s\S]*>/i.test(m.message);
                     return (
                       <div key={m.id} className={`flex ${isAdmin ? "justify-end" : "justify-start"}`}>
                         <div className={`max-w-[75%] rounded-2xl px-4 py-2 ${isAdmin ? "bg-purple-600 text-white" : "bg-white border text-slate-800"}`}>
@@ -2065,11 +2064,7 @@ function ChatTab() {
                             {m.sender_name || (isAdmin ? "Admin" : "User")} · {relativeTime(m.created_at)}
                           </p>
                           {m.message && (
-                            isHtml ? (
-                              <div className="text-sm prose-sm" dangerouslySetInnerHTML={{ __html: m.message }} />
-                            ) : (
-                              <p className="text-sm whitespace-pre-wrap">{m.message}</p>
-                            )
+                            <p className="text-sm whitespace-pre-wrap">{m.message}</p>
                           )}
                           {m.has_attachment && <TicketAttachment ticketId={selectedId} m={m} />}
                         </div>
@@ -2231,9 +2226,7 @@ function TicketsTab({
                   <span className="text-xs font-medium text-slate-700">{m.sender_name}{m.sender_type === "admin" ? " (Admin)" : ""}</span>
                   <span className="text-xs text-slate-400">{new Date(m.created_at).toLocaleString()}</span>
                 </div>
-                {/<[a-z][\s\S]*>/i.test(m.message) ? (
-                  <div className="text-sm text-slate-800" dangerouslySetInnerHTML={{ __html: m.message }} />
-                ) : m.message ? (
+                {m.message ? (
                   <p className="text-sm text-slate-800 whitespace-pre-wrap">{m.message}</p>
                 ) : null}
                 {m.has_attachment && <TicketAttachment ticketId={selectedTicket.id} m={m} />}

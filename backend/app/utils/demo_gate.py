@@ -10,14 +10,15 @@ def is_demo_user(user: User) -> bool:
     Returns True for:
       - admin / super roles
       - emails in TEST_ACCOUNT_EMAILS list
-      - emails matching TEST_EMAIL_PATTERNS
+      - emails in TEST_EMAIL_ALLOWLIST (exact match)
     """
     settings = get_settings()
     if user.role in ("super", "admin"):
         return True
     if user.email.lower() in [e.lower() for e in settings.TEST_ACCOUNT_EMAILS]:
         return True
-    for pattern in settings.TEST_EMAIL_PATTERNS:
-        if pattern.lower() in user.email.lower():
+    email_lower = user.email.lower()
+    for allowed in settings.TEST_EMAIL_ALLOWLIST:
+        if email_lower == allowed.strip().lower():
             return True
     return False

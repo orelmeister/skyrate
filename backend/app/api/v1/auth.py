@@ -628,7 +628,7 @@ async def register(
 
 
 @router.post("/login", response_model=TokenResponse)
-# @limiter.limit("5/minute")  # TODO: Fix limiter initialization - using app's limiter
+@limiter.limit("5/minute")
 async def login(
     request: Request,
     data: UserLogin,

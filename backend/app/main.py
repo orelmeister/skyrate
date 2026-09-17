@@ -35,9 +35,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Rate limiter (disabled for debugging)
-# limiter = Limiter(key_func=get_remote_address)
-limiter = None  # TODO: Fix limiter - causes app to shutdown on first request
+# Rate limiter: reuse the auth router's Limiter instance so that app.state.limiter
+# is the SAME object enforcing the @limiter.limit(...) decorators. Storage is
+# in-memory (slowapi default) - the exact configuration already proven in prod on
+# the auth validate/register routes; it never touches the health-check path, so it
+# cannot reproduce the earlier startup/health-check failure that had this disabled.
+# NOTE: in-memory counts are PER-PROCESS. The backend runs multiple uvicorn workers,
+# so an effective limit is (configured limit x worker count). To enforce a single
+# shared limit across workers/instances, provision a REACHABLE Redis and build the
+# Limiter with storage_uri=settings.REDIS_URL (do NOT point at the localhost default
+# in prod - an unreachable store is what crashed the app the first time).
+limiter = auth.limiter
 
 
 # ==================== SECURITY MIDDLEWARE ====================
@@ -176,138 +184,111 @@ def seed_demo_accounts():
     
     db = SessionLocal()
 
-    # ── Seed admin account ──────────────────────────────────────────────────
+    # ── Seed admin account (only when ADMIN_PASSWORD is explicitly configured) ─
+    #    Never overwrites an existing account's password or role.
     try:
         admin_email = "admin@skyrate.ai"
-        admin_existing = db.query(User).filter(User.email == admin_email).first()
-        admin_password = os.environ.get("ADMIN_PASSWORD", "SkyRateAdmin2024!")
-        admin_hashed = bcrypt.hashpw(admin_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        if not admin_existing:
-            admin_user = User(
-                email=admin_email,
-                password_hash=admin_hashed,
-                role=UserRole.ADMIN.value,
-                first_name="David",
-                last_name="Admin",
-                company_name="SkyRate AI",
-                is_active=True,
-                is_verified=True,
-                email_verified=True,
-            )
-            db.add(admin_user)
-            db.flush()
-            logger.info(f"Created super admin account: {admin_email}")
+        admin_password = os.environ.get("ADMIN_PASSWORD")
+        if not admin_password:
+            logger.info("[INFO] skipping admin seed, no password configured")
         else:
-            admin_existing.password_hash = admin_hashed
-            admin_existing.role = UserRole.ADMIN.value
-            admin_existing.is_active = True
-            admin_existing.is_verified = True
-            admin_existing.email_verified = True
-            logger.info(f"Updated super admin account: {admin_email}")
-        db.commit()
-        logger.info("Admin account seeded")
+            admin_existing = db.query(User).filter(User.email == admin_email).first()
+            if not admin_existing:
+                admin_hashed = bcrypt.hashpw(admin_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                admin_user = User(
+                    email=admin_email,
+                    password_hash=admin_hashed,
+                    role=UserRole.ADMIN.value,
+                    first_name="David",
+                    last_name="Admin",
+                    company_name="SkyRate AI",
+                    is_active=True,
+                    is_verified=True,
+                    email_verified=True,
+                )
+                db.add(admin_user)
+                db.flush()
+                db.commit()
+                logger.info(f"Created admin account: {admin_email}")
+            else:
+                # Never overwrite an existing account's password or role.
+                logger.info(f"Admin account already exists, leaving untouched: {admin_email}")
     except Exception as e:
         logger.error(f"Error seeding admin account: {e}")
         db.rollback()
 
-    # ── Seed super account (consultant + vendor + applicant privileges) ─────
+    # ── Seed super account - gated OFF by default. Requires BOTH an explicit
+    #    SEED_SUPER_ACCOUNT=1 flag AND a SUPER_PASSWORD env var. Never overwrites
+    #    an existing account's password or role.
     try:
         super_email = "super@skyrate.ai"
-        super_existing = db.query(User).filter(User.email == super_email).first()
-        super_password = "super@12345"
-        super_hashed = bcrypt.hashpw(super_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        if not super_existing:
-            super_user = User(
-                email=super_email,
-                password_hash=super_hashed,
-                role=UserRole.SUPER.value,
-                first_name="Super",
-                last_name="User",
-                company_name="SkyRate AI",
-                is_active=True,
-                is_verified=True,
-                email_verified=True,
-            )
-            db.add(super_user)
-            db.flush()
-            # Create both consultant and vendor profiles for super user
-            super_cp = ConsultantProfile(
-                user_id=super_user.id,
-                company_name="SkyRate AI (Super)",
-                contact_name="Super User",
-            )
-            db.add(super_cp)
-            db.flush()
-
-            # Add sample schools for super user's consultant profile (for PORTFOLIO FRN watches)
-            sample_bens = [
-                ("16056315", "San Francisco Unified School District", "CA", "San Francisco"),
-                ("16042282", "Los Angeles Unified School District", "CA", "Los Angeles"),
-                ("16003245", "Chicago Public Schools", "IL", "Chicago"),
-            ]
-            for ben, name, state, city in sample_bens:
-                school = ConsultantSchool(
-                    consultant_profile_id=super_cp.id,
-                    ben=ben,
-                    school_name=name,
-                    state=state,
-                    city=city,
-                    entity_type="School District",
-                    status="Unknown",
-                    status_color="gray",
-                )
-                db.add(school)
-
-            super_vp = VendorProfile(
-                user_id=super_user.id,
-                spin="143032945",  # CDW-G SPIN for testing
-                company_name="SkyRate AI (Super)",
-                contact_name="Super User",
-            )
-            db.add(super_vp)
-            db.flush()
-
-            super_ap = ApplicantProfile(
-                user_id=super_user.id,
-                ben="16056315",  # Same BEN as consultant school - San Francisco USD
-                sync_status="pending",
-                is_paid=True,
-            )
-            db.add(super_ap)
-            db.flush()
-
-            super_ap_ben = ApplicantBEN(
-                applicant_profile_id=super_ap.id,
-                ben="16056315",
-                is_primary=True,
-                is_paid=True,
-                subscription_status="active",
-                sync_status="pending",
-            )
-            db.add(super_ap_ben)
-            db.flush()
-            _profiles_to_sync.append(super_ap.id)
-            logger.info(f"Created super account: {super_email} with consultant profile (3 schools) + vendor profile (SPIN 143032945) + applicant profile (BEN 16056315)")
+        seed_super = os.environ.get("SEED_SUPER_ACCOUNT", "") == "1"
+        super_password = os.environ.get("SUPER_PASSWORD")
+        if not seed_super or not super_password:
+            logger.info("[INFO] skipping super seed, no password configured")
         else:
-            super_existing.password_hash = super_hashed
-            super_existing.role = UserRole.SUPER.value
-            super_existing.is_active = True
-            super_existing.is_verified = True
-            super_existing.email_verified = True
-            # Ensure both profiles exist
-            if not db.query(ConsultantProfile).filter(ConsultantProfile.user_id == super_existing.id).first():
-                db.add(ConsultantProfile(user_id=super_existing.id, company_name="SkyRate AI (Super)", contact_name="Super User"))
-            if not db.query(VendorProfile).filter(VendorProfile.user_id == super_existing.id).first():
-                db.add(VendorProfile(user_id=super_existing.id, company_name="SkyRate AI (Super)", contact_name="Super User"))
-            if not db.query(ApplicantProfile).filter(ApplicantProfile.user_id == super_existing.id).first():
+            super_existing = db.query(User).filter(User.email == super_email).first()
+            if not super_existing:
+                super_hashed = bcrypt.hashpw(super_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                super_user = User(
+                    email=super_email,
+                    password_hash=super_hashed,
+                    role=UserRole.SUPER.value,
+                    first_name="Super",
+                    last_name="User",
+                    company_name="SkyRate AI",
+                    is_active=True,
+                    is_verified=True,
+                    email_verified=True,
+                )
+                db.add(super_user)
+                db.flush()
+                # Create both consultant and vendor profiles for super user
+                super_cp = ConsultantProfile(
+                    user_id=super_user.id,
+                    company_name="SkyRate AI (Super)",
+                    contact_name="Super User",
+                )
+                db.add(super_cp)
+                db.flush()
+
+                # Add sample schools for super user's consultant profile (for PORTFOLIO FRN watches)
+                sample_bens = [
+                    ("16056315", "San Francisco Unified School District", "CA", "San Francisco"),
+                    ("16042282", "Los Angeles Unified School District", "CA", "Los Angeles"),
+                    ("16003245", "Chicago Public Schools", "IL", "Chicago"),
+                ]
+                for ben, name, state, city in sample_bens:
+                    school = ConsultantSchool(
+                        consultant_profile_id=super_cp.id,
+                        ben=ben,
+                        school_name=name,
+                        state=state,
+                        city=city,
+                        entity_type="School District",
+                        status="Unknown",
+                        status_color="gray",
+                    )
+                    db.add(school)
+
+                super_vp = VendorProfile(
+                    user_id=super_user.id,
+                    spin="143032945",  # CDW-G SPIN for testing
+                    company_name="SkyRate AI (Super)",
+                    contact_name="Super User",
+                )
+                db.add(super_vp)
+                db.flush()
+
                 super_ap = ApplicantProfile(
-                    user_id=super_existing.id,
-                    ben="16056315",
+                    user_id=super_user.id,
+                    ben="16056315",  # Same BEN as consultant school - San Francisco USD
                     sync_status="pending",
                     is_paid=True,
                 )
                 db.add(super_ap)
                 db.flush()
+
                 super_ap_ben = ApplicantBEN(
                     applicant_profile_id=super_ap.id,
                     ben="16056315",
@@ -319,10 +300,11 @@ def seed_demo_accounts():
                 db.add(super_ap_ben)
                 db.flush()
                 _profiles_to_sync.append(super_ap.id)
-                logger.info(f"Created applicant profile for super account with BEN 16056315")
-            logger.info(f"Updated super account: {super_email}")
-        db.commit()
-        logger.info("Super account seeded")
+                logger.info(f"Created super account: {super_email} with consultant profile (3 schools) + vendor profile (SPIN 143032945) + applicant profile (BEN 16056315)")
+                db.commit()
+            else:
+                # Never overwrite an existing account's password or role.
+                logger.info(f"Super account already exists, leaving untouched: {super_email}")
     except Exception as e:
         logger.error(f"Error seeding super account: {e}")
         db.rollback()
@@ -336,8 +318,8 @@ def seed_demo_accounts():
     for email, role, password in demo_accounts:
         try:
             existing = db.query(User).filter(User.email == email).first()
-            hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
             if not existing:
+                hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
                 user = User(
                     email=email,
                     password_hash=hashed,
@@ -350,13 +332,9 @@ def seed_demo_accounts():
                 db.flush()  # Get the user ID
                 logger.info(f"Created demo account: {email}")
             else:
-                # Update existing user's password hash to ensure login works
-                existing.password_hash = hashed
-                existing.is_active = True
-                existing.is_verified = True
-                existing.email_verified = True
+                # Never overwrite an existing account's password_hash or role.
                 user = existing
-                logger.info(f"Updated password for demo account: {email}")
+                logger.info(f"Demo account already exists, leaving credentials untouched: {email}")
 
             # Create vendor profile for test_vendor (whether new or existing user)
             if role == UserRole.VENDOR.value:
@@ -1192,9 +1170,13 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# Add rate limiter to app state
-# app.state.limiter = limiter
-# app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# Add rate limiter to app state and register the 429 handler so an exceeded limit
+# returns a clean JSON 429 (instead of an unhandled 500). Wiring app.state.limiter
+# is required by slowapi's _rate_limit_exceeded_handler, which injects rate-limit
+# headers via app.state.limiter. Only decorated routes are limited - the health
+# check path is untouched, so this cannot reproduce the earlier startup crash.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Add security headers middleware
 app.add_middleware(SecurityHeadersMiddleware)

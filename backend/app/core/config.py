@@ -182,8 +182,12 @@ class Settings(BaseSettings):
     APPLICANT_YEARLY_PRICE: int = 199900    # $1,999
     
     # Test/Demo Account Settings
-    # Emails containing these patterns get free access (case-insensitive)
-    TEST_EMAIL_PATTERNS: List[str] = ["test_", "test@", "demo@", "demo_"]
+    # EXACT-match allowlist of emails that get free access (case-insensitive).
+    # Sourced from env (JSON list); default empty so NO address gets free access
+    # unless explicitly configured. Replaces the old substring matching, which
+    # granted free access to ANY email containing "test_"/"demo@" - a privilege-
+    # escalation vector.
+    TEST_EMAIL_ALLOWLIST: List[str] = []
     # Specific test account emails (exact match, case-insensitive)
     TEST_ACCOUNT_EMAILS: List[str] = [
         "admin@skyrate.ai",
@@ -194,8 +198,9 @@ class Settings(BaseSettings):
         "test_entity@example.com",
         "demo@skyrate.ai"
     ]
-    # Coupon codes that bypass payment (case-insensitive)
-    FREE_ACCESS_COUPONS: List[str] = ["SKYRATEFREE", "BETATESTER", "DEMO2024", "INTERNAL"]
+    # Coupon codes that bypass payment (exact, case-insensitive). Sourced from
+    # env (JSON list); default empty. Do NOT hardcode live coupon codes here.
+    FREE_ACCESS_COUPONS: List[str] = []
     
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -233,9 +238,9 @@ def is_test_account(email: str) -> bool:
         if email_lower == test_email.lower():
             return True
     
-    # Check if email contains any test patterns
-    for pattern in settings.TEST_EMAIL_PATTERNS:
-        if pattern.lower() in email_lower:
+    # Check exact match against the configured test-email allowlist
+    for allowed in settings.TEST_EMAIL_ALLOWLIST:
+        if email_lower == allowed.strip().lower():
             return True
     
     return False

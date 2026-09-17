@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import datetime
+import html
 import logging
 
 from ...core.config import settings
@@ -139,12 +140,17 @@ async def create_ticket(
             "message": "Support ticket created successfully. We'll get back to you soon!"
         }
 
+    # Sanitize guest (unauthenticated) message on ingest so new rows are stored
+    # inert. Defense-in-depth: the admin UI now also renders ticket messages as
+    # plain text. Only untrusted guest content is HTML-escaped here.
+    safe_message = data.message if user else html.escape(data.message or "")
+
     ticket = SupportTicket(
         user_id=user.id if user else None,
         guest_name=data.guest_name if not user else None,
         guest_email=data.guest_email if not user else None,
         subject=data.subject,
-        message=data.message,
+        message=safe_message,
         category=data.category or TicketCategory.GENERAL.value,
         source=data.source or TicketSource.CHAT_WIDGET.value,
         status=TicketStatus.OPEN.value,
@@ -163,7 +169,7 @@ async def create_ticket(
             f"{user.first_name or ''} {user.last_name or ''}".strip()
             if user else data.guest_name or "Guest"
         ),
-        message=data.message,
+        message=safe_message,
     )
     db.add(initial_message)
     db.commit()
