@@ -86,5 +86,5 @@ def get_db() -> Generator[Session, None, None]:
 
 def init_db():
     """Initialize database tables"""
-    from ..models import user, subscription, consultant, vendor, application
+    from ..models import user, subscription, consultant, vendor, application, billing_invoice
     Base.metadata.create_all(bind=engine)

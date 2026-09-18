@@ -436,6 +436,18 @@ async def stripe_webhook(
     # Handle events
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
+
+        # Admin custom-invoice payments route to a dedicated, idempotent handler.
+        # (One Stripe webhook URL, so we branch here instead of a second endpoint.)
+        if (session.get("metadata") or {}).get("billing_invoice_id"):
+            try:
+                from .billing_invoices import handle_invoice_payment
+                handle_invoice_payment(session, db)
+            except Exception as _inv_err:
+                import logging as _logging
+                _logging.getLogger(__name__).error(f"[webhook] invoice handler error: {_inv_err}")
+            return {"received": True}
+
         user_id = session["metadata"].get("user_id")
         plan = session["metadata"].get("plan", "monthly")
         checkout_type = session["metadata"].get("type", "")

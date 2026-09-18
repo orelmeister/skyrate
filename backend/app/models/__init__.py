@@ -41,6 +41,12 @@ from .compliance_tracker import CompliancePlan, ComplianceTask, ComplianceTaskTe
 from .vendor_frn_note import VendorFrnNote
 from .vendor_470_digest import Vendor470DigestSubscription
 from .bid_copilot import VendorBidAnalysis, FccKbChunk, AppealPrecedent
+from .billing_invoice import (
+    BillingInvoice,
+    BillingInvoiceLine,
+    BillingInvoiceStatus,
+    BillingInvoiceInterval,
+)
 
 __all__ = [
     "User",
@@ -124,4 +130,9 @@ __all__ = [
     "VendorBidAnalysis",
     "FccKbChunk",
     "AppealPrecedent",
+    # Admin custom invoice / quote builder
+    "BillingInvoice",
+    "BillingInvoiceLine",
+    "BillingInvoiceStatus",
+    "BillingInvoiceInterval",
 ]

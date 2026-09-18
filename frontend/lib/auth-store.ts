@@ -90,6 +90,7 @@ export interface RegisterData {
   spin?: string; // For vendors
   ben?: string;  // For applicants
   promo_token?: string; // For promo invite registrations
+  invoice_token?: string; // For paid-invoice prospect signups (magic link after payment)
 }
 
 /**

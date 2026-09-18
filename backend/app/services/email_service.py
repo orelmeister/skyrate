@@ -9,6 +9,7 @@ from datetime import datetime
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
 
 from ..core.config import settings
 from ..models.alert import Alert, AlertType, AlertPriority
@@ -197,29 +198,49 @@ class EmailService:
         subject: str,
         html_content: str,
         text_content: str = None,
-        email_type: str = 'alert'
+        email_type: str = 'alert',
+        attachments: Optional[List[Dict[str, Any]]] = None,
     ) -> bool:
-        """Send an email using the appropriate sender alias"""
+        """Send an email using the appropriate sender alias.
+
+        `attachments` is an optional list of dicts, each:
+            {"filename": str, "content": bytes, "mimetype": "application/pdf"}
+        When present the message is built as multipart/mixed so files ride along
+        with the HTML/text body (used for emailing invoice PDFs).
+        """
         try:
             from_email, from_name = self.SENDER_MAP.get(
                 email_type, (self.from_email, self.from_name)
             )
-            
-            msg = MIMEMultipart('alternative')
+
+            # Body (text + HTML) always lives in a multipart/alternative part.
+            body = MIMEMultipart('alternative')
+            if text_content:
+                body.attach(MIMEText(text_content, 'plain'))
+            body.attach(MIMEText(html_content, 'html'))
+
+            if attachments:
+                # Wrap body + files in a multipart/mixed container.
+                msg = MIMEMultipart('mixed')
+                msg.attach(body)
+                for att in attachments:
+                    content = att.get('content')
+                    if content is None:
+                        continue
+                    filename = att.get('filename', 'attachment')
+                    mimetype = att.get('mimetype', 'application/octet-stream')
+                    _, _, subtype = mimetype.partition('/')
+                    part = MIMEApplication(content, _subtype=subtype or 'octet-stream')
+                    part.add_header('Content-Disposition', 'attachment', filename=filename)
+                    msg.attach(part)
+            else:
+                msg = body
+
             msg['Subject'] = subject
             msg['From'] = f"{from_name} <{self.smtp_user}>"
             msg['To'] = to_email
             msg['Reply-To'] = f"{from_name} <{from_email}>"
-            
-            # Plain text version
-            if text_content:
-                part1 = MIMEText(text_content, 'plain')
-                msg.attach(part1)
-            
-            # HTML version
-            part2 = MIMEText(html_content, 'html')
-            msg.attach(part2)
-            
+
             # Send
             if self.smtp_user:  # Only send if configured
                 with self._get_smtp_connection() as server:
@@ -1747,6 +1768,169 @@ https://skyrate.ai | support@skyrate.ai
             html_content=html_content,
             text_content=text_content,
             email_type='noreply',
+        )
+
+
+    def send_invoice_email(self, to_email: str, invoice: Dict[str, Any], pdf_bytes: bytes, pay_url: str) -> bool:
+        """Email a custom invoice with a prominent pay button and the PDF attached.
+
+        `invoice` is a plain dict (BillingInvoice.to_dict()) so this is safe to
+        call from a background task after the request DB session has closed.
+        """
+        def _money(cents):
+            sign = "-" if (cents or 0) < 0 else ""
+            return f"{sign}${abs(int(cents or 0)) / 100:,.2f}"
+
+        def _interval(v):
+            return {"one_time": "one-time", "month": "per month", "year": "per year"}.get(v, "one-time")
+
+        number = invoice.get("invoice_number", "")
+        customer = invoice.get("customer_name") or "there"
+        lines = invoice.get("lines", []) or []
+        subtotal = invoice.get("subtotal_cents", 0)
+        discount = invoice.get("discount_cents", 0)
+        total = invoice.get("total_cents", 0)
+
+        rows_html = ""
+        for ln in lines:
+            rows_html += f"""
+            <tr>
+              <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#1e293b;font-size:14px;">
+                {ln.get('description','')}
+                <div style="color:#94a3b8;font-size:12px;">{ln.get('quantity',1)} &times; {_money(ln.get('unit_amount_cents',0))} &middot; {_interval(ln.get('interval','one_time'))}</div>
+              </td>
+              <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#1e293b;font-size:14px;text-align:right;white-space:nowrap;">{_money(ln.get('amount_cents',0))}</td>
+            </tr>"""
+
+        discount_html = ""
+        if discount and discount > 0:
+            discount_html = f"""
+            <tr><td style="padding:6px 12px;color:#64748b;font-size:14px;text-align:right;">Discount</td>
+            <td style="padding:6px 12px;color:#16a34a;font-size:14px;text-align:right;white-space:nowrap;">{_money(-discount)}</td></tr>"""
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+          <div style="max-width:600px;margin:0 auto;padding:40px 20px;">
+            <div style="text-align:center;margin-bottom:28px;">
+              <span style="font-size:24px;font-weight:bold;color:#7c3aed;">SkyRate<span style="color:#1e293b;">.AI</span></span>
+            </div>
+            <div style="background:white;border-radius:16px;padding:32px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+              <h1 style="color:#1e293b;font-size:22px;margin:0 0 4px 0;">Invoice {number}</h1>
+              <p style="color:#64748b;font-size:15px;margin:0 0 24px 0;">Hi {customer}, your invoice from SkyRate AI is ready.</p>
+
+              <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">{rows_html}</table>
+              <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+                <tr><td style="padding:6px 12px;color:#64748b;font-size:14px;text-align:right;">Subtotal</td>
+                <td style="padding:6px 12px;color:#1e293b;font-size:14px;text-align:right;white-space:nowrap;">{_money(subtotal)}</td></tr>
+                {discount_html}
+                <tr><td style="padding:10px 12px;color:#1e293b;font-size:17px;font-weight:700;text-align:right;border-top:2px solid #1e293b;">Total Due</td>
+                <td style="padding:10px 12px;color:#1e293b;font-size:17px;font-weight:700;text-align:right;white-space:nowrap;border-top:2px solid #1e293b;">{_money(total)}</td></tr>
+              </table>
+
+              <div style="text-align:center;margin:24px 0;">
+                <a href="{pay_url}" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;padding:15px 36px;border-radius:10px;text-decoration:none;font-weight:600;font-size:16px;">
+                  View &amp; Pay Invoice &rarr;
+                </a>
+              </div>
+              <p style="color:#64748b;font-size:13px;text-align:center;margin:0 0 8px 0;">
+                We accept <strong>Credit Card</strong> and <strong>ACH bank transfer</strong> - choose your method at checkout.
+              </p>
+              <p style="color:#94a3b8;font-size:12px;text-align:center;margin:0;">Your invoice PDF is attached to this email.</p>
+            </div>
+            <div style="text-align:center;margin-top:16px;padding:16px;">
+              <p style="color:#94a3b8;font-size:12px;margin:0;">
+                SkyRate LLC &middot; 30 N Gould St Ste N, Sheridan, WY 82801 &middot; (855) 765-7291<br>
+                <a href="https://skyrate.ai" style="color:#7c3aed;">skyrate.ai</a> &middot;
+                <a href="mailto:billing@skyrate.ai" style="color:#7c3aed;">billing@skyrate.ai</a>
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
+        """
+
+        text_content = (
+            f"Invoice {number} from SkyRate AI\n\n"
+            f"Hi {customer}, your invoice is ready. Total Due: {_money(total)}.\n\n"
+            f"View & pay online (Credit Card or ACH bank transfer):\n{pay_url}\n\n"
+            f"Your invoice PDF is attached.\n\n"
+            f"-- SkyRate LLC | 30 N Gould St Ste N, Sheridan, WY 82801 | (855) 765-7291"
+        )
+
+        attachments = None
+        if pdf_bytes:
+            attachments = [{
+                "filename": f"Invoice-{number}.pdf",
+                "content": pdf_bytes,
+                "mimetype": "application/pdf",
+            }]
+
+        return self.send_email(
+            to_email=to_email,
+            subject=f"Your SkyRate AI Invoice {number} - {_money(total)} due",
+            html_content=html_content,
+            text_content=text_content,
+            email_type='billing',
+            attachments=attachments,
+        )
+
+
+    def send_invoice_signup_link_email(self, to_email: str, signup_url: str, invoice: Dict[str, Any]) -> bool:
+        """Prospect magic link: sent AFTER a no-account customer pays their invoice.
+        Lets them finish creating their account with the subscription already active."""
+        number = invoice.get("invoice_number", "")
+        customer = invoice.get("customer_name") or "there"
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+          <div style="max-width:600px;margin:0 auto;padding:40px 20px;">
+            <div style="text-align:center;margin-bottom:28px;">
+              <span style="font-size:24px;font-weight:bold;color:#7c3aed;">SkyRate<span style="color:#1e293b;">.AI</span></span>
+            </div>
+            <div style="background:white;border-radius:16px;padding:32px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+              <h1 style="color:#1e293b;font-size:22px;margin:0 0 8px 0;">Payment received - welcome aboard!</h1>
+              <p style="color:#64748b;font-size:15px;margin:0 0 20px 0;">
+                Hi {customer}, thank you for your payment on invoice {number}. Your SkyRate AI
+                subscription is <strong>paid and active</strong>. One last step: finish setting up
+                your account so you can log in.
+              </p>
+              <div style="text-align:center;margin:24px 0;">
+                <a href="{signup_url}" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;padding:15px 36px;border-radius:10px;text-decoration:none;font-weight:600;font-size:16px;">
+                  Finish Creating My Account &rarr;
+                </a>
+              </div>
+              <p style="color:#94a3b8;font-size:12px;text-align:center;margin:0;">
+                This secure link expires in 72 hours. You will not be asked to pay again.
+              </p>
+            </div>
+            <div style="text-align:center;margin-top:16px;padding:16px;">
+              <p style="color:#94a3b8;font-size:12px;margin:0;">
+                SkyRate LLC &middot; <a href="https://skyrate.ai" style="color:#7c3aed;">skyrate.ai</a> &middot;
+                <a href="mailto:billing@skyrate.ai" style="color:#7c3aed;">billing@skyrate.ai</a>
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
+        """
+
+        text_content = (
+            f"Payment received - welcome to SkyRate AI!\n\n"
+            f"Hi {customer}, thank you for paying invoice {number}. Your subscription is paid and active.\n\n"
+            f"Finish creating your account (secure link, expires in 72 hours; no second payment):\n{signup_url}\n\n"
+            f"-- SkyRate LLC | skyrate.ai"
+        )
+
+        return self.send_email(
+            to_email=to_email,
+            subject="Payment received - finish setting up your SkyRate AI account",
+            html_content=html_content,
+            text_content=text_content,
+            email_type='welcome',
         )
 
 

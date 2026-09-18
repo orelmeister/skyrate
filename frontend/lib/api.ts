@@ -4420,6 +4420,83 @@ class ApiClient {
     return this.request(`/api/v1/auth/validate-promo/${token}`);
   }
 
+  // ==================== Admin Custom Invoices ====================
+  async listInvoices(params?: { status?: string; email?: string; page?: number; per_page?: number }): Promise<ApiResponse<any>> {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status_filter', params.status);
+    if (params?.email) qs.set('email', params.email);
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.per_page) qs.set('per_page', String(params.per_page));
+    const q = qs.toString();
+    return this.request(`/api/v1/admin/invoices${q ? `?${q}` : ''}`);
+  }
+
+  async getInvoice(id: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/invoices/${id}`);
+  }
+
+  async createInvoice(payload: any): Promise<ApiResponse<any>> {
+    return this.request('/api/v1/admin/invoices', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
+  async updateInvoice(id: number, payload: any): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/invoices/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+  }
+
+  async sendInvoice(id: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/invoices/${id}/send`, { method: 'POST' });
+  }
+
+  async voidInvoice(id: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/invoices/${id}/void`, { method: 'POST' });
+  }
+
+  /**
+   * Fetch the admin invoice PDF as an object URL (authed download). Caller must
+   * URL.revokeObjectURL() when done.
+   */
+  async getInvoicePdfUrl(id: number): Promise<string | null> {
+    const token = this.getAccessToken();
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/admin/invoices/${id}/pdf`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    } catch {
+      return null;
+    }
+  }
+
+  // Public token-gated invoice pay endpoints (NO auth required)
+  async getPublicInvoice(token: string): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/invoices/pay/${token}`);
+  }
+
+  async createInvoiceCheckout(token: string): Promise<ApiResponse<{ checkout_url: string }>> {
+    return this.request(`/api/v1/invoices/pay/${token}/checkout`, { method: 'POST' });
+  }
+
+  async validateInvoiceToken(token: string): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/auth/validate-invoice-token/${token}`);
+  }
+
+  /**
+   * Fetch the PUBLIC invoice PDF (no auth) as an object URL. Caller must
+   * URL.revokeObjectURL() when done.
+   */
+  async getPublicInvoicePdfUrl(token: string): Promise<string | null> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/invoices/pay/${token}/pdf`);
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * Send email to a specific user (admin)
    */

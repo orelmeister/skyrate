@@ -83,6 +83,10 @@ function SignUpPage() {
   const [promoData, setPromoData] = useState<{ email: string; role: string; trial_days: number } | null>(null);
   const [promoLoading, setPromoLoading] = useState(false);
   const [promoError, setPromoError] = useState("");
+  const [invoiceToken, setInvoiceToken] = useState<string | null>(null);
+  const [invoiceData, setInvoiceData] = useState<{ email: string; role: string; invoice_number: string; company_name?: string } | null>(null);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [invoiceError, setInvoiceError] = useState("");
 
   const [formData, setFormData] = useState({
     email: "",
@@ -145,6 +149,33 @@ function SignUpPage() {
         setPromoError(err?.response?.data?.detail || err?.message || "Invalid invite link");
       })
       .finally(() => setPromoLoading(false));
+  }, [searchParams]);
+
+  // Paid-invoice magic signup link: prospect paid a custom invoice, now finishing
+  // account setup. Pre-fill + lock email/role; their subscription is already active.
+  useEffect(() => {
+    const token = searchParams.get("invoice_token");
+    if (!token) return;
+    setInvoiceToken(token);
+    setInvoiceLoading(true);
+    api
+      .validateInvoiceToken(token)
+      .then((res: any) => {
+        if (res.data?.valid) {
+          setInvoiceData(res.data);
+          setFormData((prev) => ({
+            ...prev,
+            email: res.data.email || prev.email,
+            role: (res.data.role || prev.role) as UserRole,
+          }));
+        } else {
+          setInvoiceError("This signup link is invalid or has expired.");
+        }
+      })
+      .catch((err: any) => {
+        setInvoiceError(err?.response?.data?.detail || err?.message || "Invalid signup link");
+      })
+      .finally(() => setInvoiceLoading(false));
   }, [searchParams]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -291,6 +322,9 @@ function SignUpPage() {
       return;
     }
     if (!hasIdentifier) {
+      if (invoiceData) {
+        // Paid-invoice signup: identifier is collected during onboarding, not now.
+      } else {
       setError(`${meta.key.toUpperCase()} is required to create your account.`);
       trackEvent("signup_submit_error", {
         role: formData.role,
@@ -298,8 +332,9 @@ function SignUpPage() {
         error_message: `${meta.key.toUpperCase()} required`,
       });
       return;
+      }
     }
-    if (identifier.length < meta.minLen || identifier.length > meta.maxLen) {
+    if (hasIdentifier && (identifier.length < meta.minLen || identifier.length > meta.maxLen)) {
       setError(
         `${meta.key.toUpperCase()} must be ${
           meta.minLen === meta.maxLen
@@ -321,6 +356,7 @@ function SignUpPage() {
       password: formData.password,
       role: formData.role,
       promo_token: promoToken || undefined,
+      invoice_token: invoiceToken || undefined,
       // Forward role-specific identifier when provided. Backend treats them as optional.
       [meta.key]: hasIdentifier ? identifier : undefined,
     } as any);
@@ -475,6 +511,34 @@ function SignUpPage() {
                       : `${promoData.trial_days} days`}
                   </strong>{" "}
                   of free access as a <strong className="capitalize">{promoData.role}</strong>. No credit card.
+                </p>
+              </div>
+            )}
+
+            {invoiceLoading && (
+              <div className="text-center py-8">
+                <Loader2 className="w-8 h-8 text-purple-600 animate-spin mx-auto mb-3" />
+                <p className="text-slate-500">Validating your invoice...</p>
+              </div>
+            )}
+
+            {invoiceError && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
+                <div className="font-medium text-red-700">Invalid Signup Link</div>
+                <div className="text-sm text-red-600 mt-1">{invoiceError}</div>
+              </div>
+            )}
+
+            {invoiceData && !invoiceLoading && (
+              <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-lg">✅</span>
+                  <span className="font-semibold text-emerald-800">Subscription already paid</span>
+                </div>
+                <p className="text-sm text-emerald-700">
+                  Invoice <strong>{invoiceData.invoice_number}</strong> is paid. Finish creating your
+                  account and your <strong className="capitalize">{invoiceData.role}</strong> subscription
+                  activates immediately — no card required.
                 </p>
               </div>
             )}

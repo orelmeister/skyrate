@@ -26,7 +26,7 @@ from app.core.database import engine, Base
 from app.core import perf_metrics
 
 # Import API routers - services are imported lazily within these
-from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals, alerts, applicant, notifications, support, onboarding, blog, frn_reports, usac, portfolio_analyzer, pia, mail_campaigns, leads, public_tools, denial_hunter, denial_hunter_tracking, admin_jobs, compliance, compliance_tracker, industry, fcc, erateapp_sso, bid_copilot
+from app.api.v1 import auth, subscriptions, consultant, vendor, admin, query, schools, appeals, alerts, applicant, notifications, support, onboarding, blog, frn_reports, usac, portfolio_analyzer, pia, mail_campaigns, leads, public_tools, denial_hunter, denial_hunter_tracking, admin_jobs, compliance, compliance_tracker, industry, fcc, erateapp_sso, bid_copilot, billing_invoices
 
 # Configure logging
 logging.basicConfig(
@@ -841,6 +841,66 @@ def _run_schema_migrations(engine):
                 """))
             logger.info("Migration: Created dispatched_deadline_alerts table")
 
+        # Ensure the admin custom-invoice tables exist. Base.metadata.create_all
+        # already creates them, but this idempotent CREATE TABLE IF NOT EXISTS is a
+        # belt-and-suspenders for the "ran on SQLite when first deployed" case and
+        # is guarded by has_table so it never runs on a DB that already has them.
+        if not inspector.has_table("billing_invoices"):
+            with engine.begin() as conn:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS billing_invoices (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        invoice_number VARCHAR(32) NOT NULL UNIQUE,
+                        customer_email VARCHAR(255) NOT NULL,
+                        customer_name VARCHAR(255) NOT NULL,
+                        company_name VARCHAR(255),
+                        grants_role VARCHAR(20) NOT NULL DEFAULT 'consultant',
+                        grants_plan VARCHAR(20) NOT NULL DEFAULT 'none',
+                        user_id INT,
+                        status VARCHAR(20) NOT NULL DEFAULT 'draft',
+                        currency VARCHAR(3) NOT NULL DEFAULT 'usd',
+                        subtotal_cents INT NOT NULL DEFAULT 0,
+                        discount_cents INT NOT NULL DEFAULT 0,
+                        total_cents INT NOT NULL DEFAULT 0,
+                        notes TEXT,
+                        pay_token VARCHAR(64) NOT NULL UNIQUE,
+                        primary_interval VARCHAR(10),
+                        stripe_customer_id VARCHAR(255),
+                        stripe_coupon_id VARCHAR(255),
+                        stripe_checkout_session_id VARCHAR(255),
+                        stripe_subscription_ids TEXT,
+                        signup_token VARCHAR(64) UNIQUE,
+                        signup_token_expires_at DATETIME,
+                        created_by_admin_id INT,
+                        sent_at DATETIME,
+                        paid_at DATETIME,
+                        expires_at DATETIME,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        INDEX ix_billing_invoices_customer_email (customer_email),
+                        INDEX ix_billing_invoices_status (status),
+                        INDEX ix_billing_invoices_user_id (user_id)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """))
+            logger.info("Migration: Created billing_invoices table")
+
+        if not inspector.has_table("billing_invoice_lines"):
+            with engine.begin() as conn:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS billing_invoice_lines (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        invoice_id INT NOT NULL,
+                        description VARCHAR(500) NOT NULL,
+                        unit_amount_cents INT NOT NULL DEFAULT 0,
+                        quantity INT NOT NULL DEFAULT 1,
+                        `interval` VARCHAR(10) NOT NULL DEFAULT 'one_time',
+                        sort_order INT NOT NULL DEFAULT 0,
+                        INDEX ix_billing_invoice_lines_invoice_id (invoice_id),
+                        FOREIGN KEY (invoice_id) REFERENCES billing_invoices(id) ON DELETE CASCADE
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """))
+            logger.info("Migration: Created billing_invoice_lines table")
+
         is_mysql = engine.dialect.name == "mysql"
         for table, column, col_type, _ in migrations:
             if not inspector.has_table(table):
@@ -1373,6 +1433,7 @@ app.include_router(industry.router, prefix="/v1")
 app.include_router(fcc.router, prefix="/v1")
 app.include_router(erateapp_sso.router, prefix="/v1")
 app.include_router(bid_copilot.router, prefix="/v1")
+app.include_router(billing_invoices.router, prefix="/v1")
 
 # ==================== MODELS ====================
 

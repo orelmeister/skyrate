@@ -48,6 +48,7 @@ class UserRegister(BaseModel):
     spin: Optional[str] = Field(None, description="Service Provider Identification Number (required for vendors)")
     ben: Optional[str] = Field(None, description="Billed Entity Number (required for applicants)")
     promo_token: Optional[str] = Field(None, description="Promo invite token for free trial access")
+    invoice_token: Optional[str] = Field(None, description="Paid-invoice signup token (magic link after a prospect pays a custom invoice)")
     
     @field_validator('password')
     @classmethod
@@ -301,6 +302,34 @@ async def validate_promo_token(token: str, db: Session = Depends(get_db)):
     }
 
 
+# ==================== PAID-INVOICE SIGNUP TOKEN VALIDATION ====================
+
+@router.get("/validate-invoice-token/{token}")
+async def validate_invoice_token(token: str, db: Session = Depends(get_db)):
+    """Validate a paid-invoice magic signup token. PUBLIC endpoint - no auth.
+    Lets the sign-up page pre-fill the email and show 'subscription already paid'."""
+    from ...models.billing_invoice import BillingInvoice, BillingInvoiceStatus
+
+    invoice = db.query(BillingInvoice).filter(BillingInvoice.signup_token == token).first()
+    if not invoice or not token:
+        raise HTTPException(status_code=404, detail="Invalid signup link")
+    if invoice.user_id is not None:
+        raise HTTPException(status_code=400, detail="This invoice has already been claimed")
+    if invoice.status != BillingInvoiceStatus.PAID.value:
+        raise HTTPException(status_code=400, detail="This invoice has not been paid")
+    if invoice.signup_token_expires_at and invoice.signup_token_expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="This signup link has expired")
+
+    return {
+        "valid": True,
+        "email": invoice.customer_email,
+        "role": invoice.grants_role,
+        "invoice_number": invoice.invoice_number,
+        "company_name": invoice.company_name,
+        "already_paid": True,
+    }
+
+
 # ==================== TEAM SEAT INVITES ====================
 
 @router.get("/validate-seat/{token}")
@@ -411,18 +440,38 @@ async def register(
     """
     from ...models.applicant import ApplicantProfile
 
+    # Paid-invoice signup (a prospect who already paid a custom invoice via its magic
+    # link). Validate the token up-front so we can trust the granted role and skip the
+    # CRN/SPIN/BEN gate — they collect that during onboarding, like a normal signup.
+    billing_invoice = None
+    if data.invoice_token:
+        from ...models.billing_invoice import BillingInvoice, BillingInvoiceStatus
+        billing_invoice = db.query(BillingInvoice).filter(
+            BillingInvoice.signup_token == data.invoice_token
+        ).first()
+        if (
+            not billing_invoice
+            or billing_invoice.user_id is not None
+            or billing_invoice.status != BillingInvoiceStatus.PAID.value
+            or (billing_invoice.signup_token_expires_at and billing_invoice.signup_token_expires_at < datetime.utcnow())
+        ):
+            raise HTTPException(status_code=400, detail="Invalid or expired invoice signup link")
+        # The invoice dictates the role the paid subscription grants.
+        data.role = billing_invoice.grants_role
+    invoice_signup = billing_invoice is not None
+
     # Enforce role-specific identifier (CRN for consultants, SPIN for vendors, BEN for applicants).
-    if data.role == "consultant" and not (data.crn and data.crn.strip()):
+    if not invoice_signup and data.role == "consultant" and not (data.crn and data.crn.strip()):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="CRN (Consultant Registration Number) is required for consultant accounts"
         )
-    if data.role == "vendor" and not (data.spin and data.spin.strip()):
+    if not invoice_signup and data.role == "vendor" and not (data.spin and data.spin.strip()):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="SPIN (Service Provider Identification Number) is required for vendor accounts"
         )
-    if data.role == "applicant" and not (data.ben and data.ben.strip()):
+    if not invoice_signup and data.role == "applicant" and not (data.ben and data.ben.strip()):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="BEN (Billed Entity Number) is required for applicant accounts"
@@ -544,6 +593,24 @@ async def register(
         promo_invite.status = PromoInviteStatus.ACCEPTED.value
         promo_invite.used_at = datetime.utcnow()
         promo_invite.used_by_user_id = user.id
+    elif billing_invoice:
+        # Paid custom invoice: the subscription is ALREADY paid. Provision active
+        # access immediately — no trial, no second payment. Consume the single-use
+        # signup token and bind the invoice to this new account.
+        inv_plan = billing_invoice.grants_plan if billing_invoice.grants_plan in ("monthly", "yearly") else "yearly"
+        inv_sub_ids = billing_invoice.subscription_ids()
+        subscription = Subscription(
+            user_id=user.id,
+            plan=inv_plan,
+            status=SubscriptionStatus.ACTIVE.value,
+            price_cents=billing_invoice.total_cents,
+            stripe_customer_id=billing_invoice.stripe_customer_id,
+            stripe_subscription_id=(inv_sub_ids[0] if inv_sub_ids else None),
+            start_date=datetime.utcnow(),
+        )
+        billing_invoice.user_id = user.id
+        billing_invoice.signup_token = None
+        billing_invoice.signup_token_expires_at = None
     else:
         # Normal registration: 14-day trial, requires payment setup
         trial_end = datetime.utcnow() + timedelta(days=14)

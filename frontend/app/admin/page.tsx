@@ -406,6 +406,16 @@ function AdminDashboard() {
               🎯 Denial Hunter
             </a>
           )}
+          {/* Custom Invoices — visible to admin and super (require_role("admin","super")) */}
+          {(user?.role === "admin" || user?.role === "super") && (
+            <a
+              href="/admin/invoices"
+              className="px-4 py-3 text-sm font-medium border-b-2 border-transparent text-emerald-600 hover:text-emerald-700 hover:border-emerald-300 transition-colors"
+              data-testid="admin-nav-invoices"
+            >
+              🧾 Invoices
+            </a>
+          )}
         </div>
       </nav>
 
