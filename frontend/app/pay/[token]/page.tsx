@@ -68,6 +68,16 @@ function recurringPhrase(deferred: DeferredLine[]): string {
     .join(" + ");
 }
 
+// When the recurring charges begin. The first period is prepaid at checkout, so
+// the recurring subscription starts one interval later.
+function startingClause(deferred: DeferredLine[]): string {
+  if (!deferred || deferred.length === 0) return "";
+  const intervals = new Set(deferred.map((d) => d.interval));
+  if (intervals.size === 1 && intervals.has("month")) return "starting next month";
+  if (intervals.size === 1 && intervals.has("year")) return "starting next year";
+  return "starting after the first period";
+}
+
 function PayInner() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -169,6 +179,7 @@ function PayInner() {
   const isPayable = invoice.status === "sent" || invoice.status === "draft";
   const dueToday = invoice.due_today_cents ?? invoice.total_cents;
   const recurring = recurringPhrase(invoice.deferred || []);
+  const starting = startingClause(invoice.deferred || []);
 
   // Success state after returning from Stripe
   if (paid || invoice.status === "paid") {
@@ -214,7 +225,7 @@ function PayInner() {
               </div>
               {recurring && (
                 <div className="text-xs text-purple-100 mt-0.5" data-testid="pay-recurring">
-                  then {recurring}, starting today
+                  then {recurring}, {starting}
                 </div>
               )}
             </div>
@@ -287,13 +298,7 @@ function PayInner() {
             {recurring && (
               <div className="flex justify-between text-slate-500">
                 <span>Then (recurring)</span>
-                <span>{recurring}, starting today</span>
-              </div>
-            )}
-            {(recurring || invoice.total_cents !== dueToday) && (
-              <div className="flex justify-between text-xs text-slate-400">
-                <span>First-period value</span>
-                <span>{fmtMoney(invoice.total_cents)}</span>
+                <span>{recurring}, {starting}</span>
               </div>
             )}
           </div>

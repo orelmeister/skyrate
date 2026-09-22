@@ -40,6 +40,9 @@ type InvoiceListItem = {
   reminders_enabled?: boolean;
   reminder_count?: number;
   last_reminder_at?: string | null;
+  last_send_status?: string | null;
+  last_send_error?: string | null;
+  last_send_at?: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -265,6 +268,15 @@ export default function AdminInvoicesPage() {
     return Object.entries(byInterval)
       .map(([intv, cents]) => `${fmtMoney(cents)}/${intv === "year" ? "year" : "month"}`)
       .join(" + ");
+  }, [deferredPreview]);
+
+  // When the recurring charges begin (first period is prepaid at checkout).
+  const recurringStartingPreview = useMemo(() => {
+    if (deferredPreview.length === 0) return "";
+    const intervals = new Set(deferredPreview.map((l) => l.interval));
+    if (intervals.size === 1 && intervals.has("month")) return "starting next month";
+    if (intervals.size === 1 && intervals.has("year")) return "starting next year";
+    return "starting after the first period";
   }, [deferredPreview]);
 
   const buildPayload = () => ({
@@ -509,6 +521,17 @@ export default function AdminInvoicesPage() {
                       {inv.status === "sent" && (
                         <div className="text-[11px] text-slate-400 mt-1" data-testid={`inv-reminder-state-${inv.id}`}>
                           {reminderSummary(inv)}
+                        </div>
+                      )}
+                      {inv.last_send_status && (
+                        <div
+                          className={`text-[11px] mt-1 ${inv.last_send_status === "sent" ? "text-emerald-600" : "text-red-600"}`}
+                          data-testid={`inv-send-status-${inv.id}`}
+                          title={inv.last_send_error || undefined}
+                        >
+                          {inv.last_send_status === "sent"
+                            ? "Email delivered"
+                            : `Email failed${inv.last_send_error ? `: ${inv.last_send_error.slice(0, 80)}` : ""}`}
                         </div>
                       )}
                     </td>
@@ -776,13 +799,7 @@ export default function AdminInvoicesPage() {
                 {recurringPreviewPhrase && (
                   <div className="flex justify-between text-slate-500">
                     <span>Then (recurring)</span>
-                    <span data-testid="inv-recurring">{recurringPreviewPhrase}, starting today</span>
-                  </div>
-                )}
-                {(recurringPreviewPhrase || totalCents !== dueTodayCents) && (
-                  <div className="flex justify-between text-xs text-slate-400">
-                    <span>First-period value</span>
-                    <span data-testid="inv-total">{fmtMoney(totalCents)}</span>
+                    <span data-testid="inv-recurring">{recurringPreviewPhrase}, {recurringStartingPreview}</span>
                   </div>
                 )}
               </div>

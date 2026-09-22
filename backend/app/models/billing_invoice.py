@@ -77,6 +77,12 @@ class BillingInvoice(Base):
     reminder_count = Column(Integer, nullable=False, default=0)
     last_reminder_at = Column(DateTime, nullable=True)
 
+    # Delivery outcome of the most recent send/reminder email so a silent SMTP
+    # failure is visible to the admin ("sent" | "failed" | "skipped").
+    last_send_status = Column(String(20), nullable=True)
+    last_send_error = Column(Text, nullable=True)
+    last_send_at = Column(DateTime, nullable=True)
+
     created_by_admin_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     sent_at = Column(DateTime, nullable=True)
@@ -135,6 +141,9 @@ class BillingInvoice(Base):
             "reminders_enabled": bool(self.reminders_enabled) if self.reminders_enabled is not None else True,
             "reminder_count": int(self.reminder_count or 0),
             "last_reminder_at": self.last_reminder_at.isoformat() if self.last_reminder_at else None,
+            "last_send_status": self.last_send_status,
+            "last_send_error": self.last_send_error,
+            "last_send_at": self.last_send_at.isoformat() if self.last_send_at else None,
             "sent_at": self.sent_at.isoformat() if self.sent_at else None,
             "paid_at": self.paid_at.isoformat() if self.paid_at else None,
             "expires_at": self.expires_at.isoformat() if self.expires_at else None,

@@ -21,6 +21,7 @@ Stripe constraints handled here:
 
 import logging
 import secrets
+import time
 from datetime import datetime, timedelta
 from typing import Optional, List, Literal
 
@@ -135,23 +136,26 @@ def _compute_primary_interval(lines: List[BillingInvoiceLine], override: Optiona
 def _compute_due_today(lines: List[BillingInvoiceLine], discount_cents: int, primary_interval: Optional[str]) -> tuple:
     """Single source of truth for "what the customer is charged today" vs "later".
 
-    Mirrors EXACTLY what public_checkout puts into the Stripe Checkout line_items:
-    the primary-interval recurring line(s) + every one_time line, with the coupon
-    (discount) applied. Recurring lines on the OTHER interval are created by the
-    webhook after payment, so they are deferred (not charged today).
+    The customer PREPAYS the full first period of EVERY line at checkout, so this
+    mirrors EXACTLY what public_checkout puts on the Stripe Checkout initial invoice:
+      - the primary-interval recurring line(s)  -> the Checkout subscription
+      - every secondary-interval recurring line -> a one-time "first period" line
+      - every one_time line
+    ...with the coupon (discount) applied once to the whole invoice. So due_today
+    equals subtotal - discount (the full first-period value).
 
-    Returns (due_today_cents, deferred) where deferred is a list of dicts describing
-    the recurring-after-today lines. If you change this, change public_checkout too.
+    The secondary recurring subscriptions are created by the webhook anchored one
+    interval out (they do NOT re-charge the prepaid first period), so `deferred`
+    describes only the charges that begin AFTER the first period. If you change this,
+    change public_checkout AND handle_invoice_payment too.
+
+    Returns (due_today_cents, deferred).
     """
-    one_time_total = sum(
+    first_period_total = sum(
         int(l.unit_amount_cents) * int(l.quantity or 1)
-        for l in lines if l.interval == "one_time"
+        for l in lines
     )
-    primary_total = sum(
-        int(l.unit_amount_cents) * int(l.quantity or 1)
-        for l in lines if l.interval in ("month", "year") and l.interval == primary_interval
-    )
-    due_today = max(0, one_time_total + primary_total - int(discount_cents or 0))
+    due_today = max(0, first_period_total - int(discount_cents or 0))
     deferred = [
         {
             "description": l.description,
@@ -229,6 +233,59 @@ def _require_stripe():
         raise HTTPException(status_code=503, detail="Payment processing is not configured")
     if not settings.STRIPE_SECRET_KEY:
         raise HTTPException(status_code=503, detail="Stripe is not configured on this server")
+
+
+def _record_send_result(invoice_id: int, send_status: str, error: Optional[str]) -> None:
+    """Persist the delivery outcome of a send/reminder email onto the invoice so a
+    silent SMTP failure is visible to the admin. Runs inside a background task with
+    its own DB session (the request session is already closed)."""
+    from ...core.database import SessionLocal
+    db = SessionLocal()
+    try:
+        inv = db.query(BillingInvoice).filter(BillingInvoice.id == invoice_id).first()
+        if inv is not None:
+            inv.last_send_status = send_status
+            inv.last_send_error = (error or None)
+            inv.last_send_at = datetime.utcnow()
+            db.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"[invoice-send] failed to record send result for invoice {invoice_id}: {e}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+
+def _send_invoice_email_task(invoice_id: int, to_email: str, inv_dict: dict, pdf_bytes: Optional[bytes], pay_url: str) -> None:
+    """Background task: send the invoice email and record whether it actually sent."""
+    ok = False
+    error = None
+    try:
+        from ...services.email_service import get_email_service
+        ok = bool(get_email_service().send_invoice_email(to_email, inv_dict, pdf_bytes, pay_url))
+        if not ok:
+            error = "Email send returned False (SMTP not configured or delivery failed)"
+    except Exception as e:  # noqa: BLE001
+        error = str(e)
+        logger.error(f"[invoice-send] exception sending invoice {invoice_id} to {to_email}: {e}")
+    _record_send_result(invoice_id, "sent" if ok else "failed", None if ok else error)
+
+
+def _send_invoice_reminder_task(invoice_id: int, to_email: str, inv_dict: dict, pdf_bytes: Optional[bytes], pay_url: str, reminder_number: int) -> None:
+    """Background task: send a reminder email and record whether it actually sent."""
+    ok = False
+    error = None
+    try:
+        from ...services.email_service import get_email_service
+        ok = bool(get_email_service().send_invoice_reminder_email(to_email, inv_dict, pdf_bytes, pay_url, reminder_number))
+        if not ok:
+            error = "Reminder email send returned False (SMTP not configured or delivery failed)"
+    except Exception as e:  # noqa: BLE001
+        error = str(e)
+        logger.error(f"[invoice-send] exception sending reminder for invoice {invoice_id} to {to_email}: {e}")
+    _record_send_result(invoice_id, "sent" if ok else "failed", None if ok else error)
 
 
 # ==================== ADMIN ROUTES ====================
@@ -375,9 +432,7 @@ async def send_invoice(invoice_id: int, background_tasks: BackgroundTasks, curre
         logger.error(f"Invoice PDF generation failed for {inv.invoice_number}: {e}")
         raise HTTPException(status_code=500, detail="Failed to render invoice PDF")
 
-    from ...services.email_service import get_email_service
-    email_svc = get_email_service()
-    background_tasks.add_task(email_svc.send_invoice_email, inv.customer_email, inv_dict, pdf_bytes, pay_url)
+    background_tasks.add_task(_send_invoice_email_task, inv.id, inv.customer_email, inv_dict, pdf_bytes, pay_url)
 
     inv.status = BillingInvoiceStatus.SENT.value
     inv.sent_at = datetime.utcnow()
@@ -425,10 +480,8 @@ async def send_invoice_reminder_now(invoice_id: int, background_tasks: Backgroun
         pdf_bytes = None
 
     reminder_number = int(inv.reminder_count or 0) + 1
-    from ...services.email_service import get_email_service
-    email_svc = get_email_service()
     background_tasks.add_task(
-        email_svc.send_invoice_reminder_email, inv.customer_email, inv_dict, pdf_bytes, pay_url, reminder_number
+        _send_invoice_reminder_task, inv.id, inv.customer_email, inv_dict, pdf_bytes, pay_url, reminder_number
     )
 
     inv.reminder_count = reminder_number
@@ -541,6 +594,22 @@ async def public_checkout(pay_token: str, db: Session = Depends(get_db)):
                         "product_data": {"name": l.description},
                         "unit_amount": int(l.unit_amount_cents),
                         "recurring": {"interval": l.interval},
+                    },
+                    "quantity": int(l.quantity or 1),
+                })
+            # Secondary-interval recurring lines: prepay their FIRST PERIOD now as a
+            # one-time line on the Checkout's initial invoice, so the customer SEES
+            # and pays the full first-period total in ONE amount. The recurring
+            # subscription for each is created by the webhook, anchored one interval
+            # out so it does NOT re-charge this prepaid first period (see
+            # handle_invoice_payment) -- otherwise the customer is double-charged.
+            for l in [x for x in recurring if x.interval != primary_interval]:
+                first_suffix = " (first month)" if l.interval == "month" else " (first year)"
+                line_items.append({
+                    "price_data": {
+                        "currency": "usd",
+                        "product_data": {"name": f"{l.description}{first_suffix}"},
+                        "unit_amount": int(l.unit_amount_cents),
                     },
                     "quantity": int(l.quantity or 1),
                 })
@@ -688,28 +757,54 @@ def handle_invoice_payment(session: dict, db: Session) -> None:
                 logger.error(f"[invoice-webhook] retrieve customer failed: {e}")
 
         # Create secondary-interval subscription(s) server-side (e.g. the monthly
-        # retainer when the annual line drove the Checkout Session).
+        # retainer when the annual line drove the Checkout Session). Their FIRST
+        # period was already prepaid as a one-time line on the Checkout invoice, so
+        # each sub is anchored one interval out with proration_behavior='none' -- it
+        # must NOT charge immediately, or the customer is double-charged.
         if inv.primary_interval and customer_id and STRIPE_AVAILABLE and stripe is not None:
-            secondary = [l for l in inv.lines if l.interval in ("month", "year") and l.interval != inv.primary_interval]
-            for l in secondary:
-                try:
-                    price = stripe.Price.create(
-                        currency="usd",
-                        unit_amount=int(l.unit_amount_cents),
-                        recurring={"interval": l.interval},
-                        product_data={"name": l.description},
-                    )
-                    sub_kwargs = dict(
-                        customer=customer_id,
-                        items=[{"price": price.id, "quantity": int(l.quantity or 1)}],
-                        metadata={"billing_invoice_id": str(inv.id), "secondary": "1"},
-                    )
-                    if pm_id:
-                        sub_kwargs["default_payment_method"] = pm_id
-                    sub2 = stripe.Subscription.create(**sub_kwargs)
-                    sub_ids.append(sub2.id)
-                except Exception as e:  # noqa: BLE001
-                    logger.error(f"[invoice-webhook] secondary sub create failed for '{l.description}': {e}")
+            # Retry-safe guard: if a prior (or concurrent) webhook delivery already
+            # created the secondary sub(s) for this invoice, do NOT create them
+            # again. Secondary subs are tagged metadata.secondary="1".
+            secondary_already_exists = False
+            try:
+                existing = stripe.Subscription.list(customer=customer_id, status="all", limit=100)
+                existing_data = (existing.get("data") if hasattr(existing, "get") else getattr(existing, "data", None)) or []
+                for s in existing_data:
+                    md = (s.get("metadata") if hasattr(s, "get") else getattr(s, "metadata", None)) or {}
+                    if md.get("billing_invoice_id") == str(inv.id) and md.get("secondary") == "1":
+                        secondary_already_exists = True
+                        sid = s.get("id") if hasattr(s, "get") else getattr(s, "id", None)
+                        if sid and sid not in sub_ids:
+                            sub_ids.append(sid)
+            except Exception as e:  # noqa: BLE001
+                logger.error(f"[invoice-webhook] secondary guard list failed: {e}")
+
+            if not secondary_already_exists:
+                secondary = [l for l in inv.lines if l.interval in ("month", "year") and l.interval != inv.primary_interval]
+                for l in secondary:
+                    try:
+                        # First period prepaid at checkout -> start the billing cycle
+                        # one interval out and DO NOT prorate/charge the gap.
+                        anchor_ts = int(time.time()) + (365 * 24 * 3600 if l.interval == "year" else 30 * 24 * 3600)
+                        price = stripe.Price.create(
+                            currency="usd",
+                            unit_amount=int(l.unit_amount_cents),
+                            recurring={"interval": l.interval},
+                            product_data={"name": l.description},
+                        )
+                        sub_kwargs = dict(
+                            customer=customer_id,
+                            items=[{"price": price.id, "quantity": int(l.quantity or 1)}],
+                            billing_cycle_anchor=anchor_ts,
+                            proration_behavior="none",
+                            metadata={"billing_invoice_id": str(inv.id), "secondary": "1"},
+                        )
+                        if pm_id:
+                            sub_kwargs["default_payment_method"] = pm_id
+                        sub2 = stripe.Subscription.create(**sub_kwargs)
+                        sub_ids.append(sub2.id)
+                    except Exception as e:  # noqa: BLE001
+                        logger.error(f"[invoice-webhook] secondary sub create failed for '{l.description}': {e}")
 
         # Finalize the invoice record.
         inv.status = BillingInvoiceStatus.PAID.value

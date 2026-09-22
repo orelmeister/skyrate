@@ -212,16 +212,6 @@ def generate_invoice_pdf(invoice, pay_url: Optional[str] = None) -> bytes:
         Paragraph("<b>Due Today</b>", ParagraphStyle("dt", parent=p_cell_r, fontSize=12)),
         Paragraph(f"<b>{_fmt_money(due_today, currency)}</b>", ParagraphStyle("dtv", parent=p_cell_r, fontSize=12)),
     ])
-    # "First-period value" == subtotal - discount. Only show it when it differs
-    # from Due Today (i.e. there are deferred recurring lines) so it no longer
-    # reads as a single charge.
-    if deferred or total != due_today:
-        totals_rows.append([
-            Paragraph("First-period value", ParagraphStyle(
-                "fp", parent=p_cell_r, fontSize=8, textColor=colors.HexColor(GRAY))),
-            Paragraph(_fmt_money(total, currency), ParagraphStyle(
-                "fpv", parent=p_cell_r, fontSize=8, textColor=colors.HexColor(GRAY))),
-        ])
     totals = Table(totals_rows, colWidths=[1.7 * inch, 1.3 * inch], hAlign="RIGHT")
     totals.setStyle(TableStyle([
         ("TOPPADDING", (0, 0), (-1, -1), 4),
@@ -231,15 +221,21 @@ def generate_invoice_pdf(invoice, pay_url: Optional[str] = None) -> bytes:
     ]))
     story.append(totals)
 
-    # ---- Recurring after today (deferred lines) ---------------------------
+    # ---- Recurring after the first period (deferred lines) ----------------
     if deferred:
         story.append(Spacer(1, 0.14 * inch))
-        story.append(Paragraph("Recurring after today", ParagraphStyle(
+        story.append(Paragraph("Recurring after the first period", ParagraphStyle(
             "rah", parent=p_label, fontSize=9.5, textColor=colors.HexColor(PURPLE), spaceAfter=3)))
         for d in deferred:
+            iv = d.get("interval", "month")
+            starting = (
+                "starting next month" if iv == "month"
+                else "starting next year" if iv == "year"
+                else "starting after the first period"
+            )
             story.append(Paragraph(
                 f"{d.get('description', '')} - <b>{_fmt_money(d.get('amount_cents', 0), currency)}</b> "
-                f"{_interval_label(d.get('interval', 'month'))}, starting today",
+                f"{_interval_label(iv)}, {starting}",
                 p_small,
             ))
     story.append(Spacer(1, 0.35 * inch))

@@ -1799,6 +1799,14 @@ https://skyrate.ai | support@skyrate.ai
                 for d in deferred
             )
 
+        def _starting_clause():
+            intervals = {d.get("interval") for d in deferred}
+            if intervals == {"month"}:
+                return "starting next month"
+            if intervals == {"year"}:
+                return "starting next year"
+            return "starting after the first period"
+
         rows_html = ""
         for ln in lines:
             rows_html += f"""
@@ -1826,8 +1834,8 @@ https://skyrate.ai | support@skyrate.ai
         if deferred:
             recurring_html = f"""
               <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:10px;padding:12px 16px;margin-bottom:20px;">
-                <div style="color:#7c3aed;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:4px;">Recurring after today</div>
-                <div style="color:#475569;font-size:14px;">then <strong>{_recurring_phrase()}</strong>, starting today</div>
+                <div style="color:#7c3aed;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:4px;">Recurring after the first period</div>
+                <div style="color:#475569;font-size:14px;">then <strong>{_recurring_phrase()}</strong>, {_starting_clause()}</div>
               </div>"""
 
         html_content = f"""
@@ -1875,7 +1883,7 @@ https://skyrate.ai | support@skyrate.ai
         </html>
         """
 
-        recurring_text = f" Then {_recurring_phrase()}, starting today." if deferred else ""
+        recurring_text = f" Then {_recurring_phrase()}, {_starting_clause()}." if deferred else ""
         text_content = (
             f"Invoice {number} from SkyRate AI\n\n"
             f"Hi {customer}, your invoice is ready. Due today: {_money(due_today)}.{recurring_text}\n\n"
@@ -1922,15 +1930,21 @@ https://skyrate.ai | support@skyrate.ai
             f"{_money(d.get('amount_cents', 0))} {_interval(d.get('interval', 'month'))}"
             for d in deferred
         )
+        deferred_intervals = {d.get("interval") for d in deferred}
+        starting_clause = (
+            "starting next month" if deferred_intervals == {"month"}
+            else "starting next year" if deferred_intervals == {"year"}
+            else "starting after the first period"
+        )
 
         recurring_html = ""
         recurring_text = ""
         if deferred:
             recurring_html = (
                 f'<p style="color:#64748b;font-size:14px;text-align:center;margin:0 0 4px 0;">'
-                f'then <strong>{recurring_phrase}</strong>, starting today</p>'
+                f'then <strong>{recurring_phrase}</strong>, {starting_clause}</p>'
             )
-            recurring_text = f" Then {recurring_phrase}, starting today."
+            recurring_text = f" Then {recurring_phrase}, {starting_clause}."
 
         nudge = "a quick reminder" if reminder_number <= 1 else "a friendly follow-up"
 
