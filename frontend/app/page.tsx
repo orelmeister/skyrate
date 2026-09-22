@@ -1103,16 +1103,6 @@ export default function HomePage() {
                 <li><Link href="/case-studies" className="hover:text-white transition">Case Studies</Link></li>
                 <li><Link href="/demo" className="hover:text-white transition">Live Demo</Link></li>
                 <li><Link href="/book-demo" className="hover:text-white transition">Book a Demo</Link></li>
-                <li>
-                  <a
-                    href="https://erateapp.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:text-white transition"
-                  >
-                    Need a consultant? erateapp.com →
-                  </a>
-                </li>
                 <li><Link href="/privacy" className="hover:text-white transition">Privacy Policy</Link></li>
                 <li><Link href="/terms" className="hover:text-white transition">Terms of Service</Link></li>
               </ul>

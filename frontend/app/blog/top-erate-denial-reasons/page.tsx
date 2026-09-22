@@ -360,7 +360,7 @@ export default function TopErateDenialReasonsPage() {
                 Prevention is always better than cure. By understanding these ten common denial reasons and implementing the preventive measures for each, you can dramatically reduce your denial rate and protect your E-Rate funding. Whether you manage a single school&apos;s E-Rate applications or oversee a large portfolio as a <Link href="/features/consultants" className="text-purple-600 hover:text-purple-800 font-medium underline decoration-purple-300">consultant</Link>, systematic quality checks and proactive compliance monitoring are your best defense against denials.
               </p>
               <p className="text-slate-700 leading-relaxed mt-4">
-                Want a second pair of eyes before you certify? The free <a href="https://erateapp.com/free-audit.html" rel="noopener" className="text-purple-700 hover:text-purple-900 underline font-medium">erateapp pre-submission audit</a> flags the same 10 issues above against your draft Form 471 in minutes &mdash; no account required.
+                Want a second pair of eyes before you certify? SkyRate AI&apos;s <Link href="/features/denial-analysis" className="text-purple-700 hover:text-purple-900 underline font-medium">Denial Analysis</Link> flags the same 10 issues above against your draft Form 471 before you submit &mdash; so you can fix them while it still counts.
               </p>
             </section>
 

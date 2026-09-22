@@ -301,7 +301,7 @@ export default function ErateCategory2BudgetGuidePage() {
                 For a district with 10 schools averaging 400 students each, the total five-year Category 2 budget is approximately <strong>$668,000 pre-discount</strong>. At an average 75% discount rate, E-Rate contributes $501,000 toward network equipment and installation &mdash; funds that can transform classroom connectivity across an entire district.
               </p>
               <p className="text-slate-700 leading-relaxed mb-6">
-                Need to verify your school&apos;s exact enrollment and discount rate before you calculate? Use the free <a href="https://erateapp.com/schools.html" rel="noopener" className="text-purple-700 hover:text-purple-900 underline font-medium">erateapp school lookup</a> to pull current USAC-reported numbers for any K-12 building in the country.
+                Need to verify your school&apos;s exact enrollment and discount rate before you calculate? Pull current USAC-reported numbers for any K-12 building in the country straight from the <a href="https://opendata.usac.org/" target="_blank" rel="noopener noreferrer" className="text-purple-700 hover:text-purple-900 underline font-medium">USAC Open Data portal</a>.
               </p>
             </section>
 
