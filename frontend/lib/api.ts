@@ -4451,6 +4451,17 @@ class ApiClient {
     return this.request(`/api/v1/admin/invoices/${id}/void`, { method: 'POST' });
   }
 
+  async setInvoiceReminders(id: number, enabled: boolean): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/invoices/${id}/reminders`, {
+      method: 'POST',
+      body: JSON.stringify({ enabled }),
+    });
+  }
+
+  async sendInvoiceReminder(id: number): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/invoices/${id}/send-reminder`, { method: 'POST' });
+  }
+
   /**
    * Fetch the admin invoice PDF as an object URL (authed download). Caller must
    * URL.revokeObjectURL() when done.

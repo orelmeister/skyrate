@@ -106,6 +106,10 @@ class CheckoutResponse(BaseModel):
     checkout_url: str
 
 
+class ReminderToggle(BaseModel):
+    enabled: bool
+
+
 # ==================== HELPERS ====================
 
 def _recompute_totals(lines: List[BillingInvoiceLine], discount_cents: int) -> tuple:
@@ -126,6 +130,62 @@ def _compute_primary_interval(lines: List[BillingInvoiceLine], override: Optiona
         return override
     top = max(recurring, key=lambda l: int(l.unit_amount_cents) * int(l.quantity or 1))
     return top.interval
+
+
+def _compute_due_today(lines: List[BillingInvoiceLine], discount_cents: int, primary_interval: Optional[str]) -> tuple:
+    """Single source of truth for "what the customer is charged today" vs "later".
+
+    Mirrors EXACTLY what public_checkout puts into the Stripe Checkout line_items:
+    the primary-interval recurring line(s) + every one_time line, with the coupon
+    (discount) applied. Recurring lines on the OTHER interval are created by the
+    webhook after payment, so they are deferred (not charged today).
+
+    Returns (due_today_cents, deferred) where deferred is a list of dicts describing
+    the recurring-after-today lines. If you change this, change public_checkout too.
+    """
+    one_time_total = sum(
+        int(l.unit_amount_cents) * int(l.quantity or 1)
+        for l in lines if l.interval == "one_time"
+    )
+    primary_total = sum(
+        int(l.unit_amount_cents) * int(l.quantity or 1)
+        for l in lines if l.interval in ("month", "year") and l.interval == primary_interval
+    )
+    due_today = max(0, one_time_total + primary_total - int(discount_cents or 0))
+    deferred = [
+        {
+            "description": l.description,
+            "unit_amount_cents": int(l.unit_amount_cents),
+            "quantity": int(l.quantity or 1),
+            "amount_cents": int(l.unit_amount_cents) * int(l.quantity or 1),
+            "interval": l.interval,
+        }
+        for l in lines
+        if l.interval in ("month", "year") and l.interval != primary_interval
+    ]
+    return due_today, deferred
+
+
+def _due_today_fields(inv: BillingInvoice) -> dict:
+    """Derived due-today / deferred / primary-interval fields for an invoice.
+    Safe to expose publicly (derived only from line amounts already shown)."""
+    primary = _compute_primary_interval(inv.lines, inv.primary_interval)
+    due_today, deferred = _compute_due_today(inv.lines, inv.discount_cents, primary)
+    return {
+        "primary_interval": primary,
+        "due_today_cents": due_today,
+        "deferred": deferred,
+    }
+
+
+def _admin_payload(inv: BillingInvoice, include_lines: bool = True) -> dict:
+    """Admin JSON with the due-today breakdown attached."""
+    return {**inv.to_dict(include_lines=include_lines), **_due_today_fields(inv)}
+
+
+def _public_payload(inv: BillingInvoice) -> dict:
+    """Public safe-subset JSON with the due-today breakdown attached."""
+    return {**inv.to_public_dict(), **_due_today_fields(inv)}
 
 
 def _generate_invoice_number(db: Session) -> str:
@@ -208,7 +268,7 @@ async def create_invoice(data: InvoiceCreate, current_user: User = AdminUser, db
     db.add(inv)
     db.commit()
     db.refresh(inv)
-    return {"success": True, "invoice": inv.to_dict()}
+    return {"success": True, "invoice": _admin_payload(inv)}
 
 
 @router.get("/admin/invoices")
@@ -221,7 +281,7 @@ async def list_invoices(
     per_page: int = 25,
 ):
     """List invoices, newest first, filterable by status/email, paginated."""
-    q = db.query(BillingInvoice)
+    q = db.query(BillingInvoice).options(joinedload(BillingInvoice.lines))
     if status_filter:
         q = q.filter(BillingInvoice.status == status_filter)
     if email:
@@ -236,7 +296,7 @@ async def list_invoices(
         .all()
     )
     return {
-        "invoices": [r.to_dict(include_lines=False) for r in rows],
+        "invoices": [_admin_payload(r, include_lines=False) for r in rows],
         "total": total,
         "page": page,
         "per_page": per_page,
@@ -246,7 +306,7 @@ async def list_invoices(
 @router.get("/admin/invoices/{invoice_id}")
 async def get_invoice(invoice_id: int, current_user: User = AdminUser, db: Session = Depends(get_db)):
     inv = _load_invoice(db, invoice_id)
-    return {"success": True, "invoice": inv.to_dict(), "pay_url": _pay_url(inv)}
+    return {"success": True, "invoice": _admin_payload(inv), "pay_url": _pay_url(inv)}
 
 
 @router.patch("/admin/invoices/{invoice_id}")
@@ -295,7 +355,7 @@ async def update_invoice(invoice_id: int, data: InvoiceUpdate, current_user: Use
 
     db.commit()
     db.refresh(inv)
-    return {"success": True, "invoice": inv.to_dict()}
+    return {"success": True, "invoice": _admin_payload(inv)}
 
 
 @router.post("/admin/invoices/{invoice_id}/send")
@@ -308,7 +368,7 @@ async def send_invoice(invoice_id: int, background_tasks: BackgroundTasks, curre
 
     from ...services.invoice_pdf_service import generate_invoice_pdf
     pay_url = _pay_url(inv)
-    inv_dict = inv.to_dict()  # detached-safe snapshot for the background task
+    inv_dict = _admin_payload(inv)  # detached-safe snapshot (incl. due-today breakdown)
     try:
         pdf_bytes = generate_invoice_pdf(inv_dict, pay_url)
     except Exception as e:
@@ -323,7 +383,7 @@ async def send_invoice(invoice_id: int, background_tasks: BackgroundTasks, curre
     inv.sent_at = datetime.utcnow()
     db.commit()
     db.refresh(inv)
-    return {"success": True, "invoice": inv.to_dict(), "pay_url": pay_url}
+    return {"success": True, "invoice": _admin_payload(inv), "pay_url": pay_url}
 
 
 @router.post("/admin/invoices/{invoice_id}/void")
@@ -333,14 +393,56 @@ async def void_invoice(invoice_id: int, current_user: User = AdminUser, db: Sess
         raise HTTPException(status_code=400, detail="Cannot void a paid invoice")
     inv.status = BillingInvoiceStatus.VOID.value
     db.commit()
-    return {"success": True, "invoice": inv.to_dict(include_lines=False)}
+    return {"success": True, "invoice": _admin_payload(inv, include_lines=False)}
+
+
+@router.post("/admin/invoices/{invoice_id}/reminders")
+async def set_invoice_reminders(invoice_id: int, data: ReminderToggle, current_user: User = AdminUser, db: Session = Depends(get_db)):
+    """Enable/disable the automatic unpaid-invoice reminder chase for this invoice."""
+    inv = _load_invoice(db, invoice_id)
+    inv.reminders_enabled = bool(data.enabled)
+    db.commit()
+    db.refresh(inv)
+    return {"success": True, "invoice": _admin_payload(inv, include_lines=False)}
+
+
+@router.post("/admin/invoices/{invoice_id}/send-reminder")
+async def send_invoice_reminder_now(invoice_id: int, background_tasks: BackgroundTasks, current_user: User = AdminUser, db: Session = Depends(get_db)):
+    """Fire a single payment reminder immediately (manual chase). Only for a
+    still-open sent+unpaid invoice; counts toward the reminder tally."""
+    inv = _load_invoice(db, invoice_id)
+    _maybe_expire(inv, db)
+    if inv.status != BillingInvoiceStatus.SENT.value or inv.paid_at is not None:
+        raise HTTPException(status_code=400, detail=f"Cannot remind a {inv.status} invoice")
+
+    from ...services.invoice_pdf_service import generate_invoice_pdf
+    pay_url = _pay_url(inv)
+    inv_dict = _admin_payload(inv)
+    try:
+        pdf_bytes = generate_invoice_pdf(inv_dict, pay_url)
+    except Exception as e:
+        logger.error(f"Reminder PDF generation failed for {inv.invoice_number}: {e}")
+        pdf_bytes = None
+
+    reminder_number = int(inv.reminder_count or 0) + 1
+    from ...services.email_service import get_email_service
+    email_svc = get_email_service()
+    background_tasks.add_task(
+        email_svc.send_invoice_reminder_email, inv.customer_email, inv_dict, pdf_bytes, pay_url, reminder_number
+    )
+
+    inv.reminder_count = reminder_number
+    inv.last_reminder_at = datetime.utcnow()
+    db.commit()
+    db.refresh(inv)
+    return {"success": True, "invoice": _admin_payload(inv, include_lines=False), "pay_url": pay_url}
 
 
 @router.get("/admin/invoices/{invoice_id}/pdf")
 async def admin_invoice_pdf(invoice_id: int, current_user: User = AdminUser, db: Session = Depends(get_db)):
     inv = _load_invoice(db, invoice_id)
     from ...services.invoice_pdf_service import generate_invoice_pdf
-    pdf_bytes = generate_invoice_pdf(inv.to_dict(), _pay_url(inv))
+    pdf_bytes = generate_invoice_pdf(_admin_payload(inv), _pay_url(inv))
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -378,7 +480,7 @@ async def public_get_invoice(pay_token: str, db: Session = Depends(get_db)):
     """Public — returns ONLY the safe subset. The pay_token is the credential."""
     inv = _lookup_by_pay_token(db, pay_token)
     _maybe_expire(inv, db)
-    return {"success": True, "invoice": inv.to_public_dict()}
+    return {"success": True, "invoice": _public_payload(inv)}
 
 
 @router.post("/invoices/pay/{pay_token}/checkout", response_model=CheckoutResponse)
@@ -506,7 +608,7 @@ async def public_checkout(pay_token: str, db: Session = Depends(get_db)):
 async def public_invoice_pdf(pay_token: str, db: Session = Depends(get_db)):
     inv = _lookup_by_pay_token(db, pay_token)
     from ...services.invoice_pdf_service import generate_invoice_pdf
-    pdf_bytes = generate_invoice_pdf(inv.to_dict(), _pay_url(inv))
+    pdf_bytes = generate_invoice_pdf(_admin_payload(inv), _pay_url(inv))
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",

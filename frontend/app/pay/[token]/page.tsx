@@ -17,6 +17,14 @@ type PublicLine = {
   amount_cents: number;
 };
 
+type DeferredLine = {
+  description: string;
+  unit_amount_cents: number;
+  quantity: number;
+  amount_cents: number;
+  interval: "month" | "year";
+};
+
 type PublicInvoice = {
   invoice_number: string;
   customer_name: string;
@@ -26,6 +34,9 @@ type PublicInvoice = {
   subtotal_cents: number;
   discount_cents: number;
   total_cents: number;
+  due_today_cents: number;
+  primary_interval: "month" | "year" | null;
+  deferred: DeferredLine[];
   notes: string | null;
   expires_at: string | null;
   is_expired: boolean;
@@ -42,6 +53,19 @@ function fmtMoney(cents: number): string {
 
 function intervalLabel(i: string): string {
   return i === "month" ? "per month" : i === "year" ? "per year" : "one-time";
+}
+
+// Human phrase for the recurring-after-today lines, e.g. "$650.00/month" or
+// "$650.00/month + $1,200.00/year". Groups deferred lines by billing interval.
+function recurringPhrase(deferred: DeferredLine[]): string {
+  if (!deferred || deferred.length === 0) return "";
+  const byInterval: Record<string, number> = {};
+  deferred.forEach((d) => {
+    byInterval[d.interval] = (byInterval[d.interval] || 0) + d.amount_cents;
+  });
+  return Object.entries(byInterval)
+    .map(([intv, cents]) => `${fmtMoney(cents)}/${intv === "year" ? "year" : "month"}`)
+    .join(" + ");
 }
 
 function PayInner() {
@@ -143,6 +167,8 @@ function PayInner() {
   }
 
   const isPayable = invoice.status === "sent" || invoice.status === "draft";
+  const dueToday = invoice.due_today_cents ?? invoice.total_cents;
+  const recurring = recurringPhrase(invoice.deferred || []);
 
   // Success state after returning from Stripe
   if (paid || invoice.status === "paid") {
@@ -182,10 +208,15 @@ function PayInner() {
               <div className="text-2xl font-bold">{invoice.invoice_number}</div>
             </div>
             <div className="text-right">
-              <div className="text-sm text-purple-100">Total Due</div>
-              <div className="text-2xl font-bold" data-testid="pay-total">
-                {fmtMoney(invoice.total_cents)}
+              <div className="text-sm text-purple-100">Due today</div>
+              <div className="text-2xl font-bold" data-testid="pay-due-today">
+                {fmtMoney(dueToday)}
               </div>
+              {recurring && (
+                <div className="text-xs text-purple-100 mt-0.5" data-testid="pay-recurring">
+                  then {recurring}, starting today
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -250,9 +281,21 @@ function PayInner() {
               </div>
             )}
             <div className="flex justify-between font-bold text-slate-800 text-base pt-2 border-t border-slate-200">
-              <span>Total Due</span>
-              <span>{fmtMoney(invoice.total_cents)}</span>
+              <span>Due today</span>
+              <span data-testid="pay-due-today-row">{fmtMoney(dueToday)}</span>
             </div>
+            {recurring && (
+              <div className="flex justify-between text-slate-500">
+                <span>Then (recurring)</span>
+                <span>{recurring}, starting today</span>
+              </div>
+            )}
+            {(recurring || invoice.total_cents !== dueToday) && (
+              <div className="flex justify-between text-xs text-slate-400">
+                <span>First-period value</span>
+                <span>{fmtMoney(invoice.total_cents)}</span>
+              </div>
+            )}
           </div>
 
           {invoice.notes && (
@@ -271,7 +314,7 @@ function PayInner() {
               data-testid="pay-now-btn"
               className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-semibold text-base disabled:opacity-60 transition-all"
             >
-              {payBusy ? "Redirecting to secure checkout…" : "Pay by Card or Bank Transfer (ACH)"}
+              {payBusy ? "Redirecting to secure checkout…" : `Pay ${fmtMoney(dueToday)} by Card or Bank Transfer (ACH)`}
             </button>
           ) : null}
 

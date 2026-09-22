@@ -32,9 +32,14 @@ type InvoiceListItem = {
   subtotal_cents: number;
   discount_cents: number;
   total_cents: number;
+  due_today_cents?: number;
+  primary_interval?: "month" | "year" | null;
   pay_token: string;
   user_id: number | null;
   created_at: string | null;
+  reminders_enabled?: boolean;
+  reminder_count?: number;
+  last_reminder_at?: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -78,6 +83,16 @@ function statusBadge(status: string): string {
 
 function emptyLine(): LineForm {
   return { description: "", unit_amount: "", quantity: "1", interval: "year" };
+}
+
+function reminderSummary(inv: InvoiceListItem): string {
+  if (inv.reminders_enabled === false) return "Reminders off";
+  const c = inv.reminder_count ?? 0;
+  if (c <= 0) return "Auto-reminders on";
+  const last = inv.last_reminder_at
+    ? `, last ${new Date(inv.last_reminder_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+    : "";
+  return `${c} reminder${c === 1 ? "" : "s"} sent${last}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -201,6 +216,57 @@ export default function AdminInvoicesPage() {
   const discountCents = useMemo(() => Math.min(toCents(discount), subtotalCents), [discount, subtotalCents]);
   const totalCents = Math.max(0, subtotalCents - discountCents);
 
+  // Effective primary billing interval (mirrors backend _compute_primary_interval):
+  // the admin override when it matches a recurring line, else the highest-value one.
+  const effectivePrimary = useMemo<"month" | "year" | null>(() => {
+    const rec = lines.filter((l) => l.interval === "month" || l.interval === "year");
+    if (rec.length === 0) return null;
+    if ((primaryInterval === "month" || primaryInterval === "year") && rec.some((l) => l.interval === primaryInterval)) {
+      return primaryInterval;
+    }
+    let top = rec[0];
+    let topVal = toCents(top.unit_amount) * (parseInt(top.quantity) || 1);
+    for (const l of rec) {
+      const v = toCents(l.unit_amount) * (parseInt(l.quantity) || 1);
+      if (v > topVal) {
+        top = l;
+        topVal = v;
+      }
+    }
+    return top.interval as "month" | "year";
+  }, [lines, primaryInterval]);
+
+  // Due today = primary-interval recurring + one-time lines, minus discount
+  // (mirrors backend _compute_due_today + what public_checkout charges).
+  const dueTodayCents = useMemo(() => {
+    const oneTime = lines
+      .filter((l) => l.interval === "one_time")
+      .reduce((s, l) => s + toCents(l.unit_amount) * (parseInt(l.quantity) || 1), 0);
+    const primary = effectivePrimary
+      ? lines
+          .filter((l) => l.interval === effectivePrimary)
+          .reduce((s, l) => s + toCents(l.unit_amount) * (parseInt(l.quantity) || 1), 0)
+      : 0;
+    return Math.max(0, oneTime + primary - discountCents);
+  }, [lines, effectivePrimary, discountCents]);
+
+  const deferredPreview = useMemo(
+    () => lines.filter((l) => (l.interval === "month" || l.interval === "year") && l.interval !== effectivePrimary),
+    [lines, effectivePrimary],
+  );
+
+  const recurringPreviewPhrase = useMemo(() => {
+    if (deferredPreview.length === 0) return "";
+    const byInterval: Record<string, number> = {};
+    deferredPreview.forEach((l) => {
+      const amt = toCents(l.unit_amount) * (parseInt(l.quantity) || 1);
+      byInterval[l.interval] = (byInterval[l.interval] || 0) + amt;
+    });
+    return Object.entries(byInterval)
+      .map(([intv, cents]) => `${fmtMoney(cents)}/${intv === "year" ? "year" : "month"}`)
+      .join(" + ");
+  }, [deferredPreview]);
+
   const buildPayload = () => ({
     customer_email: customerEmail.trim().toLowerCase(),
     customer_name: customerName.trim(),
@@ -303,6 +369,32 @@ export default function AdminInvoicesPage() {
     }
     window.open(url, "_blank");
     setTimeout(() => URL.revokeObjectURL(url), 60000);
+  };
+
+  const toggleReminders = async (inv: InvoiceListItem) => {
+    const next = !(inv.reminders_enabled ?? true);
+    setBusy(true);
+    const res = await api.setInvoiceReminders(inv.id, next);
+    setBusy(false);
+    if (!res.success) {
+      showToast(res.error || "Update failed");
+      return;
+    }
+    showToast(`Reminders ${next ? "enabled" : "disabled"}`);
+    await loadInvoices();
+  };
+
+  const sendReminderNow = async (inv: InvoiceListItem) => {
+    if (!confirm(`Email a payment reminder to ${inv.customer_email} now?`)) return;
+    setBusy(true);
+    const res = await api.sendInvoiceReminder(inv.id);
+    setBusy(false);
+    if (!res.success) {
+      showToast(res.error || "Reminder failed");
+      return;
+    }
+    showToast("Reminder emailed");
+    await loadInvoices();
   };
 
   const addLine = () => setLines((prev) => [...prev, emptyLine()]);
@@ -414,6 +506,11 @@ export default function AdminInvoicesPage() {
                       <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${statusBadge(inv.status)}`}>
                         {inv.status}
                       </span>
+                      {inv.status === "sent" && (
+                        <div className="text-[11px] text-slate-400 mt-1" data-testid={`inv-reminder-state-${inv.id}`}>
+                          {reminderSummary(inv)}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1.5 flex-wrap">
@@ -437,6 +534,26 @@ export default function AdminInvoicesPage() {
                         >
                           PDF
                         </button>
+                        {inv.status === "sent" && (
+                          <>
+                            <button
+                              onClick={() => sendReminderNow(inv)}
+                              disabled={busy}
+                              data-testid={`inv-send-reminder-${inv.id}`}
+                              className="px-2 py-1 text-xs rounded border border-purple-200 text-purple-700 hover:bg-purple-50 disabled:opacity-50"
+                            >
+                              Send reminder
+                            </button>
+                            <button
+                              onClick={() => toggleReminders(inv)}
+                              disabled={busy}
+                              data-testid={`inv-toggle-reminders-${inv.id}`}
+                              className="px-2 py-1 text-xs rounded border border-slate-200 hover:bg-slate-100 disabled:opacity-50"
+                            >
+                              {inv.reminders_enabled === false ? "Enable reminders" : "Mute reminders"}
+                            </button>
+                          </>
+                        )}
                         {inv.status !== "paid" && inv.status !== "void" && (
                           <button
                             onClick={() => doVoid(inv.id)}
@@ -552,6 +669,11 @@ export default function AdminInvoicesPage() {
                     <option value="year">Per year</option>
                     <option value="month">Per month</option>
                   </select>
+                  {primaryInterval === "" && effectivePrimary && (
+                    <div className="text-[11px] text-slate-400 mt-1" data-testid="inv-primary-resolved">
+                      Auto &rarr; {effectivePrimary === "year" ? "per year" : "per month"} (charged today)
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -648,9 +770,21 @@ export default function AdminInvoicesPage() {
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-slate-800 pt-1.5 border-t border-slate-200">
-                  <span>Total Due</span>
-                  <span data-testid="inv-total">{fmtMoney(totalCents)}</span>
+                  <span>Due today</span>
+                  <span data-testid="inv-due-today">{fmtMoney(dueTodayCents)}</span>
                 </div>
+                {recurringPreviewPhrase && (
+                  <div className="flex justify-between text-slate-500">
+                    <span>Then (recurring)</span>
+                    <span data-testid="inv-recurring">{recurringPreviewPhrase}, starting today</span>
+                  </div>
+                )}
+                {(recurringPreviewPhrase || totalCents !== dueTodayCents) && (
+                  <div className="flex justify-between text-xs text-slate-400">
+                    <span>First-period value</span>
+                    <span data-testid="inv-total">{fmtMoney(totalCents)}</span>
+                  </div>
+                )}
               </div>
             </div>
 

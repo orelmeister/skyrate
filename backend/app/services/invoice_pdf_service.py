@@ -197,6 +197,8 @@ def generate_invoice_pdf(invoice, pay_url: Optional[str] = None) -> bytes:
     subtotal = inv.get("subtotal_cents", 0)
     discount = inv.get("discount_cents", 0)
     total = inv.get("total_cents", 0)
+    due_today = inv.get("due_today_cents", total)
+    deferred = inv.get("deferred", []) or []
 
     totals_rows = [
         [Paragraph("Subtotal", p_cell_r), Paragraph(_fmt_money(subtotal, currency), p_cell_r)],
@@ -205,18 +207,41 @@ def generate_invoice_pdf(invoice, pay_url: Optional[str] = None) -> bytes:
         totals_rows.append(
             [Paragraph("Discount", p_cell_r), Paragraph(_fmt_money(-discount, currency), p_cell_r)]
         )
+    due_today_row_idx = len(totals_rows)
     totals_rows.append([
-        Paragraph("<b>Total Due</b>", ParagraphStyle("td", parent=p_cell_r, fontSize=11)),
-        Paragraph(f"<b>{_fmt_money(total, currency)}</b>", ParagraphStyle("tdv", parent=p_cell_r, fontSize=11)),
+        Paragraph("<b>Due Today</b>", ParagraphStyle("dt", parent=p_cell_r, fontSize=12)),
+        Paragraph(f"<b>{_fmt_money(due_today, currency)}</b>", ParagraphStyle("dtv", parent=p_cell_r, fontSize=12)),
     ])
-    totals = Table(totals_rows, colWidths=[1.4 * inch, 1.3 * inch], hAlign="RIGHT")
+    # "First-period value" == subtotal - discount. Only show it when it differs
+    # from Due Today (i.e. there are deferred recurring lines) so it no longer
+    # reads as a single charge.
+    if deferred or total != due_today:
+        totals_rows.append([
+            Paragraph("First-period value", ParagraphStyle(
+                "fp", parent=p_cell_r, fontSize=8, textColor=colors.HexColor(GRAY))),
+            Paragraph(_fmt_money(total, currency), ParagraphStyle(
+                "fpv", parent=p_cell_r, fontSize=8, textColor=colors.HexColor(GRAY))),
+        ])
+    totals = Table(totals_rows, colWidths=[1.7 * inch, 1.3 * inch], hAlign="RIGHT")
     totals.setStyle(TableStyle([
         ("TOPPADDING", (0, 0), (-1, -1), 4),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ("LINEABOVE", (0, -1), (-1, -1), 1, colors.HexColor(DARK)),
+        ("LINEABOVE", (0, due_today_row_idx), (-1, due_today_row_idx), 1, colors.HexColor(DARK)),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
     ]))
     story.append(totals)
+
+    # ---- Recurring after today (deferred lines) ---------------------------
+    if deferred:
+        story.append(Spacer(1, 0.14 * inch))
+        story.append(Paragraph("Recurring after today", ParagraphStyle(
+            "rah", parent=p_label, fontSize=9.5, textColor=colors.HexColor(PURPLE), spaceAfter=3)))
+        for d in deferred:
+            story.append(Paragraph(
+                f"{d.get('description', '')} - <b>{_fmt_money(d.get('amount_cents', 0), currency)}</b> "
+                f"{_interval_label(d.get('interval', 'month'))}, starting today",
+                p_small,
+            ))
     story.append(Spacer(1, 0.35 * inch))
 
     # ---- Pay online + payment methods ------------------------------------

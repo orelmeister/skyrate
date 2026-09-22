@@ -650,6 +650,10 @@ def _run_schema_migrations(engine):
     
     migrations = [
         # (table, column, SQL type, default)
+        # Billing custom-invoice reminder chase (added 2026-09-22)
+        ("billing_invoices", "reminders_enabled", "TINYINT(1) NOT NULL DEFAULT 1", None),
+        ("billing_invoices", "reminder_count", "INT NOT NULL DEFAULT 0", None),
+        ("billing_invoices", "last_reminder_at", "DATETIME DEFAULT NULL", None),
         ("users", "phone_verified", "TINYINT(1) DEFAULT 0", None),
         ("users", "phone_verified_at", "DATETIME DEFAULT NULL", None),
         ("users", "onboarding_completed", "TINYINT(1) DEFAULT 0", None),
@@ -871,6 +875,9 @@ def _run_schema_migrations(engine):
                         stripe_subscription_ids TEXT,
                         signup_token VARCHAR(64) UNIQUE,
                         signup_token_expires_at DATETIME,
+                        reminders_enabled TINYINT(1) NOT NULL DEFAULT 1,
+                        reminder_count INT NOT NULL DEFAULT 0,
+                        last_reminder_at DATETIME,
                         created_by_admin_id INT,
                         sent_at DATETIME,
                         paid_at DATETIME,

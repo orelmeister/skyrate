@@ -1790,6 +1790,14 @@ https://skyrate.ai | support@skyrate.ai
         subtotal = invoice.get("subtotal_cents", 0)
         discount = invoice.get("discount_cents", 0)
         total = invoice.get("total_cents", 0)
+        due_today = invoice.get("due_today_cents", total)
+        deferred = invoice.get("deferred", []) or []
+
+        def _recurring_phrase():
+            return ", ".join(
+                f"{_money(d.get('amount_cents', 0))} {_interval(d.get('interval', 'month'))}"
+                for d in deferred
+            )
 
         rows_html = ""
         for ln in lines:
@@ -1808,6 +1816,20 @@ https://skyrate.ai | support@skyrate.ai
             <tr><td style="padding:6px 12px;color:#64748b;font-size:14px;text-align:right;">Discount</td>
             <td style="padding:6px 12px;color:#16a34a;font-size:14px;text-align:right;white-space:nowrap;">{_money(-discount)}</td></tr>"""
 
+        firstperiod_html = ""
+        if deferred or total != due_today:
+            firstperiod_html = f"""
+            <tr><td style="padding:2px 12px;color:#94a3b8;font-size:12px;text-align:right;">First-period value</td>
+            <td style="padding:2px 12px;color:#94a3b8;font-size:12px;text-align:right;white-space:nowrap;">{_money(total)}</td></tr>"""
+
+        recurring_html = ""
+        if deferred:
+            recurring_html = f"""
+              <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:10px;padding:12px 16px;margin-bottom:20px;">
+                <div style="color:#7c3aed;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:4px;">Recurring after today</div>
+                <div style="color:#475569;font-size:14px;">then <strong>{_recurring_phrase()}</strong>, starting today</div>
+              </div>"""
+
         html_content = f"""
         <!DOCTYPE html>
         <html>
@@ -1821,17 +1843,19 @@ https://skyrate.ai | support@skyrate.ai
               <p style="color:#64748b;font-size:15px;margin:0 0 24px 0;">Hi {customer}, your invoice from SkyRate AI is ready.</p>
 
               <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">{rows_html}</table>
-              <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+              <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
                 <tr><td style="padding:6px 12px;color:#64748b;font-size:14px;text-align:right;">Subtotal</td>
                 <td style="padding:6px 12px;color:#1e293b;font-size:14px;text-align:right;white-space:nowrap;">{_money(subtotal)}</td></tr>
                 {discount_html}
-                <tr><td style="padding:10px 12px;color:#1e293b;font-size:17px;font-weight:700;text-align:right;border-top:2px solid #1e293b;">Total Due</td>
-                <td style="padding:10px 12px;color:#1e293b;font-size:17px;font-weight:700;text-align:right;white-space:nowrap;border-top:2px solid #1e293b;">{_money(total)}</td></tr>
+                <tr><td style="padding:10px 12px;color:#1e293b;font-size:18px;font-weight:700;text-align:right;border-top:2px solid #1e293b;">Due today</td>
+                <td style="padding:10px 12px;color:#1e293b;font-size:18px;font-weight:700;text-align:right;white-space:nowrap;border-top:2px solid #1e293b;">{_money(due_today)}</td></tr>
+                {firstperiod_html}
               </table>
+              {recurring_html}
 
               <div style="text-align:center;margin:24px 0;">
                 <a href="{pay_url}" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;padding:15px 36px;border-radius:10px;text-decoration:none;font-weight:600;font-size:16px;">
-                  View &amp; Pay Invoice &rarr;
+                  Pay {_money(due_today)} now &rarr;
                 </a>
               </div>
               <p style="color:#64748b;font-size:13px;text-align:center;margin:0 0 8px 0;">
@@ -1851,9 +1875,10 @@ https://skyrate.ai | support@skyrate.ai
         </html>
         """
 
+        recurring_text = f" Then {_recurring_phrase()}, starting today." if deferred else ""
         text_content = (
             f"Invoice {number} from SkyRate AI\n\n"
-            f"Hi {customer}, your invoice is ready. Total Due: {_money(total)}.\n\n"
+            f"Hi {customer}, your invoice is ready. Due today: {_money(due_today)}.{recurring_text}\n\n"
             f"View & pay online (Credit Card or ACH bank transfer):\n{pay_url}\n\n"
             f"Your invoice PDF is attached.\n\n"
             f"-- SkyRate LLC | 30 N Gould St Ste N, Sheridan, WY 82801 | (855) 765-7291"
@@ -1869,7 +1894,106 @@ https://skyrate.ai | support@skyrate.ai
 
         return self.send_email(
             to_email=to_email,
-            subject=f"Your SkyRate AI Invoice {number} - {_money(total)} due",
+            subject=f"Your SkyRate AI Invoice {number} - {_money(due_today)} due today",
+            html_content=html_content,
+            text_content=text_content,
+            email_type='billing',
+            attachments=attachments,
+        )
+
+
+    def send_invoice_reminder_email(self, to_email: str, invoice: Dict[str, Any], pdf_bytes: Optional[bytes], pay_url: str, reminder_number: int = 1) -> bool:
+        """Polite payment reminder for an unpaid (sent) custom invoice. Headlines
+        the Due Today amount, states the recurring portion, prominent pay button,
+        PDF attached. Never leaks the signup token (uses the pay_token URL only)."""
+        def _money(cents):
+            sign = "-" if (cents or 0) < 0 else ""
+            return f"{sign}${abs(int(cents or 0)) / 100:,.2f}"
+
+        def _interval(v):
+            return {"one_time": "one-time", "month": "per month", "year": "per year"}.get(v, "one-time")
+
+        number = invoice.get("invoice_number", "")
+        customer = invoice.get("customer_name") or "there"
+        total = invoice.get("total_cents", 0)
+        due_today = invoice.get("due_today_cents", total)
+        deferred = invoice.get("deferred", []) or []
+        recurring_phrase = ", ".join(
+            f"{_money(d.get('amount_cents', 0))} {_interval(d.get('interval', 'month'))}"
+            for d in deferred
+        )
+
+        recurring_html = ""
+        recurring_text = ""
+        if deferred:
+            recurring_html = (
+                f'<p style="color:#64748b;font-size:14px;text-align:center;margin:0 0 4px 0;">'
+                f'then <strong>{recurring_phrase}</strong>, starting today</p>'
+            )
+            recurring_text = f" Then {recurring_phrase}, starting today."
+
+        nudge = "a quick reminder" if reminder_number <= 1 else "a friendly follow-up"
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+          <div style="max-width:600px;margin:0 auto;padding:40px 20px;">
+            <div style="text-align:center;margin-bottom:28px;">
+              <span style="font-size:24px;font-weight:bold;color:#7c3aed;">SkyRate<span style="color:#1e293b;">.AI</span></span>
+            </div>
+            <div style="background:white;border-radius:16px;padding:32px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+              <h1 style="color:#1e293b;font-size:22px;margin:0 0 6px 0;">Invoice {number} is still open</h1>
+              <p style="color:#64748b;font-size:15px;margin:0 0 20px 0;">
+                Hi {customer}, just {nudge} that your SkyRate AI invoice is ready to pay whenever you are.
+              </p>
+              <div style="text-align:center;background:#faf5ff;border:1px solid #e9d5ff;border-radius:12px;padding:18px;margin-bottom:8px;">
+                <div style="color:#7c3aed;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Due today</div>
+                <div style="color:#1e293b;font-size:30px;font-weight:800;line-height:1.1;">{_money(due_today)}</div>
+              </div>
+              {recurring_html}
+              <div style="text-align:center;margin:22px 0 8px 0;">
+                <a href="{pay_url}" style="display:inline-block;background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;padding:15px 36px;border-radius:10px;text-decoration:none;font-weight:600;font-size:16px;">
+                  Pay {_money(due_today)} now &rarr;
+                </a>
+              </div>
+              <p style="color:#64748b;font-size:13px;text-align:center;margin:0 0 6px 0;">
+                We accept <strong>Credit Card</strong> and <strong>ACH bank transfer</strong> - choose your method at checkout.
+              </p>
+              <p style="color:#94a3b8;font-size:12px;text-align:center;margin:0;">Your invoice PDF is attached. Already paid? Please disregard this note.</p>
+            </div>
+            <div style="text-align:center;margin-top:16px;padding:16px;">
+              <p style="color:#94a3b8;font-size:12px;margin:0;">
+                SkyRate LLC &middot; 30 N Gould St Ste N, Sheridan, WY 82801 &middot; (855) 765-7291<br>
+                <a href="https://skyrate.ai" style="color:#7c3aed;">skyrate.ai</a> &middot;
+                <a href="mailto:billing@skyrate.ai" style="color:#7c3aed;">billing@skyrate.ai</a>
+              </p>
+            </div>
+          </div>
+        </body>
+        </html>
+        """
+
+        text_content = (
+            f"Reminder: SkyRate AI Invoice {number} is still open.\n\n"
+            f"Hi {customer}, just a reminder that your invoice is ready to pay. "
+            f"Due today: {_money(due_today)}.{recurring_text}\n\n"
+            f"View & pay online (Credit Card or ACH bank transfer):\n{pay_url}\n\n"
+            f"Your invoice PDF is attached. Already paid? Please disregard this note.\n\n"
+            f"-- SkyRate LLC | 30 N Gould St Ste N, Sheridan, WY 82801 | (855) 765-7291"
+        )
+
+        attachments = None
+        if pdf_bytes:
+            attachments = [{
+                "filename": f"Invoice-{number}.pdf",
+                "content": pdf_bytes,
+                "mimetype": "application/pdf",
+            }]
+
+        return self.send_email(
+            to_email=to_email,
+            subject=f"Reminder: SkyRate AI Invoice {number} - {_money(due_today)} due today",
             html_content=html_content,
             text_content=text_content,
             email_type='billing',

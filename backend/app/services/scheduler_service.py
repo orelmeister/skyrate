@@ -2063,6 +2063,96 @@ def run_bid_copilot_kb_job():
         logger.error(f"[bid_copilot_kb] run failed: {e}")
 
 
+def send_invoice_payment_reminders():
+    """Daily sweep: email polite payment reminders for unpaid custom invoices.
+
+    Targets status='sent', unpaid, reminders_enabled invoices that are not past
+    expiry. Sends at 3, 7 and 14 days after sent_at (max 3), at most one per
+    invoice per day. Idempotent + defensive so one bad row can't kill the run.
+    Runs ONLY on the dedicated scheduler worker.
+    """
+    logger.info("Running invoice payment reminder sweep...")
+    db = SessionLocal()
+    try:
+        from ..models.billing_invoice import BillingInvoice, BillingInvoiceStatus
+        from ..api.v1.billing_invoices import _compute_primary_interval, _compute_due_today, _pay_url
+        from .invoice_pdf_service import generate_invoice_pdf
+        from .email_service import EmailService
+
+        email_service = EmailService()
+        now = datetime.utcnow()
+        reminder_days = [3, 7, 14]
+
+        invoices = (
+            db.query(BillingInvoice)
+            .filter(
+                BillingInvoice.status == BillingInvoiceStatus.SENT.value,
+                BillingInvoice.paid_at.is_(None),
+                BillingInvoice.reminders_enabled == True,  # noqa: E712
+            )
+            .all()
+        )
+
+        scanned = 0
+        sent = 0
+        for inv in invoices:
+            scanned += 1
+            try:
+                # Expire past-deadline invoices instead of reminding on them.
+                if inv.expires_at and inv.expires_at < now:
+                    inv.status = BillingInvoiceStatus.EXPIRED.value
+                    db.commit()
+                    continue
+                if not inv.sent_at:
+                    continue
+                # At most one reminder per invoice per day (dedupe double runs).
+                if inv.last_reminder_at and inv.last_reminder_at.date() == now.date():
+                    continue
+                count = int(inv.reminder_count or 0)
+                if count >= len(reminder_days):
+                    continue
+                days_since_sent = (now - inv.sent_at).days
+                if days_since_sent < reminder_days[count]:
+                    continue
+
+                primary = _compute_primary_interval(inv.lines, inv.primary_interval)
+                due_today, deferred = _compute_due_today(inv.lines, inv.discount_cents, primary)
+                inv_dict = inv.to_dict()
+                inv_dict["primary_interval"] = primary
+                inv_dict["due_today_cents"] = due_today
+                inv_dict["deferred"] = deferred
+                pay_url = _pay_url(inv)
+                try:
+                    pdf_bytes = generate_invoice_pdf(inv_dict, pay_url)
+                except Exception as pdf_err:
+                    logger.error(f"[invoice-reminder] PDF failed for {inv.invoice_number}: {pdf_err}")
+                    pdf_bytes = None
+
+                ok = email_service.send_invoice_reminder_email(
+                    inv.customer_email, inv_dict, pdf_bytes, pay_url, reminder_number=count + 1
+                )
+                inv.reminder_count = count + 1
+                inv.last_reminder_at = now
+                db.commit()
+                if ok:
+                    sent += 1
+            except Exception as row_err:
+                logger.error(
+                    f"[invoice-reminder] error on invoice {getattr(inv, 'invoice_number', '?')}: {row_err}"
+                )
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+                continue
+
+        logger.info(f"Invoice reminder sweep complete: scanned={scanned}, reminders_sent={sent}")
+    except Exception as e:
+        logger.error(f"Invoice reminder sweep failed: {e}")
+    finally:
+        db.close()
+
+
 def init_scheduler():
     """Initialize the background scheduler with all jobs.
 
@@ -2393,6 +2483,20 @@ def init_scheduler():
         coalesce=True,
         replace_existing=True,
         next_run_time=boot + timedelta(minutes=2),
+    )
+
+    # Unpaid custom-invoice reminder chase - once daily at 15:00 UTC. Emails a
+    # polite Due-Today reminder at 3/7/14 days after send (max 3, at most one per
+    # invoice per day). Cron fires at absolute time regardless of deploy restarts,
+    # so no next_run_time is needed. Runs ONLY on the dedicated scheduler worker.
+    scheduler.add_job(
+        send_invoice_payment_reminders,
+        trigger=CronTrigger(hour=15, minute=0, timezone='UTC'),
+        id='invoice_payment_reminders',
+        name='Email payment reminders for unpaid custom invoices (daily 15:00 UTC)',
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
     )
 
     scheduler.start()

@@ -10,7 +10,7 @@ import json
 import enum
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.orm import relationship
 
 from ..core.database import Base
@@ -72,6 +72,11 @@ class BillingInvoice(Base):
     signup_token = Column(String(64), unique=True, nullable=True, index=True)
     signup_token_expires_at = Column(DateTime, nullable=True)
 
+    # Automatic payment-reminder chase for unpaid (sent) invoices
+    reminders_enabled = Column(Boolean, nullable=False, default=True)
+    reminder_count = Column(Integer, nullable=False, default=0)
+    last_reminder_at = Column(DateTime, nullable=True)
+
     created_by_admin_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     sent_at = Column(DateTime, nullable=True)
@@ -127,6 +132,9 @@ class BillingInvoice(Base):
             "stripe_checkout_session_id": self.stripe_checkout_session_id,
             "stripe_subscription_ids": self.subscription_ids(),
             "created_by_admin_id": self.created_by_admin_id,
+            "reminders_enabled": bool(self.reminders_enabled) if self.reminders_enabled is not None else True,
+            "reminder_count": int(self.reminder_count or 0),
+            "last_reminder_at": self.last_reminder_at.isoformat() if self.last_reminder_at else None,
             "sent_at": self.sent_at.isoformat() if self.sent_at else None,
             "paid_at": self.paid_at.isoformat() if self.paid_at else None,
             "expires_at": self.expires_at.isoformat() if self.expires_at else None,
