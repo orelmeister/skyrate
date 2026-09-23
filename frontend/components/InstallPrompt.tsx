@@ -12,11 +12,14 @@ interface BeforeInstallPromptEvent extends Event {
 
 export default function InstallPrompt() {
   const pathname = usePathname();
-  // Never show the install nudge on lead-capture / conversion / payment pages.
+  // Never show the install nudge on lead-capture / conversion / payment pages,
+  // or over the admin consoles where it covers action buttons.
   const suppressed =
     pathname === '/book-demo' ||
     pathname === '/sign-up' ||
-    pathname?.startsWith('/pay/') === true;
+    pathname?.startsWith('/pay/') === true ||
+    pathname?.startsWith('/admin') === true ||
+    pathname?.startsWith('/super') === true;
   const [showPrompt, setShowPrompt] = useState(false);
   const [platform, setPlatform] = useState<'ios' | 'android' | 'desktop' | 'unknown'>('unknown');
   const [browser, setBrowser] = useState<BrowserType>('unknown');
