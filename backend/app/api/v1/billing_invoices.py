@@ -848,13 +848,52 @@ def handle_invoice_payment(session: dict, db: Session) -> None:
             pass
 
 
-def _provision_for_existing_user(inv: BillingInvoice, db: Session, stripe_sub_id: Optional[str], current_period_end: Optional[datetime]) -> None:
-    """Flip an existing account's Subscription to active immediately (no trial)."""
-    user = db.query(User).filter(User.id == inv.user_id).first()
-    if not user:
-        logger.warning(f"[invoice-webhook] invoice {inv.invoice_number} user_id {inv.user_id} missing")
-        return
+def claim_paid_invoice(
+    inv: BillingInvoice,
+    user: User,
+    db: Session,
+    stripe_sub_id: Optional[str] = None,
+    current_period_end: Optional[datetime] = None,
+    fetch_period_end: bool = False,
+) -> Subscription:
+    """Bind a PAID custom invoice to ``user`` and provision (or idempotently refresh)
+    the active Subscription it already paid for.
+
+    Single source of truth for invoice -> subscription provisioning, shared by every
+    path that grants a paid invoice's subscription to an account:
+      * the Stripe webhook (invoice already had user_id -> existing account),
+      * the magic-link signup-token path in auth.register (prospect used the link),
+      * the email-match claim path in auth.register (prospect registered organically).
+
+    Safe to call more than once for the same invoice/user: an existing Subscription
+    row is upgraded/refreshed in place rather than duplicated. Does NOT commit — the
+    caller owns the transaction boundary.
+    """
+    # Bind the invoice to this account and burn any single-use signup token.
+    inv.user_id = user.id
+    inv.signup_token = None
+    inv.signup_token_expires_at = None
+
     plan = inv.grants_plan if inv.grants_plan in ("monthly", "yearly") else "yearly"
+    if not stripe_sub_id:
+        sub_ids = inv.subscription_ids()
+        stripe_sub_id = sub_ids[0] if sub_ids else None
+
+    # Optionally read current_period_end from Stripe (one cheap retrieve). Best effort
+    # only — the subscription still provisions if Stripe is unavailable.
+    if (
+        fetch_period_end
+        and current_period_end is None
+        and stripe_sub_id
+        and STRIPE_AVAILABLE
+        and stripe is not None
+    ):
+        try:
+            current_period_end = _period_end_from_sub(stripe.Subscription.retrieve(stripe_sub_id))
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"[invoice-claim] period-end fetch failed for {stripe_sub_id}: {e}")
+
+    # Idempotent: refresh the existing Subscription row if present, else create one.
     sub = user.subscription
     if not sub:
         sub = Subscription(user_id=user.id, price_cents=inv.total_cents)
@@ -870,3 +909,14 @@ def _provision_for_existing_user(inv: BillingInvoice, db: Session, stripe_sub_id
     sub.trial_end = None
     if current_period_end:
         sub.current_period_end = current_period_end
+    return sub
+
+
+def _provision_for_existing_user(inv: BillingInvoice, db: Session, stripe_sub_id: Optional[str], current_period_end: Optional[datetime]) -> None:
+    """Flip an existing account's Subscription to active immediately (no trial).
+    Thin wrapper over the shared claim_paid_invoice provisioning helper."""
+    user = db.query(User).filter(User.id == inv.user_id).first()
+    if not user:
+        logger.warning(f"[invoice-webhook] invoice {inv.invoice_number} user_id {inv.user_id} missing")
+        return
+    claim_paid_invoice(inv, user, db, stripe_sub_id=stripe_sub_id, current_period_end=current_period_end)

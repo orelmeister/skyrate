@@ -594,23 +594,12 @@ async def register(
         promo_invite.used_at = datetime.utcnow()
         promo_invite.used_by_user_id = user.id
     elif billing_invoice:
-        # Paid custom invoice: the subscription is ALREADY paid. Provision active
-        # access immediately — no trial, no second payment. Consume the single-use
-        # signup token and bind the invoice to this new account.
-        inv_plan = billing_invoice.grants_plan if billing_invoice.grants_plan in ("monthly", "yearly") else "yearly"
-        inv_sub_ids = billing_invoice.subscription_ids()
-        subscription = Subscription(
-            user_id=user.id,
-            plan=inv_plan,
-            status=SubscriptionStatus.ACTIVE.value,
-            price_cents=billing_invoice.total_cents,
-            stripe_customer_id=billing_invoice.stripe_customer_id,
-            stripe_subscription_id=(inv_sub_ids[0] if inv_sub_ids else None),
-            start_date=datetime.utcnow(),
-        )
-        billing_invoice.user_id = user.id
-        billing_invoice.signup_token = None
-        billing_invoice.signup_token_expires_at = None
+        # Paid custom invoice via magic link: the subscription is ALREADY paid.
+        # Provision active access immediately through the shared claim helper — no
+        # trial, no second payment. It binds the invoice to this new account and
+        # burns the single-use signup token.
+        from .billing_invoices import claim_paid_invoice
+        subscription = claim_paid_invoice(billing_invoice, user, db)
     else:
         # Normal registration: 14-day trial, requires payment setup
         trial_end = datetime.utcnow() + timedelta(days=14)
@@ -635,6 +624,43 @@ async def register(
     
     db.commit()
     db.refresh(user)
+
+    # Email-match invoice claim: a prospect may have PAID a custom invoice for this
+    # exact email, then ignored the magic signup link and registered organically. If
+    # an unclaimed PAID invoice exists for this email, grant the subscription already
+    # paid for. Best-effort AFTER the commit above — it must never block or 500 the
+    # registration itself. Skipped when a token/promo path already provisioned access.
+    if not invoice_signup and not promo_invite:
+        import logging
+        try:
+            from sqlalchemy import func
+            from ...models.billing_invoice import BillingInvoice, BillingInvoiceStatus
+            from .billing_invoices import claim_paid_invoice
+            unclaimed_invoice = (
+                db.query(BillingInvoice)
+                .filter(
+                    func.lower(BillingInvoice.customer_email) == user.email,
+                    BillingInvoice.status == BillingInvoiceStatus.PAID.value,
+                    BillingInvoice.user_id.is_(None),
+                )
+                .order_by(BillingInvoice.id.asc())
+                .first()
+            )
+            if unclaimed_invoice:
+                claim_paid_invoice(unclaimed_invoice, user, db, fetch_period_end=True)
+                db.commit()
+                logging.getLogger(__name__).info(
+                    f"[invoice-claim] linked paid invoice {unclaimed_invoice.invoice_number} "
+                    f"to organically-registered user {user.id} ({user.email})"
+                )
+        except Exception as claim_err:
+            logging.getLogger(__name__).error(
+                f"[invoice-claim] email-match claim failed for {user.email}: {claim_err}"
+            )
+            try:
+                db.rollback()
+            except Exception:
+                pass
 
     # Telegram alert on new registration
     try:
