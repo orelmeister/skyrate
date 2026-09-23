@@ -4170,6 +4170,7 @@ class ApiClient {
     never_logged_in?: boolean;
     email_unverified?: boolean;
     onboarding_incomplete?: boolean;
+    billing?: string;
   }): Promise<ApiResponse<any>> {
     const qs = new URLSearchParams();
     if (params?.role) qs.set('role', params.role);
@@ -4180,7 +4181,31 @@ class ApiClient {
     if (params?.never_logged_in) qs.set('never_logged_in', 'true');
     if (params?.email_unverified) qs.set('email_unverified', 'true');
     if (params?.onboarding_incomplete) qs.set('onboarding_incomplete', 'true');
+    if (params?.billing) qs.set('billing', params.billing);
     return this.request(`/api/v1/admin/users?${qs.toString()}`);
+  }
+
+  /**
+   * Update an admin-managed user's core details, phone, test flag, and
+   * role-specific identifier (SPIN for vendors, CRN for consultants). Only the
+   * provided fields are changed; the backend returns the enriched user.
+   */
+  async updateAdminUser(userId: number, payload: {
+    email?: string;
+    role?: string;
+    first_name?: string;
+    last_name?: string;
+    company_name?: string;
+    phone?: string;
+    is_active?: boolean;
+    is_test?: boolean;
+    spin?: string;
+    crn?: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request(`/api/v1/admin/users/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
   }
 
   /**

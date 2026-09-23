@@ -108,6 +108,12 @@ function AdminDashboard() {
   const [userNeverLogged, setUserNeverLogged] = useState(false);
   const [userEmailUnverified, setUserEmailUnverified] = useState(false);
   const [userOnbIncomplete, setUserOnbIncomplete] = useState(false);
+  // Billing cohort filter (paid | comped | trial | none | test) and the
+  // real per-type counts that power the filter chips.
+  const [userBillingFilter, setUserBillingFilter] = useState("");
+  const [billingSummary, setBillingSummary] = useState<{
+    paid: number; trial: number; comped: number; none: number; test: number;
+  } | null>(null);
   // Headline funnel-leak cohort counts powering the Users KPI stat cards.
   const [funnelCounts, setFunnelCounts] = useState<{
     missing_identifier: number;
@@ -204,6 +210,7 @@ function AdminDashboard() {
   }, [
     activeTab, userSearch, userRoleFilter, ticketStatusFilter,
     userMissingIdent, userNeverLogged, userEmailUnverified, userOnbIncomplete,
+    userBillingFilter,
   ]);
 
   // Headline funnel-leak counts are global (not filter-dependent), so load them
@@ -244,10 +251,12 @@ function AdminDashboard() {
         never_logged_in: userNeverLogged || undefined,
         email_unverified: userEmailUnverified || undefined,
         onboarding_incomplete: userOnbIncomplete || undefined,
+        billing: userBillingFilter || undefined,
       });
       const data = res.data?.users || [];
       setUsers(data);
       setUsersTotal(res.data?.total || data.length);
+      setBillingSummary(res.data?.billing_summary || null);
     } catch (e) {
       console.error("Failed to load users", e);
     }
@@ -447,6 +456,9 @@ function AdminDashboard() {
                 setEmailUnverified={setUserEmailUnverified}
                 onboardingIncomplete={userOnbIncomplete}
                 setOnboardingIncomplete={setUserOnbIncomplete}
+                billingFilter={userBillingFilter}
+                setBillingFilter={setUserBillingFilter}
+                billingSummary={billingSummary}
                 funnelCounts={funnelCounts}
                 onEmailUser={(id) => { setEmailUserId(id); setActiveTab("communications"); }}
                 onDeleteUser={async (u) => {
@@ -527,6 +539,15 @@ function AdminDashboard() {
       >
         {drawerUser && (
           <div className="p-6 space-y-8">
+            {/* Current billing state — real subscription data, read-only. */}
+            <UserBillingSummary user={drawerUser} />
+
+            {/* Edit core user details + role identifier (SPIN / CRN). */}
+            <UserEditSection
+              user={drawerUser}
+              onSaved={(updated) => { setPlanModalUser(updated); loadUsers(); }}
+            />
+
             {/* ===================== Billing & Subscription ===================== */}
             <section>
               <div className="mb-4">
@@ -1147,6 +1168,255 @@ function OverviewTab({ dashboard, setActiveTab }: { dashboard: DashboardData; se
   );
 }
 
+// ==================== BILLING HELPERS ====================
+
+// Visual badge for a derived billing_type. Test accounts are handled
+// separately (a grey outline chip) since is_test is orthogonal to the type.
+function billingTypeBadge(bt: string | undefined): { label: string; cls: string } {
+  switch (bt) {
+    case "paid": return { label: "Paid", cls: "bg-green-100 text-green-700 border border-green-200" };
+    case "trial": return { label: "Trial", cls: "bg-amber-100 text-amber-700 border border-amber-200" };
+    case "comped": return { label: "Comped", cls: "bg-blue-100 text-blue-700 border border-blue-200" };
+    default: return { label: "None", cls: "bg-slate-100 text-slate-500 border border-slate-200" };
+  }
+}
+
+// Format an integer "days remaining" into human copy. null => unknown (em dash).
+function timeLeftLabel(days: number | null | undefined): { text: string; cls: string } {
+  if (days == null) return { text: "—", cls: "text-slate-400" };
+  if (days < 0) return { text: `Expired ${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} ago`, cls: "text-red-500" };
+  if (days === 0) return { text: "Ends today", cls: "text-amber-600" };
+  return { text: `${days} day${days === 1 ? "" : "s"} left`, cls: days <= 14 ? "text-amber-600" : "text-slate-600" };
+}
+
+// Format integer cents as USD. null => em dash (never a fake number).
+function formatCents(cents: number | null | undefined): string {
+  if (cents == null) return "—";
+  return `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
+
+// Coerce a FastAPI error `detail` (string | array | object) into a plain
+// string so it is never rendered as a React child. Mirrors auth-store's
+// normalizeErrorDetail (which is not exported).
+function normalizeDetail(detail: unknown, fallback: string): string {
+  if (typeof detail === "string" && detail.trim().length > 0) return detail;
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((d: any) => (typeof d === "string" ? d : d && typeof d.msg === "string" ? d.msg : null))
+      .filter(Boolean);
+    if (msgs.length > 0) return msgs.join("; ");
+  }
+  if (detail && typeof detail === "object") {
+    const anyDetail = detail as any;
+    if (typeof anyDetail.msg === "string") return anyDetail.msg;
+    if (typeof anyDetail.message === "string") return anyDetail.message;
+  }
+  return fallback;
+}
+
+// Read-only summary of a user's current subscription state. All values come
+// from the backend billing block; anything unknown renders as an em dash.
+function UserBillingSummary({ user }: { user: any }) {
+  const sub = user?.subscription || {};
+  const badge = billingTypeBadge(sub.billing_type);
+  const isTest = !!sub.is_test_account;
+  const tl = timeLeftLabel(sub.days_remaining);
+  const endIso = sub.trial_end && sub.status === "trialing" ? sub.trial_end : sub.current_period_end;
+
+  return (
+    <section className="bg-white rounded-lg border border-slate-200 p-5 shadow-sm">
+      <div className="mb-3">
+        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Subscription</h3>
+        <p className="text-xs text-slate-500 mt-0.5">Live billing state for this account.</p>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap mb-3">
+        {isTest && (
+          <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-white text-slate-500 border border-slate-300">
+            Test
+          </span>
+        )}
+        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${badge.cls}`}>{badge.label}</span>
+        {sub.status && sub.status !== "none" && (
+          <span className="text-[11px] text-slate-400">status: {sub.status}</span>
+        )}
+      </div>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+        <div>
+          <dt className="text-slate-400 uppercase tracking-wider text-[10px] font-bold">Plan</dt>
+          <dd className="text-slate-800 capitalize">{sub.plan || "—"}</dd>
+        </div>
+        <div>
+          <dt className="text-slate-400 uppercase tracking-wider text-[10px] font-bold">Price</dt>
+          <dd className="text-slate-800">{formatCents(sub.price_cents)}</dd>
+        </div>
+        <div>
+          <dt className="text-slate-400 uppercase tracking-wider text-[10px] font-bold">Time left</dt>
+          <dd className={tl.cls}>{tl.text}</dd>
+        </div>
+        <div>
+          <dt className="text-slate-400 uppercase tracking-wider text-[10px] font-bold">Renews / ends</dt>
+          <dd className="text-slate-800">{endIso ? new Date(endIso).toLocaleDateString() : "—"}</dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
+// Editable core-details form: name, email, phone, company, role identifier
+// (SPIN for vendors, CRN for consultants) and the internal test flag.
+function UserEditSection({ user, onSaved }: { user: any; onSaved: (u: any) => void }) {
+  const isVendor = user?.role === "vendor";
+  const isConsultant = user?.role === "consultant";
+
+  const [form, setForm] = useState({
+    first_name: "", last_name: "", email: "", phone: "", company_name: "",
+    spin: "", crn: "", is_test: false,
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string>("");
+  const [okMsg, setOkMsg] = useState<string>("");
+
+  // Reset the form whenever a different user is opened in the drawer.
+  useEffect(() => {
+    setForm({
+      first_name: user?.first_name || "",
+      last_name: user?.last_name || "",
+      email: user?.email || "",
+      phone: user?.phone || "",
+      company_name: user?.company_name || "",
+      spin: user?.role === "vendor" ? (user?.portfolio?.spin || "") : "",
+      crn: user?.role === "consultant" ? (user?.portfolio?.crn || "") : "",
+      is_test: !!(user?.is_test ?? user?.subscription?.is_test_account),
+    });
+    setError("");
+    setOkMsg("");
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleSave() {
+    setSaving(true);
+    setError("");
+    setOkMsg("");
+    const payload: {
+      first_name: string; last_name: string; email: string; phone: string;
+      company_name: string; is_test: boolean; spin?: string; crn?: string;
+    } = {
+      first_name: form.first_name.trim(),
+      last_name: form.last_name.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      company_name: form.company_name.trim(),
+      is_test: form.is_test,
+    };
+    if (isVendor) payload.spin = form.spin.trim();
+    if (isConsultant) payload.crn = form.crn.trim();
+    try {
+      const res = await api.updateAdminUser(user.id, payload);
+      if (res.error) {
+        // request() already flattens FastAPI `detail` to a string.
+        setError(normalizeDetail(res.error, "Failed to save user."));
+      } else if (res.data?.user) {
+        setOkMsg("Saved.");
+        onSaved(res.data.user);
+      } else {
+        setError(normalizeDetail(res.data?.detail, "Failed to save user."));
+      }
+    } catch (e: any) {
+      setError(e?.message || "Failed to save user.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const field = "w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-500";
+  const lbl = "block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1";
+
+  return (
+    <section className="bg-white rounded-lg border border-slate-200 p-5 shadow-sm">
+      <div className="mb-4">
+        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Edit User Details</h3>
+        <p className="text-xs text-slate-500 mt-0.5">
+          Update contact info{isVendor ? " and pre-set the vendor SPIN" : isConsultant ? " and pre-set the consultant CRN" : ""} so everything is ready before they log in.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={lbl}>First name</label>
+          <input className={field} value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} />
+        </div>
+        <div>
+          <label className={lbl}>Last name</label>
+          <input className={field} value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} />
+        </div>
+        <div className="col-span-2">
+          <label className={lbl}>Email</label>
+          <input type="email" className={field} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+        </div>
+        <div>
+          <label className={lbl}>Phone</label>
+          <input className={field} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="—" />
+        </div>
+        <div>
+          <label className={lbl}>Company</label>
+          <input className={field} value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} placeholder="—" />
+        </div>
+        {isVendor && (
+          <div className="col-span-2">
+            <label className={lbl}>SPIN <span className="text-slate-400 normal-case font-normal">(9 digits)</span></label>
+            <input
+              className={`${field} font-mono`}
+              value={form.spin}
+              onChange={(e) => setForm({ ...form, spin: e.target.value.replace(/[^0-9]/g, "").slice(0, 9) })}
+              inputMode="numeric"
+              placeholder="e.g. 143012345"
+            />
+          </div>
+        )}
+        {isConsultant && (
+          <div className="col-span-2">
+            <label className={lbl}>CRN</label>
+            <input
+              className={`${field} font-mono`}
+              value={form.crn}
+              onChange={(e) => setForm({ ...form, crn: e.target.value.trim() })}
+              placeholder="Consultant Registration Number"
+            />
+          </div>
+        )}
+        <div className="col-span-2">
+          <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={form.is_test}
+              onChange={(e) => setForm({ ...form, is_test: e.target.checked })}
+              className="rounded border-slate-300"
+            />
+            Internal test / trial account
+          </label>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>
+      )}
+      {okMsg && (
+        <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">{okMsg}</div>
+      )}
+
+      <div className="mt-4 flex items-center justify-end">
+        <button
+          type="button"
+          disabled={saving}
+          onClick={handleSave}
+          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-sm font-bold rounded-lg shadow-sm transition-all"
+        >
+          {saving ? "Saving..." : "Save changes"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 // ==================== USERS TAB ====================
 
 function UsersTab({
@@ -1155,6 +1425,7 @@ function UsersTab({
   neverLoggedIn, setNeverLoggedIn,
   emailUnverified, setEmailUnverified,
   onboardingIncomplete, setOnboardingIncomplete,
+  billingFilter, setBillingFilter, billingSummary,
   funnelCounts,
   onEmailUser,
   onDeleteUser,
@@ -1167,6 +1438,8 @@ function UsersTab({
   neverLoggedIn: boolean; setNeverLoggedIn: (v: boolean) => void;
   emailUnverified: boolean; setEmailUnverified: (v: boolean) => void;
   onboardingIncomplete: boolean; setOnboardingIncomplete: (v: boolean) => void;
+  billingFilter: string; setBillingFilter: (v: string) => void;
+  billingSummary: { paid: number; trial: number; comped: number; none: number; test: number } | null;
   funnelCounts: {
     missing_identifier: number;
     email_unverified: number;
@@ -1225,7 +1498,7 @@ function UsersTab({
     | "email" | "name" | "role" | "identifier"
     | "email_verified" | "onboarding_completed"
     | "last_login" | "days_since_signup" | "is_active"
-    | "company_name" | "phone";
+    | "company_name" | "phone" | "billing" | "time_left";
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -1258,6 +1531,8 @@ function UsersTab({
         case "is_active": return u.is_active ? 1 : 0;
         case "company_name": return (u.company_name || "").toLowerCase();
         case "phone": return u.phone || "";
+        case "billing": return u.subscription?.billing_type || "none";
+        case "time_left": return u.subscription?.days_remaining ?? Number.NEGATIVE_INFINITY;
       }
     };
     const copy = [...users];
@@ -1415,6 +1690,19 @@ function UsersTab({
           <option value="applicant">Applicant</option>
           <option value="admin">Admin</option>
         </select>
+        <select
+          value={billingFilter}
+          onChange={(e) => setBillingFilter(e.target.value)}
+          className="px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+          title="Filter by billing status"
+        >
+          <option value="">All Billing</option>
+          <option value="paid">Paid</option>
+          <option value="trial">Trial</option>
+          <option value="comped">Comped</option>
+          <option value="none">None</option>
+          <option value="test">Test</option>
+        </select>
         <span className="text-sm text-slate-500">{total} users</span>
         <button
           type="button"
@@ -1423,6 +1711,32 @@ function UsersTab({
         >
           + Add New User
         </button>
+      </div>
+
+      {/* Billing cohort chips — real per-type counts from the response. Click to
+          filter; click the active chip again to clear. */}
+      <div className="flex items-center gap-2 flex-wrap text-xs">
+        <span className="text-slate-500">Billing:</span>
+        {([
+          { key: "paid", label: "Paid", count: billingSummary?.paid, active: "bg-green-100 border-green-300 text-green-800" },
+          { key: "trial", label: "Trial", count: billingSummary?.trial, active: "bg-amber-100 border-amber-300 text-amber-800" },
+          { key: "comped", label: "Comped", count: billingSummary?.comped, active: "bg-blue-100 border-blue-300 text-blue-800" },
+          { key: "none", label: "None", count: billingSummary?.none, active: "bg-slate-200 border-slate-300 text-slate-700" },
+          { key: "test", label: "Test", count: billingSummary?.test, active: "bg-slate-100 border-slate-400 text-slate-700" },
+        ]).map((chip) => (
+          <button
+            key={chip.key}
+            type="button"
+            onClick={() => setBillingFilter(billingFilter === chip.key ? "" : chip.key)}
+            className={`px-2.5 py-1 rounded-full border transition-colors ${
+              billingFilter === chip.key
+                ? `${chip.active} font-semibold`
+                : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
+            }`}
+          >
+            {chip.label}: {chip.count == null ? "—" : chip.count}
+          </button>
+        ))}
       </div>
 
       {/* Funnel-drilldown filter chips. Each is a toggle that maps 1:1 to a
@@ -1487,6 +1801,8 @@ function UsersTab({
               <SortTh k="company_name">Company</SortTh>
               <SortTh k="phone">Phone</SortTh>
               <SortTh k="role">Role</SortTh>
+              <SortTh k="billing">Billing</SortTh>
+              <SortTh k="time_left" className="whitespace-nowrap">Time Left</SortTh>
               <SortTh k="identifier">Identifier</SortTh>
               <SortTh k="email_verified" className="whitespace-nowrap">Verified</SortTh>
               <SortTh k="onboarding_completed">Onboarding</SortTh>
@@ -1545,6 +1861,33 @@ function UsersTab({
                   >
                     {u.role}
                   </span>
+                </td>
+                <td className="px-3 py-3">
+                  {(() => {
+                    const sub = u.subscription || {};
+                    const badge = billingTypeBadge(sub.billing_type);
+                    return (
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {sub.is_test_account && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-white text-slate-500 border border-slate-300">Test</span>
+                          )}
+                          <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${badge.cls}`}>{badge.label}</span>
+                        </div>
+                        {(sub.plan || sub.price_cents != null) && (
+                          <div className="text-[10px] text-slate-400 whitespace-nowrap capitalize">
+                            {sub.plan || ""}{sub.plan && sub.price_cents != null ? " \u00b7 " : ""}{sub.price_cents != null ? formatCents(sub.price_cents) : ""}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </td>
+                <td className="px-3 py-3 text-xs whitespace-nowrap">
+                  {(() => {
+                    const tl = timeLeftLabel(u.subscription?.days_remaining);
+                    return <span className={tl.cls}>{tl.text}</span>;
+                  })()}
                 </td>
                 <td className="px-3 py-3 text-xs">
                   {(() => {

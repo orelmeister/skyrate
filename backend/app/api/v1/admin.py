@@ -8,7 +8,7 @@ import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_, text
+from sqlalchemy import func, or_, and_, not_, case, text
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import datetime, timedelta
@@ -56,6 +56,12 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = None
     company_name: Optional[str] = None
     is_active: Optional[bool] = None
+    phone: Optional[str] = None
+    # Mark/unmark an internal test/trial account (User.is_test).
+    is_test: Optional[bool] = None
+    # Role-specific identifiers. spin only applies to vendors, crn to consultants.
+    spin: Optional[str] = None
+    crn: Optional[str] = None
 
 
 class SubscriptionUpdate(BaseModel):
@@ -88,6 +94,155 @@ class SeatInviteCreate(BaseModel):
 AdminUser = Depends(require_role("admin", "super"))
 
 
+# ==================== BILLING DERIVATION ====================
+
+# Valid values for the ?billing= filter on the users listing.
+BILLING_FILTERS = {"paid", "comped", "trial", "none", "test"}
+
+
+def _derive_billing(sub, now: datetime) -> dict:
+    """Derive a billing summary for a user's subscription.
+
+    NO MOCK DATA: every value comes from the real Subscription row; anything
+    genuinely unknown is returned as None so the UI can render an em dash.
+
+    billing_type is one of:
+      - paid:   a real Stripe subscription (id starts with 'sub_') that is
+                active or past_due (a genuine paying customer).
+      - trial:  status trialing, or trial_end in the future (incl. PROMO_INVITE_).
+      - comped: active but not a real Stripe sub (FREE_* coupon/test grants,
+                PROMO_INVITE_ active grants, or price_cents == 0).
+      - none:   no subscription, or canceled/unpaid/expired with no access.
+
+    days_remaining counts whole days to the relevant end date (trial_end while
+    trialing, else current_period_end, falling back to end_date used by comped
+    grants). Negative means expired; None means unknown.
+    """
+    if sub is None:
+        return {
+            "status": "none",
+            "plan": None,
+            "price_cents": None,
+            "billing_type": "none",
+            "current_period_end": None,
+            "trial_end": None,
+            "days_remaining": None,
+        }
+
+    sid = sub.stripe_subscription_id or ""
+    cust = sub.stripe_customer_id or ""
+    is_real_stripe = sid.startswith("sub_")
+    is_promo = cust.startswith("PROMO_INVITE_")
+    is_free_grant = sid.startswith("FREE_") or cust.startswith("FREE_")
+    sstatus = sub.status or "none"
+    trial_active = sstatus == "trialing" or (sub.trial_end is not None and sub.trial_end > now)
+
+    if is_real_stripe and sstatus in ("active", "past_due"):
+        billing_type = "paid"
+    elif trial_active:
+        billing_type = "trial"
+    elif sstatus == "active" and (
+        is_free_grant or is_promo or not is_real_stripe or (sub.price_cents or 0) == 0
+    ):
+        billing_type = "comped"
+    else:
+        billing_type = "none"
+
+    # Relevant end date is real data in every branch; end_date is the column
+    # comped/free grants populate (they have no current_period_end).
+    end_ref = sub.trial_end if trial_active else (sub.current_period_end or sub.end_date)
+    days_remaining = (end_ref - now).days if end_ref is not None else None
+
+    return {
+        "status": sstatus,
+        "plan": sub.plan,
+        "price_cents": sub.price_cents,
+        "billing_type": billing_type,
+        "current_period_end": sub.current_period_end.isoformat() if sub.current_period_end else None,
+        "trial_end": sub.trial_end.isoformat() if sub.trial_end else None,
+        "days_remaining": days_remaining,
+    }
+
+
+def _apply_billing_filter(query, billing: str, now: datetime):
+    """Apply a ?billing= filter to the users query.
+
+    SQL conditions mirror _derive_billing exactly so the filtered list, the
+    total count, and the billing_summary chips all agree. 'test' is orthogonal
+    to billing_type (a test account may also be comped), so it filters on
+    User.is_test rather than the subscription.
+    """
+    if billing == "test":
+        return query.filter(User.is_test.is_(True))
+
+    query = query.outerjoin(Subscription, Subscription.user_id == User.id)
+    sid = func.coalesce(Subscription.stripe_subscription_id, "")
+    sstatus = func.coalesce(Subscription.status, "")
+    sid_real = sid.like("sub_%")
+    trial_active = or_(
+        sstatus == "trialing",
+        and_(Subscription.trial_end.isnot(None), Subscription.trial_end > now),
+    )
+    paid_cond = and_(sid_real, sstatus.in_(("active", "past_due")))
+    comped_cond = and_(
+        Subscription.id.isnot(None), sstatus == "active", not_(sid_real), not_(trial_active)
+    )
+
+    if billing == "paid":
+        return query.filter(paid_cond)
+    if billing == "trial":
+        return query.filter(and_(trial_active, not_(paid_cond)))
+    if billing == "comped":
+        return query.filter(comped_cond)
+    # none
+    return query.filter(
+        or_(
+            Subscription.id.is_(None),
+            and_(not_(paid_cond), not_(trial_active), not_(comped_cond)),
+        )
+    )
+
+
+def _compute_billing_summary(base_query, now: datetime) -> dict:
+    """Real per-type counts for the filter chips.
+
+    Computed over the currently role/search/funnel-filtered user set (ignoring
+    the billing filter itself) so the chips always show the full breakdown.
+    One grouped query for the billing types plus one count for test accounts.
+    Queries are generative, so base_query is left untouched for the caller.
+    """
+    sid = func.coalesce(Subscription.stripe_subscription_id, "")
+    sstatus = func.coalesce(Subscription.status, "")
+    sid_real = sid.like("sub_%")
+    trial_active = or_(
+        sstatus == "trialing",
+        and_(Subscription.trial_end.isnot(None), Subscription.trial_end > now),
+    )
+    paid_cond = and_(sid_real, sstatus.in_(("active", "past_due")))
+    comped_cond = and_(
+        Subscription.id.isnot(None), sstatus == "active", not_(sid_real), not_(trial_active)
+    )
+    billing_case = case(
+        (paid_cond, "paid"),
+        (trial_active, "trial"),
+        (comped_cond, "comped"),
+        else_="none",
+    )
+
+    summary = {"paid": 0, "trial": 0, "comped": 0, "none": 0}
+    rows = (
+        base_query.outerjoin(Subscription, Subscription.user_id == User.id)
+        .with_entities(billing_case.label("bt"), func.count(func.distinct(User.id)))
+        .group_by(billing_case)
+        .all()
+    )
+    for bt_val, cnt in rows:
+        if bt_val in summary:
+            summary[bt_val] = int(cnt)
+    summary["test"] = base_query.filter(User.is_test.is_(True)).count()
+    return summary
+
+
 # ==================== USER MANAGEMENT ====================
 
 @router.get("/users")
@@ -101,6 +256,8 @@ async def list_users(
     never_logged_in: Optional[bool] = None,
     email_unverified: Optional[bool] = None,
     onboarding_incomplete: Optional[bool] = None,
+    # Billing cohort filter: paid | comped | trial | none | test.
+    billing: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
     current_user: User = AdminUser,
@@ -160,12 +317,30 @@ async def list_users(
             ~User.id.in_(appl_with_ben),
         )
 
+    now = datetime.utcnow()
+
+    # Billing breakdown for the filter chips — computed over the role/search/
+    # funnel-filtered set BEFORE the billing filter is applied, so the chips
+    # always show the full breakdown. Generative queries leave `query` intact.
+    billing_summary = _compute_billing_summary(query, now)
+
+    # Optional billing cohort filter (paid | comped | trial | none | test).
+    billing_norm = (billing or "").strip().lower()
+    if billing_norm in BILLING_FILTERS:
+        query = _apply_billing_filter(query, billing_norm, now)
+
     total = query.count()
     users = query.order_by(User.created_at.desc()).offset(offset).limit(limit).all()
-    
+
+    # Pre-fetch every subscription for this page in ONE query (avoids N+1).
+    user_ids = [u.id for u in users]
+    subs_by_user = {}
+    if user_ids:
+        for s in db.query(Subscription).filter(Subscription.user_id.in_(user_ids)).all():
+            subs_by_user[s.user_id] = s
+
     # Enrich with role-specific portfolio data
     enriched = []
-    now = datetime.utcnow()
     for u in users:
         data = u.to_dict()
         # Funnel drill-down derived fields. days_since_signup helps admins spot
@@ -175,6 +350,13 @@ async def list_users(
         else:
             data["days_since_signup"] = None
         data["has_identifier"] = False  # default, overwritten in role branches below
+
+        # Billing visibility: real subscription state so the admin can tell
+        # paying customers from test/trial/comped accounts at a glance.
+        data["is_test"] = bool(u.is_test)
+        billing_block = _derive_billing(subs_by_user.get(u.id), now)
+        billing_block["is_test_account"] = bool(u.is_test)
+        data["subscription"] = billing_block
 
         # Check if they are an active team seat
         seat = db.query(AccountSeat).filter(AccountSeat.user_id == u.id, AccountSeat.status == "active").first()
@@ -230,6 +412,7 @@ async def list_users(
         "total": total,
         "limit": limit,
         "offset": offset,
+        "billing_summary": billing_summary,
         "users": enriched
     }
 
@@ -434,11 +617,102 @@ async def update_user(
         user.company_name = data.company_name
     if data.is_active is not None:
         user.is_active = data.is_active
-    
+    if data.phone is not None:
+        user.phone = data.phone.strip() or None
+    if data.is_test is not None:
+        user.is_test = bool(data.is_test)
+
+    # SPIN upsert (vendors only). USAC SPINs are 9 digits. Role check uses the
+    # possibly-updated role above so an admin can set role=vendor + SPIN at once.
+    if data.spin is not None:
+        spin_val = data.spin.strip()
+        if user.role != "vendor":
+            if spin_val:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="SPIN can only be set on vendor accounts.",
+                )
+        else:
+            if spin_val and (not spin_val.isdigit() or len(spin_val) != 9):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="SPIN must be exactly 9 digits.",
+                )
+            vp = db.query(VendorProfile).filter(VendorProfile.user_id == user.id).first()
+            if not vp:
+                vp = VendorProfile(user_id=user.id)
+                db.add(vp)
+            vp.spin = spin_val or None
+
+    # CRN upsert (consultants only). The crn column is unique, so guard against
+    # collisions with a clear 400 rather than a raw IntegrityError.
+    if data.crn is not None:
+        crn_val = data.crn.strip()
+        if user.role != "consultant":
+            if crn_val:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="CRN can only be set on consultant accounts.",
+                )
+        else:
+            if crn_val:
+                clash = db.query(ConsultantProfile).filter(
+                    ConsultantProfile.crn == crn_val,
+                    ConsultantProfile.user_id != user.id,
+                ).first()
+                if clash:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="That CRN is already assigned to another consultant.",
+                    )
+            cp = db.query(ConsultantProfile).filter(ConsultantProfile.user_id == user.id).first()
+            if not cp:
+                cp = ConsultantProfile(user_id=user.id)
+                db.add(cp)
+            cp.crn = crn_val or None
+
     db.commit()
     db.refresh(user)
-    
-    return {"success": True, "user": user.to_dict()}
+
+    # Return the enriched user so the admin UI can update the row in place —
+    # includes the refreshed billing block and role-specific portfolio.
+    now = datetime.utcnow()
+    result = user.to_dict()
+    result["is_test"] = bool(user.is_test)
+    result["days_since_signup"] = (now - user.created_at).days if user.created_at else None
+    billing_block = _derive_billing(user.subscription, now)
+    billing_block["is_test_account"] = bool(user.is_test)
+    result["subscription"] = billing_block
+    result["has_identifier"] = False
+    if user.role == "vendor":
+        vp = db.query(VendorProfile).filter(VendorProfile.user_id == user.id).first()
+        if vp:
+            result["portfolio"] = {"spin": vp.spin, "company_name": vp.company_name}
+            result["has_identifier"] = bool(vp.spin)
+    elif user.role == "consultant":
+        cp = db.query(ConsultantProfile).filter(ConsultantProfile.user_id == user.id).first()
+        if cp:
+            schools = db.query(ConsultantSchool).filter(
+                ConsultantSchool.consultant_profile_id == cp.id
+            ).all()
+            result["portfolio"] = {
+                "crn": cp.crn,
+                "schools_count": len(schools),
+                "schools": [{"ben": s.ben, "name": s.school_name, "state": s.state} for s in schools[:10]],
+            }
+            result["has_identifier"] = bool(cp.crn)
+    elif user.role == "applicant":
+        profile = db.query(ApplicantProfile).filter(ApplicantProfile.user_id == user.id).first()
+        if profile:
+            bens = db.query(ApplicantBEN).filter(ApplicantBEN.applicant_profile_id == profile.id).all()
+            result["portfolio"] = {
+                "organization": profile.organization_name,
+                "ben_count": len(bens),
+                "bens": [{"ben": b.ben, "name": b.organization_name or b.display_name} for b in bens[:10]],
+            }
+            result["has_identifier"] = bool(profile.ben)
+
+    return {"success": True, "user": result}
 
 
 @router.delete("/users/{user_id}")
