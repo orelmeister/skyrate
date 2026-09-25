@@ -13,7 +13,7 @@ USAC Datasets used:
 import requests
 import pandas as pd
 import math
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import os
@@ -2609,12 +2609,12 @@ class USACDataClient:
     def get_470_leads(
         self,
         year: Optional[int] = None,
-        state: Optional[str] = None,
-        category: Optional[str] = None,
-        service_type: Optional[str] = None,
-        manufacturer: Optional[str] = None,
+        state: Optional[Union[str, List[str]]] = None,
+        category: Optional[Union[str, List[str]]] = None,
+        service_type: Optional[Union[str, List[str]]] = None,
+        manufacturer: Optional[Union[str, List[str]]] = None,
         equipment_type: Optional[str] = None,
-        service_function: Optional[str] = None,
+        service_function: Optional[Union[str, List[str]]] = None,
         min_speed: Optional[str] = None,
         max_speed: Optional[str] = None,
         sort_by: Optional[str] = None,
@@ -2631,12 +2631,12 @@ class USACDataClient:
         
         Args:
             year: Optional funding year filter (default: current + next year)
-            state: Optional two-letter state code filter
-            category: Optional category filter ('1' for Cat1, '2' for Cat2)
-            service_type: Optional service type filter
-            manufacturer: Optional manufacturer name filter (partial match)
+            state: Optional two-letter state code, or a list of codes (OR-ed)
+            category: Optional category filter ('1' for Cat1, '2' for Cat2), or a list (OR-ed)
+            service_type: Optional service type filter, or a list (OR-ed)
+            manufacturer: Optional manufacturer name filter (partial match), or a list (OR-ed)
             equipment_type: Optional equipment/function type filter (e.g., 'Switches', 'Routers')
-            service_function: Optional service function filter (e.g., 'Managed Internal Broadband Services')
+            service_function: Optional service function filter, or a list (OR-ed)
             min_speed: Optional minimum speed/capacity filter
             max_speed: Optional maximum speed/capacity filter
             sort_by: Sort order - 'entity_name' for ABC, 'posting_date' (default) for newest first
@@ -2663,6 +2663,33 @@ class USACDataClient:
             def _sanitize(val: str) -> str:
                 return val.replace("'", "''")
 
+            # Multi-value filters (vendor digest multi-select) are OR-ed inside a
+            # single SoQL query so several states/categories/service types never
+            # fan out into multiple USAC requests.
+            def _as_list(val) -> List[str]:
+                if val is None:
+                    return []
+                items = list(val) if isinstance(val, (list, tuple, set)) else [val]
+                out: List[str] = []
+                for item in items:
+                    text = str(item).strip()
+                    if text and text not in out:
+                        out.append(text)
+                return out
+
+            def _like_any(column: str, values: List[str]) -> str:
+                parts = [f"UPPER({column}) LIKE UPPER('%{_sanitize(v)}%')" for v in values]
+                return parts[0] if len(parts) == 1 else "(" + " OR ".join(parts) + ")"
+
+            def _quoted(values: List[str]) -> str:
+                return ",".join(f"'{_sanitize(v)}'" for v in values)
+
+            states = [s.upper() for s in _as_list(state)]
+            categories = _as_list(category)
+            service_types = _as_list(service_type)
+            manufacturers = _as_list(manufacturer)
+            service_functions = _as_list(service_function)
+
             # Parse USAC lat/long (strings) into floats for the opportunity map.
             def _geofloat(val) -> Optional[float]:
                 try:
@@ -2672,22 +2699,25 @@ class USACDataClient:
                 # USAC occasionally has 0/blank placeholders; treat as missing.
                 return None if f == 0.0 else f
             
-            if category:
-                cat_name = f"Category {category}" if category in ['1', '2'] else category
-                where_conditions.append(f"service_category = '{_sanitize(cat_name)}'")
+            if categories:
+                cat_names = [f"Category {c}" if c in ['1', '2'] else c for c in categories]
+                if len(cat_names) == 1:
+                    where_conditions.append(f"service_category = '{_sanitize(cat_names[0])}'")
+                else:
+                    where_conditions.append(f"service_category IN ({_quoted(cat_names)})")
             
-            if service_type:
-                where_conditions.append(f"UPPER(service_type) LIKE UPPER('%{_sanitize(service_type)}%')")
+            if service_types:
+                where_conditions.append(_like_any('service_type', service_types))
             
-            if manufacturer:
-                where_conditions.append(f"UPPER(manufacturer) LIKE UPPER('%{_sanitize(manufacturer)}%')")
+            if manufacturers:
+                where_conditions.append(_like_any('manufacturer', manufacturers))
             
             # NEW: Equipment type / function filter (Items 6, 7)
             if equipment_type:
                 where_conditions.append(f"UPPER(function) LIKE UPPER('%{_sanitize(equipment_type)}%')")
             
-            if service_function:
-                where_conditions.append(f"UPPER(service_type) LIKE UPPER('%{_sanitize(service_function)}%')")
+            if service_functions:
+                where_conditions.append(_like_any('service_type', service_functions))
             
             # NEW: Speed/capacity range filter (Item 8)
             if min_speed:
@@ -2764,8 +2794,10 @@ class USACDataClient:
                 batch_apps = app_numbers[i:i + batch_size]
                 quoted_app_nums = ','.join(f"'{an}'" for an in batch_apps)
                 basic_where = f"application_number IN ({quoted_app_nums})"
-                if state:
-                    basic_where += f" AND billed_entity_state = '{state.upper()}'"
+                if len(states) == 1:
+                    basic_where += f" AND billed_entity_state = '{_sanitize(states[0])}'"
+                elif states:
+                    basic_where += f" AND billed_entity_state IN ({_quoted(states)})"
                 
                 basic_params = {
                     '$where': basic_where,
@@ -2790,7 +2822,7 @@ class USACDataClient:
                 basic_info = basic_lookup.get(app_num, {})
                 
                 # Apply state filter if we have basic info
-                if state and basic_info.get('billed_entity_state', '').upper() != state.upper():
+                if states and basic_info.get('billed_entity_state', '').upper() not in states:
                     continue
                 
                 if app_num not in leads_by_app:
@@ -2870,11 +2902,13 @@ class USACDataClient:
                 (min_deal_value is not None and min_deal_value > 0) or
                 (max_deal_value is not None and max_deal_value > 0)
             )
-            if state:
+            # Multi-state selections skip enrichment: one C2 call per state would
+            # be exactly the USAC request fan-out we are avoiding.
+            if len(states) == 1:
                 try:
-                    c2_map = self.get_c2_budgets_by_state(state)
+                    c2_map = self.get_c2_budgets_by_state(states[0])
                 except Exception as e:
-                    logger.warning(f"C2 budget enrichment failed for state {state}: {e}")
+                    logger.warning(f"C2 budget enrichment failed for state {states[0]}: {e}")
                     c2_map = {}
                 for lead in leads:
                     ben_key = str(lead.get('ben') or '').strip()
@@ -2888,7 +2922,7 @@ class USACDataClient:
                         lead['c2_budget_available'] = None
                         lead['c2_budget_cycle'] = None
             else:
-                # No state scope — leave fields None; tell the UI we did not enrich.
+                # No single-state scope — leave fields None; tell the UI we did not enrich.
                 for lead in leads:
                     lead['c2_budget_total'] = None
                     lead['c2_budget_available'] = None

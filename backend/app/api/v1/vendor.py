@@ -3178,6 +3178,11 @@ async def upsert_frn_note(
 
 _DIGEST_FILTER_KEYS = ("year", "state", "category", "service_type", "manufacturer", "name")
 
+# Filters a vendor can pick several values for (Ari: one digest covering six
+# states + Cat 1/2 + MIBS/BMIC instead of six separate digests). Legacy rows
+# store plain strings; a string is read as a one-element list.
+_DIGEST_MULTI_KEYS = ("state", "category", "service_type", "manufacturer")
+
 
 class Digest470Create(BaseModel):
     name: Optional[str] = None
@@ -3190,6 +3195,19 @@ class Digest470Update(BaseModel):
     filters: Optional[Dict[str, Any]] = None
     enabled: Optional[bool] = None
     email: Optional[EmailStr] = None
+
+
+def _as_filter_list(val: Any) -> List[str]:
+    """Normalise a string or list filter value to de-duplicated trimmed strings."""
+    if val is None:
+        return []
+    items = list(val) if isinstance(val, (list, tuple, set)) else [val]
+    out: List[str] = []
+    for item in items:
+        text = str(item).strip()
+        if text and text not in out:
+            out.append(text)
+    return out
 
 
 def _clean_digest_filters(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -3205,23 +3223,39 @@ def _clean_digest_filters(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
                 out[key] = int(val)
             except (TypeError, ValueError):
                 continue
+        elif key in _DIGEST_MULTI_KEYS:
+            values = _as_filter_list(val)
+            if values:
+                out[key] = values
         else:
             out[key] = str(val).strip()
     return out
 
 
+def _label_values(val: Any, limit: int = 4, upper: bool = False) -> str:
+    """Render a single- or multi-value filter as readable text, truncated."""
+    values = _as_filter_list(val)
+    if upper:
+        values = [v.upper() for v in values]
+    if len(values) > limit:
+        return ", ".join(values[:limit]) + f" +{len(values) - limit} more"
+    return ", ".join(values)
+
+
 def _digest_default_name(filters: Dict[str, Any]) -> str:
     bits: List[str] = []
     if filters.get("state"):
-        bits.append(str(filters["state"]).upper())
+        bits.append(_label_values(filters["state"], upper=True))
     if filters.get("category"):
-        bits.append(f"Category {filters['category']}")
+        cats = _as_filter_list(filters["category"])
+        bits.append("Category " + ", ".join(cats) if cats else "")
     if filters.get("service_type"):
-        bits.append(str(filters["service_type"]))
+        bits.append(_label_values(filters["service_type"], limit=3))
     if filters.get("manufacturer"):
-        bits.append(str(filters["manufacturer"]))
+        bits.append(_label_values(filters["manufacturer"], limit=3))
     if filters.get("name"):
         bits.append(str(filters["name"]))
+    bits = [b for b in bits if b]
     return " / ".join(bits) if bits else "All Form 470 postings"
 
 

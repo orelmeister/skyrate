@@ -36,6 +36,66 @@ const PIPELINE_STAGES: { key: string; label: string; chip: string; dot: string }
   { key: "lost", label: "Lost", chip: "bg-red-100 text-red-700", dot: "bg-red-500" },
 ];
 
+// ---- Form 470 daily digest: multi-select criteria ----
+// One digest can cover several states / categories / service functions, so a
+// vendor no longer needs three separate digests for one client (Ari 2026-09-25).
+interface DigestFormState {
+  id: number | null;
+  name: string;
+  year?: number;
+  states: string[];
+  categories: string[];
+  serviceTypes: string[];
+  manufacturer: string;
+  applicantName: string;
+}
+
+const DIGEST_CATEGORY_OPTIONS = [
+  { value: "1", label: "Category 1 (Internet/WAN)" },
+  { value: "2", label: "Category 2 (Equipment)" },
+];
+
+// `categories` follows the USAC Eligible Services List split already encoded in
+// backend/app/services/compliance/rules/rule_service_types.py.
+const DIGEST_SERVICE_FUNCTIONS: { value: string; label: string; categories: string[] }[] = [
+  { value: "Managed Internal Broadband Services", label: "MIBS (Managed Internal Broadband)", categories: ["2"] },
+  { value: "Basic Maintenance of Internal Connections", label: "BMIC (Basic Maintenance)", categories: ["2"] },
+  { value: "Internal Connections", label: "Internal Connections", categories: ["2"] },
+  { value: "Internet Access", label: "Internet Access", categories: ["1"] },
+  { value: "Data Transmission and/or Internet Access", label: "Data Transmission / Internet", categories: ["1"] },
+  { value: "Voice", label: "Voice Services", categories: ["1"] },
+];
+
+/** Read a saved filter value (legacy string or new array) as a string array. */
+function toFilterArray(value: unknown): string[] {
+  if (value === null || value === undefined) return [];
+  const items = Array.isArray(value) ? value : [value];
+  const out: string[] = [];
+  for (const item of items) {
+    const text = String(item).trim();
+    if (text && !out.includes(text)) out.push(text);
+  }
+  return out;
+}
+
+/** Human-readable summary of a digest's saved criteria, single- or multi-value. */
+function digestCriteriaLabel(filters: Record<string, unknown> | undefined): string {
+  const f = filters || {};
+  const trim = (values: string[], limit: number) =>
+    values.length > limit ? `${values.slice(0, limit).join(", ")} +${values.length - limit} more` : values.join(", ");
+  const bits: string[] = [];
+  const states = toFilterArray(f.state).map((s) => s.toUpperCase());
+  if (states.length) bits.push(trim(states, 6));
+  const cats = toFilterArray(f.category);
+  if (cats.length) bits.push(`Category ${cats.join(", ")}`);
+  const svcs = toFilterArray(f.service_type);
+  if (svcs.length) bits.push(trim(svcs, 3));
+  const mfrs = toFilterArray(f.manufacturer);
+  if (mfrs.length) bits.push(trim(mfrs, 3));
+  if (typeof f.name === "string" && f.name.trim()) bits.push(f.name.trim());
+  return bits.length ? bits.join(" / ") : "All states, all categories";
+}
+
 interface SearchResult {
   ben: string;
   name: string;
@@ -925,6 +985,9 @@ function VendorPortalPage() {
   const [digestBusy, setDigestBusy] = useState(false);
   const [digestMsg, setDigestMsg] = useState<string | null>(null);
   const [digestPreview, setDigestPreview] = useState<{ id: number; data: Vendor470DigestPreview } | null>(null);
+  // Multi-select digest builder: one digest can cover several states, both
+  // categories and several service functions (Ari, 2026-09-25).
+  const [digestForm, setDigestForm] = useState<DigestFormState | null>(null);
 
   const loadDigests = async () => {
     try {
@@ -935,21 +998,80 @@ function VendorPortalPage() {
     }
   };
 
-  const saveCurrentSearchAsDigest = async () => {
+  // Open the builder seeded from the current Form 470 search filters.
+  const openDigestBuilder = () => {
+    setDigestMsg(null);
+    setDigestForm({
+      id: null,
+      name: "",
+      year: form470Filters.year,
+      states: toFilterArray(form470Filters.state),
+      categories: toFilterArray(form470Filters.category),
+      serviceTypes: toFilterArray(form470Filters.service_function || form470Filters.service_type),
+      manufacturer: form470Filters.manufacturer || "",
+      applicantName: form470Filters.name || "",
+    });
+    setShowDigests(true);
+  };
+
+  const editDigest = (d: Vendor470DigestSubscription) => {
+    const f = (d.filters || {}) as Record<string, unknown>;
+    setDigestMsg(null);
+    setDigestForm({
+      id: d.id,
+      name: d.name || "",
+      year: typeof f.year === "number" ? f.year : (f.year ? Number(f.year) : undefined),
+      states: toFilterArray(f.state),
+      categories: toFilterArray(f.category),
+      serviceTypes: toFilterArray(f.service_type),
+      manufacturer: toFilterArray(f.manufacturer).join(", "),
+      applicantName: typeof f.name === "string" ? f.name : "",
+    });
+    setShowDigests(true);
+  };
+
+  const toggleDigestValue = (key: "states" | "categories" | "serviceTypes", value: string) => {
+    setDigestForm((prev) => {
+      if (!prev) return prev;
+      const current = prev[key];
+      const next = current.includes(value)
+        ? current.filter((v) => v !== value)
+        : [...current, value];
+      if (key !== "categories") return { ...prev, [key]: next };
+      // Drop service functions that the narrowed list no longer offers, so a
+      // hidden checkbox can never silently stay part of the saved criteria.
+      const allowed = next.length
+        ? DIGEST_SERVICE_FUNCTIONS.filter((o) => o.categories.some((c) => next.includes(c))).map((o) => o.value)
+        : DIGEST_SERVICE_FUNCTIONS.map((o) => o.value);
+      return { ...prev, categories: next, serviceTypes: prev.serviceTypes.filter((s) => allowed.includes(s)) };
+    });
+  };
+
+  const saveDigestForm = async () => {
+    if (!digestForm) return;
     setDigestBusy(true);
     setDigestMsg(null);
     try {
       const filters: Record<string, unknown> = {};
-      if (form470Filters.year) filters.year = form470Filters.year;
-      if (form470Filters.state) filters.state = form470Filters.state;
-      if (form470Filters.category) filters.category = form470Filters.category;
-      if (form470Filters.service_type) filters.service_type = form470Filters.service_type;
-      if (form470Filters.manufacturer) filters.manufacturer = form470Filters.manufacturer;
-      if (form470Filters.name) filters.name = form470Filters.name;
-      const res = await api.createDigestSubscription({ filters });
+      if (digestForm.year) filters.year = digestForm.year;
+      if (digestForm.states.length) filters.state = digestForm.states;
+      if (digestForm.categories.length) filters.category = digestForm.categories;
+      if (digestForm.serviceTypes.length) filters.service_type = digestForm.serviceTypes;
+      const mfrs = digestForm.manufacturer.split(",").map((s) => s.trim()).filter(Boolean);
+      if (mfrs.length) filters.manufacturer = mfrs;
+      if (digestForm.applicantName.trim()) filters.name = digestForm.applicantName.trim();
+
+      const payload = { name: digestForm.name.trim() || undefined, filters };
+      const res = digestForm.id
+        ? await api.updateDigestSubscription(digestForm.id, payload)
+        : await api.createDigestSubscription(payload);
       if (res.data?.success) {
-        setDigestMsg("Saved. You'll get a daily email when new matching Form 470s post.");
-        setShowDigests(true);
+        setDigestMsg(
+          digestForm.id
+            ? "Digest updated."
+            : "Saved. You'll get a daily email when new matching Form 470s post."
+        );
+        setDigestForm(null);
         await loadDigests();
       } else {
         setDigestMsg(res.error || "Could not save digest.");
@@ -974,6 +1096,7 @@ function VendorPortalPage() {
     try {
       await api.deleteDigestSubscription(id);
       if (digestPreview?.id === id) setDigestPreview(null);
+      if (digestForm?.id === id) setDigestForm(null);
       await loadDigests();
     } catch {
       /* non-blocking */
@@ -3961,9 +4084,9 @@ function VendorPortalPage() {
                   Clear Filters
                 </button>
                 <button
-                  onClick={saveCurrentSearchAsDigest}
+                  onClick={openDigestBuilder}
                   disabled={digestBusy}
-                  title="Save these filters and get a daily email when new matching Form 470s post"
+                  title="Pick states, categories and service functions, then get a daily email when new matching Form 470s post"
                   className="px-4 py-2 text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium disabled:opacity-50"
                 >
                   Email me new matches daily
@@ -3986,16 +4109,199 @@ function VendorPortalPage() {
                 <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50/50 p-4">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-semibold text-slate-900">Daily Form 470 email digests</h3>
-                    <button
-                      onClick={() => setShowDigests(false)}
-                      className="text-slate-400 hover:text-slate-600 text-sm"
-                    >
-                      Close
-                    </button>
+                    <div className="flex items-center gap-3">
+                      {!digestForm && (
+                        <button
+                          onClick={openDigestBuilder}
+                          className="text-indigo-700 hover:text-indigo-900 text-sm font-medium"
+                        >
+                          + New digest
+                        </button>
+                      )}
+                      <button
+                        onClick={() => { setShowDigests(false); setDigestForm(null); }}
+                        className="text-slate-400 hover:text-slate-600 text-sm"
+                      >
+                        Close
+                      </button>
+                    </div>
                   </div>
+
+                  {digestForm && (
+                    <div className="mb-4 rounded-lg border border-indigo-200 bg-white p-4" data-testid="digest-builder">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold text-slate-900">
+                          {digestForm.id ? "Edit digest" : "New digest"}
+                        </h4>
+                        <span className="text-xs text-slate-500">
+                          {digestForm.year ? `Funding year ${digestForm.year}` : "All funding years"}
+                        </span>
+                      </div>
+
+                      <div className="mb-4">
+                        <label className="block text-xs font-medium text-slate-700 mb-1">Digest name (optional)</label>
+                        <input
+                          type="text"
+                          value={digestForm.name}
+                          onChange={(e) => setDigestForm({ ...digestForm, name: e.target.value })}
+                          placeholder="e.g. Northeast Cat 2 clients"
+                          data-testid="digest-name"
+                          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                      </div>
+
+                      {/* States — multi-select */}
+                      <div className="mb-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-xs font-medium text-slate-700">
+                            States {digestForm.states.length ? `(${digestForm.states.length} selected)` : "(all states)"}
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setDigestForm({ ...digestForm, states: [...US_STATES] })}
+                              data-testid="digest-states-all"
+                              className="text-xs text-indigo-700 hover:underline"
+                            >
+                              Select all
+                            </button>
+                            <button
+                              onClick={() => setDigestForm({ ...digestForm, states: [] })}
+                              data-testid="digest-states-clear"
+                              className="text-xs text-slate-500 hover:underline"
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        </div>
+                        <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200 p-2 grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-10 gap-1">
+                          {US_STATES.map((st) => (
+                            <label
+                              key={st}
+                              className="flex items-center gap-1 text-xs text-slate-700 px-1 py-0.5 rounded hover:bg-indigo-50 cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={digestForm.states.includes(st)}
+                                onChange={() => toggleDigestValue("states", st)}
+                                data-testid={`digest-state-${st}`}
+                                className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                              />
+                              {st}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        {/* Categories — multi-select */}
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 mb-2">
+                            Category {digestForm.categories.length ? "" : "(all categories)"}
+                          </label>
+                          <div className="space-y-1 rounded-lg border border-slate-200 p-2">
+                            {DIGEST_CATEGORY_OPTIONS.map((opt) => (
+                              <label
+                                key={opt.value}
+                                className="flex items-center gap-2 text-xs text-slate-700 px-1 py-1 rounded hover:bg-indigo-50 cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={digestForm.categories.includes(opt.value)}
+                                  onChange={() => toggleDigestValue("categories", opt.value)}
+                                  data-testid={`digest-category-${opt.value}`}
+                                  className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                {opt.label}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Service functions — multi-select, narrowed by category */}
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 mb-2">
+                            Service Function {digestForm.serviceTypes.length ? "" : "(all functions)"}
+                          </label>
+                          <div className="space-y-1 rounded-lg border border-slate-200 p-2">
+                            {DIGEST_SERVICE_FUNCTIONS
+                              .filter((opt) =>
+                                digestForm.categories.length === 0 ||
+                                opt.categories.some((c) => digestForm.categories.includes(c))
+                              )
+                              .map((opt) => (
+                                <label
+                                  key={opt.value}
+                                  className="flex items-center gap-2 text-xs text-slate-700 px-1 py-1 rounded hover:bg-indigo-50 cursor-pointer"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={digestForm.serviceTypes.includes(opt.value)}
+                                    onChange={() => toggleDigestValue("serviceTypes", opt.value)}
+                                    data-testid={`digest-service-${opt.value.replace(/[^a-zA-Z0-9]+/g, "-")}`}
+                                    className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                  />
+                                  {opt.label}
+                                </label>
+                              ))}
+                          </div>
+                          {digestForm.categories.length > 0 && (
+                            <p className="mt-1 text-[11px] text-slate-500">
+                              Showing only functions eligible for the selected categor
+                              {digestForm.categories.length > 1 ? "ies" : "y"}.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 mb-1">
+                            Manufacturer (comma-separated, optional)
+                          </label>
+                          <input
+                            type="text"
+                            value={digestForm.manufacturer}
+                            onChange={(e) => setDigestForm({ ...digestForm, manufacturer: e.target.value })}
+                            placeholder="e.g. Cisco, Meraki"
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 mb-1">
+                            Applicant name contains (optional)
+                          </label>
+                          <input
+                            type="text"
+                            value={digestForm.applicantName}
+                            onChange={(e) => setDigestForm({ ...digestForm, applicantName: e.target.value })}
+                            placeholder="e.g. Lincoln"
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={saveDigestForm}
+                          disabled={digestBusy}
+                          data-testid="digest-save"
+                          className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+                        >
+                          {digestBusy ? "Saving..." : digestForm.id ? "Save changes" : "Create digest"}
+                        </button>
+                        <button
+                          onClick={() => setDigestForm(null)}
+                          className="px-4 py-2 text-slate-600 border border-slate-300 rounded-lg text-sm hover:bg-slate-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {digests.length === 0 ? (
                     <p className="text-sm text-slate-500">
-                      No digests yet. Set your filters above and click &ldquo;Email me new matches daily&rdquo; to get a daily email of new Form 470 postings that match.
+                      No digests yet. Click &ldquo;Email me new matches daily&rdquo; to pick your states, categories and service functions and get a daily email of new Form 470 postings that match.
                     </p>
                   ) : (
                     <ul className="space-y-2">
@@ -4004,6 +4310,9 @@ function VendorPortalPage() {
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="min-w-0">
                               <div className="text-sm font-medium text-slate-900 truncate">{d.name}</div>
+                              <div className="text-xs text-slate-600" data-testid={`digest-criteria-${d.id}`}>
+                                {digestCriteriaLabel(d.filters)}
+                              </div>
                               <div className="text-xs text-slate-500">
                                 {d.enabled ? "Active" : "Paused"}
                                 {d.last_sent_at ? ` \u00b7 last sent ${String(d.last_sent_at).slice(0, 10)}` : " \u00b7 not sent yet"}
@@ -4011,8 +4320,16 @@ function VendorPortalPage() {
                             </div>
                             <div className="flex items-center gap-2">
                               <button
+                                onClick={() => editDigest(d)}
+                                data-testid={`digest-edit-${d.id}`}
+                                className="px-2.5 py-1 text-xs text-slate-700 border border-slate-200 rounded hover:bg-slate-50"
+                              >
+                                Edit
+                              </button>
+                              <button
                                 onClick={() => previewDigest(d.id)}
                                 disabled={digestBusy}
+                                data-testid={`digest-preview-${d.id}`}
                                 className="px-2.5 py-1 text-xs text-indigo-700 border border-indigo-200 rounded hover:bg-indigo-50 disabled:opacity-50"
                               >
                                 Preview
@@ -4025,6 +4342,7 @@ function VendorPortalPage() {
                               </button>
                               <button
                                 onClick={() => removeDigest(d.id)}
+                                data-testid={`digest-delete-${d.id}`}
                                 className="px-2.5 py-1 text-xs text-red-600 border border-red-200 rounded hover:bg-red-50"
                               >
                                 Delete
