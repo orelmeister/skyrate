@@ -4,6 +4,19 @@ import type { Metadata } from "next";
 import { ArrowRight, Activity, FileSearch, Users } from "lucide-react";
 import { STATES, getStateBySlug } from "@/lib/states-data";
 
+// States that earn organic clicks/impressions (GSC 30d). All other thin, near-
+// duplicate state pages are noindexed to preserve crawl budget for the money
+// pages (frn-tracker, appeal-generator, pricing). Revisit each Monday audit.
+const INDEXABLE_STATES = new Set([
+  "georgia",
+  "oklahoma",
+  "arizona",
+  "arkansas",
+  "colorado",
+  "hawaii",
+  "connecticut",
+]);
+
 type Props = {
   params: { state: string };
 };
@@ -39,7 +52,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title: `E-Rate Funding for ${stateData.name} | SkyRate AI`,
       description: `Track ${stateData.entityCount.toLocaleString()} E-Rate entities in ${stateData.name}. Free FRN and BEN tracking.`,
     },
-    robots: "index, follow",
+    robots: INDEXABLE_STATES.has(stateData.slug)
+      ? { index: true, follow: true }
+      : { index: false, follow: true },
   };
 }
 

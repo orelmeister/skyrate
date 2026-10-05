@@ -463,7 +463,7 @@ export default function ErateCategory2BudgetGuidePage() {
                 </div>
               </div>
               <p className="text-slate-700 leading-relaxed mb-6">
-                Need help tracking your C2 budget across multiple schools? SkyRate AI provides real-time budget utilization tracking through its <Link href="/features/frn-monitoring" className="text-purple-600 hover:text-purple-800 font-medium underline decoration-purple-300">FRN monitoring dashboard</Link>, so you always know exactly how much budget remains for each entity in your portfolio.
+                Need help tracking your C2 budget across multiple schools? SkyRate AI provides real-time budget utilization tracking through its <Link href="/features/frn-monitoring" className="text-purple-600 hover:text-purple-800 font-medium underline decoration-purple-300">FRN monitoring dashboard</Link>, so you always know exactly how much budget remains for each entity in your portfolio. Want a quick one-off check? Look up any FRN&apos;s live status with the free <Link href="/tools/frn-tracker" className="text-purple-600 hover:text-purple-800 font-medium underline decoration-purple-300">FRN tracker</Link> — no signup required.
               </p>
             </section>
 
