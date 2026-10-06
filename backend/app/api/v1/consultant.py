@@ -3290,6 +3290,78 @@ async def sam_check_school(
     }
 
 
+@router.get("/schools/498-status/batch")
+async def sam_check_all_schools(
+    apply: bool = Query(False, description="If true, schools with an Approved 498 filed WITH a UEI get has_form_498/sam_gov_registered set"),
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    db: Session = Depends(get_db),
+):
+    """Batch FCC Form 498 / UEI check for ALL of this consultant's schools (demo item A2).
+
+    One chunked USAC Open Data query instead of clicking school-by-school.
+    Returns per-BEN statuses, a summary, and a needs-attention list for the
+    'Need your attention' panel: 498 missing / not approved, or approved but
+    filed WITHOUT a SAM.gov UEI (BEAR payment risk since the UEI mandate).
+    """
+    from ...services import sam_gov_service
+
+    schools = db.query(ConsultantSchool).filter(
+        ConsultantSchool.consultant_profile_id == profile.id,
+    ).all()
+    bens = [s.ben for s in schools if s.ben]
+    statuses = sam_gov_service.check_form_498_uei_batch(bens) if bens else {}
+
+    summary = {"total": len(bens), "ok": 0, "no_uei": 0, "not_approved": 0, "not_found": 0}
+    needs_attention = []
+    applied_count = 0
+    for school in schools:
+        st = statuses.get(school.ben)
+        if st is None:
+            continue
+        st["school_name"] = school.school_name
+        if st.get("found") and st.get("form_498_approved") and st.get("uei_on_498") is True:
+            summary["ok"] += 1
+            if apply and not (school.has_form_498 and school.sam_gov_registered):
+                school.has_form_498 = True
+                school.sam_gov_registered = True
+                applied_count += 1
+        elif st.get("found") and st.get("form_498_approved"):
+            summary["no_uei"] += 1
+            needs_attention.append({
+                "ben": school.ben,
+                "school_name": school.school_name,
+                "form_498_status": st.get("form_498_status"),
+                "reason": "Form 498 approved but filed WITHOUT a SAM.gov UEI - BEAR payments at risk",
+            })
+        elif st.get("found"):
+            summary["not_approved"] += 1
+            needs_attention.append({
+                "ben": school.ben,
+                "school_name": school.school_name,
+                "form_498_status": st.get("form_498_status"),
+                "reason": "Form 498 status: {} (not Approved)".format(st.get("form_498_status") or "Unknown"),
+            })
+        else:
+            summary["not_found"] += 1
+            needs_attention.append({
+                "ben": school.ben,
+                "school_name": school.school_name,
+                "form_498_status": None,
+                "reason": "No 498 record found in USAC (entity may not have filed a BEAR invoice in the last 2 years)",
+            })
+    if applied_count:
+        db.commit()
+
+    return {
+        "success": True,
+        "checked_at": datetime.utcnow().isoformat() + "Z",
+        "applied": applied_count,
+        "summary": summary,
+        "statuses": statuses,
+        "needs_attention": needs_attention,
+    }
+
+
 @router.delete("/schools/{ben}")
 async def remove_school(
     ben: str,

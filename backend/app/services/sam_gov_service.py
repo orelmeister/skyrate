@@ -170,6 +170,90 @@ def check_form_498_uei(ben: str) -> Dict[str, Any]:
 
 
 
+def check_form_498_uei_batch(bens: List[str]) -> Dict[str, Dict[str, Any]]:
+    """Batch FCC Form 498 / UEI lookup for many BENs (chunked SoQL IN queries).
+
+    Same per-BEN result shape as check_form_498_uei(). One USAC Open Data
+    request per 100 BENs, so a consultant's whole school book is checked in a
+    handful of requests instead of one request per school.
+    """
+    def _empty(ben: str, error: Optional[str]) -> Dict[str, Any]:
+        return {
+            "found": False,
+            "ben": ben,
+            "entity_name": None,
+            "entity_type": None,
+            "form_498_status": None,
+            "form_498_approved": False,
+            "approved_date": None,
+            "uei_on_498": None,
+            "form_number": None,
+            "error": error,
+            "bear_risk": True,
+        }
+
+    results: Dict[str, Dict[str, Any]] = {}
+    seen = set()
+    clean_bens: List[str] = []
+    for ben in bens:
+        cb = (str(ben) if ben is not None else "").strip()
+        if cb and cb not in seen:
+            seen.add(cb)
+            clean_bens.append(cb)
+
+    chunk_size = 100
+    for i in range(0, len(clean_bens), chunk_size):
+        chunk = clean_bens[i:i + chunk_size]
+        in_list = ",".join("'{}'".format(b.replace("'", "")) for b in chunk)
+        try:
+            resp = requests.get(
+                USAC_ENTITY_SUPPLEMENTAL_URL,
+                params={"$where": "entity_number in({})".format(in_list), "$limit": len(chunk) * 5},
+                headers=_REQUEST_HEADERS,
+                timeout=45,
+            )
+            resp.raise_for_status()
+            rows = resp.json()
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning("USAC 498 batch lookup failed for %d BENs: %s", len(chunk), exc)
+            for b in chunk:
+                results[b] = _empty(b, "USAC lookup failed")
+            continue
+
+        by_ben: Dict[str, Dict[str, Any]] = {}
+        for row in rows:
+            key = (row.get("entity_number") or "").strip()
+            if key and key not in by_ben:
+                by_ben[key] = row
+
+        for b in chunk:
+            row = by_ben.get(b)
+            if row is None:
+                results[b] = _empty(
+                    b,
+                    "No FCC Form 498 record found for this BEN (may not have filed a BEAR in the last 2 years)",
+                )
+                continue
+            status = (row.get("form498_status") or "").strip()
+            uei_raw = (row.get("fcc_form_498_filed_with_uei") or "").strip().lower()
+            uei_on_498 = True if uei_raw == "yes" else (False if uei_raw == "no" else None)
+            approved = status.lower() == "approved"
+            results[b] = {
+                "found": True,
+                "ben": b,
+                "entity_name": row.get("entity_name"),
+                "entity_type": row.get("entity_type"),
+                "form_498_status": status or None,
+                "form_498_approved": approved,
+                "approved_date": row.get("fcc_form_498_status_date_time"),
+                "uei_on_498": uei_on_498,
+                "form_number": row.get("fcc_form_498_form_number"),
+                "error": None,
+                "bear_risk": (not approved) or (uei_on_498 is False),
+            }
+    return results
+
+
 def check_entity(name: str, state: Optional[str] = None, limit: int = 5) -> Dict[str, Any]:
     """
     Look up an entity by legal business name (+ optional 2-letter state) in

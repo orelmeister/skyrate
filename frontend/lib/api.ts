@@ -400,6 +400,22 @@ export interface SamCheckResult {
   };
 }
 
+export interface Batch498NeedsAttention {
+  ben: string;
+  school_name?: string | null;
+  form_498_status?: string | null;
+  reason: string;
+}
+
+export interface Batch498Response {
+  success: boolean;
+  checked_at: string;
+  applied: number;
+  summary: { total: number; ok: number; no_uei: number; not_approved: number; not_found: number };
+  statuses: Record<string, Form498Result & { school_name?: string | null }>;
+  needs_attention: Batch498NeedsAttention[];
+}
+
 // ==================== DISBURSEMENT / INVOICING SCHEDULE TYPES ====================
 
 export interface DisbursementLine {
@@ -3295,6 +3311,12 @@ class ApiClient {
   async consultantSamCheck(ben: string, apply = false): Promise<ApiResponse<SamCheckResult>> {
     const qs = apply ? '?apply=true' : '';
     return this.request(`/api/v1/consultant/schools/${encodeURIComponent(ben)}/sam-check${qs}`);
+  }
+
+  // ---- Batch 498/UEI check for all consultant schools (A2 "needs attention" panel) ----
+  async consultant498BatchCheck(apply = false): Promise<ApiResponse<Batch498Response>> {
+    const qs = apply ? '?apply=true' : '';
+    return this.request(`/api/v1/consultant/schools/498-status/batch${qs}`);
   }
 
   async consultant470Lookup(filters: {

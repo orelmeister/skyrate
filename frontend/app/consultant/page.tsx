@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore, deriveRequiresPaymentSetup } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
-import { api, ConsultantSchool, ConsultantProfile, AppealRecord, PIAResponseRecord, PIAFRNRecord, PIAPreview, FRNWatch, FRNReportHistory, Form471ByEntityResponse, Form471Record, Form471LineItem, DisbursementScheduleResponse, FrnTracking, SamCheckResult } from "@/lib/api";
+import { api, ConsultantSchool, ConsultantProfile, AppealRecord, PIAResponseRecord, PIAFRNRecord, PIAPreview, FRNWatch, FRNReportHistory, Form471ByEntityResponse, Form471Record, Form471LineItem, DisbursementScheduleResponse, FrnTracking, SamCheckResult, Batch498Response } from "@/lib/api";
 import { SearchResultsTable } from "@/components/SearchResultsTable";
 import { AppealChat } from "@/components/AppealChat";
 import { PIAChat } from "@/components/PIAChat";
@@ -2629,6 +2629,21 @@ function ConsultantPortalPage() {
   // SAM.gov registration lookup (A2 auto-confirm) — on-demand, human-in-the-loop.
   const [samCheckBen, setSamCheckBen] = useState<string | null>(null);
   const [samCheckResult, setSamCheckResult] = useState<SamCheckResult | null>(null);
+
+  // A2 batch: one-click 498/UEI check across every school + needs-attention panel
+  const [batch498, setBatch498] = useState<Batch498Response | null>(null);
+  const [batch498Loading, setBatch498Loading] = useState(false);
+  const handleBatch498Check = async () => {
+    setBatch498Loading(true);
+    try {
+      const resp = await api.consultant498BatchCheck();
+      if (resp.success && resp.data) setBatch498(resp.data);
+    } catch {
+      // leave previous results in place; per-school check remains available
+    } finally {
+      setBatch498Loading(false);
+    }
+  };
   const [samApplying, setSamApplying] = useState(false);
 
   const handleSamCheck = async (school: EnhancedSchool) => {
@@ -3225,6 +3240,19 @@ function ConsultantPortalPage() {
                       {isRefreshingSchools ? 'Syncing...' : 'Sync from USAC'}
                     </span>
                   </button>
+                  <button
+                    onClick={handleBatch498Check}
+                    disabled={batch498Loading || schools.length === 0}
+                    title="Check every school's FCC Form 498 status and SAM.gov UEI flag against USAC Open Data (updated nightly)"
+                    className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors disabled:opacity-50"
+                  >
+                    <svg className={`w-5 h-5 text-indigo-600 ${batch498Loading ? 'animate-pulse' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                    <span className="text-sm font-medium text-slate-700">
+                      {batch498Loading ? 'Checking 498/UEI...' : 'Check all 498/UEI'}
+                    </span>
+                  </button>
                 </div>
 
                 <div className="flex gap-3">
@@ -3254,6 +3282,39 @@ function ConsultantPortalPage() {
                   </button>
                 </div>
               </div>
+
+              {/* A2: 498 / SAM.gov UEI needs-attention panel */}
+              {batch498 && (
+                <div className={`rounded-2xl border p-4 ${batch498.needs_attention.length > 0 ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <h3 className="text-sm font-semibold text-slate-800">
+                      {batch498.needs_attention.length > 0 ? 'Need your attention: 498 / SAM.gov UEI' : '498 / SAM.gov UEI check'}
+                      <span className="ml-2 text-xs font-normal text-slate-500">USAC Open Data, updated nightly</span>
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      {batch498.summary.ok} OK / {batch498.summary.no_uei} no UEI / {batch498.summary.not_approved} not approved / {batch498.summary.not_found} no record
+                    </p>
+                  </div>
+                  {batch498.needs_attention.length > 0 ? (
+                    <ul className="mt-3 space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                      {batch498.needs_attention.map((item) => (
+                        <li key={item.ben} className="flex items-start gap-2 text-xs">
+                          <span className="mt-1 inline-block w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
+                          <span className="text-slate-700">
+                            <span className="font-medium">{item.school_name || `BEN ${item.ben}`}</span>
+                            <span className="text-slate-400 font-mono"> ({item.ben})</span>
+                            {' - '}{item.reason}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-xs text-emerald-700">
+                      Every school has an Approved Form 498 filed with a SAM.gov UEI. BEAR payments are not at risk.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Schools Table */}
               <TableExportBar
@@ -3492,6 +3553,23 @@ function ConsultantPortalPage() {
                                   {school[key] ? '✓ ' : ''}{label}
                                 </button>
                               ))}
+                              {batch498?.statuses?.[school.ben] && (() => {
+                                const bs = batch498.statuses[school.ben];
+                                const ok = bs.found && bs.form_498_approved && bs.uei_on_498 === true;
+                                const noUei = bs.found && bs.form_498_approved && bs.uei_on_498 !== true;
+                                return (
+                                  <span
+                                    title={bs.found
+                                      ? `USAC: Form 498 ${bs.form_498_status || 'unknown'}${bs.uei_on_498 === true ? ', filed with SAM.gov UEI' : bs.uei_on_498 === false ? ', filed WITHOUT a SAM.gov UEI' : ''}`
+                                      : 'USAC: no 498 record found (may not have filed a BEAR in the last 2 years)'}
+                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                                      ok ? 'bg-emerald-100 text-emerald-700' : noUei ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'
+                                    }`}
+                                  >
+                                    {ok ? 'USAC: 498+UEI' : noUei ? 'USAC: no UEI' : 'USAC: 498 risk'}
+                                  </span>
+                                );
+                              })()}
                               <button
                                 type="button"
                                 onClick={() => handleSamCheck(school)}
