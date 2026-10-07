@@ -394,7 +394,7 @@ export default function HowToFileForm498Page() {
               Ready to get your E-Rate SPIN?
             </h2>
             <p className="text-lg text-slate-300 max-w-2xl mx-auto mb-8">
-              We handle the FCC Form 498 filing end-to-end. Check your eligibility in 60 seconds.
+              We handle the FCC Form 498 filing end-to-end. Check your eligibility in 60 seconds. Already filed? See <Link href="/pricing" className="text-purple-300 underline hover:text-purple-200">plans &amp; pricing</Link> or track your funding with the free <Link href="/tools/frn-tracker" className="text-purple-300 underline hover:text-purple-200">FRN tracker</Link>.
             </p>
             <Link
               href="/become-a-vendor"

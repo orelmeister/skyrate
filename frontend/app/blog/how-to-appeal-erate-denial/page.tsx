@@ -225,7 +225,7 @@ export default function HowToAppealErateDenialPage() {
             <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-6 my-10">
               <p className="text-slate-900 font-semibold mb-2">Feeling overwhelmed? You don&apos;t have to do this alone.</p>
               <p className="text-slate-600 text-sm mb-4">
-                SkyRate AI automates the complex parts of E-Rate management so you can focus on what matters. Our platform handles denial analysis, appeal generation, FRN monitoring, and more.
+                SkyRate AI automates the complex parts of E-Rate management so you can focus on what matters. Our platform handles <Link href="/features/denial-analysis" className="text-purple-700 underline hover:text-purple-900">denial analysis</Link>, <Link href="/features/appeal-generator" className="text-purple-700 underline hover:text-purple-900">AI appeal generation</Link>, <Link href="/features/frn-monitoring" className="text-purple-700 underline hover:text-purple-900">FRN monitoring</Link>, and more &mdash; see <Link href="/pricing" className="text-purple-700 underline hover:text-purple-900">plans &amp; pricing</Link>.
               </p>
               <div className="flex flex-wrap gap-3">
                 <Link href="/sign-up" className="inline-flex items-center gap-1 bg-purple-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
