@@ -416,6 +416,42 @@ export interface Batch498Response {
   needs_attention: Batch498NeedsAttention[];
 }
 
+export interface FundingRecoveryStaleFrn {
+  frn: string;
+  funding_year: number;
+  committed: number;
+  status?: string | null;
+}
+
+export interface FundingRecoverySchool {
+  ben: string;
+  school_name?: string | null;
+  n_frns: number;
+  committed: number;
+  disbursed: number;
+  outstanding: number;
+  stale_amount: number;
+  pct_collected?: number | null;
+  stale_frns: FundingRecoveryStaleFrn[];
+}
+
+export interface FundingRecoveryResponse {
+  success: boolean;
+  checked_at: string;
+  summary: {
+    schools_checked: number;
+    schools_with_data: number;
+    total_committed: number;
+    total_disbursed: number;
+    total_outstanding: number;
+    schools_with_stale: number;
+    total_stale_amount: number;
+    years: number[];
+    stale_max_fy: number;
+  };
+  schools: FundingRecoverySchool[];
+}
+
 // ==================== DISBURSEMENT / INVOICING SCHEDULE TYPES ====================
 
 export interface DisbursementLine {
@@ -3317,6 +3353,12 @@ class ApiClient {
   async consultant498BatchCheck(apply = false): Promise<ApiResponse<Batch498Response>> {
     const qs = apply ? '?apply=true' : '';
     return this.request(`/api/v1/consultant/schools/498-status/batch${qs}`);
+  }
+
+  // ---- Approved-vs-received funding recovery rollup (committed vs disbursed) ----
+  async consultantFundingRecovery(years?: string): Promise<ApiResponse<FundingRecoveryResponse>> {
+    const qs = years ? `?years=${encodeURIComponent(years)}` : '';
+    return this.request(`/api/v1/consultant/schools/funding-recovery/batch${qs}`);
   }
 
   async consultant470Lookup(filters: {

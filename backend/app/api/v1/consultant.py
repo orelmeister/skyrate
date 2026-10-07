@@ -3362,6 +3362,42 @@ async def sam_check_all_schools(
     }
 
 
+@router.get("/schools/funding-recovery/batch")
+async def funding_recovery_batch(
+    years: str = Query("2022,2023,2024,2025", description="Comma-separated funding years"),
+    profile: ConsultantProfile = Depends(get_consultant_profile),
+    db: Session = Depends(get_db),
+):
+    """Approved-vs-received rollup for ALL of this consultant's schools.
+
+    For every school BEN, compares USAC committed dollars against authorized
+    disbursements (srbr-2d59) and surfaces outstanding money plus stale FRNs
+    (committed > 0, $0 disbursed, FY <= stale cutoff). The Challenge Prep
+    wedge: approved on paper is not money received.
+    """
+    from ...services import funding_recovery
+
+    try:
+        year_list = [int(y) for y in years.split(",") if y.strip()]
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="years must be integers")
+    if not year_list or len(year_list) > 8:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provide 1-8 funding years")
+
+    schools = db.query(ConsultantSchool).filter(
+        ConsultantSchool.consultant_profile_id == profile.id,
+    ).all()
+    school_dicts = [{"ben": s.ben, "school_name": s.school_name} for s in schools if s.ben]
+
+    rollup = funding_recovery.build_recovery_rollup(school_dicts, year_list)
+    return {
+        "success": True,
+        "checked_at": datetime.utcnow().isoformat() + "Z",
+        "summary": rollup["summary"],
+        "schools": rollup["schools"],
+    }
+
+
 @router.delete("/schools/{ben}")
 async def remove_school(
     ben: str,

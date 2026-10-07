@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore, deriveRequiresPaymentSetup } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
-import { api, ConsultantSchool, ConsultantProfile, AppealRecord, PIAResponseRecord, PIAFRNRecord, PIAPreview, FRNWatch, FRNReportHistory, Form471ByEntityResponse, Form471Record, Form471LineItem, DisbursementScheduleResponse, FrnTracking, SamCheckResult, Batch498Response } from "@/lib/api";
+import { api, ConsultantSchool, ConsultantProfile, AppealRecord, PIAResponseRecord, PIAFRNRecord, PIAPreview, FRNWatch, FRNReportHistory, Form471ByEntityResponse, Form471Record, Form471LineItem, DisbursementScheduleResponse, FrnTracking, SamCheckResult, Batch498Response, FundingRecoveryResponse } from "@/lib/api";
 import { SearchResultsTable } from "@/components/SearchResultsTable";
 import { AppealChat } from "@/components/AppealChat";
 import { PIAChat } from "@/components/PIAChat";
@@ -2644,6 +2644,22 @@ function ConsultantPortalPage() {
       setBatch498Loading(false);
     }
   };
+
+  // C6: approved-vs-received rollup (committed vs disbursed) across the book
+  const [fundingRecovery, setFundingRecovery] = useState<FundingRecoveryResponse | null>(null);
+  const [fundingRecoveryLoading, setFundingRecoveryLoading] = useState(false);
+  const [recoveryExpandedBen, setRecoveryExpandedBen] = useState<string | null>(null);
+  const handleFundingRecoveryScan = async () => {
+    setFundingRecoveryLoading(true);
+    try {
+      const resp = await api.consultantFundingRecovery();
+      if (resp.success && resp.data) setFundingRecovery(resp.data);
+    } catch {
+      // keep previous results
+    } finally {
+      setFundingRecoveryLoading(false);
+    }
+  };
   const [samApplying, setSamApplying] = useState(false);
 
   const handleSamCheck = async (school: EnhancedSchool) => {
@@ -3253,6 +3269,19 @@ function ConsultantPortalPage() {
                       {batch498Loading ? 'Checking 498/UEI...' : 'Check all 498/UEI'}
                     </span>
                   </button>
+                  <button
+                    onClick={handleFundingRecoveryScan}
+                    disabled={fundingRecoveryLoading || schools.length === 0}
+                    title="Compare USAC committed dollars vs actually disbursed dollars for every school (FY2022-2025, USAC Open Data)"
+                    className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors disabled:opacity-50"
+                  >
+                    <svg className={`w-5 h-5 text-emerald-600 ${fundingRecoveryLoading ? 'animate-pulse' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-sm font-medium text-slate-700">
+                      {fundingRecoveryLoading ? 'Scanning money...' : 'Committed vs received'}
+                    </span>
+                  </button>
                 </div>
 
                 <div className="flex gap-3">
@@ -3313,6 +3342,90 @@ function ConsultantPortalPage() {
                       Every school has an Approved Form 498 filed with a SAM.gov UEI. BEAR payments are not at risk.
                     </p>
                   )}
+                </div>
+              )}
+
+              {/* C6: approved-vs-received (committed vs disbursed) panel */}
+              {fundingRecovery && (
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <h3 className="text-sm font-semibold text-slate-800">
+                      Money on the table: committed vs received
+                      <span className="ml-2 text-xs font-normal text-slate-500">
+                        FY{Math.min(...fundingRecovery.summary.years)}-{Math.max(...fundingRecovery.summary.years)} - USAC Open Data
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-500">{fundingRecovery.summary.schools_with_data} of {fundingRecovery.summary.schools_checked} schools have funding data</p>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+                    <div className="bg-slate-50 rounded-xl p-3">
+                      <p className="text-xs text-slate-500">Committed</p>
+                      <p className="text-lg font-bold text-slate-900">${fundingRecovery.summary.total_committed.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                    </div>
+                    <div className="bg-emerald-50 rounded-xl p-3">
+                      <p className="text-xs text-emerald-700">Disbursed</p>
+                      <p className="text-lg font-bold text-emerald-700">${fundingRecovery.summary.total_disbursed.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                    </div>
+                    <div className="bg-amber-50 rounded-xl p-3">
+                      <p className="text-xs text-amber-700">Outstanding</p>
+                      <p className="text-lg font-bold text-amber-700">${fundingRecovery.summary.total_outstanding.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                    </div>
+                    <div className="bg-red-50 rounded-xl p-3">
+                      <p className="text-xs text-red-600" title={`Committed with $0 disbursed, FY <= ${fundingRecovery.summary.stale_max_fy}`}>Stale ($0 disbursed, older FYs)</p>
+                      <p className="text-lg font-bold text-red-600">${fundingRecovery.summary.total_stale_amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                    </div>
+                  </div>
+                  {fundingRecovery.schools.length > 0 && (
+                    <div className="mt-3 max-h-80 overflow-y-auto">
+                      <table className="w-full text-xs">
+                        <thead className="sticky top-0 bg-white">
+                          <tr className="text-left text-slate-500">
+                            <th className="py-2 pr-2">School</th>
+                            <th className="py-2 pr-2 text-right">FRNs</th>
+                            <th className="py-2 pr-2 text-right">Committed</th>
+                            <th className="py-2 pr-2 text-right">Disbursed</th>
+                            <th className="py-2 pr-2 text-right">Outstanding</th>
+                            <th className="py-2 text-right">Collected</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {fundingRecovery.schools.slice(0, 50).map((s) => (
+                            <Fragment key={s.ben}>
+                              <tr
+                                className={`border-t border-slate-100 ${s.stale_frns.length > 0 ? 'cursor-pointer hover:bg-amber-50' : ''}`}
+                                onClick={() => s.stale_frns.length > 0 && setRecoveryExpandedBen(recoveryExpandedBen === s.ben ? null : s.ben)}
+                              >
+                                <td className="py-1.5 pr-2">
+                                  <span className="font-medium text-slate-800">{s.school_name || `BEN ${s.ben}`}</span>
+                                  {s.stale_frns.length > 0 && (
+                                    <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 text-[10px] font-semibold">
+                                      {s.stale_frns.length} stale FRN{s.stale_frns.length > 1 ? 's' : ''}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-1.5 pr-2 text-right text-slate-600">{s.n_frns}</td>
+                                <td className="py-1.5 pr-2 text-right text-slate-700">${s.committed.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                                <td className="py-1.5 pr-2 text-right text-emerald-700">${s.disbursed.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                                <td className="py-1.5 pr-2 text-right font-semibold text-amber-700">${s.outstanding.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                                <td className="py-1.5 text-right text-slate-600">{s.pct_collected != null ? `${s.pct_collected}%` : '-'}</td>
+                              </tr>
+                              {recoveryExpandedBen === s.ben && s.stale_frns.map((f) => (
+                                <tr key={`${s.ben}-${f.frn}`} className="bg-red-50/50">
+                                  <td className="py-1 pl-6 pr-2 text-slate-600" colSpan={4}>
+                                    FRN {f.frn} - FY{f.funding_year} - {f.status || 'Funded'} - committed with $0 disbursed
+                                  </td>
+                                  <td className="py-1 pr-2 text-right font-medium text-red-600" colSpan={2}>${f.committed.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                                </tr>
+                              ))}
+                            </Fragment>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <p className="mt-2 text-[11px] text-slate-400">
+                    Outstanding = committed minus authorized disbursements. Recent FYs may still be invoicing normally; stale rows (older FYs, $0 disbursed) are the ones to chase before invoice deadlines.
+                  </p>
                 </div>
               )}
 
