@@ -18,6 +18,7 @@ import sys
 import os
 import re
 import threading
+import time
 import uuid as uuid_mod
 
 # Add skyrate-ai to path
@@ -5055,6 +5056,13 @@ async def update_predicted_lead_status(
     return {"success": True, "message": f"Status updated to {body.status}"}
 
 
+# Single-flight guard: the refresh is a multi-minute USAC pull that starves the
+# worker if clicks stack up, so only one may be in flight per process.
+_prediction_refresh_lock = threading.Lock()
+_prediction_refresh_running = False
+_prediction_refresh_started_at: Optional[float] = None
+
+
 def _run_prediction_refresh(states: Optional[List[str]], force: bool):
     """
     Background worker that runs prediction refresh in a separate thread
@@ -5064,7 +5072,9 @@ def _run_prediction_refresh(states: Optional[List[str]], force: bool):
     logger = logging.getLogger(__name__)
     from ...core.database import SessionLocal
     from ...services.prediction_service import prediction_service
-    
+
+    global _prediction_refresh_running, _prediction_refresh_started_at
+
     logger.info("Background prediction refresh started")
     db = SessionLocal()
     try:
@@ -5084,6 +5094,9 @@ def _run_prediction_refresh(states: Optional[List[str]], force: bool):
         logger.error(f"Background prediction refresh error: {e}")
     finally:
         db.close()
+        with _prediction_refresh_lock:
+            _prediction_refresh_running = False
+            _prediction_refresh_started_at = None
 
 
 @router.post("/predicted-leads/refresh")
@@ -5099,8 +5112,22 @@ async def refresh_predictions(
     Runs in a background thread so the API remains responsive.
     Admin or premium vendor access required.
     """
+    global _prediction_refresh_running, _prediction_refresh_started_at
+
     state_list = [s.strip() for s in states.split(',')] if states else None
-    
+
+    with _prediction_refresh_lock:
+        if _prediction_refresh_running:
+            elapsed = int(time.time() - (_prediction_refresh_started_at or time.time()))
+            return {
+                "success": True,
+                "message": f"A prediction refresh is already running ({elapsed}s elapsed). Check stats endpoint for progress.",
+                "status": "processing",
+                "already_running": True,
+            }
+        _prediction_refresh_running = True
+        _prediction_refresh_started_at = time.time()
+
     # Run in a background thread so we don't block the event loop
     thread = threading.Thread(
         target=_run_prediction_refresh,
@@ -5108,11 +5135,12 @@ async def refresh_predictions(
         daemon=True
     )
     thread.start()
-    
+
     return {
         "success": True,
         "message": "Prediction refresh started in background. Check stats endpoint for progress.",
-        "status": "processing"
+        "status": "processing",
+        "already_running": False,
     }
 
 
