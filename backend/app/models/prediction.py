@@ -5,7 +5,7 @@ Premium feature ($499/mo addon).
 """
 
 import enum
-from sqlalchemy import Column, Integer, String, Text, DateTime, Float, ForeignKey, JSON, Index
+from sqlalchemy import Column, Integer, String, Text, DateTime, Float, Boolean, ForeignKey, JSON, Index
 from datetime import datetime
 
 from ..core.database import Base
@@ -207,3 +207,45 @@ class PredictionRefreshLog(Base):
     
     # Performance
     duration_seconds = Column(Float, nullable=True)
+
+
+class PredictionRefreshJob(Base):
+    """
+    Queue for user-requested prediction refreshes.
+
+    The refresh is a multi-minute USAC pull, so the web container only enqueues a
+    row here; the scheduler worker claims and executes it.
+    """
+    __tablename__ = "prediction_refresh_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    status = Column(String(20), default="queued", nullable=False, index=True)  # queued, running, completed, failed
+
+    states = Column(JSON, nullable=True)
+    force_refresh = Column(Boolean, default=False, nullable=False)
+
+    requested_by_user_id = Column(Integer, nullable=True)
+    requested_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+
+    total_predictions = Column(Integer, nullable=True)
+    duration_seconds = Column(Float, nullable=True)
+    error = Column(Text, nullable=True)
+
+    # Set when a worker claims the job; lets us reap jobs from a crashed worker.
+    claimed_by = Column(String(100), nullable=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "status": self.status,
+            "states": self.states,
+            "force_refresh": self.force_refresh,
+            "requested_at": self.requested_at.isoformat() if self.requested_at else None,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "total_predictions": self.total_predictions,
+            "duration_seconds": self.duration_seconds,
+            "error": self.error,
+        }

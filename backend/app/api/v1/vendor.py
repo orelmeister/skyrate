@@ -17,8 +17,6 @@ import secrets
 import sys
 import os
 import re
-import threading
-import time
 import uuid as uuid_mod
 
 # Add skyrate-ai to path
@@ -5012,6 +5010,30 @@ async def get_predicted_leads_stats(
     return prediction_service.get_prediction_stats(db)
 
 
+# Declared before /predicted-leads/{prediction_id} so it isn't swallowed by it.
+@router.get("/predicted-leads/refresh-status")
+async def get_prediction_refresh_status(
+    profile: VendorProfile = Depends(get_vendor_profile),
+    db: Session = Depends(get_db)
+):
+    """Status of the most recent queued/running/finished prediction refresh job."""
+    from ...models.prediction import PredictionRefreshJob
+
+    job = (
+        db.query(PredictionRefreshJob)
+        .order_by(PredictionRefreshJob.id.desc())
+        .first()
+    )
+    if not job:
+        return {"success": True, "job": None, "in_progress": False}
+
+    return {
+        "success": True,
+        "job": job.to_dict(),
+        "in_progress": job.status in ("queued", "running"),
+    }
+
+
 @router.get("/predicted-leads/{prediction_id}")
 async def get_predicted_lead_detail(
     prediction_id: int,
@@ -5056,49 +5078,6 @@ async def update_predicted_lead_status(
     return {"success": True, "message": f"Status updated to {body.status}"}
 
 
-# Single-flight guard: the refresh is a multi-minute USAC pull that starves the
-# worker if clicks stack up, so only one may be in flight per process.
-_prediction_refresh_lock = threading.Lock()
-_prediction_refresh_running = False
-_prediction_refresh_started_at: Optional[float] = None
-
-
-def _run_prediction_refresh(states: Optional[List[str]], force: bool):
-    """
-    Background worker that runs prediction refresh in a separate thread
-    with its own DB session. This prevents blocking the async event loop.
-    """
-    import logging
-    logger = logging.getLogger(__name__)
-    from ...core.database import SessionLocal
-    from ...services.prediction_service import prediction_service
-
-    global _prediction_refresh_running, _prediction_refresh_started_at
-
-    logger.info("Background prediction refresh started")
-    db = SessionLocal()
-    try:
-        result = prediction_service.generate_all_predictions(
-            db=db,
-            states=states,
-            force_refresh=force,
-        )
-        if result.get('success'):
-            logger.info(
-                f"Background prediction refresh complete: {result.get('total_predictions', 0)} predictions "
-                f"in {result.get('duration_seconds', 0):.1f}s"
-            )
-        else:
-            logger.error(f"Background prediction refresh failed: {result}")
-    except Exception as e:
-        logger.error(f"Background prediction refresh error: {e}")
-    finally:
-        db.close()
-        with _prediction_refresh_lock:
-            _prediction_refresh_running = False
-            _prediction_refresh_started_at = None
-
-
 @router.post("/predicted-leads/refresh")
 async def refresh_predictions(
     states: Optional[str] = None,
@@ -5107,40 +5086,52 @@ async def refresh_predictions(
     db: Session = Depends(get_db)
 ):
     """
-    Trigger a manual prediction refresh.
-    This fetches fresh data from USAC and re-runs all prediction algorithms.
-    Runs in a background thread so the API remains responsive.
+    Queue a manual prediction refresh.
+
+    The refresh is a multi-minute USAC pull, so it is NOT executed here - running
+    it in the web container starves uvicorn and takes the whole API down. We only
+    enqueue a job row; the scheduler worker claims and runs it.
     Admin or premium vendor access required.
     """
-    global _prediction_refresh_running, _prediction_refresh_started_at
+    from ...models.prediction import PredictionRefreshJob
 
     state_list = [s.strip() for s in states.split(',')] if states else None
 
-    with _prediction_refresh_lock:
-        if _prediction_refresh_running:
-            elapsed = int(time.time() - (_prediction_refresh_started_at or time.time()))
-            return {
-                "success": True,
-                "message": f"A prediction refresh is already running ({elapsed}s elapsed). Check stats endpoint for progress.",
-                "status": "processing",
-                "already_running": True,
-            }
-        _prediction_refresh_running = True
-        _prediction_refresh_started_at = time.time()
-
-    # Run in a background thread so we don't block the event loop
-    thread = threading.Thread(
-        target=_run_prediction_refresh,
-        args=(state_list, force),
-        daemon=True
+    existing = (
+        db.query(PredictionRefreshJob)
+        .filter(PredictionRefreshJob.status.in_(["queued", "running"]))
+        .order_by(PredictionRefreshJob.requested_at.asc())
+        .first()
     )
-    thread.start()
+    if existing:
+        return {
+            "success": True,
+            "message": (
+                "A prediction refresh is already running."
+                if existing.status == "running"
+                else "A prediction refresh is already queued."
+            ),
+            "status": existing.status,
+            "already_running": True,
+            "job": existing.to_dict(),
+        }
+
+    job = PredictionRefreshJob(
+        status="queued",
+        states=state_list,
+        force_refresh=force,
+        requested_by_user_id=current_user.id,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
 
     return {
         "success": True,
-        "message": "Prediction refresh started in background. Check stats endpoint for progress.",
-        "status": "processing",
+        "message": "Prediction refresh queued. The background worker will pick it up shortly.",
+        "status": "queued",
         "already_running": False,
+        "job": job.to_dict(),
     }
 
 

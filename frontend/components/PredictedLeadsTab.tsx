@@ -337,6 +337,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
   const [stats, setStats] = useState<PredictionStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
   const [selectedLead, setSelectedLead] = useState<PredictedLead | null>(null);
   // Per-entity Form 471 purchase-history drill-down (B5) — opened from the detail panel.
   const [purchaseHistoryBen, setPurchaseHistoryBen] = useState<string | null>(null);
@@ -490,12 +491,38 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
+    setRefreshMessage("Queued - the background worker will start it shortly...");
     try {
       await api.post("/vendor/predicted-leads/refresh");
-      // Re-fetch after refresh
+
+      // The worker runs the USAC pull out-of-process, so poll until it settles.
+      const deadline = Date.now() + 15 * 60 * 1000;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 5000));
+        const response = await api.get("/vendor/predicted-leads/refresh-status");
+        const payload = response.data;
+        if (!payload) continue;
+
+        const job = payload.job;
+        if (!job || !payload.in_progress) {
+          setRefreshMessage(
+            job?.status === "failed"
+              ? `Refresh failed: ${job.error || "unknown error"}`
+              : `Refresh complete - ${job?.total_predictions ?? 0} predictions.`
+          );
+          break;
+        }
+        setRefreshMessage(
+          job.status === "running"
+            ? "Refreshing predictions from USAC (this can take several minutes)..."
+            : "Queued - waiting for the background worker..."
+        );
+      }
+
       await Promise.all([fetchLeads(0), fetchStats()]);
     } catch (error) {
       console.error("Failed to refresh predictions:", error);
+      setRefreshMessage("Could not start the refresh. Please try again.");
     } finally {
       setIsRefreshing(false);
     }
@@ -957,6 +984,12 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
           </button>
         </div>
       </div>
+
+      {refreshMessage && (
+        <div className="mb-4 px-4 py-2 text-sm text-purple-800 bg-purple-50 border border-purple-200 rounded-xl">
+          {refreshMessage}
+        </div>
+      )}
 
       {/* Stats Cards */}
       {stats && (

@@ -1959,6 +1959,91 @@ def refresh_predicted_leads():
         db.close()
 
 
+def process_prediction_refresh_queue():
+    """
+    Drain user-requested prediction refreshes queued by the web container.
+
+    The web API only enqueues a PredictionRefreshJob row - executing the USAC
+    pull inside uvicorn previously wedged the entire backend.
+    """
+    from app.models.prediction import PredictionRefreshJob
+    import os as _os
+
+    db = SessionLocal()
+    job = None
+    try:
+        # Reap jobs orphaned by a worker restart.
+        stale_cutoff = datetime.utcnow() - timedelta(hours=2)
+        stale = db.query(PredictionRefreshJob).filter(
+            PredictionRefreshJob.status == "running",
+            PredictionRefreshJob.started_at < stale_cutoff,
+        ).all()
+        for s in stale:
+            s.status = "failed"
+            s.error = "Worker restarted while job was running"
+            s.completed_at = datetime.utcnow()
+        if stale:
+            db.commit()
+
+        if db.query(PredictionRefreshJob).filter(
+            PredictionRefreshJob.status == "running"
+        ).first():
+            return
+
+        job = db.query(PredictionRefreshJob).filter(
+            PredictionRefreshJob.status == "queued"
+        ).order_by(PredictionRefreshJob.requested_at.asc()).first()
+        if not job:
+            return
+
+        job.status = "running"
+        job.started_at = datetime.utcnow()
+        job.claimed_by = f"scheduler-{_os.getpid()}"
+        db.commit()
+    except Exception as e:
+        logger.error(f"[prediction-queue] Failed to claim job: {e}")
+        db.close()
+        return
+
+    logger.info(f"[prediction-queue] Running job {job.id} (states={job.states}, force={job.force_refresh})")
+    try:
+        from app.services.prediction_service import prediction_service
+
+        result = prediction_service.generate_all_predictions(
+            db=db,
+            states=job.states or None,
+            force_refresh=bool(job.force_refresh),
+        )
+
+        if result.get('success'):
+            job.status = "completed"
+            job.total_predictions = result.get('total_predictions', 0)
+            job.duration_seconds = result.get('duration_seconds')
+            logger.info(
+                f"[prediction-queue] Job {job.id} complete: "
+                f"{job.total_predictions} predictions in {job.duration_seconds or 0:.1f}s"
+            )
+        else:
+            job.status = "failed"
+            job.error = str(result.get('error', 'Unknown error'))[:2000]
+            logger.error(f"[prediction-queue] Job {job.id} failed: {job.error}")
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        job.status = "failed"
+        job.error = str(e)[:2000]
+        logger.error(f"[prediction-queue] Job {job.id} raised: {e}")
+    finally:
+        try:
+            job.completed_at = datetime.utcnow()
+            db.commit()
+        except Exception as e:
+            logger.error(f"[prediction-queue] Could not persist job {job.id} result: {e}")
+        db.close()
+
+
 def process_frn_watch_reports():
     """
     Process FRN watch monitors and send email reports.
@@ -2348,6 +2433,18 @@ def init_scheduler():
         id='refresh_predicted_leads',
         name='Refresh predictive lead intelligence from USAC',
         replace_existing=True
+    )
+
+    # Drain user-requested prediction refreshes enqueued by the web container.
+    scheduler.add_job(
+        process_prediction_refresh_queue,
+        trigger=IntervalTrigger(seconds=30),
+        id='process_prediction_refresh_queue',
+        name='Run queued prediction refresh requests',
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        next_run_time=boot + timedelta(seconds=45),
     )
     
     # FRN watch report processing - every hour (first run 6 min after boot)

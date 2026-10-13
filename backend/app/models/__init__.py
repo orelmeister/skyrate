@@ -32,7 +32,7 @@ from .user_usac_cache import UserUsacCache, UsacSyncJob
 from .admin_frn_snapshot import AdminFRNSnapshot
 from .pilot_frn_snapshot import PilotFRNSnapshot
 from .promo_invite import PromoInvite, PromoInviteStatus
-from .prediction import PredictedLead, PredictionRefreshLog, PredictionType, PredictionStatus
+from .prediction import PredictedLead, PredictionRefreshLog, PredictionRefreshJob, PredictionType, PredictionStatus
 from .lead import Lead
 from .email_verification_token import EmailVerificationToken
 from .compliance_analysis import ComplianceAnalysis
@@ -110,6 +110,7 @@ __all__ = [
     # Predictive Leads
     "PredictedLead",
     "PredictionRefreshLog",
+    "PredictionRefreshJob",
     "PredictionType",
     "PredictionStatus",
     # Inbound leads (public capture form)
