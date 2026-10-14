@@ -7,6 +7,7 @@ const GTM_ID = "GTM-MRT2V6HZ";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import InstallPrompt from "@/components/InstallPrompt";
 import ChatWidget from "@/components/ChatWidget";
+import StickyDemoBar from "@/components/StickyDemoBar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Analytics from "@/components/Analytics";
 
@@ -214,6 +215,7 @@ export default function RootLayout({
           {children}
           <ChatWidget />
           <InstallPrompt />
+          <StickyDemoBar />
         </ErrorBoundary>
         {process.env.NEXT_PUBLIC_TAWKTO_ID && (
           <Script
