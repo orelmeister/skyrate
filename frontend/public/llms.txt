@@ -1,0 +1,33 @@
+# SkyRate AI (skyrate.ai)
+
+> AI-powered E-Rate management platform for U.S. schools, libraries, E-Rate
+> consultants, and service providers. Built on the full USAC Open Data
+> (Socrata) dataset with real-time FRN status monitoring.
+
+## What SkyRate does
+- Real-time FRN (Funding Request Number) status tracking with email/push alerts, synced from USAC Open Data.
+- Form 470 bid-evaluation co-pilot: compliant, price-as-primary-factor scoring per FCC rules.
+- Form 470 lead discovery and competitor SPIN tracking for service providers.
+- AI denial analysis: plain-English explanation of USAC denial codes.
+- AI appeal generator: drafts appeals citing FCC Order 19-117 and relevant precedent.
+- Category 2 budget tracking per BEN, deadline alerts (Form 470/471, PIA, appeal windows).
+- Free, ungated tools: FRN tracker (https://skyrate.ai/tools/frn-tracker) and BEN tracker (https://skyrate.ai/tools/ben-tracker).
+
+## Plans (advertised)
+- Free Trial: $0, 14-day full access, no credit card.
+- Pro (Consultant or Vendor): $499/month or $4,790/year.
+- Pro (School/Applicant): $199/month or $1,910/year.
+- Enterprise: custom pricing, SSO (SAML/Google/Microsoft), RBAC, dedicated CSM.
+
+## Key pages
+- Book a demo (primary CTA): https://skyrate.ai/book-demo
+- Pricing: https://skyrate.ai/pricing
+- For consultants: https://skyrate.ai/features/consultants
+- For schools & districts: https://skyrate.ai/features/applicants
+- For vendors: https://skyrate.ai/features/vendors
+- Case studies: https://skyrate.ai/case-studies
+- Blog: https://skyrate.ai/blog
+
+## Company
+SkyRate LLC, 30 N Gould St Ste N, Sheridan, WY 82801. Phone (855) 765-7291.
+Support: support@skyrate.ai

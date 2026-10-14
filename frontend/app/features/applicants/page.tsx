@@ -340,7 +340,12 @@ export default function ApplicantsFeaturePage() {
             Start tracking your E-Rate applications today
           </h2>
           <p className="text-lg text-slate-600 mb-8">
-            Book a 20-minute demo on your own USAC data - no commitment. Prefer hands-on? The 14-day free trial is in the menu. See why schools and libraries
+            Book a 20-minute demo on your own USAC data - no commitment. Prefer hands-on? The 14-day free trial is in the menu.{" "}
+            Skeptical of AI claims?{" "}
+            <Link href="/blog/erate-compliance-ai-validation-2026" className="text-purple-600 hover:underline font-medium">
+              See our compliance engine tested on 144 real Form 470s
+            </Link>
+            . See why schools and libraries
             across the country trust SkyRate AI to monitor their E-Rate applications, track budgets,
             and never miss a deadline.
           </p>

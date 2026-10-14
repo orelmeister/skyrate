@@ -298,7 +298,12 @@ export default function ConsultantsFeaturePage() {
             Ready to streamline your E-Rate consulting?
           </h2>
           <p className="text-lg text-slate-600 mb-8">
-            Book a 20-minute demo on your own USAC data - no commitment. Prefer hands-on? The 14-day free trial is in the menu. See why hundreds of E-Rate
+            Book a 20-minute demo on your own USAC data - no commitment. Prefer hands-on? The 14-day free trial is in the menu.{" "}
+            Skeptical of AI claims?{" "}
+            <Link href="/blog/erate-compliance-ai-validation-2026" className="text-purple-600 hover:underline font-medium">
+              See our compliance engine tested on 144 real Form 470s
+            </Link>
+            . See why hundreds of E-Rate
             consultants trust SkyRate AI to manage their portfolios and maximize funding for their
             clients.
           </p>

@@ -11,11 +11,11 @@ import ROICalculator from "@/components/ROICalculator";
 import AudienceChips from "@/components/AudienceChips";
 
 export const metadata: Metadata = {
-  title: "SkyRate AI — E-Rate Bidding, FRN Tracking & Compliance for Schools",
-  description: "The E-Rate platform for applicants: run compliant Form 470 bid evaluations, track every FRN in real time, and follow a step-by-step compliance workflow so you never miss a deadline. 14-day free trial.",
-  keywords: "E-Rate compliance software, Form 470 bid evaluation, FRN tracker, FRN management, E-Rate filing workflow, USAC tracker, school E-Rate application, Category 2 budget, E-Rate for applicants",
+  title: "SkyRate AI - The E-Rate Management Platform (FRN Tracking, Bidding & Compliance)",
+  description: "The AI-powered E-Rate management platform for schools, consultants, and service providers: compliant Form 470 bid evaluations, real-time FRN tracking on USAC data, denial analysis and appeals. 14-day free trial.",
+  keywords: "E-Rate software, E-Rate management platform, USAC E-Rate AI, E-Rate compliance software, Form 470 bid evaluation, FRN tracker, FRN management, E-Rate platform, Category 2 budget",
   openGraph: {
-    title: "SkyRate AI — E-Rate Bidding, FRN Tracking & Compliance for Schools",
+    title: "SkyRate AI - The E-Rate Management Platform",
     description: "Run compliant bid evaluations, track every FRN in real time, and follow a guided compliance workflow. Built for E-Rate applicants, consultants, and vendors.",
     type: "website",
     url: "https://skyrate.ai",
@@ -120,9 +120,8 @@ export default function HomePage() {
                 Trusted across 500+ schools &amp; libraries
               </div>
               <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-5 sm:mb-6 leading-tight">
-                Run a Compliant{" "}
-                <span className="gradient-text">E-Rate Application</span>{" "}
-                — Start to Finish
+                The AI-Powered{" "}
+                <span className="gradient-text">E-Rate Management Platform</span>
               </h1>
               <p className="text-base sm:text-lg lg:text-xl text-slate-400 mb-8 sm:mb-10 max-w-xl mx-auto lg:mx-0 leading-relaxed">
                 Evaluate your Form 470 bids the compliant way, track every FRN in real time, and follow a guided compliance workflow so you never miss a deadline — the E-Rate platform built for schools, libraries, and the consultants who serve them.
@@ -275,10 +274,16 @@ export default function HomePage() {
               </p>
             </div>
           </div>
-          <div className="mt-8 text-center">
+          <div className="mt-8 text-center space-y-2">
             <Link href="/book-demo?source=pilot-strip" className="inline-flex items-center gap-2 text-purple-700 font-semibold hover:text-purple-800 transition">
               See what it does with your data &rarr;
             </Link>
+            <p className="text-sm text-slate-500">
+              How accurate is the AI?{" "}
+              <Link href="/blog/erate-compliance-ai-validation-2026" className="text-purple-700 hover:underline font-medium">
+                We tested it on 144 real Form 470s - read the results
+              </Link>
+            </p>
           </div>
         </div>
       </section>
