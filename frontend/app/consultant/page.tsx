@@ -5878,7 +5878,7 @@ function ConsultantPortalPage() {
                       {!isFreeUser && !canAddFree && (
                         <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg mb-3">
                           <p className="text-xs text-amber-800">
-                            💳 Additional CRNs require a subscription: <strong>$499/mo</strong> or <strong>$4,999/yr</strong> per CRN.
+                            💳 Additional CRNs require a subscription: <strong>$499/mo</strong> or <strong>$4,790/yr</strong> per CRN.
                           </p>
                         </div>
                       )}
@@ -6176,7 +6176,7 @@ function ConsultantPortalPage() {
                         >
                           <div className="absolute -top-2 right-3 px-2 py-0.5 bg-green-500 text-white text-[10px] font-bold rounded-full">SAVE 17%</div>
                           <div className="text-xs text-indigo-600 uppercase font-semibold mb-1">Yearly</div>
-                          <div className="text-2xl font-bold text-slate-900">$4,999<span className="text-sm font-normal text-slate-500">/yr</span></div>
+                          <div className="text-2xl font-bold text-slate-900">$4,790<span className="text-sm font-normal text-slate-500">/yr</span></div>
                           <div className="text-xs text-slate-500 mt-2">~$417/mo. Best value.</div>
                           <div className="mt-3 w-full py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium text-center group-hover:bg-indigo-700 transition">
                             Choose Yearly

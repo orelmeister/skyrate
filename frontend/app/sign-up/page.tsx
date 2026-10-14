@@ -447,12 +447,12 @@ function SignUpPage() {
 
           <div className="grid grid-cols-3 gap-4 pt-4">
             <div className="text-center glassmorphism-card rounded-xl p-3">
-              <div className="text-3xl font-bold text-white">$500M+</div>
-              <div className="text-sm text-purple-200">Funding Tracked</div>
+              <div className="text-3xl font-bold text-white">$2.5B+</div>
+              <div className="text-sm text-purple-200">E-Rate Funding Analyzed</div>
             </div>
             <div className="text-center glassmorphism-card rounded-xl p-3">
-              <div className="text-3xl font-bold text-white">2,500+</div>
-              <div className="text-sm text-purple-200">Schools</div>
+              <div className="text-3xl font-bold text-white">500+</div>
+              <div className="text-sm text-purple-200">Schools & Libraries</div>
             </div>
             <div className="text-center glassmorphism-card rounded-xl p-3">
               <div className="text-3xl font-bold text-white">14-day</div>
@@ -559,7 +559,7 @@ function SignUpPage() {
                 <div className="text-[10px] text-slate-500 mt-0.5">USAC-current</div>
               </div>
               <div className="text-center px-2 py-2 rounded-lg border border-slate-200 bg-slate-50">
-                <div className="text-[11px] font-semibold text-purple-700">Free Forever Plan</div>
+                <div className="text-[11px] font-semibold text-purple-700">14-Day Free Trial Plan</div>
                 <div className="text-[10px] text-slate-500 mt-0.5">No trial expiry</div>
               </div>
               <div className="text-center px-2 py-2 rounded-lg border border-slate-200 bg-slate-50">

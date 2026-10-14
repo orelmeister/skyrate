@@ -177,7 +177,7 @@ export default function HomePage() {
                     </div>
                     <div className="bg-white/5 rounded-xl p-4 border border-white/5">
                       <div className="text-2xl font-bold text-indigo-400">$4.2M</div>
-                      <div className="text-xs text-slate-400">Funding Tracked</div>
+                      <div className="text-xs text-slate-400">E-Rate Funding Analyzed</div>
                     </div>
                     <div className="bg-white/5 rounded-xl p-4 border border-white/5">
                       <div className="text-2xl font-bold text-purple-400">6</div>
@@ -546,8 +546,8 @@ export default function HomePage() {
                     <div className="text-blue-100 text-xs sm:text-sm">Active Denials</div>
                   </div>
                   <div className="bg-white/15 rounded-xl p-3 sm:p-4 backdrop-blur-sm">
-                    <div className="text-2xl sm:text-3xl font-bold">87%</div>
-                    <div className="text-blue-100 text-xs sm:text-sm">Appeal Success</div>
+                    <div className="text-2xl sm:text-3xl font-bold">24/7</div>
+                    <div className="text-blue-100 text-xs sm:text-sm">USAC Monitoring</div>
                   </div>
                 </div>
                 <div className="bg-white/15 rounded-xl p-3 sm:p-4 backdrop-blur-sm">
@@ -658,9 +658,9 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 text-center">
             {[
-              { val: "$500M+", label: "E-Rate Funding Tracked", icon: "💰" },
-              { val: "2,500+", label: "Schools Managed", icon: "🏫" },
-              { val: "87%", label: "Appeal Success Rate", icon: "📈" },
+              { val: "$2.5B+", label: "E-Rate Funding Analyzed", icon: "💰" },
+              { val: "500+", label: "Schools & Libraries Tracked", icon: "🏫" },
+              { val: "24/7", label: "USAC Data Monitoring", icon: "📈" },
               { val: "18hrs", label: "Saved Per Week", icon: "⏱️" },
             ].map((s) => (
               <div key={s.label} className="animate-slide-up">
@@ -803,7 +803,7 @@ export default function HomePage() {
                   <span className="text-3xl sm:text-4xl font-bold text-emerald-600">$199</span>
                   <span className="text-slate-500">/month</span>
                 </div>
-                <p className="text-xs sm:text-sm text-slate-500 mt-1">or $1,999/year (save $389)</p>
+                <p className="text-xs sm:text-sm text-slate-500 mt-1">or $1,910/year (save $478)</p>
               </div>
               <ul className="space-y-2 sm:space-y-3 mb-6 sm:mb-8 text-sm sm:text-base">
                 {["Automatic FRN tracking", "Real-time status alerts", "AI-generated appeal letters", "Deadline reminders", "Unlimited appeal refinements", "Email support"].map((f) => (
@@ -832,7 +832,7 @@ export default function HomePage() {
                   <span className="text-3xl sm:text-4xl font-bold text-indigo-600">$499</span>
                   <span className="text-slate-500">/month</span>
                 </div>
-                <p className="text-xs sm:text-sm text-slate-500 mt-1">or $4,999/year (save $989)</p>
+                <p className="text-xs sm:text-sm text-slate-500 mt-1">or $4,790/year (save $1,198)</p>
               </div>
               <ul className="space-y-2 sm:space-y-3 mb-6 sm:mb-8 text-sm sm:text-base">
                 {["Unlimited schools", "AI appeal generation", "Denial pattern analysis", "CRN auto-import", "Natural language search", "Email support"].map((f) => (
@@ -861,7 +861,7 @@ export default function HomePage() {
                   <span className="text-3xl sm:text-4xl font-bold text-purple-600">$499</span>
                   <span className="text-slate-500">/month</span>
                 </div>
-                <p className="text-xs sm:text-sm text-slate-500 mt-1">or $4,999/year (save $989)</p>
+                <p className="text-xs sm:text-sm text-slate-500 mt-1">or $4,790/year (save $1,198)</p>
               </div>
               <ul className="space-y-2 sm:space-y-3 mb-6 sm:mb-8 text-sm sm:text-base">
                 {["Form 470 lead tracking", "Multi-manufacturer monitoring", "FRN status tracking", "Competitor analysis", "Market intelligence dashboard", "Priority support"].map((f) => (

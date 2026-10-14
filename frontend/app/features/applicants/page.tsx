@@ -275,11 +275,11 @@ export default function ApplicantsFeaturePage() {
           </div>
           <div className="grid sm:grid-cols-3 gap-8 max-w-4xl mx-auto">
             <div className="text-center">
-              <p className="text-4xl sm:text-5xl font-bold text-white mb-2">$500M+</p>
-              <p className="text-purple-200 font-medium">Funding Tracked</p>
+              <p className="text-4xl sm:text-5xl font-bold text-white mb-2">$2.5B+</p>
+              <p className="text-purple-200 font-medium">E-Rate Funding Analyzed</p>
             </div>
             <div className="text-center">
-              <p className="text-4xl sm:text-5xl font-bold text-white mb-2">2,500+</p>
+              <p className="text-4xl sm:text-5xl font-bold text-white mb-2">500+</p>
               <p className="text-purple-200 font-medium">Schools &amp; Libraries</p>
             </div>
             <div className="text-center">

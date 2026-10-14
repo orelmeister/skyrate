@@ -208,7 +208,7 @@ export default function PricingPage() {
           <div className="max-w-4xl mx-auto text-center">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-50 border border-purple-100 text-xs sm:text-sm font-medium text-purple-700 mb-4 sm:mb-6">
               <Shield className="w-3.5 h-3.5" />
-              <span>Trusted by E-Rate teams managing $100M+ in annual funding</span>
+              <span>In live pilots with E-Rate consultants and vendors nationwide</span>
             </div>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 leading-tight tracking-tight mb-4 sm:mb-6">
               E-Rate consulting software{" "}

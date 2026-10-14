@@ -174,10 +174,10 @@ export default function ContactPage() {
                 Speak with a member of our support team directly.
               </p>
               <a
-                href="tel:+18005551234"
+                href="tel:+18557657291"
                 className="text-indigo-600 font-semibold hover:text-indigo-700 transition-colors"
               >
-                (800) 555-1234
+                (855) 765-7291
               </a>
             </div>
 

@@ -272,7 +272,7 @@ export default function VendorsFeaturePage() {
               <p className="text-purple-200 font-medium">Form 470s Tracked</p>
             </div>
             <div className="text-center">
-              <p className="text-4xl sm:text-5xl font-bold text-white mb-2">$500M+</p>
+              <p className="text-4xl sm:text-5xl font-bold text-white mb-2">$2.5B+</p>
               <p className="text-purple-200 font-medium">In Opportunities</p>
             </div>
             <div className="text-center">

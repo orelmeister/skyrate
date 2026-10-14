@@ -230,8 +230,9 @@ export default function AboutPage() {
               </div>
               <h3 className="text-lg font-bold text-slate-900 mb-2">Multi-Model AI</h3>
               <p className="text-slate-600 text-sm leading-relaxed">
-                Powered by DeepSeek, Google Gemini, and Claude — we pick the best AI for each
-                task, from appeals to denial analysis.
+                Powered by multiple enterprise AI models hosted in the U.S. with strict
+                data isolation - we pick the best model for each task, from appeals to
+                denial analysis.
               </p>
             </div>
             <div className="bg-white rounded-2xl p-6 border border-slate-200">
@@ -279,21 +280,21 @@ export default function AboutPage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
             <div className="text-center">
               <div className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent mb-2">
-                $500M+
+                $2.5B+
               </div>
-              <p className="text-slate-600 font-medium">Funding Tracked</p>
+              <p className="text-slate-600 font-medium">E-Rate Funding Analyzed</p>
             </div>
             <div className="text-center">
               <div className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent mb-2">
-                2,500+
+                500+
               </div>
               <p className="text-slate-600 font-medium">Schools Served</p>
             </div>
             <div className="text-center">
               <div className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent mb-2">
-                98%
+                24/7
               </div>
-              <p className="text-slate-600 font-medium">Appeal Success Rate</p>
+              <p className="text-slate-600 font-medium">USAC Data Monitoring</p>
             </div>
             <div className="text-center">
               <div className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent mb-2">

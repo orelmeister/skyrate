@@ -74,9 +74,9 @@ export default function TermsPage() {
           <h3>4.1 Pricing</h3>
           <p>The Service is offered on a subscription basis with the following plans:</p>
           <ul>
-            <li><strong>Consultant:</strong> $499/month or $4,999/year</li>
-            <li><strong>Vendor:</strong> $499/month or $4,999/year</li>
-            <li><strong>Applicant:</strong> $199/month or $1,999/year</li>
+            <li><strong>Consultant:</strong> $499/month or $4,790/year</li>
+            <li><strong>Vendor:</strong> $499/month or $4,790/year</li>
+            <li><strong>Applicant:</strong> $199/month or $1,910/year</li>
           </ul>
           <p>All prices are in US dollars and are subject to change with 30 days&apos; notice.</p>
 

@@ -144,7 +144,7 @@ export default function PrivacyPage() {
           <p>We do not sell your personal information. We may share information with:</p>
           <ul>
             <li><strong>Service providers:</strong> Stripe (payments), Twilio (SMS), Google Workspace (email), and cloud hosting providers that help us operate the Service</li>
-            <li><strong>AI providers:</strong> We send anonymized or de-identified E-Rate data to AI services (DeepSeek, Google Gemini, Anthropic Claude) for denial analysis and appeal generation. We do not send your personal contact information to AI providers.</li>
+            <li><strong>AI providers:</strong> We send anonymized or de-identified E-Rate data to U.S.-hosted enterprise AI providers under data-processing agreements for denial analysis and appeal generation. We do not send your personal contact information to AI providers.</li>
             <li><strong>Legal requirements:</strong> When required by law, subpoena, or legal process</li>
             <li><strong>Business transfers:</strong> In connection with a merger, acquisition, or sale of assets</li>
           </ul>

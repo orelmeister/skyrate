@@ -170,7 +170,7 @@ export default function AppealGeneratorFeaturePage() {
                 Multiple AI Models
               </h3>
               <p className="text-slate-600 leading-relaxed">
-                Choose from DeepSeek, Google Gemini, or Claude to generate your appeal. Each model
+                Our multi-model engine selects among U.S.-hosted enterprise AI models to generate your appeal. Each model
                 brings unique strengths — compare outputs, select the best arguments, and combine
                 perspectives for the most comprehensive appeal possible. Switch models with one
                 click.
@@ -321,16 +321,16 @@ export default function AppealGeneratorFeaturePage() {
           </div>
           <div className="grid sm:grid-cols-3 gap-8 max-w-4xl mx-auto">
             <div className="text-center">
-              <p className="text-4xl sm:text-5xl font-bold text-white mb-2">$500M+</p>
-              <p className="text-purple-200 font-medium">Funding Tracked</p>
+              <p className="text-4xl sm:text-5xl font-bold text-white mb-2">$2.5B+</p>
+              <p className="text-purple-200 font-medium">E-Rate Funding Analyzed</p>
             </div>
             <div className="text-center">
-              <p className="text-4xl sm:text-5xl font-bold text-white mb-2">2,500+</p>
-              <p className="text-purple-200 font-medium">Schools Monitored</p>
+              <p className="text-4xl sm:text-5xl font-bold text-white mb-2">500+</p>
+              <p className="text-purple-200 font-medium">Schools & Libraries Tracked</p>
             </div>
             <div className="text-center">
-              <p className="text-4xl sm:text-5xl font-bold text-white mb-2">98%</p>
-              <p className="text-purple-200 font-medium">Appeal Success Rate</p>
+              <p className="text-4xl sm:text-5xl font-bold text-white mb-2">24/7</p>
+              <p className="text-purple-200 font-medium">USAC Data Monitoring</p>
             </div>
           </div>
         </div>
