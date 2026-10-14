@@ -171,15 +171,19 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000", "https://skyrate.ai", "https://*.skyrate.ai"]
     
     # Subscription Pricing (cents)
-    # Consultants: $499/month or $4,999/year
+    # Yearly = 20% off annualized monthly, matching the advertised pricing page
+    # (frontend/components/PricingClient.tsx): 499*12*0.80 = 4790.40 -> $4,790;
+    # 199*12*0.80 = 1910.40 -> $1,910. Keep these in sync with the pricing page
+    # AND the Stripe price objects (STRIPE_PRICE_* env).
+    # Consultants: $499/month or $4,790/year
     CONSULTANT_MONTHLY_PRICE: int = 49900   # $499
-    CONSULTANT_YEARLY_PRICE: int = 499900   # $4,999
-    # Vendors: $499/month or $4,999/year  
+    CONSULTANT_YEARLY_PRICE: int = 479000   # $4,790
+    # Vendors: $499/month or $4,790/year
     VENDOR_MONTHLY_PRICE: int = 49900       # $499
-    VENDOR_YEARLY_PRICE: int = 499900       # $4,999
-    # Applicants: $199/month or $1,999/year
+    VENDOR_YEARLY_PRICE: int = 479000       # $4,790
+    # Applicants: $199/month or $1,910/year
     APPLICANT_MONTHLY_PRICE: int = 19900    # $199
-    APPLICANT_YEARLY_PRICE: int = 199900    # $1,999
+    APPLICANT_YEARLY_PRICE: int = 191000    # $1,910
     
     # Test/Demo Account Settings
     # EXACT-match allowlist of emails that get free access (case-insensitive).
