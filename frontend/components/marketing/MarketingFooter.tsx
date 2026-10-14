@@ -57,6 +57,21 @@ export default function MarketingFooter() {
                   </Link>
                 </li>
                 <li>
+                  <Link href="/case-studies" className="text-slate-400 hover:text-white text-sm transition-colors">
+                    Case Studies
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/demo" className="text-slate-400 hover:text-white text-sm transition-colors">
+                    Live Demo
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/tools/frn-tracker" className="text-slate-400 hover:text-white text-sm transition-colors">
+                    Free FRN Tracker
+                  </Link>
+                </li>
+                <li>
                   <Link href="/features/appeal-generator" className="text-slate-400 hover:text-white text-sm transition-colors">
                     Appeal Generator
                   </Link>
