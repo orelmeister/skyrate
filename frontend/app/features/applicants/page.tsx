@@ -1,4 +1,6 @@
 import { Metadata } from "next";
+import MarketingFooter from "@/components/marketing/MarketingFooter";
+import MarketingHeader from "@/components/marketing/MarketingHeader";
 import Link from "next/link";
 import { Check, ArrowRight, BarChart3, Bell, Shield, Clock, DollarSign, FileText, Search, Zap } from "lucide-react";
 
@@ -25,53 +27,7 @@ export default function ApplicantsFeaturePage() {
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
-        <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <img
-              src="/images/logos/logo-icon-transparent.png"
-              alt=""
-              width={32}
-              height={32}
-              className="rounded-lg"
-            />
-            <span className="text-white font-bold text-xl">
-              SkyRate<span className="text-purple-400">.AI</span>
-            </span>
-          </Link>
-          <div className="hidden md:flex items-center gap-8">
-            <Link href="/features/consultants" className="text-slate-300 hover:text-white text-sm transition-colors">
-              For Consultants
-            </Link>
-            <Link href="/features/vendors" className="text-slate-300 hover:text-white text-sm transition-colors">
-              For Vendors
-            </Link>
-            <Link href="/features/applicants" className="text-purple-300 text-sm font-medium">
-              For Applicants
-            </Link>
-            <Link href="/pricing" className="text-slate-300 hover:text-white text-sm transition-colors">
-              Pricing
-            </Link>
-            <Link href="/blog" className="text-slate-300 hover:text-white text-sm transition-colors">
-              Blog
-            </Link>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/sign-in"
-              className="text-slate-300 hover:text-white text-sm transition-colors hidden sm:block"
-            >
-              Sign In
-            </Link>
-            <Link
-              href="/book-demo"
-              className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-            >
-              Book a Demo
-            </Link>
-          </div>
-        </nav>
-      </header>
+      <MarketingHeader active="/features/applicants" />
 
       {/* Hero Section */}
       <section className="relative bg-slate-950 overflow-hidden">
@@ -408,124 +364,7 @@ export default function ApplicantsFeaturePage() {
       </section>
 
       {/* Footer */}
-      <footer className="bg-slate-900 pt-16 pb-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-8 mb-12">
-            {/* Brand Column */}
-            <div className="lg:col-span-1">
-              <Link href="/" className="flex items-center gap-2 mb-4">
-                <img
-                  src="/images/logos/logo-icon-transparent.png"
-                  alt=""
-                  width={28}
-                  height={28}
-                  className="rounded-lg"
-                />
-                <span className="text-white font-bold text-lg">
-                  SkyRate<span className="text-purple-400">.AI</span>
-                </span>
-              </Link>
-              <p className="text-slate-400 text-sm leading-relaxed">
-                AI-powered E-Rate funding intelligence for consultants, vendors, and applicants.
-              </p>
-            </div>
-
-            {/* Features */}
-            <div>
-              <h4 className="text-white font-semibold text-sm mb-4">Features</h4>
-              <ul className="space-y-2.5">
-                <li>
-                  <Link href="/features/consultants" className="text-slate-400 hover:text-white text-sm transition-colors">
-                    For Consultants
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/features/vendors" className="text-slate-400 hover:text-white text-sm transition-colors">
-                    For Vendors
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/features/applicants" className="text-slate-400 hover:text-white text-sm transition-colors">
-                    For Applicants
-                  </Link>
-                </li>
-              </ul>
-            </div>
-
-            {/* Product */}
-            <div>
-              <h4 className="text-white font-semibold text-sm mb-4">Product</h4>
-              <ul className="space-y-2.5">
-                <li>
-                  <Link href="/pricing" className="text-slate-400 hover:text-white text-sm transition-colors">
-                    Pricing
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/features/appeal-generator" className="text-slate-400 hover:text-white text-sm transition-colors">
-                    Appeal Generator
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/features/frn-monitoring" className="text-slate-400 hover:text-white text-sm transition-colors">
-                    FRN Monitoring
-                  </Link>
-                </li>
-              </ul>
-            </div>
-
-            {/* Company */}
-            <div>
-              <h4 className="text-white font-semibold text-sm mb-4">Company</h4>
-              <ul className="space-y-2.5">
-                <li>
-                  <Link href="/about" className="text-slate-400 hover:text-white text-sm transition-colors">
-                    About
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/book-demo" className="text-slate-400 hover:text-white text-sm transition-colors">
-                    Book a Demo
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/contact" className="text-slate-400 hover:text-white text-sm transition-colors">
-                    Contact
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/blog" className="text-slate-400 hover:text-white text-sm transition-colors">
-                    Blog
-                  </Link>
-                </li>
-              </ul>
-            </div>
-
-            {/* Legal */}
-            <div>
-              <h4 className="text-white font-semibold text-sm mb-4">Legal</h4>
-              <ul className="space-y-2.5">
-                <li>
-                  <Link href="/terms" className="text-slate-400 hover:text-white text-sm transition-colors">
-                    Terms of Service
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/privacy" className="text-slate-400 hover:text-white text-sm transition-colors">
-                    Privacy Policy
-                  </Link>
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="border-t border-slate-800 pt-8 text-center">
-            <p className="text-slate-500 text-sm">
-              &copy; {new Date().getFullYear()} SkyRate AI. All rights reserved.
-            </p>
-          </div>
-        </div>
-      </footer>
+      <MarketingFooter />
     </div>
   );
 }
