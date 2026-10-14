@@ -196,7 +196,9 @@ function SignUpPage() {
     const v = value.trim();
     return v.length >= meta.minLen && v.length <= meta.maxLen;
   };
-  const identifierOk = isIdentifierValid(formData.role, formData.identifier);
+  // USAC id is optional now; the Google button is never gated on it.
+  const identifierOk = true;
+  void isIdentifierValid; // retained for potential future format gating
 
   useEffect(() => {
     roleRef.current = formData.role;
@@ -219,17 +221,10 @@ function SignUpPage() {
             setError("Google sign-in was canceled or failed.");
             return;
           }
-          // Enforce role-specific USAC identifier — Google signup must not
-          // bypass the CRN/SPIN/BEN gate that the email signup enforces.
+          // USAC identifier is OPTIONAL at sign-up (CRO audit Day 5):
+          // auth first, IDs during onboarding. Forward it when provided.
           const role = roleRef.current;
           const identifier = (identifierRef.current || "").trim();
-          const meta = IDENTIFIER_META[role];
-          if (!identifier || !isIdentifierValid(role, identifier)) {
-            const len = meta.minLen === meta.maxLen ? `${meta.minLen} digits` : `${meta.minLen}\u2013${meta.maxLen} digits`;
-            setError(`Please enter your ${meta.key.toUpperCase()} (${len}) above before signing up with Google.`);
-            trackEvent("signup_google_error", { role, error_code: "identifier_missing" });
-            return;
-          }
           setGoogleLoading(true);
           setError("");
           trackEvent("signup_google_attempt", { role });
@@ -321,19 +316,8 @@ function SignUpPage() {
       });
       return;
     }
-    if (!hasIdentifier) {
-      if (invoiceData) {
-        // Paid-invoice signup: identifier is collected during onboarding, not now.
-      } else {
-      setError(`${meta.key.toUpperCase()} is required to create your account.`);
-      trackEvent("signup_submit_error", {
-        role: formData.role,
-        error_code: "identifier_missing",
-        error_message: `${meta.key.toUpperCase()} required`,
-      });
-      return;
-      }
-    }
+    // USAC identifier is OPTIONAL at sign-up (CRO audit Day 5) - collected
+    // during onboarding (or on a guided setup call) when not provided here.
     if (hasIdentifier && (identifier.length < meta.minLen || identifier.length > meta.maxLen)) {
       setError(
         `${meta.key.toUpperCase()} must be ${
@@ -640,13 +624,6 @@ function SignUpPage() {
                         {opt.label}
                       </div>
                       <div className="text-xs text-slate-500 mt-0.5">{opt.tagline}</div>
-                      <div
-                        className={`text-xs mt-1 font-medium ${
-                          formData.role === opt.value ? "text-purple-600" : "text-slate-400"
-                        }`}
-                      >
-                        {opt.price}
-                      </div>
                     </button>
                   ))}
                 </div>
@@ -656,13 +633,12 @@ function SignUpPage() {
               <div data-testid="identifier-field">
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   {IDENTIFIER_META[formData.role].label}{" "}
-                  <span className="text-red-500 font-normal">*</span>
+                  <span className="text-slate-400 font-normal">(optional)</span>
                 </label>
                 <input
                   type="text"
                   inputMode="numeric"
                   name="identifier"
-                  required
                   value={formData.identifier}
                   onChange={(e) => {
                     const cleaned = e.target.value.replace(/\D/g, "").slice(0, 20);
@@ -710,6 +686,17 @@ function SignUpPage() {
                 {identifierWarning && (
                   <p className="mt-1 text-xs text-amber-600">{identifierWarning}</p>
                 )}
+                <p className="mt-1.5 text-xs text-slate-500">
+                  Don&apos;t know it? Add it later in onboarding, find it with our{" "}
+                  <Link href="/tools/ben-tracker" className="text-purple-600 hover:underline font-medium">
+                    free BEN tracker
+                  </Link>
+                  , or{" "}
+                  <Link href="/book-demo?source=signup-guided-setup" className="text-purple-600 hover:underline font-medium">
+                    book a guided setup call
+                  </Link>
+                  .
+                </p>
               </div>
 
               {/* Google Sign-Up */}
