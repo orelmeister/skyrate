@@ -37,10 +37,10 @@ const CONSULTANT_PLANS: PricingPlan[] = [
   {
     type: "yearly",
     name: "Annual",
-    price: 4999,
+    price: 4790,
     interval: "year",
-    description: "Best value - Save $989/year",
-    savings: "Save 17%",
+    description: "Best value - Save $1,198/year",
+    savings: "Save 20%",
     features: [
       "Everything in Monthly",
       "Priority support",
@@ -69,10 +69,10 @@ const VENDOR_PLANS: PricingPlan[] = [
   {
     type: "yearly",
     name: "Annual",
-    price: 4999,
+    price: 4790,
     interval: "year",
-    description: "Best value - Save $989/year",
-    savings: "Save 17%",
+    description: "Best value - Save $1,198/year",
+    savings: "Save 20%",
     features: [
       "Everything in Monthly",
       "Priority support",
@@ -101,10 +101,10 @@ const APPLICANT_PLANS: PricingPlan[] = [
   {
     type: "yearly",
     name: "Annual",
-    price: 1999,
+    price: 1910,
     interval: "year",
-    description: "Best value - Save $389/year",
-    savings: "Save 16%",
+    description: "Best value - Save $478/year",
+    savings: "Save 20%",
     features: [
       "Everything in Monthly",
       "Priority support",
