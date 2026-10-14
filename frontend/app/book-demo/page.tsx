@@ -79,17 +79,80 @@ export default function BookDemoPage() {
         </nav>
       </header>
 
-      <main className="flex-1 flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold mb-3">Book your free demo</h1>
-            <p className="text-slate-400">
+      <main className="flex-1 px-4 sm:px-6 py-10 lg:py-14">
+        <div className="w-full max-w-5xl mx-auto grid lg:grid-cols-2 gap-10 lg:gap-14 items-start">
+          {/* Left: value proposition */}
+          <div className="max-w-md mx-auto lg:mx-0 text-center lg:text-left">
+            <h1 className="text-3xl sm:text-4xl font-bold mb-3">Book your free demo</h1>
+            <p className="text-slate-400 mb-8">
               Tell us who you are and we&apos;ll take you straight to the calendar to pick a time.
               A SkyRate specialist will walk you through your district&apos;s real E-Rate data.
             </p>
+
+            <ul className="space-y-3 text-left mb-8">
+              {[
+                "See your real E-Rate data live - we load your actual USAC portfolio, not a canned demo.",
+                "FRN, Form 470 & 471 tracking for your whole portfolio in one dashboard.",
+                "20 minutes, no commitment, no credit card.",
+              ].map((benefit) => (
+                <li key={benefit} className="flex items-start gap-3 text-sm text-slate-300">
+                  <svg
+                    className="mt-0.5 h-5 w-5 flex-shrink-0 text-purple-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>{benefit}</span>
+                </li>
+              ))}
+            </ul>
+
+            {/* What happens next */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-5 mb-8 text-left">
+              <h2 className="text-sm font-semibold text-slate-200 mb-3">What happens next</h2>
+              <ol className="space-y-2.5">
+                {[
+                  "Pick a time on the calendar (opens right after this form).",
+                  "We pull your organization's public USAC data before the call.",
+                  "A specialist walks you through it live - and answers anything.",
+                ].map((step, i) => (
+                  <li key={step} className="flex items-start gap-3 text-sm text-slate-300">
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-600/30 text-purple-300 text-xs font-bold flex items-center justify-center mt-0.5">
+                      {i + 1}
+                    </span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            <figure className="bg-white/5 border border-white/10 rounded-2xl p-5 text-left">
+              <blockquote className="text-sm text-slate-200 leading-relaxed">
+                &ldquo;Before SkyRate, our district spent 40+ hours per funding year on E-Rate
+                paperwork. Now our consultants handle 3x the clients with the same team.&rdquo;
+              </blockquote>
+              <figcaption className="mt-3 text-xs text-slate-400">
+                <span className="font-semibold text-slate-200">E-Rate Consultant</span> &middot; Mid-Atlantic Region
+              </figcaption>
+            </figure>
+
+            <p className="mt-6 text-sm text-slate-400">
+              Prefer to talk now? Call{" "}
+              <a
+                href="tel:855-765-7291"
+                className="font-semibold text-purple-300 hover:text-purple-200"
+              >
+                (855) 765-7291
+              </a>
+            </p>
           </div>
 
-          <form
+          {/* Right: the form, visible above the fold */}
+          <div className="w-full max-w-md mx-auto lg:mx-0 lg:sticky lg:top-8">
+            <form
             onSubmit={handleSubmit}
             className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-4"
           >
@@ -180,49 +243,6 @@ export default function BookDemoPage() {
               No spam. We&apos;ll only use this to prepare for your demo.
             </p>
           </form>
-
-          {/* Why book a demo — benefits, social proof, phone */}
-          <div className="mt-8 space-y-6">
-            <ul className="space-y-3">
-              {[
-                "See your real E-Rate data live — we load your actual USAC portfolio, not a canned demo.",
-                "FRN, Form 470 & 471 tracking for your whole portfolio in one dashboard.",
-                "20 minutes, no commitment, no credit card.",
-              ].map((benefit) => (
-                <li key={benefit} className="flex items-start gap-3 text-sm text-slate-300">
-                  <svg
-                    className="mt-0.5 h-5 w-5 flex-shrink-0 text-purple-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span>{benefit}</span>
-                </li>
-              ))}
-            </ul>
-
-            <figure className="bg-white/5 border border-white/10 rounded-2xl p-5">
-              <blockquote className="text-sm text-slate-200 leading-relaxed">
-                &ldquo;Before SkyRate, our district spent 40+ hours per funding year on E-Rate
-                paperwork. Now our consultants handle 3x the clients with the same team.&rdquo;
-              </blockquote>
-              <figcaption className="mt-3 text-xs text-slate-400">
-                <span className="font-semibold text-slate-200">E-Rate Consultant</span> · Mid-Atlantic Region
-              </figcaption>
-            </figure>
-
-            <p className="text-center text-sm text-slate-400">
-              Prefer to talk now? Call{" "}
-              <a
-                href="tel:855-765-7291"
-                className="font-semibold text-purple-300 hover:text-purple-200"
-              >
-                (855) 765-7291
-              </a>
-            </p>
           </div>
         </div>
       </main>
