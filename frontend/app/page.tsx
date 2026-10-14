@@ -253,6 +253,36 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ────────── LIVE PILOTS — SOCIAL PROOF ────────── */}
+      <section className="py-12 sm:py-16 px-4 sm:px-6 bg-white border-b border-slate-200">
+        <div className="max-w-5xl mx-auto">
+          <p className="text-center text-xs sm:text-sm font-semibold tracking-widest uppercase text-purple-600 mb-8">
+            In live pilots with E-Rate consultants and vendors
+          </p>
+          <div className="grid sm:grid-cols-2 gap-6">
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6">
+              <div className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-2">Consultant pilot</div>
+              <p className="text-slate-700 leading-relaxed text-sm sm:text-base">
+                An E-Rate consulting firm uses SkyRate daily to track FRN status and deadlines
+                across a multi-district portfolio &mdash; replacing manual USAC portal checks.
+              </p>
+            </div>
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6">
+              <div className="text-xs font-semibold uppercase tracking-wide text-purple-600 mb-2">Vendor pilot</div>
+              <p className="text-slate-700 leading-relaxed text-sm sm:text-base">
+                A service provider uses SkyRate&apos;s Form 470 discovery to find and respond to
+                new bid opportunities the day they are posted.
+              </p>
+            </div>
+          </div>
+          <div className="mt-8 text-center">
+            <Link href="/book-demo?source=pilot-strip" className="inline-flex items-center gap-2 text-purple-700 font-semibold hover:text-purple-800 transition">
+              See what it does with your data &rarr;
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* ════════════════════ ROI CALCULATOR ════════════════════ */}
       <ROICalculator />
 
