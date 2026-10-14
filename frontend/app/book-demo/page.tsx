@@ -13,6 +13,7 @@ export default function BookDemoPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [organization, setOrganization] = useState("");
+  const [usacId, setUsacId] = useState("");
   const [role, setRole] = useState<Role>("unsure");
   const [hp, setHp] = useState(""); // honeypot
   const [submitting, setSubmitting] = useState(false);
@@ -39,6 +40,7 @@ export default function BookDemoPage() {
           name: name.trim(),
           email: email.trim(),
           organization: organization.trim() || undefined,
+          usac_id: usacId.trim() || undefined,
           role,
           source: "skyrate.ai/book-demo",
           _hp: hp,
@@ -86,7 +88,8 @@ export default function BookDemoPage() {
             <h1 className="text-3xl sm:text-4xl font-bold mb-3">Book your free demo</h1>
             <p className="text-slate-400 mb-8">
               Tell us who you are and we&apos;ll take you straight to the calendar to pick a time.
-              A SkyRate specialist will walk you through your district&apos;s real E-Rate data.
+              A SkyRate specialist will walk you through your organization&apos;s real E-Rate
+              data - whether you&apos;re a school, a consultant, or a service provider.
             </p>
 
             <ul className="space-y-3 text-left mb-8">
@@ -229,6 +232,20 @@ export default function BookDemoPage() {
               </select>
             </div>
 
+            <div>
+              <label htmlFor="bd-usac" className="block text-sm font-medium text-slate-300 mb-1.5">
+                BEN / CRN / SPIN <span className="text-slate-500 font-normal">(optional)</span>
+              </label>
+              <input
+                id="bd-usac"
+                type="text"
+                value={usacId}
+                onChange={(e) => setUsacId(e.target.value)}
+                className="w-full rounded-lg bg-slate-900 border border-white/10 px-3.5 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                placeholder="So we can pre-load your live USAC portfolio"
+              />
+            </div>
+
             {error && <p className="text-sm text-red-400">{error}</p>}
 
             <button
@@ -240,7 +257,9 @@ export default function BookDemoPage() {
             </button>
 
             <p className="text-xs text-slate-500 text-center">
-              No spam. We&apos;ll only use this to prepare for your demo.
+              No spam. We&apos;ll only use this to prepare for your demo. After this 30-second
+              step you pick any open slot on the live calendar - times are typically available
+              within 1-2 business days.
             </p>
           </form>
           </div>

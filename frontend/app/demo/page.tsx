@@ -65,10 +65,11 @@ export default function DemoPage() {
             <p className="text-sm text-amber-100/80">
               All BENs, FRNs, dollar amounts, and applicant names below are synthetic.
               {" "}
-              <Link href="/sign-up?source=demo-banner" className="underline font-semibold hover:text-white">
-                Sign up
-              </Link>{" "}
-              to track your own real BENs and FRNs.
+              Want to see it with <strong>your</strong> real USAC portfolio?{" "}
+              <Link href="/book-demo?source=demo-banner" className="underline font-semibold hover:text-white">
+                Book a 15-min custom demo
+              </Link>
+              .
             </p>
           </div>
         </div>
@@ -95,21 +96,21 @@ export default function DemoPage() {
         </section>
 
         <section className="mt-12 bg-gradient-to-r from-indigo-600/30 to-purple-600/30 border border-indigo-500/40 rounded-2xl p-8 text-center">
-          <h2 className="text-2xl sm:text-3xl font-bold mb-2">Ready to track your real BENs?</h2>
-          <p className="text-slate-300 mb-5">14-day free trial · No credit card · Setup in under 5 minutes</p>
+          <h2 className="text-2xl sm:text-3xl font-bold mb-2">Want this with your real USAC portfolio?</h2>
+          <p className="text-slate-300 mb-5">15-minute custom walkthrough on your own BENs and FRNs · No commitment</p>
           <Link
-            href="/sign-up?source=demo-cta"
+            href="/book-demo?source=demo-cta"
             className="inline-flex items-center gap-2 px-6 py-3 bg-white text-slate-900 rounded-xl font-bold hover:bg-slate-100 transition"
           >
-            Start your free trial →
+            Book a custom demo →
           </Link>
           <p className="mt-4 text-sm text-slate-300">
-            Prefer a live walkthrough?{" "}
+            Prefer hands-on?{" "}
             <Link
-              href="/book-demo?source=demo-page"
+              href="/sign-up?source=demo-page"
               className="font-semibold text-white underline hover:text-purple-200"
             >
-              Book a demo →
+              Start a 14-day free trial →
             </Link>
           </p>
         </section>

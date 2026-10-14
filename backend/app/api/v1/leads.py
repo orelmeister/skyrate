@@ -212,6 +212,7 @@ class DemoRequest(BaseModel):
     phone: Optional[str] = Field(None, max_length=50)
     role: Literal["consultant", "vendor", "applicant", "unsure"] = "unsure"
     organization: Optional[str] = Field(None, max_length=255)
+    usac_id: Optional[str] = Field(None, max_length=50)  # BEN / CRN / SPIN
     source: str = Field("skyrate.ai/demo", max_length=255)
     hp: Optional[str] = Field(None, alias="_hp")
 
@@ -257,6 +258,7 @@ async def request_demo(
         phone=_strip_phone(payload.phone),
         role=payload.role,
         organization=(payload.organization or "").strip() or None,
+        ben=(payload.usac_id or "").strip()[:50] or None,
         source=(payload.source or "skyrate.ai/demo").strip(),
         ip_address=client_ip,
         user_agent=(request.headers.get("user-agent") or "")[:500] or None,
@@ -280,6 +282,8 @@ async def request_demo(
             parts.append(f"Role: {lead.role}")
         if lead.phone:
             parts.append(f"Phone: {lead.phone}")
+        if lead.ben:
+            parts.append(f"USAC ID (BEN/CRN/SPIN): {lead.ben}")
         send_alert(
             title="New demo request",
             body="\n".join(parts),
