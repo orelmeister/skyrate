@@ -89,16 +89,24 @@ export default function AboutPage() {
             About SkyRate AI
           </span>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6">
-            AI-Powered E-Rate Intelligence{" "}
+            Schools Shouldn&apos;t Lose E-Rate Funding{" "}
             <span className="bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
-              for Everyone
+              to Paperwork
             </span>
           </h1>
-          <p className="text-lg sm:text-xl text-slate-300 max-w-3xl mx-auto leading-relaxed">
-            We believe every school deserves access to modern technology, and the E-Rate program
-            is the key. SkyRate AI uses artificial intelligence to make E-Rate funding simpler,
-            faster, and more successful for everyone involved.
+          <p className="text-lg sm:text-xl text-slate-300 max-w-3xl mx-auto leading-relaxed mb-10">
+            Every year, funding is denied over missed deadlines, bad bid evaluations, and USAC
+            portal blind spots &mdash; problems software should have solved long ago. SkyRate AI
+            combines real-time USAC data with AI so consultants, vendors, and schools catch
+            every dollar they&apos;re entitled to.
           </p>
+          <Link
+            href="/book-demo?source=about-hero"
+            className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold px-8 py-3.5 rounded-xl transition-colors text-lg"
+          >
+            See it on your data
+            <ArrowRight className="w-5 h-5" />
+          </Link>
         </div>
       </section>
 
@@ -187,6 +195,17 @@ export default function AboutPage() {
             </Link>
           </div>
         </div>
+      </section>
+
+      {/* Mid-page demo CTA */}
+      <section className="bg-white pb-20 text-center">
+        <Link
+          href="/book-demo?source=about-mid"
+          className="inline-flex items-center gap-2 border border-purple-300 text-purple-700 hover:bg-purple-50 font-semibold px-8 py-3.5 rounded-xl transition-colors"
+        >
+          Book a 20-minute demo
+          <ArrowRight className="w-5 h-5" />
+        </Link>
       </section>
 
       {/* What Makes SkyRate Different */}
