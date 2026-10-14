@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import MarketingHeader from "@/components/marketing/MarketingHeader";
 import Link from "next/link";
 import DemoClient from "./DemoClient";
 
@@ -54,20 +55,7 @@ export default function DemoPage() {
         }}
       />
 
-      <header className="border-b border-white/10 bg-slate-950/80 backdrop-blur sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <img src="/images/logos/logo-icon-transparent.png" alt="" width={32} height={32} className="rounded-lg" />
-            <span className="font-bold text-xl">SkyRate<span className="text-purple-400">.AI</span></span>
-          </Link>
-          <Link
-            href="/book-demo?source=demo-header"
-            className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg font-semibold text-sm hover:from-indigo-500 hover:to-purple-500 transition"
-          >
-            Book a Demo
-          </Link>
-        </div>
-      </header>
+      <MarketingHeader />
 
       <main className="max-w-7xl mx-auto px-4 py-8">
         <div className="bg-amber-500/15 border border-amber-500/40 rounded-xl p-4 mb-6 flex items-start gap-3">

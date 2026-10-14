@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import MarketingHeader from "@/components/marketing/MarketingHeader";
 import Link from "next/link";
 import { BlogPostJsonLd } from "@/components/seo/BlogPostJsonLd";
 import { ArrowRight, ArrowLeft, Clock, BookOpen, CheckCircle, FileText, Building2, Search, BadgeCheck } from "lucide-react";
@@ -66,54 +67,7 @@ export default function HowToFileForm498Page() {
       />
       <div className="min-h-screen bg-white">
         {/* Header */}
-        <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
-          <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2">
-              <img
-                src="/images/logos/logo-icon-transparent.png"
-                alt=""
-                width={32}
-                height={32}
-                className="rounded-lg"
-              />
-              <span className="text-white font-bold text-xl">
-                SkyRate<span className="text-purple-400">.AI</span>
-              </span>
-            </Link>
-            <div className="hidden md:flex items-center gap-8">
-              <Link href="/blog" className="text-purple-300 text-sm font-medium flex items-center gap-1">
-                <ArrowLeft className="w-3.5 h-3.5" />
-                Back to Blog
-              </Link>
-              <Link href="/features/consultants" className="text-slate-300 hover:text-white text-sm transition-colors">
-                For Consultants
-              </Link>
-              <Link href="/features/vendors" className="text-slate-300 hover:text-white text-sm transition-colors">
-                For Vendors
-              </Link>
-              <Link href="/become-a-vendor" className="text-slate-300 hover:text-white text-sm transition-colors">
-                Become a Vendor
-              </Link>
-              <Link href="/pricing" className="text-slate-300 hover:text-white text-sm transition-colors">
-                Pricing
-              </Link>
-            </div>
-            <div className="flex items-center gap-3">
-              <Link
-                href="/sign-in"
-                className="text-slate-300 hover:text-white text-sm transition-colors hidden sm:block"
-              >
-                Sign In
-              </Link>
-              <Link
-                href="/become-a-vendor"
-                className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-              >
-                Get your SPIN
-              </Link>
-            </div>
-          </nav>
-        </header>
+        <MarketingHeader active="/blog" />
 
         {/* Article */}
         <article className="bg-white py-16 sm:py-20">

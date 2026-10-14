@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import MarketingHeader from "@/components/marketing/MarketingHeader";
 import Link from "next/link";
 import CaseStudiesClient from "./CaseStudiesClient";
 
@@ -85,6 +86,8 @@ export default function CaseStudiesPage() {
         />
       ))}
       <main className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900 text-white">
+        <MarketingHeader active="/case-studies" />
+
         <header className="max-w-5xl mx-auto px-4 sm:px-6 pt-12 pb-6">
           <Link href="/" className="text-sm text-slate-400 hover:text-white transition">
             ← Back to SkyRate

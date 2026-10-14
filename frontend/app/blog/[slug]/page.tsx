@@ -13,6 +13,7 @@ import {
   Calendar,
   Sparkles,
 } from "lucide-react";
+import MarketingHeader from "@/components/marketing/MarketingHeader";
 
 export default function DynamicBlogPost() {
   const params = useParams();
@@ -55,14 +56,7 @@ export default function DynamicBlogPost() {
   if (notFoundState || !post) {
     return (
       <div className="min-h-screen bg-white">
-        <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
-          <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <Link href="/" className="flex items-center gap-2">
-              <img src="/images/logos/logo-icon-transparent.png" alt="" width={32} height={32} className="rounded-lg" />
-              <span className="text-white font-bold text-xl">SkyRate<span className="text-purple-400">.AI</span></span>
-            </Link>
-          </nav>
-        </header>
+        <MarketingHeader active="/blog" />
         <div className="max-w-3xl mx-auto px-4 py-24 text-center">
           <h1 className="text-3xl font-bold text-slate-900 mb-4">Post Not Found</h1>
           <p className="text-slate-600 mb-8">This blog post doesn&apos;t exist or has been unpublished.</p>

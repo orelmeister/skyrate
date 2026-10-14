@@ -2,22 +2,13 @@
 
 import Link from "next/link";
 import { SafeEmail } from "@/components/SafeEmail";
+import MarketingHeader from "@/components/marketing/MarketingHeader";
 
 export default function SecurityPage() {
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-xl border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <img src="/images/logos/logo-icon-transparent.png" alt="" width={32} height={32} className="rounded-lg" />
-            <span className="text-white font-bold text-xl">SkyRate<span className="text-purple-400">.AI</span></span>
-          </Link>
-          <Link href="/" className="text-sm text-slate-400 hover:text-white transition-colors">
-            Back to Home
-          </Link>
-        </div>
-      </header>
+      <MarketingHeader />
 
       {/* Content */}
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
