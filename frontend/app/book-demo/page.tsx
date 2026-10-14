@@ -13,7 +13,10 @@ export default function BookDemoPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [organization, setOrganization] = useState("");
-  const [usacId, setUsacId] = useState("");
+  const [usacId, setUsacId] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("usac") || "";
+  });
   const [role, setRole] = useState<Role>("unsure");
   const [hp, setHp] = useState(""); // honeypot
   const [submitting, setSubmitting] = useState(false);

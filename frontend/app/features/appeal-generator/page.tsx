@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import MarketingHeader from "@/components/marketing/MarketingHeader";
+import FrnLookupClient from "@/app/tools/frn-tracker/FrnLookupClient";
 import Link from "next/link";
 import { Check, ArrowRight, Brain, FileText, Scale, Zap, Shield, Clock, Sparkles, BookOpen } from "lucide-react";
 
@@ -58,6 +59,29 @@ export default function AppealGeneratorFeaturePage() {
           </div>
         </div>
       </section>
+
+      {/* Inline FRN Lookup Widget - the real tool, ungated (CRO audit: no bait-and-switch) */}
+      <section className="relative bg-slate-950 border-t border-white/10 py-16 sm:py-20">
+        <div className="absolute inset-0 bg-gradient-to-b from-purple-900/10 via-transparent to-transparent" />
+        <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-3">
+              Check the FRN you want to appeal{" "}
+              <span className="bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
+                free, right now
+              </span>
+            </h2>
+            <p className="text-slate-400 max-w-2xl mx-auto">
+              Enter your denied Funding Request Number to pull its latest USAC status - no account needed. Then let SkyRate draft the appeal citing FCC Order 19-117.
+            </p>
+          </div>
+          <FrnLookupClient />
+          <p className="text-xs text-slate-500 text-center mt-6">
+            Results reflect public USAC Open Data records and may lag the official USAC portal.
+          </p>
+        </div>
+      </section>
+
 
       {/* How It Works Section */}
       <section className="bg-slate-50 py-20 sm:py-24">

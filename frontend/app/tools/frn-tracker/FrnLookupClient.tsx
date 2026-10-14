@@ -190,7 +190,21 @@ export default function FrnLookupClient() {
               </div>
             </div>
           ) : (
+            <>
             <FrnResultCard record={result.record!} />
+            {/* Personalized demo callout using the looked-up FRN (CRO audit Day 4) */}
+            <div className="mt-4 bg-gradient-to-r from-indigo-600/20 to-purple-600/20 border border-purple-400/30 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <p className="text-sm text-slate-200 text-center sm:text-left">
+                Want an expert to walk through FRN {result.frn} and the rest of your portfolio with you?
+              </p>
+              <Link
+                href={`/book-demo?source=frn-tracker-result&usac=${encodeURIComponent(result.frn)}`}
+                className="flex-shrink-0 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold transition"
+              >
+                Book a 15-min demo
+              </Link>
+            </div>
+            </>
           )}
 
           <div className="mt-6">

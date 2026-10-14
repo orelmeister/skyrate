@@ -332,6 +332,18 @@ export default function BenLookupClient() {
                   <UrgentBanner record={result.record} />
                 )}
                 <BenResultCard record={result.record} />
+                {/* Personalized demo callout using the looked-up BEN (CRO audit Day 4) */}
+                <div className="mt-4 bg-gradient-to-r from-indigo-600/20 to-purple-600/20 border border-purple-400/30 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <p className="text-sm text-slate-200 text-center sm:text-left">
+                    Want a 15-minute expert audit of BEN {result.ben} - FRNs, C2 budget and deadlines?
+                  </p>
+                  <Link
+                    href={`/book-demo?source=ben-tracker-result&usac=${encodeURIComponent(result.ben)}`}
+                    className="flex-shrink-0 px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold transition"
+                  >
+                    Book a demo on this BEN
+                  </Link>
+                </div>
               </>
             )
           )}
