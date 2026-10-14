@@ -30,7 +30,7 @@ const IDENTIFIER_META: Record<UserRole, {
   consultant: {
     key: "crn",
     label: "Your USAC Consultant Registration Number (CRN)",
-    helper: "Required — we use this to auto-pull your school portfolio.",
+    helper: "Optional - add it now to auto-import your portfolio, or add it later in onboarding.",
     placeholder: "e.g. 16016019",
     minLen: 6,
     maxLen: 15,
@@ -38,7 +38,7 @@ const IDENTIFIER_META: Record<UserRole, {
   vendor: {
     key: "spin",
     label: "Your USAC Service Provider Identification Number (SPIN)",
-    helper: "Required — find it on your USAC profile.",
+    helper: "Optional - find it on your USAC profile, or add it later in onboarding.",
     placeholder: "e.g. 143005551",
     minLen: 9,
     maxLen: 9,
@@ -46,7 +46,7 @@ const IDENTIFIER_META: Record<UserRole, {
   applicant: {
     key: "ben",
     label: "Your Billed Entity Number (BEN)",
-    helper: "Required — look it up at usac.org if unsure.",
+    helper: "Optional - look it up at usac.org, or add it later in onboarding.",
     placeholder: "e.g. 16002074",
     minLen: 6,
     maxLen: 9,
@@ -421,12 +421,12 @@ function SignUpPage() {
               <>
                 Start in 30 seconds.
                 <br />
-                <span className="text-blue-200">Activate with USAC ID.</span>
+                <span className="text-blue-200">No USAC ID needed to start.</span>
               </>
             )}
           </h1>
           <p className="text-lg text-purple-100 max-w-md">
-            Enter your USAC identifier (CRN, SPIN, or BEN) and we&apos;ll auto-import your portfolio in seconds.
+            Sign up with Google or email in 30 seconds - add your CRN, SPIN, or BEN later and we&apos;ll auto-import your portfolio.
           </p>
 
           <div className="grid grid-cols-3 gap-4 pt-4">
@@ -532,7 +532,7 @@ function SignUpPage() {
                 Start your free FY2026 E-Rate AI account in 30 seconds
               </h2>
               <p className="text-slate-500 mt-2 text-sm">
-                Verify your USAC entity (CRN, SPIN, or BEN) to activate your account.
+                Create your account in 30 seconds - no USAC ID required to start.
               </p>
             </div>
 
