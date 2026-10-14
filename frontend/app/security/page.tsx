@@ -117,6 +117,7 @@ export default function SecurityPage() {
           </div>
           <div className="flex items-center gap-6 text-sm">
             <Link href="/security" className="text-purple-400">Security</Link>
+            <Link href="/book-demo" className="hover:text-white transition-colors">Book a Demo</Link>
             <Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
             <Link href="/terms" className="hover:text-white transition-colors">Terms of Service</Link>
             <span>&copy; {new Date().getFullYear()} SkyRate AI. All rights reserved.</span>

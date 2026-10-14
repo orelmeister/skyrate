@@ -61,10 +61,10 @@ export default function DemoPage() {
             <span className="font-bold text-xl">SkyRate<span className="text-purple-400">.AI</span></span>
           </Link>
           <Link
-            href="/sign-up?source=demo-header"
+            href="/book-demo?source=demo-header"
             className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg font-semibold text-sm hover:from-indigo-500 hover:to-purple-500 transition"
           >
-            Start Free Trial
+            Book a Demo
           </Link>
         </div>
       </header>

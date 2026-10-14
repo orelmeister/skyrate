@@ -70,10 +70,10 @@ export default function HowToAppealErateDenialPage() {
               Sign In
             </Link>
             <Link
-              href="/sign-up"
+              href="/book-demo"
               className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
             >
-              Sign Up
+              Book a Demo
             </Link>
           </div>
         </nav>
@@ -228,8 +228,8 @@ export default function HowToAppealErateDenialPage() {
                 SkyRate AI automates the complex parts of E-Rate management so you can focus on what matters. Our platform handles <Link href="/features/denial-analysis" className="text-purple-700 underline hover:text-purple-900">denial analysis</Link>, <Link href="/features/appeal-generator" className="text-purple-700 underline hover:text-purple-900">AI appeal generation</Link>, <Link href="/features/frn-monitoring" className="text-purple-700 underline hover:text-purple-900">FRN monitoring</Link>, and more &mdash; see <Link href="/pricing" className="text-purple-700 underline hover:text-purple-900">plans &amp; pricing</Link>.
               </p>
               <div className="flex flex-wrap gap-3">
-                <Link href="/sign-up" className="inline-flex items-center gap-1 bg-purple-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
-                  Start Free Trial <ArrowRight className="w-3.5 h-3.5" />
+                <Link href="/book-demo?source=blog-inline" className="inline-flex items-center gap-1 bg-purple-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
+                  Book a Demo <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
                 <Link href="/contact" className="inline-flex items-center gap-1 border border-purple-300 text-purple-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-purple-50 transition-colors">
                   Contact Us for Help
@@ -427,10 +427,10 @@ export default function HowToAppealErateDenialPage() {
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
-              href="/sign-up"
+              href="/book-demo?source=blog-cta"
               className="inline-flex items-center gap-2 bg-white text-purple-700 hover:bg-purple-50 font-semibold px-8 py-3.5 rounded-xl transition-colors text-lg"
             >
-              Get Started Free
+              Book a Demo
               <ArrowRight className="w-5 h-5" />
             </Link>
             <Link
@@ -476,6 +476,11 @@ export default function HowToAppealErateDenialPage() {
               <h4 className="text-white font-semibold text-sm mb-4">Company</h4>
               <ul className="space-y-2.5">
                 <li><Link href="/about" className="text-slate-400 hover:text-white text-sm transition-colors">About</Link></li>
+                <li>
+                  <Link href="/book-demo" className="text-slate-400 hover:text-white text-sm transition-colors">
+                    Book a Demo
+                  </Link>
+                </li>
                 <li><Link href="/contact" className="text-slate-400 hover:text-white text-sm transition-colors">Contact</Link></li>
                 <li><Link href="/blog" className="text-slate-400 hover:text-white text-sm transition-colors">Blog</Link></li>
               </ul>

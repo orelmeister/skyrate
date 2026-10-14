@@ -116,8 +116,8 @@ export default function StatePage({ params }: Props) {
           </div>
           <div className="flex items-center gap-3">
             <Link href="/sign-in" className="text-slate-300 hover:text-white text-sm transition-colors hidden sm:block">Sign In</Link>
-            <Link href="/sign-up" className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-              Start Free Trial
+            <Link href="/book-demo" className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+              Book a Demo
             </Link>
           </div>
         </nav>
@@ -144,10 +144,10 @@ export default function StatePage({ params }: Props) {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
-              href="/sign-up"
+              href="/book-demo?source=hero"
               className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-semibold hover:from-purple-500 hover:to-indigo-500 transition shadow-lg shadow-purple-500/30"
             >
-              Start Free Trial
+              Book a Demo
               <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
@@ -349,10 +349,10 @@ export default function StatePage({ params }: Props) {
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link
-            href="/sign-up"
+            href="/book-demo?source=state-cta"
             className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-semibold hover:from-purple-500 hover:to-indigo-500 transition shadow-lg shadow-purple-500/30"
           >
-            Start Free Trial
+            Book a Demo
             <ArrowRight className="w-4 h-4" />
           </Link>
           <Link

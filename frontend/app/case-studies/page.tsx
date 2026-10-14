@@ -110,6 +110,12 @@ export default function CaseStudiesPage() {
             </p>
             <div className="flex flex-wrap gap-3 justify-center">
               <Link
+                href="/book-demo?source=case-studies-cta"
+                className="px-6 py-3 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 font-semibold transition"
+              >
+                Book a Demo
+              </Link>
+              <Link
                 href="/demo"
                 className="px-6 py-3 rounded-lg border border-white/20 hover:bg-white/10 font-semibold transition"
               >
@@ -117,7 +123,7 @@ export default function CaseStudiesPage() {
               </Link>
               <Link
                 href="/sign-up?source=case-studies-cta"
-                className="px-6 py-3 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 font-semibold transition"
+                className="px-6 py-3 rounded-lg border border-white/20 hover:bg-white/10 font-semibold transition"
               >
                 Start free trial
               </Link>

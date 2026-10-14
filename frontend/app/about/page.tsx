@@ -72,10 +72,10 @@ export default function AboutPage() {
               Sign In
             </Link>
             <Link
-              href="/sign-up"
+              href="/book-demo"
               className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
             >
-              Sign Up
+              Book a Demo
             </Link>
           </div>
         </nav>
@@ -300,10 +300,10 @@ export default function AboutPage() {
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
-              href="/sign-up"
+              href="/book-demo?source=about-cta"
               className="inline-flex items-center gap-2 bg-white text-purple-700 hover:bg-purple-50 font-semibold px-8 py-3.5 rounded-xl transition-colors text-lg"
             >
-              Get Started Free
+              Book a Demo
               <ArrowRight className="w-5 h-5" />
             </Link>
             <Link
@@ -390,6 +390,11 @@ export default function AboutPage() {
                 <li>
                   <Link href="/about" className="text-slate-400 hover:text-white text-sm transition-colors">
                     About
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/book-demo" className="text-slate-400 hover:text-white text-sm transition-colors">
+                    Book a Demo
                   </Link>
                 </li>
                 <li>

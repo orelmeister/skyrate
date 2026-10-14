@@ -62,7 +62,7 @@ export default function HomePage() {
             <Link href="/features/applicants" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">For Applicants</Link>
             <Link href="/pricing" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">Pricing</Link>
             <Link href="/blog" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">Blog</Link>
-            <Link href="/book-demo" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">Book a Demo</Link>
+            <Link href="/sign-up?source=nav" className="text-slate-400 hover:text-white transition font-medium text-sm lg:text-base">Start Free Trial</Link>
           </nav>
 
           <div className="flex items-center gap-3">
@@ -82,8 +82,8 @@ export default function HomePage() {
             <Link href="/sign-in" className="hidden sm:inline text-slate-400 hover:text-white transition font-medium text-sm">
               Sign In
             </Link>
-            <Link href="/sign-up?source=header" className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-500 hover:to-purple-500 transition shadow-lg shadow-indigo-500/25 font-medium text-sm">
-              Start Free Trial
+            <Link href="/book-demo?source=header" className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-500 hover:to-purple-500 transition shadow-lg shadow-indigo-500/25 font-medium text-sm">
+              Book a Demo
             </Link>
             <MobileMenuButton />
           </div>
@@ -98,7 +98,7 @@ export default function HomePage() {
             <Link href="/features/applicants" className="text-slate-400 hover:text-white font-medium py-1">For Applicants</Link>
             <Link href="/pricing" className="text-slate-400 hover:text-white font-medium py-1">Pricing</Link>
             <Link href="/blog" className="text-slate-400 hover:text-white font-medium py-1">Blog</Link>
-            <Link href="/book-demo" className="text-slate-400 hover:text-white font-medium py-1">Book a Demo</Link>
+            <Link href="/sign-up?source=nav" className="text-slate-400 hover:text-white font-medium py-1">Start Free Trial</Link>
             <Link href="/sign-in" className="text-indigo-400 font-medium py-1 sm:hidden">Sign In</Link>
           </nav>
         </div>
@@ -133,10 +133,10 @@ export default function HomePage() {
               </div>
               <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 sm:gap-4 mb-5">
                 <Link
-                  href="/sign-up?source=hero"
+                  href="/book-demo?source=hero"
                   className="w-full sm:w-auto px-6 sm:px-8 py-3.5 sm:py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-500 hover:to-purple-500 transition shadow-xl shadow-indigo-500/30 text-base sm:text-lg animate-gentle-bounce"
                 >
-                  Start Free Trial
+                  Book a Demo
                 </Link>
                 <Link
                   href="/tools/frn-tracker"
@@ -152,7 +152,7 @@ export default function HomePage() {
                 </Link>
               </div>
               <p className="text-xs sm:text-sm text-slate-500 mb-6">
-                No credit card required · Cancel anytime · Full access
+                Live 20-minute walkthrough on your real USAC data · No commitment · Free trial available
               </p>
             </div>
 

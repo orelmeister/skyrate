@@ -100,7 +100,7 @@ export default function DynamicBlogPost() {
           </div>
           <div className="flex items-center gap-3">
             <Link href="/sign-in" className="text-slate-300 hover:text-white text-sm transition-colors hidden sm:block">Sign In</Link>
-            <Link href="/sign-up" className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">Sign Up</Link>
+            <Link href="/book-demo" className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">Book a Demo</Link>
           </div>
         </nav>
       </header>
@@ -202,8 +202,8 @@ export default function DynamicBlogPost() {
             Stop struggling with E-Rate complexity. Let SkyRate AI&apos;s intelligent platform handle the heavy lifting — from denial analysis to appeal generation.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/sign-up" className="inline-flex items-center gap-2 bg-white text-purple-700 hover:bg-purple-50 font-semibold px-8 py-3.5 rounded-xl transition-colors text-lg">
-              Start Free Trial <ArrowRight className="w-5 h-5" />
+            <Link href="/book-demo?source=blog-cta" className="inline-flex items-center gap-2 bg-white text-purple-700 hover:bg-purple-50 font-semibold px-8 py-3.5 rounded-xl transition-colors text-lg">
+              Book a Demo <ArrowRight className="w-5 h-5" />
             </Link>
             <Link href="/contact" className="inline-flex items-center gap-2 border border-white/30 hover:border-white/60 text-white font-semibold px-8 py-3.5 rounded-xl transition-colors text-lg">
               Contact Us
@@ -224,7 +224,8 @@ export default function DynamicBlogPost() {
               <Link href="/blog" className="hover:text-white transition-colors">Blog</Link>
               <Link href="/pricing" className="hover:text-white transition-colors">Pricing</Link>
               <Link href="/about" className="hover:text-white transition-colors">About</Link>
-              <Link href="/contact" className="hover:text-white transition-colors">Contact</Link>
+              <Link href="/book-demo" className="hover:text-white transition-colors">Book a Demo</Link>
+            <Link href="/contact" className="hover:text-white transition-colors">Contact</Link>
               <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
               <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
             </div>

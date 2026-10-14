@@ -194,10 +194,10 @@ export default function PricingPage() {
                 Sign in
               </Link>
               <Link
-                href="/sign-up?source=pricing-header"
+                href="/book-demo?source=pricing-header"
                 className="text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 px-4 py-2 rounded-lg shadow-sm transition"
               >
-                Start free
+                Book a demo
               </Link>
             </div>
           </div>

@@ -170,10 +170,10 @@ export default function FeaturesIndexPage() {
               Sign In
             </Link>
             <Link
-              href="/sign-up"
+              href="/book-demo"
               className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
             >
-              Start Free Trial
+              Book a Demo
             </Link>
           </div>
         </nav>
@@ -199,17 +199,17 @@ export default function FeaturesIndexPage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
-              href="/sign-up"
+              href="/book-demo?source=hero"
               className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-semibold hover:from-purple-500 hover:to-indigo-500 transition shadow-lg shadow-purple-500/30"
             >
-              Start Free Trial
+              Book a Demo
               <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
-              href="/demo"
+              href="/sign-up?source=features-hero"
               className="inline-flex items-center gap-2 px-8 py-4 bg-white/10 border border-white/20 text-white rounded-xl font-semibold hover:bg-white/15 transition"
             >
-              Book a Demo
+              Start Free Trial
             </Link>
           </div>
         </div>
@@ -289,17 +289,17 @@ export default function FeaturesIndexPage() {
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link
-            href="/sign-up"
+            href="/book-demo?source=features-cta"
             className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-semibold hover:from-purple-500 hover:to-indigo-500 transition shadow-lg shadow-purple-500/30"
           >
-            Start Free Trial
+            Book a Demo
             <ArrowRight className="w-4 h-4" />
           </Link>
           <Link
-            href="/demo"
+            href="/sign-up?source=features-cta"
             className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white/10 border border-white/20 text-white rounded-xl font-semibold hover:bg-white/15 transition"
           >
-            Book a Demo
+            Start Free Trial
           </Link>
         </div>
         <p className="text-slate-500 text-sm mt-4">No credit card required. Free plan available.</p>

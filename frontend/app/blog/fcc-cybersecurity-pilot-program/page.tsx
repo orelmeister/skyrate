@@ -157,10 +157,10 @@ export default function CybersecurityPilotPage() {
                 Sign In
               </Link>
               <Link
-                href="/sign-up"
+                href="/book-demo"
                 className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
               >
-                Sign Up
+                Book a Demo
               </Link>
             </div>
           </nav>
@@ -338,10 +338,10 @@ export default function CybersecurityPilotPage() {
                   </p>
                   <div className="flex flex-col sm:flex-row gap-4 justify-center">
                     <Link
-                      href="/sign-up"
+                      href="/book-demo?source=blog-cta"
                       className="inline-flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-3 rounded-xl transition-colors"
                     >
-                      Start Free <ArrowRight className="w-4 h-4" />
+                      Book a Demo <ArrowRight className="w-4 h-4" />
                     </Link>
                     <Link
                       href="/pricing"
@@ -417,7 +417,8 @@ export default function CybersecurityPilotPage() {
               <div className="flex items-center gap-6 text-sm text-slate-500">
                 <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
                 <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
-                <Link href="/contact" className="hover:text-white transition-colors">Contact</Link>
+                <Link href="/book-demo" className="hover:text-white transition-colors">Book a Demo</Link>
+            <Link href="/contact" className="hover:text-white transition-colors">Contact</Link>
                 <Link href="/blog" className="hover:text-white transition-colors">Blog</Link>
               </div>
             </div>

@@ -174,8 +174,8 @@ export default function BecomeAVendorPage() {
               <Link href="/sign-in" className="hidden sm:inline text-slate-400 hover:text-white transition font-medium text-sm">
                 Sign In
               </Link>
-              <Link href="/sign-up?source=become-a-vendor-header" className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-500 hover:to-purple-500 transition shadow-lg shadow-indigo-500/25 font-medium text-sm">
-                Start Free Trial
+              <Link href="/book-demo?source=become-a-vendor-header" className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-500 hover:to-purple-500 transition shadow-lg shadow-indigo-500/25 font-medium text-sm">
+                Book a Demo
               </Link>
               <label htmlFor="mobile-menu-toggle" className="md:hidden cursor-pointer text-slate-300 hover:text-white p-2 -mr-2" aria-label="Toggle menu">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
@@ -547,7 +547,7 @@ export default function BecomeAVendorPage() {
                 <h4 className="text-white font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Company</h4>
                 <ul className="space-y-1.5 sm:space-y-2 text-xs sm:text-sm">
                   <li><Link href="/about" className="hover:text-white transition">About</Link></li>
-                  <li><Link href="/contact" className="hover:text-white transition">Contact</Link></li>
+                  <li><Link href="/book-demo" className="hover:text-white transition">Book a Demo</Link></li><li><Link href="/contact" className="hover:text-white transition">Contact</Link></li>
                   <li><Link href="/case-studies" className="hover:text-white transition">Case Studies</Link></li>
                   <li><Link href="/security" className="hover:text-white transition">Security</Link></li>
                   <li><Link href="/privacy" className="hover:text-white transition">Privacy Policy</Link></li>
