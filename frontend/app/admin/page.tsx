@@ -4169,6 +4169,9 @@ function PromoInvitesTab() {
   const [trialDays, setTrialDays] = useState(30);
 
   const trialOptions = [
+    { value: 3, label: "3 days" },
+    { value: 7, label: "7 days" },
+    { value: 14, label: "14 days" },
     { value: 21, label: "21 days" },
     { value: 30, label: "1 month" },
     { value: 60, label: "2 months" },

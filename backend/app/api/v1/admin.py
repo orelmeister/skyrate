@@ -2251,9 +2251,9 @@ async def create_promo_invite(
     if data.role not in ["vendor", "consultant", "applicant"]:
         raise HTTPException(status_code=400, detail="Invalid role. Must be vendor, consultant, or applicant.")
     
-    # Validate trial days (21 days to 6 months)
-    if data.trial_days < 21 or data.trial_days > 180:
-        raise HTTPException(status_code=400, detail="Trial days must be between 21 and 180.")
+    # Validate trial days (3 days to 6 months)
+    if data.trial_days < 3 or data.trial_days > 180:
+        raise HTTPException(status_code=400, detail="Trial days must be between 3 and 180.")
     
     # Check if email already has an active invite
     existing = db.query(PromoInvite).filter(
