@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
 import type { SwitchingSignalsResponse, OpportunitySignals, SwitchLikelihood, PurchasingPattern, VendorOutreach } from "@/lib/api";
 import { SkeletonRows, SkeletonStatCards } from "@/components/Skeleton";
+import StateMultiSelect from "@/components/StateMultiSelect";
 import { downloadCsv, csvFilename, downloadExcel, excelFilename } from "@/lib/csv-export";
 import PurchaseHistoryModal from "@/components/PurchaseHistoryModal";
 
@@ -373,7 +374,8 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
 
   // Filters
   const [filterCategory, setFilterCategory] = useState<string>("");
-  const [filterState, setFilterState] = useState<string>("");
+  // Several states at once — vendors cover multi-state territories (Ari 2026-10-21).
+  const [filterStates, setFilterStates] = useState<string[]>([]);
   const [filterManufacturer, setFilterManufacturer] = useState<string>("");
   const [filterEntityType, setFilterEntityType] = useState<string>("");
   const [filterServiceType, setFilterServiceType] = useState<string>("");
@@ -399,7 +401,9 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
     const saved = loadPredictedFilters();
     if (!saved) return;
     if (typeof saved.category === "string") setFilterCategory(saved.category);
-    if (typeof saved.state === "string") setFilterState(saved.state);
+    if (typeof saved.state === "string" && saved.state) {
+      setFilterStates(saved.state.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean));
+    }
     if (typeof saved.manufacturer === "string") setFilterManufacturer(saved.manufacturer);
     if (typeof saved.entity_type === "string") setFilterEntityType(saved.entity_type);
     if (typeof saved.service_type === "string") setFilterServiceType(saved.service_type);
@@ -417,7 +421,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
     }
     savePredictedFilters({
       category: filterCategory,
-      state: filterState,
+      state: filterStates.join(","),
       manufacturer: filterManufacturer,
       entity_type: filterEntityType,
       service_type: filterServiceType,
@@ -428,7 +432,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
       sort_by: sortBy,
       sort_order: sortOrder,
     });
-  }, [filterCategory, filterState, filterManufacturer, filterEntityType, filterServiceType, filterName, filterMinAmount, filterMaxAmount, filterSwitchLevel, sortBy, sortOrder]);
+  }, [filterCategory, filterStates, filterManufacturer, filterEntityType, filterServiceType, filterName, filterMinAmount, filterMaxAmount, filterSwitchLevel, sortBy, sortOrder]);
 
   const fetchLeads = useCallback(async (newOffset = 0) => {
     setIsLoading(true);
@@ -440,7 +444,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
       // Signals are no longer selected manually — every applicable signal badge
       // renders on each opportunity; the Category dropdown scopes the list.
       if (filterCategory) params.append("category", filterCategory);
-      if (filterState) params.append("state", filterState);
+      if (filterStates.length) params.append("state", filterStates.join(","));
       if (filterManufacturer) params.append("manufacturer", filterManufacturer);
       if (filterEntityType) params.append("entity_type", filterEntityType);
       if (filterServiceType) params.append("service_type", filterServiceType);
@@ -470,7 +474,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
     } finally {
       setIsLoading(false);
     }
-  }, [filterCategory, filterState, filterManufacturer, filterEntityType, filterServiceType, filterName, filterMinAmount, filterMaxAmount, sortBy, sortOrder]);
+  }, [filterCategory, filterStates, filterManufacturer, filterEntityType, filterServiceType, filterName, filterMinAmount, filterMaxAmount, sortBy, sortOrder]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -1115,18 +1119,15 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
           </select>
 
 
-          <select
-            value={filterState}
-            onChange={(e) => { setFilterState(e.target.value); setOffset(0); }}
-            className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-          >
-            <option value="">All States</option>
-            {US_STATES.map((s) => (
-              <option key={s.code} value={s.code}>
-                {s.code} — {s.name}
-              </option>
-            ))}
-          </select>
+          <StateMultiSelect
+            options={US_STATES}
+            value={filterStates}
+            onChange={(next) => { setFilterStates(next); setOffset(0); }}
+            buttonClassName="min-w-[11rem] px-3 py-1.5 border border-slate-200 rounded-lg bg-white text-sm text-left focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            accentClassName="text-purple-600 hover:underline"
+            checkboxClassName="h-3.5 w-3.5 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+            testIdPrefix="pl-state"
+          />
 
           <input
             type="text"
@@ -1210,7 +1211,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
           {isLoading ? (
             <SkeletonRows rows={6} height="h-28" />
           ) : visibleLeads.length === 0 ? (
-            (filterCategory || filterSwitchLevel || filterState || filterManufacturer || filterEntityType || filterServiceType || filterName || filterMinAmount || filterMaxAmount) ? (
+            (filterCategory || filterSwitchLevel || filterStates.length || filterManufacturer || filterEntityType || filterServiceType || filterName || filterMinAmount || filterMaxAmount) ? (
               <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
                 <span className="text-5xl mb-4 block">🔍</span>
                 <h3 className="text-lg font-semibold text-slate-700 mb-2">No leads match these filters</h3>
@@ -1220,7 +1221,7 @@ export default function PredictedLeadsTab({ onView471, onView470 }: { onView471?
                 </p>
                 <button
                   onClick={() => {
-                    setFilterCategory(""); setFilterSwitchLevel(""); setFilterState(""); setFilterManufacturer("");
+                    setFilterCategory(""); setFilterSwitchLevel(""); setFilterStates([]); setFilterManufacturer("");
                     setFilterEntityType(""); setFilterServiceType(""); setFilterName("");
                     setFilterMinAmount(""); setFilterMaxAmount(""); setOffset(0);
                   }}

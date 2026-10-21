@@ -11,6 +11,7 @@ import { Form471LineItem, FrnTracking } from "@/lib/api";
 import { Vendor470DigestSubscription, Vendor470DigestPreview } from "@/lib/api";
 import { useTabParam } from "@/hooks/useTabParam";
 import PredictedLeadsTab from "@/components/PredictedLeadsTab";
+import StateMultiSelect from "@/components/StateMultiSelect";
 import OpportunityMap from "@/components/OpportunityMap";
 import OpportunityAlerts from "@/components/OpportunityAlerts";
 import { TableExportBar } from "@/components/TableExportBar";
@@ -66,14 +67,18 @@ const DIGEST_SERVICE_FUNCTIONS: { value: string; label: string; categories: stri
   { value: "Voice", label: "Voice Services", categories: ["1"] },
 ];
 
-/** Read a saved filter value (legacy string or new array) as a string array. */
+/** Read a saved filter value (legacy string or new array) as a string array.
+ * Comma-separated strings split too, so a multi-state filter stored as
+ * "NY,NJ,CT" round-trips through the API and localStorage as three values. */
 function toFilterArray(value: unknown): string[] {
   if (value === null || value === undefined) return [];
   const items = Array.isArray(value) ? value : [value];
   const out: string[] = [];
   for (const item of items) {
-    const text = String(item).trim();
-    if (text && !out.includes(text)) out.push(text);
+    for (const part of String(item).split(",")) {
+      const text = part.trim();
+      if (text && !out.includes(text)) out.push(text);
+    }
   }
   return out;
 }
@@ -2571,6 +2576,9 @@ function VendorPortalPage() {
     "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"
   ];
 
+  // Form 470 search state filter as a list ("NY,NJ,CT" <-> ["NY","NJ","CT"]).
+  const form470StateList = toFilterArray(form470Filters.state).map((s) => s.toUpperCase());
+
   const SERVICE_TYPES = [
     "Internal Connections",
     "Basic Maintenance",
@@ -3890,19 +3898,19 @@ function VendorPortalPage() {
                   />
                 </div>
 
-                {/* State Filter */}
+                {/* State Filter — multi-select (Ari 2026-10-21: vendors cover
+                    several states and want to search them in one query). The
+                    filter travels as a comma-separated `state` param. */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">State</label>
-                  <select
-                    value={form470Filters.state || ""}
-                    onChange={(e) => setForm470Filters({ ...form470Filters, state: e.target.value || undefined })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                  >
-                    <option value="">All States</option>
-                    {US_STATES.map((state) => (
-                      <option key={state} value={state}>{state}</option>
-                    ))}
-                  </select>
+                  <StateMultiSelect
+                    options={US_STATES.map((code) => ({ code }))}
+                    value={form470StateList}
+                    onChange={(next) =>
+                      setForm470Filters({ ...form470Filters, state: next.length ? next.join(",") : undefined })
+                    }
+                    testIdPrefix="f470-state"
+                  />
                 </div>
 
                 {/* Category Filter */}
@@ -4461,7 +4469,7 @@ function VendorPortalPage() {
                   <div className="font-medium text-green-800">Found {form470TotalLeads} Form 470 Leads</div>
                   <div className="text-sm text-green-600">
                     {form470Filters.manufacturer && `Manufacturer: ${form470Filters.manufacturer} • `}
-                    {form470Filters.state && `State: ${form470Filters.state} • `}
+                    {form470StateList.length > 0 && `${form470StateList.length === 1 ? "State" : "States"}: ${form470StateList.join(", ")} • `}
                     {form470Filters.category && `Category ${form470Filters.category}`}
                   </div>
                 </div>

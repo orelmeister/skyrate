@@ -3,7 +3,7 @@ Vendor Portal API Endpoints
 Handles school search, equipment matching, and lead generation
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query, Request
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
@@ -41,6 +41,26 @@ router = APIRouter(prefix="/vendor", tags=["Vendor Portal"])
 # (surfacing as Starlette "No response returned." -> HTTP 500). When exceeded we
 # fall back to locally cached admin_frn_snapshots so the vendor still gets data.
 VENDOR_FRN_LIVE_TIMEOUT_SECONDS = 25
+
+
+def normalize_state_codes(*values: Any) -> List[str]:
+    """Normalise state filters to a sorted list of unique 2-letter codes.
+
+    Accepts the legacy single `state=NY`, a comma-separated `state=NY,NJ,CT`,
+    and a repeated `states=NY&states=NJ` param, matching the normalisation the
+    Form 470 digest already applies to its saved multi-state filters.
+    """
+    out: List[str] = []
+    for value in values:
+        if not value:
+            continue
+        items = value if isinstance(value, (list, tuple, set)) else [value]
+        for item in items:
+            for part in str(item).split(','):
+                code = part.strip().upper()
+                if len(code) == 2 and code.isalpha() and code not in out:
+                    out.append(code)
+    return sorted(out)
 
 
 # ==================== SCHEMAS ====================
@@ -1662,6 +1682,7 @@ async def get_470_leads(
     background_tasks: BackgroundTasks,
     year: Optional[int] = None,
     state: Optional[str] = None,
+    states: Optional[List[str]] = Query(None),
     category: Optional[str] = None,
     name: Optional[str] = None,
     service_type: Optional[str] = None,
@@ -1695,6 +1716,12 @@ async def get_470_leads(
 
     _log = _logging.getLogger(__name__)
 
+    # `state` stays backward compatible (single code) but now also accepts a
+    # comma-separated list; `states` may be repeated. Vendors sell across
+    # several states and asked to search them all at once (Ari 2026-10-21).
+    state_list = normalize_state_codes(state, states)
+    state_applied = ",".join(state_list) if state_list else None
+
     # Clamp limit
     if limit > 1000:
         limit = 1000
@@ -1715,8 +1742,8 @@ async def get_470_leads(
             q = q.filter(VendorForm470Snapshot.funding_year == str(year))
         if name:
             q = q.filter(VendorForm470Snapshot.entity_name.ilike(f'%{name.strip()}%'))
-        if state:
-            q = q.filter(VendorForm470Snapshot.state == state.upper())
+        if state_list:
+            q = q.filter(VendorForm470Snapshot.state.in_(state_list))
         if category:
             cat_name = f"Category {category}" if category in ('1', '2') else category
             q = q.filter(VendorForm470Snapshot.categories_json.ilike(f'%{cat_name}%'))
@@ -1826,7 +1853,7 @@ async def get_470_leads(
                 "partial": False,
                 "last_refreshed": last_refreshed.isoformat() if last_refreshed else None,
                 "filters_applied": {
-                    "year": year, "state": state, "category": category,
+                    "year": year, "state": state_applied, "category": category,
                     "name": name,
                     "service_type": service_type, "manufacturer": manufacturer,
                     "equipment_type": equipment_type, "service_function": service_function,
@@ -1845,7 +1872,7 @@ async def get_470_leads(
 
         def _fetch_live():
             return client.get_470_leads(
-                year=year, state=state, category=category,
+                year=year, state=(state_list or None), category=category,
                 service_type=service_type, manufacturer=manufacturer,
                 equipment_type=equipment_type, service_function=service_function,
                 min_speed=min_speed, max_speed=max_speed,
@@ -1882,7 +1909,7 @@ async def get_470_leads(
                 "next_cursor": None,
                 "message": "Live USAC fetch timed out or failed. Showing cached data.",
                 "filters_applied": {
-                    "year": year, "state": state, "category": category,
+                    "year": year, "state": state_applied, "category": category,
                     "name": name,
                     "service_type": service_type, "manufacturer": manufacturer,
                 },
@@ -1901,8 +1928,8 @@ async def get_470_leads(
                 del_q = _db.query(VendorForm470Snapshot)
                 if year:
                     del_q = del_q.filter(VendorForm470Snapshot.funding_year == str(year))
-                if state:
-                    del_q = del_q.filter(VendorForm470Snapshot.state == state.upper())
+                if state_list:
+                    del_q = del_q.filter(VendorForm470Snapshot.state.in_(state_list))
                 del_q.delete(synchronize_session=False)
 
                 for lead in leads_data:
@@ -4905,6 +4932,7 @@ def _get_vendor_serviced_bens(db: Session, profile: VendorProfile) -> Optional[s
 async def get_predicted_leads(
     prediction_type: Optional[str] = None,
     state: Optional[str] = None,
+    states: Optional[List[str]] = Query(None),
     manufacturer: Optional[str] = None,
     entity_type: Optional[str] = None,
     service_type: Optional[str] = None,
@@ -4938,8 +4966,9 @@ async def get_predicted_leads(
     from ...services.prediction_service import prediction_service
     from ...models.prediction import PredictionType, PredictionStatus
 
-    # Parse filters shared by both modes
-    states = [s.strip() for s in state.split(',')] if state else None
+    # Parse filters shared by both modes. `state` accepts one code or a
+    # comma-separated list; `states` may be repeated.
+    state_list = normalize_state_codes(state, states)
     manufacturers_list = [m.strip() for m in manufacturer.split(',')] if manufacturer else None
     entity_types_list = [e.strip() for e in entity_type.split(',')] if entity_type else None
 
@@ -4950,7 +4979,7 @@ async def get_predicted_leads(
         serviced_bens = _get_vendor_serviced_bens(db, profile)
         return prediction_service.get_unified_opportunities(
             db=db,
-            states=states,
+            states=state_list or None,
             manufacturers=manufacturers_list,
             entity_types=entity_types_list,
             min_confidence=min_confidence,
@@ -4982,7 +5011,7 @@ async def get_predicted_leads(
         db=db,
         vendor_profile_id=profile.id,
         prediction_type=ptype,
-        states=states,
+        states=state_list or None,
         manufacturers=manufacturers_list,
         entity_types=entity_types_list,
         min_confidence=min_confidence,

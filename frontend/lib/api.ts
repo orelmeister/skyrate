@@ -3473,7 +3473,8 @@ class ApiClient {
    */
   async get470Leads(filters: {
     year?: number;
-    state?: string;
+    /** One state code, or several as a comma-separated string / array. */
+    state?: string | string[];
     category?: string;
     service_type?: string;
     manufacturer?: string;
@@ -3490,7 +3491,8 @@ class ApiClient {
   }): Promise<ApiResponse<Form470LeadsResponse>> {
     const params = new URLSearchParams();
     if (filters.year) params.append('year', filters.year.toString());
-    if (filters.state) params.append('state', filters.state);
+    const stateParam = Array.isArray(filters.state) ? filters.state.join(',') : filters.state;
+    if (stateParam) params.append('state', stateParam);
     if (filters.category) params.append('category', filters.category);
     if (filters.service_type) params.append('service_type', filters.service_type);
     if (filters.manufacturer) params.append('manufacturer', filters.manufacturer);
