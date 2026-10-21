@@ -7451,7 +7451,16 @@ function VendorPortalPage() {
                               <ul className="divide-y divide-slate-100">
                                 {(group.category.includes('1')
                                   ? (Object.keys(group.roles) as ServiceRole[])
-                                  : CATEGORY_TWO_ROLES
+                                  // The three Category 2 slots always render (so an
+                                  // un-requested one shows a dash), plus any other
+                                  // role this group actually carries, so no requested
+                                  // line can be hidden by the grouping.
+                                  : [
+                                      ...CATEGORY_TWO_ROLES,
+                                      ...(Object.keys(group.roles) as ServiceRole[]).filter(
+                                        (r) => !CATEGORY_TWO_ROLES.includes(r)
+                                      ),
+                                    ]
                                 ).map((role) => {
                                   const entries = group.roles[role] || [];
                                   const requested = entries.length > 0;
