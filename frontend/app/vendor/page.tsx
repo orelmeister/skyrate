@@ -6,7 +6,8 @@ import Link from "next/link";
 import { useAuthStore, deriveRequiresPaymentSetup } from "@/lib/auth-store";
 import { useVerificationGuard } from "@/lib/use-verification-guard";
 import { PERF_V2_ENABLED } from "@/lib/featureFlags";
-import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse, FRNStatusResponse, FRNStatusSummaryResponse, FRNStatusRecord, Form470Lead, Form470LeadsResponse, Form470DetailResponse, SavedLead, EnrichedContactData, FRNWatch, CreateWatchRequest, FRNReportHistory, VendorDisbursementResponse } from "@/lib/api";
+import { api, VendorProfile, SpinValidationResult, ServicedEntity, EntityDetailResponse, EntityYearData, Form471ByEntityResponse, Form471Record, Form471Vendor, CompetitorAnalysisResponse, FRNStatusResponse, FRNStatusSummaryResponse, FRNStatusRecord, Form470Lead, Form470LeadsResponse, Form470DetailResponse, Form470RfpDocument, SavedLead, EnrichedContactData, FRNWatch, CreateWatchRequest, FRNReportHistory, VendorDisbursementResponse } from "@/lib/api";
+import { groupServices, ROLE_LABELS, CATEGORY_TWO_ROLES, type ServiceRole } from "@/lib/groupServices";
 import { Form471LineItem, FrnTracking } from "@/lib/api";
 import { Vendor470DigestSubscription, Vendor470DigestPreview } from "@/lib/api";
 import { useTabParam } from "@/hooks/useTabParam";
@@ -958,6 +959,7 @@ function VendorPortalPage() {
 
   // Form 470 Lead Generation state (Sprint 3)
   const [form470Leads, setForm470Leads] = useState<Form470Lead[]>([]);
+  const [servicesView, setServicesView] = useState<'grouped' | 'flat'>('grouped');
   const [form470Loading, setForm470Loading] = useState(false);
   const [form470Error, setForm470Error] = useState<string | null>(null);
   const [form470Filters, setForm470Filters] = useState<{
@@ -979,6 +981,10 @@ function VendorPortalPage() {
   // upcoming-funding-year default only when nothing was saved (Tim's Great Lakes
   // + Cat 2 selection sticks between visits). Persist on every subsequent change.
   const form470FiltersSkipPersist = useRef(true);
+  // Set while load470Leads writes the server's filters_applied back into state,
+  // so that write is not mistaken for the user editing a filter.
+  const form470SyncingFilters = useRef(false);
+  const [form470Stale, setForm470Stale] = useState(false);
   useEffect(() => {
     const saved = loadSavedFilters<typeof form470Filters>("vendor_470_filters");
     if (saved) setForm470Filters(saved);
@@ -1129,11 +1135,20 @@ function VendorPortalPage() {
       return;
     }
     saveFilters("vendor_470_filters", form470Filters);
+    // Filters edited after a search: the table below still shows the PREVIOUS
+    // result set, which is how "Found 35" ended up above 9 rows (Ari
+    // 2026-10-21). Say so instead of letting the two silently disagree.
+    if (!form470SyncingFilters.current) setForm470Stale(true);
+    form470SyncingFilters.current = false;
   }, [form470Filters]);
   const [form470TotalLeads, setForm470TotalLeads] = useState(0);
   const [form470Detail, setForm470Detail] = useState<Form470DetailResponse | null>(null);
   const [form470DetailLoading, setForm470DetailLoading] = useState(false);
   const [showForm470Modal, setShowForm470Modal] = useState(false);
+  // BEN whose purchase history is open from inside the 470 detail modal. Kept
+  // separate from `purchaseHistoryBen` (FRN tab) so the popup can be rendered
+  // after the 470 modal and therefore stack above it.
+  const [form470PurchaseBen, setForm470PurchaseBen] = useState<string | null>(null);
   // Application number currently resolving a real certified Form 470/471 PDF (per-row spinner).
   const [pdfBusyApp, setPdfBusyApp] = useState<string | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
@@ -1282,6 +1297,28 @@ function VendorPortalPage() {
     form470Leads.forEach((l) => { if (l.applicant_type) s.add(l.applicant_type); });
     return Array.from(s).sort();
   }, [form470Leads]);
+
+  // Distinct RFP attachments for the open 470. Prefers the deduped list the
+  // backend now returns; older cached detail payloads only carried a URL per
+  // service line (and repeated the same attachment on every one), so fall back
+  // to deduping those by URL.
+  const form470RfpDocuments = useMemo<Form470RfpDocument[]>(() => {
+    if (!form470Detail) return [];
+    if (form470Detail.rfp_documents?.length) return form470Detail.rfp_documents;
+    const seen = new Set<string>();
+    const out: Form470RfpDocument[] = [];
+    for (const service of form470Detail.services || []) {
+      const url = typeof service.rfp_documents === 'string' ? service.rfp_documents : '';
+      if (!url.startsWith('http') || seen.has(url)) continue;
+      seen.add(url);
+      let filename = url;
+      try {
+        filename = decodeURIComponent(url.split('/').pop() || url).replace(/^\d+-/, '');
+      } catch { /* keep the raw URL as the label */ }
+      out.push({ url, filename });
+    }
+    return out;
+  }, [form470Detail]);
 
   // Sorted search results for table display
   const sortedSearchResults = useMemo(() => {
@@ -1828,10 +1865,12 @@ function VendorPortalPage() {
       if (response.success && response.data) {
         setForm470Leads(response.data.leads || []);
         setForm470TotalLeads(response.data.total_leads || 0);
+        setForm470Stale(false);
         // Clean null values from filters_applied to avoid null contamination in state
         const cleanFilters = Object.fromEntries(
           Object.entries(response.data.filters_applied || {}).filter(([_, v]) => v != null)
         );
+        form470SyncingFilters.current = true;
         setForm470Filters(cleanFilters);
       } else {
         setForm470Error(response.error || "Failed to fetch 470 leads");
@@ -4462,16 +4501,33 @@ function VendorPortalPage() {
               <SkeletonTable rows={8} columns={6} />
             )}
 
-            {/* Results Summary */}
+            {/* Results Summary — the headline number must describe the rows
+                actually in the table. The School/Applicant Type filter runs in
+                the browser, so "Found 35" could sit above 9 visible rows
+                (Ari 2026-10-21); report both numbers instead. */}
             {form470TotalLeads > 0 && (
-              <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
+              <div className={`border rounded-xl p-4 flex items-center gap-3 ${form470Stale ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
                 <div>
-                  <div className="font-medium text-green-800">Found {form470TotalLeads} Form 470 Leads</div>
-                  <div className="text-sm text-green-600">
+                  <div className={`font-medium ${form470Stale ? 'text-amber-800' : 'text-green-800'}`}>
+                    {sortedForm470Leads.length === form470TotalLeads
+                      ? `Found ${form470TotalLeads} Form 470 Leads`
+                      : `Showing ${sortedForm470Leads.length} of ${form470TotalLeads} Form 470 Leads`}
+                  </div>
+                  <div className={`text-sm ${form470Stale ? 'text-amber-700' : 'text-green-600'}`}>
                     {form470Filters.manufacturer && `Manufacturer: ${form470Filters.manufacturer} • `}
                     {form470StateList.length > 0 && `${form470StateList.length === 1 ? "State" : "States"}: ${form470StateList.join(", ")} • `}
                     {form470Filters.category && `Category ${form470Filters.category}`}
                   </div>
+                  {sortedForm470Leads.length !== form470TotalLeads && form470ApplicantType && (
+                    <div className="text-sm text-slate-600 mt-1">
+                      Narrowed in-browser by School / Applicant Type.
+                    </div>
+                  )}
+                  {form470Stale && (
+                    <div className="text-sm font-medium text-amber-800 mt-1">
+                      Filters changed — press &ldquo;Search 470s&rdquo; to update these results.
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -7355,109 +7411,167 @@ function VendorPortalPage() {
                   {/* Services Details */}
                   {form470Detail.services && form470Detail.services.length > 0 && (
                     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                      <div className="p-4 border-b border-slate-200 bg-slate-50">
+                      <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between gap-3">
                         <h3 className="font-semibold text-slate-900">Services Requested ({form470Detail.total_services})</h3>
+                        {/* Grouped by equipment so maintenance / managed-broadband
+                            sit with the hardware they cover (Ari 2026-10-21). Flat
+                            list stays available so nothing is hidden. */}
+                        <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5" role="group" aria-label="Services view">
+                          <button
+                            type="button"
+                            onClick={() => setServicesView('grouped')}
+                            aria-pressed={servicesView === 'grouped'}
+                            className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${servicesView === 'grouped' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                          >
+                            Grouped
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setServicesView('flat')}
+                            aria-pressed={servicesView === 'flat'}
+                            className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${servicesView === 'flat' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                          >
+                            Flat list
+                          </button>
+                        </div>
                       </div>
-                      <div className="divide-y divide-slate-100 max-h-60 overflow-y-auto">
-                        {form470Detail.services.map((service, idx) => (
-                          <div key={idx} className="p-4 flex items-start justify-between">
-                            <div>
-                              <div className="font-medium text-slate-900">{service.service_type}</div>
-                              <div className="text-sm text-slate-500">{service.function}</div>
-                              {service.manufacturer && (
-                                <span className="inline-block mt-1 px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">
-                                  {service.manufacturer}
+                      {servicesView === 'grouped' ? (
+                        <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto">
+                          {groupServices(form470Detail.services).map((group) => (
+                            <div key={group.key} className="border border-slate-200 rounded-xl overflow-hidden">
+                              <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-baseline justify-between gap-2">
+                                <span className="font-semibold text-slate-900 text-sm">
+                                  {group.label}
+                                  {group.quantityLabel && <span className="font-normal text-slate-500"> — {group.quantityLabel}</span>}
                                 </span>
-                              )}
+                                <span className={`text-[11px] px-2 py-0.5 rounded-full ${group.category.includes('1') ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                                  {group.category}
+                                </span>
+                              </div>
+                              <ul className="divide-y divide-slate-100">
+                                {(group.category.includes('1')
+                                  ? (Object.keys(group.roles) as ServiceRole[])
+                                  : CATEGORY_TWO_ROLES
+                                ).map((role) => {
+                                  const entries = group.roles[role] || [];
+                                  const requested = entries.length > 0;
+                                  return (
+                                    <li key={role} className="px-3 py-2 flex items-start justify-between gap-2 text-sm">
+                                      <span className="flex items-center gap-2">
+                                        <span
+                                          aria-hidden="true"
+                                          className={`w-4 text-center font-bold ${requested ? 'text-emerald-600' : 'text-slate-300'}`}
+                                        >
+                                          {requested ? '\u2713' : '\u2013'}
+                                        </span>
+                                        <span className={requested ? 'text-slate-900' : 'text-slate-400'}>
+                                          {ROLE_LABELS[role]}
+                                          <span className="sr-only">{requested ? ' requested' : ' not requested'}</span>
+                                        </span>
+                                      </span>
+                                      <span className="text-right text-xs text-slate-600 shrink-0">
+                                        {requested ? (
+                                          entries.map((line, i) => (
+                                            <span key={i} className="block">
+                                              {[line.quantity && `${line.quantity} ${line.unit}`.trim(), line.speed].filter(Boolean).join(' • ')}
+                                              {line.manufacturer && (
+                                                <span className="ml-1 px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded">{line.manufacturer}</span>
+                                              )}
+                                            </span>
+                                          ))
+                                        ) : (
+                                          <span className="text-slate-400">Not requested</span>
+                                        )}
+                                      </span>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
                             </div>
-                            <div className="text-right text-sm">
-                              <div className="text-slate-700">{service.quantity} {service.unit}</div>
-                              {service.min_capacity && (
-                                <div className="text-slate-500">{service.min_capacity} - {service.max_capacity}</div>
-                              )}
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
+                          {form470Detail.services.map((service, idx) => (
+                            <div key={idx} className="p-4 flex items-start justify-between">
+                              <div>
+                                <div className="font-medium text-slate-900">{service.service_type}</div>
+                                <div className="text-sm text-slate-500">{service.function}</div>
+                                {service.manufacturer && (
+                                  <span className="inline-block mt-1 px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">
+                                    {service.manufacturer}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-right text-sm">
+                                <div className="text-slate-700">{service.quantity} {service.unit}</div>
+                                {service.min_capacity && (
+                                  <div className="text-slate-500">{service.min_capacity} - {service.max_capacity}</div>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
 
                   {/* Descriptions */}
-                  {/* RFP Documents */}
-                  {form470Detail.services?.some(s => s.rfp_documents || s.rfp_identifier) && (
+                  {/* RFP Documents — one entry per distinct attachment. USAC's
+                      services dataset repeats every attachment once per service
+                      line, so we render the deduped 470-level list the backend
+                      builds (falling back to per-service URLs for cached
+                      payloads from before that change). */}
+                  {(() => {
+                    const docs = form470RfpDocuments;
+                    const rfpIdentifier = form470Detail.services?.find(s => s.rfp_identifier)?.rfp_identifier || null;
+                    if (!docs.length && !rfpIdentifier) return null;
+                    return (
                     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
                       <div className="p-4 border-b border-slate-200 bg-amber-50">
                         <h3 className="font-semibold text-amber-900 flex items-center gap-2">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                          RFP Documents
+                          RFP Documents{docs.length > 0 ? ` (${docs.length})` : ''}
                         </h3>
                       </div>
-                      <div className="divide-y divide-slate-100">
-                        {form470Detail.services
-                          .filter(s => s.rfp_documents || s.rfp_identifier)
-                          .map((service, idx) => {
-                          const extractFilename = (url: string): string => {
-                            try {
-                              const parts = url.split('/');
-                              const encoded = parts[parts.length - 1];
-                              const decoded = decodeURIComponent(encoded);
-                              return decoded.replace(/^\d+-/, '');
-                            } catch {
-                              return url;
-                            }
-                          };
-                          const docUrl = service.rfp_documents && typeof service.rfp_documents === 'string' ? service.rfp_documents : null;
-                          const isHttpLink = docUrl?.startsWith('http') ?? false;
-                          const filename = isHttpLink && docUrl ? extractFilename(docUrl) : null;
-
-                          return (
-                          <div key={idx} className="p-4">
-                            {service.rfp_identifier && (
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-xs font-medium text-slate-500">RFP ID:</span>
-                                <span className="text-sm font-mono text-slate-900">{service.rfp_identifier}</span>
+                      {docs.length === 0 ? (
+                        <div className="p-4 text-sm text-slate-500">
+                          This Form 470 does not have RFP documents attached on USAC.
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-100">
+                          {docs.map((doc) => (
+                            <div key={doc.url} className="p-4 space-y-2">
+                              <div className="flex items-center gap-2">
+                                <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                                <span className="text-sm font-medium text-slate-900 break-all">{doc.filename}</span>
                               </div>
-                            )}
-                            {docUrl && (
-                              <div className="mt-2">
-                                {isHttpLink && filename ? (
-                                  <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                      <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
-                                      <span className="text-sm font-medium text-slate-900 break-all">{filename}</span>
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <a
-                                        href="https://opendata.usac.org/stories/s/ejcg-sjaz"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
-                                      >
-                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                                        View on USAC
-                                      </a>
-                                      <button
-                                        type="button"
-                                        onClick={() => forceDownloadFile(docUrl, filename)}
-                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700 transition-colors"
-                                      >
-                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" /></svg>
-                                        Download
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <span className="text-sm text-slate-700 break-all">{docUrl}</span>
-                                )}
+                              <div className="flex flex-wrap items-center gap-2">
+                                <a
+                                  href="https://opendata.usac.org/stories/s/ejcg-sjaz"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                  View on USAC
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => forceDownloadFile(doc.url, doc.filename)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700 transition-colors"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" /></svg>
+                                  Download
+                                </button>
                               </div>
-                            )}
-                            <div className="text-xs text-slate-400 mt-1">{service.service_type} - {service.function}</div>
-                          </div>
-                          );
-                        })}
-                      </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {(form470Detail.category_one_description || form470Detail.category_two_description) && (
                     <div className="space-y-4">
@@ -7603,6 +7717,35 @@ function VendorPortalPage() {
                 );
               })()}
               
+              {/* Purchase history — same drill-down as the Predicted Leads
+                  detail panel, so a vendor can see what this applicant has
+                  actually bought before bidding (Ari 2026-10-21). USAC has no
+                  BEN on some 470s; disable rather than open an empty popup. */}
+              {(() => {
+                const ben = (form470Detail?.entity?.ben || '').toString().trim();
+                return ben ? (
+                  <button
+                    type="button"
+                    onClick={() => setForm470PurchaseBen(ben)}
+                    className="px-4 py-2 bg-slate-800 text-white rounded-xl hover:bg-slate-900 transition-colors flex items-center gap-2"
+                    title="Form 471 purchase history for this entity"
+                  >
+                    <span>📜</span>
+                    View purchase history
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    title="USAC has no BEN on this Form 470, so purchase history cannot be looked up."
+                    className="px-4 py-2 bg-slate-200 text-slate-400 rounded-xl flex items-center gap-2 cursor-not-allowed"
+                  >
+                    <span>📜</span>
+                    View purchase history
+                  </button>
+                );
+              })()}
+
               {/* Find Staff (Ari loom-1 #9): scope the LinkedIn people search to
                   the quoted org name + city/state so it stops returning unrelated
                   companies. */}
@@ -7631,6 +7774,13 @@ function VendorPortalPage() {
           </div>
         </div>
       )}
+
+      {/* Rendered after the 470 modal so it paints on top of it (both are z-50). */}
+      <PurchaseHistoryModal
+        ben={form470PurchaseBen}
+        entityName={form470Detail?.entity?.name}
+        onClose={() => setForm470PurchaseBen(null)}
+      />
 
       {/* Search Result Detail Modal */}
       {showSearchResultModal && selectedSearchResult && (

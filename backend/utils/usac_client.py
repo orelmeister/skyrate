@@ -13,7 +13,8 @@ USAC Datasets used:
 import requests
 import pandas as pd
 import math
-from typing import Dict, List, Optional, Any, Union
+import re
+from typing import Dict, List, Optional, Any, Tuple, Union
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import os
@@ -205,6 +206,107 @@ def professional_services_flag(services) -> bool:
         if any(k in st or k in fn for k in _PRO_SERVICE_KEYWORDS):
             return True
     return False
+
+
+def _rfp_document_url(row) -> Optional[str]:
+    """Pull the attachment URL out of a 470_services row. Socrata serves the
+    column as a URL object (``{"url": ...}``) but older cached payloads and the
+    snapshot table store a plain string."""
+    if not isinstance(row, dict):
+        return None
+    raw = row.get('rfp_documents')
+    if isinstance(raw, dict):
+        raw = raw.get('url')
+    raw = (raw or '').strip()
+    return raw or None
+
+
+def _rfp_document_filename(url: str) -> str:
+    """Human-readable filename for an RFP attachment URL (USAC prefixes the
+    stored name with an internal id, e.g. ``22703223-Wasco ADD1.pdf``)."""
+    try:
+        from urllib.parse import unquote
+        tail = unquote(url.rstrip('/').split('/')[-1])
+        return re.sub(r'^\d+-', '', tail) or url
+    except Exception:
+        return url
+
+
+def _rfp_document_key(url: str) -> str:
+    """Dedupe key for an attachment: the same file can come back with different
+    percent-encoding or a trailing slash. Deliberately NOT the filename -- two
+    genuinely different attachments on one 470 can share a filename, and losing
+    one of them is the bug this whole path exists to fix."""
+    try:
+        from urllib.parse import unquote
+        return unquote(url).strip().rstrip('/').lower()
+    except Exception:
+        return url.strip().lower()
+
+
+def _collapse_470_service_rows(
+    rows: List[Dict[str, Any]],
+    form_version: Optional[str] = None,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, str]]]:
+    """Collapse USAC's Form 470 services cross product into real data.
+
+    Dataset 39tn-hjzv emits one row per
+    (service line x RFP attachment x form_version), so a 470 with 32 service
+    lines, 8 attachments and 2 versions returns 512 rows. Returns
+    ``(service_lines, rfp_documents)`` where service lines are deduplicated on
+    their substantive fields and documents are deduplicated on URL, both in
+    first-seen order so the UI stays stable between loads.
+
+    Service lines are scoped to ``form_version`` (a revised 470 must not show
+    the superseded lines), but documents are collected from EVERY row: the
+    attachment list is a property of the 470, and scoping it risks silently
+    dropping an attachment.
+    """
+    rows = [r for r in (rows or []) if isinstance(r, dict)]
+
+    documents: List[Dict[str, str]] = []
+    seen_docs = set()
+    any_rfp_flag = False
+    for row in rows:
+        url = _rfp_document_url(row)
+        if url:
+            key = _rfp_document_key(url)
+            if key not in seen_docs:
+                seen_docs.add(key)
+                documents.append({'url': url, 'filename': _rfp_document_filename(url)})
+        if str(row.get('rfp_identifier') or '').strip().lower() in ('yes', 'true', '1'):
+            any_rfp_flag = True
+
+    want = (form_version or '').strip().lower()
+    if want:
+        scoped = [r for r in rows if (r.get('form_version') or '').strip().lower() == want]
+        if scoped:
+            rows = scoped
+
+    service_fields = (
+        'service_category', 'service_type', 'function', 'manufacturer',
+        'quantity', 'unit', 'entities', 'minimum_capacity', 'maximum_capacity',
+        'installation_initial_configuration',
+    )
+
+    services: List[Dict[str, Any]] = []
+    seen_services = set()
+    for row in rows:
+        key = tuple((row.get(f) or '') for f in service_fields)
+        if key in seen_services:
+            continue
+        seen_services.add(key)
+        service = dict(row)
+        # The per-line column is a Socrata URL object; the UI wants a string.
+        service['rfp_documents'] = _rfp_document_url(row)
+        services.append(service)
+
+    # Row-level "RFP Documents: Yes/No" and the document list must agree.
+    rfp_answer = 'Yes' if (documents or any_rfp_flag) else 'No'
+    for s in services:
+        s['rfp_identifier'] = rfp_answer
+
+    return services, documents
 
 
 class USACDataClient:
@@ -2854,13 +2956,41 @@ class USACDataClient:
                         'cat2_description': basic_info.get('category_two_description'),
                         # Service details
                         'services': [],
+                        'rfp_documents': [],
                         'manufacturers': set(),
                         'service_types': set(),
-                        'categories': set()
+                        'categories': set(),
+                        '_service_keys': set(),
+                        '_doc_urls': set(),
                     }
-                
+
+                lead_bucket = leads_by_app[app_num]
+
+                # USAC returns a cross product of (service line x RFP attachment
+                # x form_version); keep one entry per distinct service line and
+                # collect attachments separately, else the snapshot stores (and
+                # the UI renders) the same line/document dozens of times.
+                doc_url = _rfp_document_url(service)
+                if doc_url and doc_url not in lead_bucket['_doc_urls']:
+                    lead_bucket['_doc_urls'].add(doc_url)
+                    lead_bucket['rfp_documents'].append(
+                        {'url': doc_url, 'filename': _rfp_document_filename(doc_url)}
+                    )
+
+                service_key = (
+                    service.get('form_version'), service.get('service_category'),
+                    service.get('service_type'), service.get('function'),
+                    service.get('manufacturer'), service.get('quantity'),
+                    service.get('unit'), service.get('minimum_capacity'),
+                    service.get('maximum_capacity'),
+                    service.get('installation_initial_configuration'),
+                )
+                if service_key in lead_bucket['_service_keys']:
+                    continue
+                lead_bucket['_service_keys'].add(service_key)
+
                 # Add service details
-                leads_by_app[app_num]['services'].append({
+                lead_bucket['services'].append({
                     'service_category': service.get('service_category'),
                     'service_type': service.get('service_type'),
                     'function': service.get('function'),
@@ -2870,7 +3000,7 @@ class USACDataClient:
                     'min_capacity': service.get('minimum_capacity'),
                     'max_capacity': service.get('maximum_capacity'),
                     'installation_required': service.get('installation_initial_configuration'),
-                    'rfp_documents': service.get('rfp_documents', {}).get('url') if isinstance(service.get('rfp_documents'), dict) else service.get('rfp_documents'),
+                    'rfp_documents': doc_url,
                     'rfp_identifier': service.get('rfp_identifier')
                 })
                 
@@ -2884,6 +3014,8 @@ class USACDataClient:
             # Convert sets to lists for JSON serialization
             leads = []
             for lead in leads_by_app.values():
+                lead.pop('_service_keys', None)
+                lead.pop('_doc_urls', None)
                 lead['manufacturers'] = list(lead['manufacturers'])
                 lead['service_types'] = list(lead['service_types'])
                 lead['categories'] = list(lead['categories'])
@@ -3162,17 +3294,29 @@ class USACDataClient:
                 return rows[0]
 
             basic_info = _pick(basic_data)
-            
-            # Fetch all services for this application
+
+            # Fetch all services for this application.
+            #
+            # USAC returns this dataset as a CROSS PRODUCT of
+            # (service line) x (RFP attachment) x (form_version). A 470 with 32
+            # service lines, 8 RFP documents and 2 versions comes back as 512
+            # rows (verified: app 270000804). The old `$limit: 100` therefore
+            # both truncated real service lines and dropped RFP documents, while
+            # the rows that did come back repeated the same documents dozens of
+            # times. Pull the whole cross product, then collapse it.
             services_url = USAC_ENDPOINTS['470_services']
             services_params = {
                 '$where': f"application_number = '{application_number}'",
-                '$limit': 100
+                '$limit': 5000
             }
-            
+
             services_response = self.session.get(services_url, params=services_params, timeout=30)
             services_response.raise_for_status()
-            services_data = services_response.json()
+            raw_service_rows = services_response.json()
+
+            services_data, rfp_documents = _collapse_470_service_rows(
+                raw_service_rows, basic_info.get('form_version')
+            )
             
             # Build comprehensive response
             return {
@@ -3240,9 +3384,14 @@ class USACDataClient:
                     'min_capacity': s.get('minimum_capacity'),
                     'max_capacity': s.get('maximum_capacity'),
                     'installation_required': s.get('installation_initial_configuration'),
-                    'rfp_documents': s.get('rfp_documents', {}).get('url') if isinstance(s.get('rfp_documents'), dict) else s.get('rfp_documents'),
+                    'rfp_documents': s.get('rfp_documents'),
                     'rfp_identifier': s.get('rfp_identifier')
                 } for s in services_data],
+                # Every distinct RFP attachment on this 470, deduped by URL and
+                # kept in first-seen order. 470-level because USAC's services
+                # dataset carries no attachment->service link.
+                'rfp_documents': rfp_documents,
+                'has_rfp_documents': bool(rfp_documents),
                 # Summary
                 'total_services': len(services_data),
                 'manufacturers': list(set(s.get('manufacturer') for s in services_data if s.get('manufacturer'))),

@@ -2163,7 +2163,8 @@ async def get_470_detail(
         client = USACDataClient()
         ver = (version or "").strip() or None
         result = get_or_cache(
-            namespace="470_detail",
+            # v2 = cross-product collapse + 470-level rfp_documents list.
+            namespace="470_detail_v2",
             params={"application_number": application_number, "version": ver or "default"},
             ttl_hours=24,
             fetch_fn=lambda: client.get_470_detail(application_number, version=ver),

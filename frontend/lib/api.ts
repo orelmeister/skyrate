@@ -865,6 +865,14 @@ export interface Form470Service {
   rfp_identifier: string | null;
 }
 
+// One RFP attachment on a Form 470. USAC's services dataset is a cross product
+// of (service line x attachment x form version), so the backend collapses it
+// and returns the distinct attachments once, at the 470 level.
+export interface Form470RfpDocument {
+  url: string;
+  filename: string;
+}
+
 export interface Form470Lead {
   application_number: string;
   funding_year: string;
@@ -1052,6 +1060,8 @@ export interface Form470DetailResponse {
   created_date: string;
   services: Form470Service[];
   total_services: number;
+  rfp_documents?: Form470RfpDocument[];
+  has_rfp_documents?: boolean;
   manufacturers: string[];
   service_types: string[];
   categories: string[];
