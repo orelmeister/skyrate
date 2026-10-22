@@ -18,7 +18,7 @@ from ...core.security import (
     hash_password, verify_password, 
     create_access_token, create_refresh_token, decode_token,
     create_email_verification_token, create_password_reset_token,
-    get_current_user
+    get_current_user, touch_last_active
 )
 from ...core.config import settings
 from ...models.user import User, UserRole
@@ -811,6 +811,8 @@ async def refresh_token(
             detail="User not found or inactive"
         )
     
+    touch_last_active(db, user)
+
     # Generate new tokens with role included
     access_token = create_access_token(data={"sub": str(user.id), "role": user.role})
     refresh_token = create_refresh_token(data={"sub": str(user.id), "role": user.role})

@@ -1497,7 +1497,7 @@ function UsersTab({
   type SortKey =
     | "email" | "name" | "role" | "identifier"
     | "email_verified" | "onboarding_completed"
-    | "last_login" | "days_since_signup" | "is_active"
+    | "last_login" | "last_active_at" | "days_since_signup" | "is_active"
     | "company_name" | "phone" | "billing" | "time_left";
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -1527,6 +1527,7 @@ function UsersTab({
         case "email_verified": return u.email_verified ? 1 : 0;
         case "onboarding_completed": return u.onboarding_completed ? 1 : 0;
         case "last_login": return u.last_login ? new Date(u.last_login).getTime() : 0;
+        case "last_active_at": return u.last_active_at ? new Date(u.last_active_at).getTime() : 0;
         case "days_since_signup": return u.days_since_signup ?? -1;
         case "is_active": return u.is_active ? 1 : 0;
         case "company_name": return (u.company_name || "").toLowerCase();
@@ -1580,6 +1581,7 @@ function UsersTab({
       Onboarding: u.onboarding_completed ? "Complete" : "Incomplete",
       Status: u.is_active ? "Active" : "Inactive",
       "Last Login": u.last_login ? new Date(u.last_login).toLocaleDateString() : "Never",
+      "Last Active": u.last_active_at ? new Date(u.last_active_at).toLocaleString() : "",
       Joined: u.created_at ? new Date(u.created_at).toLocaleDateString() : "",
       "Days Since Signup": u.days_since_signup ?? "",
     }));
@@ -1807,6 +1809,7 @@ function UsersTab({
               <SortTh k="email_verified" className="whitespace-nowrap">Verified</SortTh>
               <SortTh k="onboarding_completed">Onboarding</SortTh>
               <SortTh k="last_login" className="whitespace-nowrap">Last Login</SortTh>
+              <SortTh k="last_active_at" className="whitespace-nowrap">Last Active</SortTh>
               <SortTh k="days_since_signup" className="whitespace-nowrap">Days</SortTh>
               <SortTh k="is_active">Status</SortTh>
               <th
@@ -1924,6 +1927,14 @@ function UsersTab({
                 <td className="px-3 py-3 text-slate-500 text-xs whitespace-nowrap">
                   {u.last_login ? new Date(u.last_login).toLocaleDateString() : (
                     <span className="text-red-500">Never</span>
+                  )}
+                </td>
+                <td
+                  className="px-3 py-3 text-slate-500 text-xs whitespace-nowrap"
+                  title={u.last_active_at ? new Date(u.last_active_at).toLocaleString() : "No activity recorded since tracking started (Oct 22, 2026)"}
+                >
+                  {u.last_active_at ? new Date(u.last_active_at).toLocaleDateString() : (
+                    <span className="text-slate-400">—</span>
                   )}
                 </td>
                 <td className="px-3 py-3 text-slate-500 text-xs text-right tabular-nums">{u.days_since_signup ?? "—"}</td>

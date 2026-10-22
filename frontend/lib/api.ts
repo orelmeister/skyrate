@@ -31,6 +31,7 @@ export interface User {
   is_verified: boolean;
   created_at: string;
   last_login: string | null;
+  last_active_at?: string | null;
   subscription?: Subscription;
 }
 

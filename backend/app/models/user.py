@@ -63,6 +63,8 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_login = Column(DateTime)
+    # Refresh tokens keep sessions alive 90 days, so last_login undercounts real usage.
+    last_active_at = Column(DateTime)
     
     # Relationships
     subscription = relationship("Subscription", back_populates="user", uselist=False)
@@ -98,6 +100,7 @@ class User(Base):
             "pending_identifier_reminder": self.pending_identifier_reminder.isoformat() if self.pending_identifier_reminder else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_login": self.last_login.isoformat() if self.last_login else None,
+            "last_active_at": self.last_active_at.isoformat() if self.last_active_at else None,
         }
         # Team-seats: expose whether this user is an ACTIVE seat inside another
         # account (they inherit the owner's CRN/portfolio). The frontend uses

@@ -669,6 +669,7 @@ def _run_schema_migrations(engine):
         ("users", "sms_opted_in_at", "DATETIME DEFAULT NULL", None),
         ("users", "verified_entity", "TINYINT(1) DEFAULT 0", None),
         ("users", "verified_entity_at", "DATETIME DEFAULT NULL", None),
+        ("users", "last_active_at", "DATETIME DEFAULT NULL", None),
         # Email verification codes table (replaces in-memory dict)
         # Note: This table is created via Base.metadata.create_all, migration entries here
         # are only for columns on existing tables.

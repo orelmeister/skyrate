@@ -99,6 +99,29 @@ def decode_token(token: str) -> Dict[str, Any]:
         )
 
 
+LAST_ACTIVE_THROTTLE = timedelta(minutes=10)
+
+
+def touch_last_active(db: Session, user) -> None:
+    """Record real usage; throttled so we write at most once per 10 min per user."""
+    now = datetime.utcnow()
+    last = getattr(user, "last_active_at", None)
+    if last is not None and now - last < LAST_ACTIVE_THROTTLE:
+        return
+    try:
+        from ..models.user import User
+        # Explicit updated_at keeps the column's onupdate from bumping it.
+        db.query(User).filter(User.id == user.id).update(
+            {User.last_active_at: now, User.updated_at: User.updated_at},
+            synchronize_session=False,
+        )
+        db.commit()
+        user.last_active_at = now
+    except Exception as e:
+        db.rollback()
+        print(f"[WARN] touch_last_active failed for user {getattr(user, 'id', '?')}: {e}")
+
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
@@ -143,6 +166,8 @@ async def get_current_user(
             detail="User account is disabled",
         )
     
+    touch_last_active(db, user)
+
     # Validate that token role matches database role (security check)
     token_role = payload.get("role")
     if token_role and token_role != user.role:
