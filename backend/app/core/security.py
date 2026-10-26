@@ -75,10 +75,24 @@ def create_email_verification_token(user_id: int, email: str) -> str:
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
-def create_password_reset_token(user_id: int, email: str) -> str:
-    """Create a JWT token for password reset (1-hour expiry)"""
+def _password_reset_fingerprint(password_hash: str) -> str:
+    """Short fingerprint of the current password hash. Embedded in reset
+    tokens so a token becomes invalid as soon as the password changes
+    (i.e. reset links are single-use)."""
+    import hashlib
+    return hashlib.sha256((password_hash or "").encode()).hexdigest()[:16]
+
+
+def create_password_reset_token(user_id: int, email: str, password_hash: str = "") -> str:
+    """Create a JWT token for password reset (1-hour expiry, single-use)"""
     expire = datetime.utcnow() + timedelta(hours=1)
-    to_encode = {"sub": str(user_id), "email": email, "exp": expire, "type": "password_reset"}
+    to_encode = {
+        "sub": str(user_id),
+        "email": email,
+        "exp": expire,
+        "type": "password_reset",
+        "pwh": _password_reset_fingerprint(password_hash),
+    }
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 

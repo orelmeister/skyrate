@@ -1280,7 +1280,7 @@ async def forgot_password(
     user = db.query(User).filter(User.email == data.email.lower()).first()
 
     if user and user.is_active:
-        reset_token = create_password_reset_token(user.id, user.email)
+        reset_token = create_password_reset_token(user.id, user.email, user.password_hash or "")
         from ...services.email_service import get_email_service
         email_svc = get_email_service()
         background_tasks.add_task(
@@ -1319,6 +1319,16 @@ async def reset_password(
     user = db.query(User).filter(User.id == int(user_id), User.email == email.lower()).first()
     if not user or not user.is_active:
         raise HTTPException(status_code=400, detail="User not found or account is disabled.")
+
+    # Single-use enforcement: the token embeds a fingerprint of the password
+    # hash it was issued against. Once the password changes, the fingerprint
+    # no longer matches and the link cannot be reused.
+    from ...core.security import _password_reset_fingerprint
+    if payload.get("pwh") != _password_reset_fingerprint(user.password_hash or ""):
+        raise HTTPException(
+            status_code=400,
+            detail="This reset link has already been used or is no longer valid. Please request a new one."
+        )
 
     user.password_hash = hash_password(data.new_password)
     db.commit()

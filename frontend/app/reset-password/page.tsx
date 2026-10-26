@@ -42,7 +42,21 @@ function ResetPasswordForm() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        throw new Error(data?.detail || "Failed to reset password. Please request a new link.");
+        // FastAPI may return detail as a string, an object, or an array of
+        // validation error objects (422). Normalize to a readable message.
+        const d = data?.detail;
+        let msg = "Failed to reset password. Please request a new link.";
+        if (typeof d === "string") {
+          msg = d;
+        } else if (Array.isArray(d)) {
+          msg = d
+            .map((item) => (typeof item === "string" ? item : item?.msg || ""))
+            .filter(Boolean)
+            .join(" ") || msg;
+        } else if (d && typeof d === "object") {
+          msg = (d as { msg?: string }).msg || msg;
+        }
+        throw new Error(msg);
       }
 
       setSuccess(true);
